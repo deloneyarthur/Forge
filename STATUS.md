@@ -24,7 +24,7 @@
 ## Pending operator action
 
 - **Spawn a fresh agent** in `/home/aj/proj/crucible_contracts/` using `CONTRACTS_V1_2_AGENT_PROMPT.md` (in this repo root) as the kickoff message. That agent ships `crucible_contracts` v1.2.0.
-- After contracts v1.2.0 lands, trigger a new Forge session to resume Phase 1. The first action in that session will be to bump `FORGE_EXPECTED_CONTRACT_VERSION` in `src/forge/core/contracts_check.py` from `"1.1.0"` → `"1.2.0"`, re-read `docs/DESIGN.md` §3, and proceed with predicate-type implementation.
+- **After contracts v1.2.0 lands**, spawn a fresh Forge agent in `/home/aj/proj/Forge/` using `PHASE_1_RESUME_PROMPT.md` (in this repo root) as the kickoff message. That agent verifies the v1.2.0 surface, bumps `FORGE_EXPECTED_CONTRACT_VERSION` to `"1.2.0"`, and proceeds through Phase 1 (grammar engine, 7-10 days budget, close-review at boundary).
 - (Optional, separate doc-only PR) Address the four documentation inconsistencies surfaced in `PHASE_0_HANDOFF.md` — rule count typo, inbox format, decisions-file layout, "five phases" prose. None block Phase 1.
 
 ## Active blockers
