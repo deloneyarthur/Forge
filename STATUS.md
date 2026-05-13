@@ -1,10 +1,11 @@
 # Forge — Status
 
-**Current phase:** 1 (Grammar engine) — **resumed 2026-05-13** after `crucible_contracts` v1.2.0 landed. Pre-code confirmation message pending operator acknowledgement; no production code beyond the contracts-version bump.
+**Current phase:** 1 (Grammar engine) — **COMPLETE; awaiting close review.** See `PHASE_1_HANDOFF.md`.
 **Previous phase:** 0 (Bootstrap) — complete, committed at `74f0ffa`.
 **Phase started (Phase 1):** 2026-05-13
 **Phase paused → resumed:** 2026-05-13 (single calendar day; pause was waiting for contracts side-quest)
-**Budget vs actual (Phase 1):** 7-10 days budgeted (§12); 6 of ~12 modules shipped (all 6 predicate types + validator). Remaining: loader, archive, `config/grammar.yaml` (21 rules), `docs/GRAMMAR.md`, pre-commit hooks, property tests, perf test, handoff.
+**Phase finished:** 2026-05-13
+**Budget vs actual (Phase 1):** 7-10 days budgeted (§12); ~1 calendar day actual (extended single session). All 12 modules shipped; 218/218 tests green; ruff + format + mypy --strict clean.
 
 ## Phase 0 deliverables (§12)
 
@@ -45,3 +46,5 @@ None. Q7 closed by D008 (contracts v1.2.0 adopted).
 - 2026-05-13 (session 2, cont.): operator approved all 7 proposed predicate encodings + chose path (b) for question 3 (canonical exit-ID list in contracts). Logged D009–D015 (path-resolver dual syntax, S4 lookback bucketing, exit-id list in contracts, E2 stop-loss classifier, R1 simplified, §3.5 E1 doc cleanup, S5 single-rule encoding). Side-trip into `crucible_contracts`: shipped v1.3.0 (commit `1d5b51f`) adding `KNOWN_EXIT_IDS` (14) + `STOP_LOSS_EXIT_IDS` (3); 142 tests + 100% coverage; ruff + mypy strict + format all green. Bumped Forge's pin to `"1.3.0"` (D016). Pre-code architecture logged as D017.
 - 2026-05-13 (session 2, cont.): **Phase 1 module 1 shipped** at commit `fce3ee0`: `src/forge/grammar/{models,path_resolver,predicates}.py` + tests. 59 new unit tests; full suite 77/77; ruff + format + mypy --strict all clean. Discriminated-union predicate models for all six §3.4 types (only `cardinality` has an evaluator so far; the other five raise NotImplementedError). Path resolver supports both §3.4 sugar and JSONPath. Cardinality predicate covers S1/S2/S3/C3 shapes.
 - 2026-05-13 (session 2, cont.): **Phase 1 modules 2-6 shipped**: all 6 predicate-type evaluators (`numerical_range`, `requires`, `forbids`, `compatibility`, `custom_python`) + the validator (`validate(config, grammar, registry) -> ValidationResult`) + custom-predicate registry pattern (`forge.grammar.custom_predicates.REGISTRY`). D018 logged: S4 moves from `compatibility` to `custom_python` because §3.4's example path `signals.directional.lookback` can't resolve cleanly without registry-aware path semantics; `compatibility` stays generic and is exercised via synthetic test rules (same approach as D015 for requires/forbids). 60 new tests; full suite 119/119; all gates green.
+- 2026-05-13 (session 2, cont.): **Phase 1 modules 7-9 shipped**: loader + archive (`load_grammar` + `GrammarVersionError` enforcement + hash helpers); 16 §3.5 `custom_python` predicate functions with module-level operator-readable tables; `config/grammar.yaml` populated with all 21 v1 rules + `config/grammar_archive/v1.yaml` archived + `docs/GRAMMAR.md` narrative + 10-test integration suite verifying the load/validate round-trip. Commits b33332f → 666159d. Full suite 197/197.
+- 2026-05-13 (session 2, cont.): **Phase 1 modules 10-12 shipped**: pre-commit hook scripts for grammar version-bump enforcement + grammar↔doc sync (13 integration tests); property tests passing 1000 valid + 1000 invalid configs against the v1 grammar; perf test confirming < 10ms / config; equity-family invariant (CLAUDE.md hard rule #7); `PHASE_1_HANDOFF.md` written. Commits 66af073 → 7c8fae6 + handoff. Full suite 218/218; ruff + format + mypy --strict clean. **Phase 1 complete; awaiting close review.**
