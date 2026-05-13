@@ -14,6 +14,13 @@ Architecture rationale: see ``IMPLEMENTATION_DECISIONS.md`` D017.
 
 from __future__ import annotations
 
+from forge.grammar.archive import (
+    archive_grammar,
+    compute_grammar_hash,
+    find_archived_grammar,
+    list_archived_versions,
+)
+from forge.grammar.loader import load_grammar
 from forge.grammar.models import (
     CardinalityPredicate,
     CompatibilityPredicate,
@@ -47,7 +54,12 @@ __all__ = [
     "PredicateResult",
     "RequiresPredicate",
     "Rule",
+    "archive_grammar",
+    "compute_grammar_hash",
     "evaluate",
+    "find_archived_grammar",
+    "list_archived_versions",
+    "load_grammar",
     "resolve",
     "validate",
 ]
