@@ -31,6 +31,7 @@ from forge.grammar.models import (
 )
 from forge.grammar.path_resolver import resolve
 from forge.grammar.predicates import evaluate
+from forge.grammar.validator import validate
 
 __all__ = [
     "CardinalityPredicate",
@@ -48,4 +49,5 @@ __all__ = [
     "Rule",
     "evaluate",
     "resolve",
+    "validate",
 ]
