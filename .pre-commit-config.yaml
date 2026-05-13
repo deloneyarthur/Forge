@@ -4,23 +4,27 @@
 #   grammar↔doc sync (GRAMMAR.md must have a section per rule id).
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.12
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
+  # mypy runs in the local venv (language: system) rather than pre-commit's
+  # isolated env because `crucible_contracts` is a sibling path dep that's
+  # not on PyPI — pre-commit's isolated env can't install it. The local
+  # uv-managed venv has it; CI must run mypy via `uv run` for the same
+  # reason.
+  - repo: local
     hooks:
       - id: mypy
-        args: [--config-file=pyproject.toml]
-        additional_dependencies:
-          - "pydantic>=2.7"
-          - "types-pyyaml>=6.0"
-          - "structlog>=24.0"
-          - "typer>=0.12"
+        name: mypy --strict (local venv)
+        entry: uv run mypy --strict src
+        language: system
+        types: [python]
         files: ^src/
+        require_serial: true
+        pass_filenames: false
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
