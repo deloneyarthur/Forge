@@ -73,9 +73,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN", "PLR2004", "S101", "S311", "PT011", "PLC0415"]
+"tests/**" = ["ANN", "PLR2004", "S101", "S311", "PT011", "PLC0415", "S603", "S607"]
 "src/forge/cli/**" = ["B008", "UP007", "PLC0415"]  # Typer + lazy imports for fast --help / mismatch resilience
 "src/forge/core/seed.py" = ["S311"]                # Deterministic non-crypto RNG is the whole point
+"scripts/**" = ["S603", "S607", "T201", "PLR0911"]  # Pre-commit hook scripts shell out + branchy validation
 
 [tool.ruff.format]
 quote-style = "double"

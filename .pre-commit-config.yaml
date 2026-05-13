@@ -1,5 +1,7 @@
-# Forge pre-commit hooks. Phase 0 ships ruff + mypy + standard hygiene.
-# Phase 1 will add the grammar version-bump scanner (hard rule #10).
+# Forge pre-commit hooks.
+# - Phase 0: ruff + mypy + standard hygiene.
+# - Phase 1: grammar version-bump scanner (CLAUDE.md hard rule #10) and
+#   grammar↔doc sync (GRAMMAR.md must have a section per rule id).
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
@@ -30,3 +32,27 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=200]
       - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      - id: grammar-version-bump
+        name: grammar version-bump scanner
+        description: |
+          Refuse commits that change config/grammar.yaml without bumping
+          grammar_version and staging the prior version under
+          config/grammar_archive/. CLAUDE.md hard rule #10.
+        entry: python scripts/check_grammar_version_bump.py
+        language: system
+        pass_filenames: false
+        files: ^(config/grammar\.yaml|config/grammar_archive/.*\.yaml)$
+        always_run: false
+      - id: grammar-doc-sync
+        name: grammar ↔ GRAMMAR.md sync
+        description: |
+          Every rule id in config/grammar.yaml must have a matching heading
+          in docs/GRAMMAR.md (and vice versa).
+        entry: python scripts/check_grammar_doc_sync.py
+        language: system
+        pass_filenames: false
+        files: ^(config/grammar\.yaml|docs/GRAMMAR\.md)$
+        always_run: false
