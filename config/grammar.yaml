@@ -1,0 +1,295 @@
+# Forge v1 grammar — 21 operator-owned rules (DESIGN.md §3.5).
+#
+# This file is operator-owned (CLAUDE.md hard rule #1). Changes to
+# `rules:` must come with a `grammar_version` bump and an archive entry
+# under `config/grammar_archive/`; the pre-commit hook enforces this and
+# `forge.grammar.loader.load_grammar` rejects silent edits at load time.
+#
+# Predicate encodings per the pre-code confirmation (2026-05-13) and the
+# operator-approved adjustments in IMPLEMENTATION_DECISIONS.md D009-D018.
+
+grammar_version: v1
+
+rules:
+  # =========================================================================
+  # Structural rules (S1-S5) — what shape a strategy must have
+  # =========================================================================
+
+  - id: S1
+    category: structural
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#S1
+    predicate:
+      type: cardinality
+      field: hypothesis
+      count: 1
+    cost_estimate: low
+    evidence_to_relax:
+      - "3+ promoted strategies have explicit multi-hypothesis structure"
+      - "domain expert provides theoretical basis for relaxation"
+
+  - id: S2
+    category: structural
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#S2
+    predicate:
+      type: cardinality
+      field: signals.role.directional
+      count: 1
+    cost_estimate: low
+    evidence_to_relax:
+      - "promoted strategies systematically use two competing directional signals"
+
+  - id: S3
+    category: structural
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#S3
+    predicate:
+      type: cardinality
+      field: signals.role.regime_filter
+      min: 1
+    cost_estimate: low
+    evidence_to_relax:
+      - "unfiltered strategies promote at parity with regime-filtered ones over 4+ batches"
+
+  - id: S4
+    category: structural
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#S4
+    predicate:
+      type: custom_python
+      function: lookback_class_matches_dte_bucket
+    cost_estimate: medium
+    evidence_to_relax:
+      - "promoted long-lookback signals operating at short DTE buckets (or vice versa)"
+
+  - id: S5
+    category: structural
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#S5
+    predicate:
+      type: custom_python
+      function: exits_match_hypothesis
+    cost_estimate: medium
+    evidence_to_relax:
+      - "promoted strategy uses an exit pattern §3.5 S5 forbids for its hypothesis"
+
+  # =========================================================================
+  # Composition rules (C1-C4) — which signal combinations are allowed
+  # =========================================================================
+
+  - id: C1
+    category: composition
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#C1
+    predicate:
+      type: custom_python
+      function: no_duplicate_indicator_families
+    cost_estimate: medium
+    evidence_to_relax:
+      - "promoted strategies use two same-family indicators with different parameters meaningfully"
+
+  - id: C2
+    category: composition
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#C2
+    predicate:
+      type: custom_python
+      function: directional_family_matches_hypothesis
+    cost_estimate: high
+    evidence_to_relax:
+      - "promoted strategy combines hypothesis X with directional family Y where §3.5 C2 disallows the pairing"
+
+  - id: C3
+    category: composition
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#C3
+    predicate:
+      type: cardinality
+      field: signals
+      max: 4
+    cost_estimate: low
+    evidence_to_relax:
+      - "promoted strategy uses 5+ signals with each contributing measurable orthogonal signal"
+
+  - id: C4
+    category: composition
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#C4
+    predicate:
+      type: custom_python
+      function: regime_indicators_disjoint_from_directional
+    cost_estimate: low
+    evidence_to_relax:
+      - "promoted strategy reuses the directional indicator as a regime gate with different threshold"
+
+  # =========================================================================
+  # Parameter coherence rules (P1-P4)
+  # =========================================================================
+
+  - id: P1
+    category: parameter
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#P1
+    predicate:
+      type: custom_python
+      function: indicator_params_within_registry_ranges
+    cost_estimate: low
+    evidence_to_relax:
+      - "registry param_ranges become too narrow vs. observed promoted-strategy parameter mass"
+
+  - id: P2
+    category: parameter
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#P2
+    predicate:
+      type: custom_python
+      function: dte_window_matches_bucket
+    cost_estimate: medium
+    evidence_to_relax:
+      - "DTE window for a bucket needs widening based on observed promotion at the edges"
+
+  - id: P3
+    category: parameter
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#P3
+    predicate:
+      type: custom_python
+      function: delta_target_in_dte_band
+    cost_estimate: medium
+    evidence_to_relax:
+      - "delta band for a bucket needs widening based on observed promotion at the edges"
+
+  - id: P4
+    category: parameter
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#P4
+    predicate:
+      type: numerical_range
+      field: sizer.per_trade_risk_pct
+      min: 0.005
+      max: 0.02
+    cost_estimate: low
+    evidence_to_relax:
+      - "lower bound 0.5% blocks valid micro-sized hedges (cannot raise upper bound — contracts cap)"
+
+  # =========================================================================
+  # Exit logic rules (E1-E3)
+  # =========================================================================
+
+  - id: E1
+    category: exit
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#E1
+    predicate:
+      type: custom_python
+      function: mandatory_exits_present
+    cost_estimate: low
+    evidence_to_relax:
+      - "(cannot relax — contracts MANDATORY_EXIT_IDS enforces this; rule is defense in depth)"
+
+  - id: E2
+    category: exit
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#E2
+    predicate:
+      type: custom_python
+      function: at_most_two_stop_loss_exits
+    cost_estimate: low
+    evidence_to_relax:
+      - "promoted strategy uses 3 distinct stop-loss exits with non-redundant trigger conditions"
+
+  - id: E3
+    category: exit
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#E3
+    predicate:
+      type: custom_python
+      function: trailing_atr_has_activation_threshold
+    cost_estimate: low
+    evidence_to_relax:
+      - "promoted trend strategy uses trailing_atr with activate_after_gain_pct < 0.30 systematically"
+
+  # =========================================================================
+  # Regime coherence rules (R1-R3)
+  # =========================================================================
+
+  - id: R1
+    category: regime
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#R1
+    predicate:
+      type: custom_python
+      function: mean_reversion_requires_iv_rank_gate
+    cost_estimate: medium
+    evidence_to_relax:
+      - "promoted mean_reversion strategies use a non-iv_rank regime gate (e.g., percentile_rank)"
+
+  - id: R2
+    category: regime
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#R2
+    predicate:
+      type: custom_python
+      function: trend_requires_trend_strength_gate
+    cost_estimate: medium
+    evidence_to_relax:
+      - "promoted trend strategies use a non-adx/hurst trend-strength gate (e.g., realized_trend)"
+
+  - id: R3
+    category: regime
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#R3
+    predicate:
+      type: custom_python
+      function: volatility_event_requires_event_proximity_gate
+    cost_estimate: medium
+    evidence_to_relax:
+      - "promoted volatility_event strategies use a non-calendar event-proximity proxy"
+
+  # =========================================================================
+  # Risk coherence rules (X1-X2)
+  # =========================================================================
+
+  - id: X1
+    category: risk
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#X1
+    predicate:
+      type: custom_python
+      function: vol_target_requires_realized_vol_indicator
+    cost_estimate: medium
+    evidence_to_relax:
+      - "vol_target sizing can use an alternative realized-vol proxy registered in the indicator set"
+
+  - id: X2
+    category: risk
+    version: 1
+    active: true
+    rationale_ref: GRAMMAR.md#X2
+    predicate:
+      type: custom_python
+      function: kelly_requires_expected_value_estimator
+    cost_estimate: medium
+    evidence_to_relax:
+      - "alternative EV estimator becomes a Crucible helper (would also need expected_value_estimator alias)"
