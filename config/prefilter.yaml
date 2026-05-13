@@ -1,0 +1,19 @@
+# Pre-filter battery thresholds. See FORGE_DESIGN.md §10.2.
+prefilter:
+  signal_density:
+    min_activations: 30
+  expected_trade_count:
+    min_trades: 50
+  novelty:
+    max_jaccard_overlap: 0.80
+  regime_exposure:
+    max_single_regime_concentration: 0.80
+  permutation_test:
+    n_permutations: 100
+    p_value_threshold: 0.10
+  auto_tune:
+    enabled: true
+    min_promotion_rate: 0.005          # 0.5%
+    max_promotion_rate: 0.05           # 5%
+    adjustment_pct_per_step: 0.10
+    max_cumulative_adjustment: 0.30

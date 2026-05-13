@@ -1,0 +1,11 @@
+# Ranker weights and diversification. See FORGE_DESIGN.md §10.3.
+ranker:
+  weights:
+    signal_density: 0.30
+    novelty: 0.25
+    regime_diversity: 0.20
+    permutation_test: 0.15
+    prior_promotion_proximity: 0.10
+  diversification:
+    method: greedy   # 'greedy' or 'dpp'
+    similarity_metric: jaccard

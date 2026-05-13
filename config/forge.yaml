@@ -1,0 +1,24 @@
+# Forge main configuration. See FORGE_DESIGN.md §10.1.
+forge:
+  data_root: ~/forge_data
+  db_path: ~/forge_data/forge.db
+  log_root: ~/forge_data/logs
+
+  crucible:
+    inbox_path: ~/optbt_data/inbox        # where Forge writes
+    db_path: ~/optbt_data/results.duckdb  # where Forge reads (read-only)
+    contracts_version: "1.1"
+
+  enumeration:
+    max_candidates_per_batch: 100000
+    seed: 42
+
+  submission:
+    batch_size: 200
+    inflight_threshold: 0.80   # wait until 80% of prev batch is gated
+    poll_interval_seconds: 600 # check Crucible status every 10 min
+
+  feedback:
+    light_consumption_after_every: 1   # every batch
+    full_analysis_after_every: 10      # every 10 batches
+    deep_review_after_every: 50        # every 50 batches
