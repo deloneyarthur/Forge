@@ -116,24 +116,20 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
                 lookback=50,
                 params_schema={},
             ),
-            # Trend-strength regime gates (R2). Classified as `volatility`
-            # rather than `trend` so a trend_continuation strategy (which
-            # requires a trend-family directional per C2) can co-exist with
-            # this regime gate without violating C1 (no two same-family
-            # indicators). See OPEN_QUESTIONS.md — §3.5's R2/C1 interaction
-            # implies trend-strength indicators live outside the `trend`
-            # family; this fixture takes that reading.
+            # Trend-strength regime gates (R2). `trend_strength` is its own
+            # family (contracts v1.4.0 / D019) so adx/hurst can gate a
+            # trend-family directional without triggering C1.
             IndicatorMetadata(
                 id="adx",
                 version=1,
-                family="volatility",
+                family="trend_strength",
                 lookback=14,
                 params_schema={},
             ),
             IndicatorMetadata(
                 id="hurst",
                 version=1,
-                family="volatility",
+                family="trend_strength",
                 lookback=100,
                 params_schema={},
             ),

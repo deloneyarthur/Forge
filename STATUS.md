@@ -1,7 +1,8 @@
 # Forge — Status
 
-**Current phase:** 1 (Grammar engine) — **COMPLETE; awaiting close review.** See `PHASE_1_HANDOFF.md`.
-**Previous phase:** 0 (Bootstrap) — complete, committed at `74f0ffa`.
+**Current phase:** 2 (Enumerator) — **in progress.** Phase 1 close-review running in parallel; operator authorized Phase 2 start per closure plan D1–D8.
+**Previous phase:** 1 (Grammar engine) — complete, last commit `ac98e81`. See `PHASE_1_HANDOFF.md`.
+**Previous-previous phase:** 0 (Bootstrap) — complete, committed at `74f0ffa`.
 **Phase started (Phase 1):** 2026-05-13
 **Phase paused → resumed:** 2026-05-13 (single calendar day; pause was waiting for contracts side-quest)
 **Phase finished:** 2026-05-13
@@ -48,3 +49,4 @@ None. Q7 closed by D008 (contracts v1.2.0 adopted).
 - 2026-05-13 (session 2, cont.): **Phase 1 modules 2-6 shipped**: all 6 predicate-type evaluators (`numerical_range`, `requires`, `forbids`, `compatibility`, `custom_python`) + the validator (`validate(config, grammar, registry) -> ValidationResult`) + custom-predicate registry pattern (`forge.grammar.custom_predicates.REGISTRY`). D018 logged: S4 moves from `compatibility` to `custom_python` because §3.4's example path `signals.directional.lookback` can't resolve cleanly without registry-aware path semantics; `compatibility` stays generic and is exercised via synthetic test rules (same approach as D015 for requires/forbids). 60 new tests; full suite 119/119; all gates green.
 - 2026-05-13 (session 2, cont.): **Phase 1 modules 7-9 shipped**: loader + archive (`load_grammar` + `GrammarVersionError` enforcement + hash helpers); 16 §3.5 `custom_python` predicate functions with module-level operator-readable tables; `config/grammar.yaml` populated with all 21 v1 rules + `config/grammar_archive/v1.yaml` archived + `docs/GRAMMAR.md` narrative + 10-test integration suite verifying the load/validate round-trip. Commits b33332f → 666159d. Full suite 197/197.
 - 2026-05-13 (session 2, cont.): **Phase 1 modules 10-12 shipped**: pre-commit hook scripts for grammar version-bump enforcement + grammar↔doc sync (13 integration tests); property tests passing 1000 valid + 1000 invalid configs against the v1 grammar; perf test confirming < 10ms / config; equity-family invariant (CLAUDE.md hard rule #7); `PHASE_1_HANDOFF.md` written. Commits 66af073 → 7c8fae6 + handoff. Full suite 218/218; ruff + format + mypy --strict clean. **Phase 1 complete; awaiting close review.**
+- 2026-05-13 (session 3, resume): Phase 2 (Enumerator) kickoff. Pre-code closure plan presented (D1-D8); operator approved all. D1 resolved by contracts side-trip → **v1.4.0 shipped** (commit `d84240a`) adding `trend_strength` to the family list; honest classification for adx/hurst restored. Q8 logged + closed; D019 logged. Forge pin bumped to `"1.4.0"`; fixture reclassified. Phase 2 module-build begins.
