@@ -79,12 +79,18 @@ class SearchSpace:
 
     hypotheses: tuple[str, ...]
     sizer_modes: tuple[str, ...]
+    samplable_sizer_modes: tuple[str, ...]
     dte_buckets: tuple[str, ...]
 
     indicators_by_family: Mapping[str, tuple[str, ...]]
     directional_indicators_by_hypothesis: Mapping[str, tuple[str, ...]]
     regime_indicators_by_hypothesis: Mapping[str, tuple[str, ...]]
-    sizer_required_indicator: Mapping[str, str | None]
+
+    # Sparse: only modes WITH a §3.5 X-rule requirement that the current
+    # registry can satisfy. ``samplable_sizer_modes`` is the filtered set
+    # of modes the sampler may pick — a mode is samplable iff it has no
+    # X-rule or its X-rule is satisfied.
+    sizer_required_indicator: Mapping[str, str]
 
     dte_entry_window_by_bucket: Mapping[str, tuple[int, int]]
     delta_band_by_bucket: Mapping[str, tuple[float, float]]
@@ -108,7 +114,7 @@ def build_search_space(
     indicators_by_family = _build_indicators_by_family(registry)
     directional = _build_directional_pool(indicators_by_family)
     regime = _build_regime_pool(registry_ids)
-    sizer_req = _build_sizer_required_indicators(registry.sizer_modes, registry_ids)
+    samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
     risk_pct_range = _resolve_p4_risk_pct_range(grammar)
 
     s5_required = MappingProxyType({h: _S5_HYPOTHESIS_EXITS[h]["required"] for h in _HYPOTHESES})
@@ -117,6 +123,7 @@ def build_search_space(
     return SearchSpace(
         hypotheses=_HYPOTHESES,
         sizer_modes=tuple(sorted(registry.sizer_modes)),
+        samplable_sizer_modes=samplable_modes,
         dte_buckets=_DTE_BUCKETS,
         indicators_by_family=indicators_by_family,
         directional_indicators_by_hypothesis=directional,
@@ -181,25 +188,40 @@ def _build_regime_pool(
     return MappingProxyType(pool)
 
 
-def _build_sizer_required_indicators(
+_X_RULE_REQUIREMENTS: Mapping[str, str] = MappingProxyType(
+    {
+        "vol_target": _X1_VOL_TARGET_INDICATOR,
+        "fractional_kelly": _X2_KELLY_INDICATOR,
+    }
+)
+
+
+def _build_sizer_mode_views(
     sizer_modes: tuple[str, ...],
     registry_ids: set[str],
-) -> Mapping[str, str | None]:
-    """§3.5 X1/X2: `vol_target` requires `realized_vol`; `fractional_kelly`
-    requires `expected_value_estimator`. Other modes have no requirement.
-    Returns None when the required indicator is missing from the registry —
-    the sampler treats that mode as unsupported in the current registry."""
-    req: dict[str, str | None] = {}
+) -> tuple[tuple[str, ...], Mapping[str, str]]:
+    """Resolve §3.5 X1/X2 against the registry.
+
+    Returns ``(samplable_modes, required_indicator_map)``:
+
+    - ``samplable_modes``: modes the sampler may pick. A mode is samplable
+      iff it has no X-rule requirement OR its required indicator is in the
+      registry.
+    - ``required_indicator_map``: sparse — keyed only by modes whose X-rule
+      requirement is *met*. ``mapping.get(mode)`` returns ``None`` for
+      modes with no requirement, the sampler treats that as "no chaining
+      needed".
+    """
+    samplable: list[str] = []
+    required: dict[str, str] = {}
     for mode in sorted(sizer_modes):
-        if mode == "vol_target":
-            req[mode] = (
-                _X1_VOL_TARGET_INDICATOR if _X1_VOL_TARGET_INDICATOR in registry_ids else None
-            )
-        elif mode == "fractional_kelly":
-            req[mode] = _X2_KELLY_INDICATOR if _X2_KELLY_INDICATOR in registry_ids else None
-        else:
-            req[mode] = None
-    return MappingProxyType(req)
+        x_requirement = _X_RULE_REQUIREMENTS.get(mode)
+        if x_requirement is None:
+            samplable.append(mode)
+        elif x_requirement in registry_ids:
+            samplable.append(mode)
+            required[mode] = x_requirement
+    return tuple(samplable), MappingProxyType(required)
 
 
 def _resolve_p4_risk_pct_range(grammar: Grammar) -> tuple[float, float]:

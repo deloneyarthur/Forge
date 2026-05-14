@@ -98,6 +98,16 @@ def test_sizer_modes_sorted_from_registry(space: SearchSpace) -> None:
     assert space.sizer_modes == ("fixed_risk_pct", "fractional_kelly", "vol_target")
 
 
+def test_samplable_sizer_modes_when_all_x_rules_met(space: SearchSpace) -> None:
+    """The test registry has realized_vol + expected_value_estimator, so
+    every sizer mode is samplable."""
+    assert space.samplable_sizer_modes == (
+        "fixed_risk_pct",
+        "fractional_kelly",
+        "vol_target",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Indicators by family — sorted within each family, sorted families
 # ---------------------------------------------------------------------------
@@ -220,16 +230,19 @@ def test_sizer_required_fractional_kelly_is_ev_estimator(
     assert space.sizer_required_indicator["fractional_kelly"] == "expected_value_estimator"
 
 
-def test_sizer_required_fixed_risk_pct_is_none(space: SearchSpace) -> None:
-    assert space.sizer_required_indicator["fixed_risk_pct"] is None
+def test_sizer_required_fixed_risk_pct_has_no_entry(space: SearchSpace) -> None:
+    """``fixed_risk_pct`` has no §3.5 X-rule, so the sparse map omits it.
+    The sampler reads via ``.get()``; ``None`` means "no chaining needed."""
+    assert "fixed_risk_pct" not in space.sizer_required_indicator
+    assert space.sizer_required_indicator.get("fixed_risk_pct") is None
 
 
-def test_sizer_required_missing_indicator_returns_none(
+def test_unsamplable_mode_drops_when_indicator_missing(
     v1_grammar: object,
 ) -> None:
-    """If realized_vol is absent from the registry, vol_target requires
-    nothing — the sampler treats that mode as unsupported. The semantics
-    match: sampler-side will short-circuit on the missing requirement."""
+    """If realized_vol is absent from the registry, ``vol_target`` falls out
+    of ``samplable_sizer_modes`` AND out of ``sizer_required_indicator``.
+    The sampler never picks an X-rule-unsatisfiable mode."""
     empty_realized_vol_registry = RegistrySnapshot(
         indicators=(
             IndicatorMetadata(
@@ -247,7 +260,9 @@ def test_sizer_required_missing_indicator_returns_none(
         crucible_version="0.0.0-synthetic",
     )
     space = build_search_space(v1_grammar, empty_realized_vol_registry)  # type: ignore[arg-type]
-    assert space.sizer_required_indicator["vol_target"] is None
+    assert "vol_target" not in space.samplable_sizer_modes
+    assert "vol_target" not in space.sizer_required_indicator
+    assert space.samplable_sizer_modes == ()
 
 
 # ---------------------------------------------------------------------------
