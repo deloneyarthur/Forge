@@ -12,7 +12,7 @@ Covers:
 from __future__ import annotations
 
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -112,6 +112,7 @@ def test_rejection_counter_populates_on_sparse_registry(
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
     counter: Counter[str] = Counter()
     with pytest.raises(EnumerationCapped):
@@ -149,6 +150,7 @@ def test_enumeration_capped_when_target_unreachable(
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
     with pytest.raises(EnumerationCapped, match="capped"):
         list(

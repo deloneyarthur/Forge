@@ -9,7 +9,7 @@ empty-pool / unsamplable-mode edges.
 from __future__ import annotations
 
 import random
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -308,6 +308,7 @@ def test_sampler_raises_when_no_hypothesis_has_pools(grammar: Grammar) -> None:
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
     space = build_search_space(grammar, empty_registry)
     with pytest.raises(SamplerError, match="no hypothesis"):
@@ -340,6 +341,7 @@ def test_sampler_raises_when_no_sizer_mode_is_samplable(grammar: Grammar) -> Non
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
     space = build_search_space(grammar, registry)
     with pytest.raises(SamplerError, match="no sizer mode"):

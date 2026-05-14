@@ -8,7 +8,7 @@ configs would have NaN for most of any backtest.
 from __future__ import annotations
 
 import random
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -68,6 +68,7 @@ def _short_history_registry(*, history_days: int, lookback: int) -> RegistrySnap
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=history_days,
+        data_start_date=date(2022, 1, 1),
     )
 
 
@@ -162,6 +163,7 @@ def test_multi_indicator_signal_uses_max_lookback() -> None:
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=200,
+        data_start_date=date(2022, 1, 1),
     )
     cfg = minimal_strategy_config(
         signals=(

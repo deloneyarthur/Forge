@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from crucible_contracts import (
@@ -32,6 +32,7 @@ def _snapshot(**overrides: object) -> RegistrySnapshot:
         "snapshot_taken_at": datetime(2026, 5, 13, tzinfo=UTC),
         "crucible_version": "0.0.0-synthetic",
         "data_history_days": 1008,
+        "data_start_date": date(2022, 1, 1),
     }
     base.update(overrides)
     return RegistrySnapshot(**base)  # type: ignore[arg-type]
@@ -67,6 +68,7 @@ def test_hash_stable_for_fixture_registry() -> None:
         "snapshot_taken_at",
         "crucible_version",
         "data_history_days",
+        "data_start_date",
     ],
 )
 def test_hash_is_sensitive_to_each_field(field: str) -> None:
@@ -98,8 +100,10 @@ def test_hash_is_sensitive_to_each_field(field: str) -> None:
         modified = _snapshot(snapshot_taken_at=datetime(2027, 1, 1, tzinfo=UTC))
     elif field == "crucible_version":
         modified = _snapshot(crucible_version="9.9.9-bumped")
-    else:  # data_history_days
+    elif field == "data_history_days":
         modified = _snapshot(data_history_days=504)
+    else:  # data_start_date
+        modified = _snapshot(data_start_date=date(2020, 6, 1))
 
     assert registry_hash(modified) != baseline_hash
 

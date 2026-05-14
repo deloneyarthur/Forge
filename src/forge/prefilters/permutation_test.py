@@ -56,13 +56,12 @@ class PermutationTestFilter:
             real_notional = 0.0
 
         # Permuted distribution: random subsets of size n_activations
-        # drawn from the full window's returns. The window is built
-        # against the feature cache's history depth.
+        # drawn from the full window's returns. The window is anchored at
+        # `registry.data_start_date` (contracts v1.6.0) so the calendar
+        # axis stays consistent with whatever cache implementation answers
+        # `returns(dates)`.
         history = ctx.feature_cache.data_history_days
-        # Synthetic feature caches in tests don't expose a `start_date`
-        # uniformly, so we use a fixed anchor and trust the cache's
-        # `returns(dates)` to answer for any date in its window.
-        window = _full_window(date(2022, 1, 1), history)
+        window = _full_window(ctx.registry.data_start_date, history)
         all_returns_map = ctx.feature_cache.returns(window)
         all_returns = list(all_returns_map.values())
 

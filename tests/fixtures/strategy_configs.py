@@ -8,7 +8,7 @@ fixture references. Tests override fields via ``minimal_strategy_config(**)``.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from crucible_contracts import (
@@ -208,6 +208,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
 
 

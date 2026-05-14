@@ -169,7 +169,7 @@ def test_perf_100k_configs_under_five_minutes(grammar: Grammar) -> None:
 
 
 def test_capped_is_loud_for_unsatisfiable_registries(grammar: Grammar) -> None:
-    from datetime import UTC, datetime
+    from datetime import UTC, date, datetime
 
     from crucible_contracts import MANDATORY_EXIT_IDS, RegistrySnapshot
 
@@ -181,6 +181,7 @@ def test_capped_is_loud_for_unsatisfiable_registries(grammar: Grammar) -> None:
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
     with pytest.raises(EnumerationCapped):
         list(enumerate_candidates(grammar, bad, seed=0, max_candidates=1))

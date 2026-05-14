@@ -9,7 +9,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -259,6 +259,7 @@ def test_unsamplable_mode_drops_when_indicator_missing(
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
     space = build_search_space(v1_grammar, empty_realized_vol_registry)  # type: ignore[arg-type]
     assert "vol_target" not in space.samplable_sizer_modes
@@ -346,6 +347,7 @@ def test_empty_directional_pool_when_family_absent(v1_grammar: object) -> None:
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
     space = build_search_space(v1_grammar, no_trend_registry)  # type: ignore[arg-type]
     assert space.directional_indicators_by_hypothesis["trend_continuation"] == ()

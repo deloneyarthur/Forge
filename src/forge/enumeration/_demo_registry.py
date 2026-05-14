@@ -12,7 +12,7 @@ remove this module entirely once Phase 4 lands).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from crucible_contracts import IndicatorMetadata, RegistrySnapshot
 
@@ -147,4 +147,5 @@ def demo_registry() -> RegistrySnapshot:
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
         data_history_days=1008,
+        data_start_date=date(2022, 1, 1),
     )
