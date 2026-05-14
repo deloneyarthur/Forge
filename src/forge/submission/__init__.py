@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from forge.submission.batch import BatchContext, mint_batch_id
+from forge.submission.pre_filter_logger import record_pre_filter_logs
 from forge.submission.rate_limiter import RateLimitStatus, check_rate_limit
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "RateLimitStatus",
     "check_rate_limit",
     "mint_batch_id",
+    "record_pre_filter_logs",
 ]
