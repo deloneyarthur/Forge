@@ -146,4 +146,5 @@ def demo_registry() -> RegistrySnapshot:
         sizer_modes=("fixed_risk_pct", "vol_target", "fractional_kelly"),
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )

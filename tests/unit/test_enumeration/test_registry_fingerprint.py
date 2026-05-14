@@ -31,6 +31,7 @@ def _snapshot(**overrides: object) -> RegistrySnapshot:
         "sizer_modes": ("fixed_risk_pct",),
         "snapshot_taken_at": datetime(2026, 5, 13, tzinfo=UTC),
         "crucible_version": "0.0.0-synthetic",
+        "data_history_days": 1008,
     }
     base.update(overrides)
     return RegistrySnapshot(**base)  # type: ignore[arg-type]
@@ -65,6 +66,7 @@ def test_hash_stable_for_fixture_registry() -> None:
         "sizer_modes",
         "snapshot_taken_at",
         "crucible_version",
+        "data_history_days",
     ],
 )
 def test_hash_is_sensitive_to_each_field(field: str) -> None:
@@ -94,8 +96,10 @@ def test_hash_is_sensitive_to_each_field(field: str) -> None:
         modified = _snapshot(sizer_modes=("fixed_risk_pct", "vol_target"))
     elif field == "snapshot_taken_at":
         modified = _snapshot(snapshot_taken_at=datetime(2027, 1, 1, tzinfo=UTC))
-    else:  # crucible_version
+    elif field == "crucible_version":
         modified = _snapshot(crucible_version="9.9.9-bumped")
+    else:  # data_history_days
+        modified = _snapshot(data_history_days=504)
 
     assert registry_hash(modified) != baseline_hash
 

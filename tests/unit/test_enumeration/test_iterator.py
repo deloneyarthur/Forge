@@ -111,6 +111,7 @@ def test_rejection_counter_populates_on_sparse_registry(
         sizer_modes=("fixed_risk_pct",),
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )
     counter: Counter[str] = Counter()
     with pytest.raises(EnumerationCapped):
@@ -147,6 +148,7 @@ def test_enumeration_capped_when_target_unreachable(
         sizer_modes=("fixed_risk_pct",),
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )
     with pytest.raises(EnumerationCapped, match="capped"):
         list(

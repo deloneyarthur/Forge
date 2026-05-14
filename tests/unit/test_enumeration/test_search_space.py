@@ -258,6 +258,7 @@ def test_unsamplable_mode_drops_when_indicator_missing(
         sizer_modes=("vol_target",),
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )
     space = build_search_space(v1_grammar, empty_realized_vol_registry)  # type: ignore[arg-type]
     assert "vol_target" not in space.samplable_sizer_modes
@@ -344,6 +345,7 @@ def test_empty_directional_pool_when_family_absent(v1_grammar: object) -> None:
         sizer_modes=("fixed_risk_pct",),
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )
     space = build_search_space(v1_grammar, no_trend_registry)  # type: ignore[arg-type]
     assert space.directional_indicators_by_hypothesis["trend_continuation"] == ()

@@ -1,8 +1,9 @@
 # Forge — Status
 
-**Current phase:** 2 (Enumerator) — **COMPLETE; awaiting light review.** See `PHASE_2_HANDOFF.md`.
-**Previous phase:** 1 (Grammar engine) — complete, last commit `ac98e81`. See `PHASE_1_HANDOFF.md`.
-**Previous-previous phase:** 0 (Bootstrap) — complete, committed at `74f0ffa`.
+**Current phase:** 3 (Pre-filter battery) — **IN PROGRESS** (kickoff + contracts v1.5.0 side-trip + closure plan logged).
+**Previous phase:** 2 (Enumerator) — complete, last commit `ca9dc8b`. See `PHASE_2_HANDOFF.md`.
+**Previous-previous phase:** 1 (Grammar engine) — complete, last commit `ac98e81`. See `PHASE_1_HANDOFF.md`.
+**Phase 0 (Bootstrap)** — complete, committed at `74f0ffa`.
 **Phase started (Phase 1):** 2026-05-13
 **Phase paused → resumed:** 2026-05-13 (single calendar day; pause was waiting for contracts side-quest)
 **Phase finished:** 2026-05-13
@@ -52,3 +53,4 @@ None. Q7 closed by D008 (contracts v1.2.0 adopted).
 - 2026-05-13 (session 3, resume): Phase 2 (Enumerator) kickoff. Pre-code closure plan presented (D1-D8); operator approved all. D1 resolved by contracts side-trip → **v1.4.0 shipped** (commit `d84240a`) adding `trend_strength` to the family list; honest classification for adx/hurst restored. Q8 logged + closed; D019 logged. Forge pin bumped to `"1.4.0"`; fixture reclassified. Phase 2 module-build begins.
 - 2026-05-13 (session 3, cont.): **Phase 2 modules 1-5 shipped** at commits `fe8d4ab` → `de3458f` → `6fa51e7` → `74b0f45` → `c3139fc`. search_space (CSP variable+domain pre-resolver) → registry_fingerprint (16-char sha256 of canonical JSON for §13.1 triple) → defaults (D6 fixed values for unconstrained fields) → sampler (hypothesis-first, valid-by-construction, 118 tests) → iterator + CLI (`forge enumerate --seed N --max K [--summary]`, with `EnumerationCapped` retry-budget). 173 new tests; full suite 395/395.
 - 2026-05-13 (session 3, cont.): **Phase 2 module 6 shipped**: invariants test file covering §13.1 byte-determinism, hard rule #7 defense-in-depth, D5, max_candidates contract, path-(a) zero-rejection at 200/1000-config scales, and §4.5 perf at 100K configs (~15s — 20x headroom against the 5min budget). `PHASE_2_HANDOFF.md` written. Full suite 407/407; ruff + format + mypy --strict clean. **Phase 2 complete; awaiting light review.**
+- 2026-05-13 (session 3, cont.): **Phase 3 (Pre-filter battery) kickoff.** Pre-code closure plan presented (D1–D9); operator approved (`1.a, 2.a, 3.a, 4.a, 5.ok, 6.b, 7.confirm 100, 8.a, 9.ok`). D6 resolved by contracts side-trip → **contracts v1.5.0 shipped** (commit `edbdfcb`) adding `RegistrySnapshot.data_history_days` (required `int`, `ge=1`). Forge pin bumped to `"1.5.0"`; 9 RegistrySnapshot constructor sites updated to `data_history_days=1008` (≈ 4×252 trading days); registry-hash sensitivity test added. Logged as **D020** (contracts adoption) + **D021** (full closure plan). Full suite 408/408; ruff + format + mypy --strict clean. Phase 3 module-build begins.

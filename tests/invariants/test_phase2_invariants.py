@@ -180,6 +180,7 @@ def test_capped_is_loud_for_unsatisfiable_registries(grammar: Grammar) -> None:
         sizer_modes=("fixed_risk_pct",),
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )
     with pytest.raises(EnumerationCapped):
         list(enumerate_candidates(grammar, bad, seed=0, max_candidates=1))

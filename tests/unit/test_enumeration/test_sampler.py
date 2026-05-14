@@ -307,6 +307,7 @@ def test_sampler_raises_when_no_hypothesis_has_pools(grammar: Grammar) -> None:
         sizer_modes=("fixed_risk_pct",),
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )
     space = build_search_space(grammar, empty_registry)
     with pytest.raises(SamplerError, match="no hypothesis"):
@@ -338,6 +339,7 @@ def test_sampler_raises_when_no_sizer_mode_is_samplable(grammar: Grammar) -> Non
         sizer_modes=("vol_target",),  # X1 unsatisfiable: no realized_vol
         snapshot_taken_at=datetime(2026, 5, 13, tzinfo=UTC),
         crucible_version="0.0.0-synthetic",
+        data_history_days=1008,
     )
     space = build_search_space(grammar, registry)
     with pytest.raises(SamplerError, match="no sizer mode"):
