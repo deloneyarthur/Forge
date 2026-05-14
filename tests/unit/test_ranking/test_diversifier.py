@@ -20,7 +20,13 @@ from tests.fixtures.strategy_configs import minimal_strategy_config
 
 def _named_config(name: str, signal_ids: tuple[str, ...]) -> StrategyConfig:
     """Build a config with the given signal IDs (first is directional,
-    rest are regime-filter)."""
+    rest are regime-filter).
+
+    Phase 5 D024/D10: similarity scoring uses content_key (not id), so
+    each unique signal_id input also varies the params dict — that way
+    these tests, which use signal_ids as a proxy for "different signal,"
+    keep producing distinct content keys under the new scheme.
+    """
     if not signal_ids:
         msg = "_named_config: need at least one signal"
         raise ValueError(msg)
@@ -30,7 +36,7 @@ def _named_config(name: str, signal_ids: tuple[str, ...]) -> StrategyConfig:
             type="threshold",
             role="directional",
             indicators=("rsi_2",),
-            params={"threshold": 30.0},
+            params={"threshold": 30.0, "key": signal_ids[0]},
         ),
         *tuple(
             SignalSpec(
@@ -38,7 +44,7 @@ def _named_config(name: str, signal_ids: tuple[str, ...]) -> StrategyConfig:
                 type="threshold",
                 role="regime_filter",
                 indicators=("iv_rank",),
-                params={"threshold": 50.0},
+                params={"threshold": 50.0, "key": sid},
             )
             for sid in signal_ids[1:]
         ),

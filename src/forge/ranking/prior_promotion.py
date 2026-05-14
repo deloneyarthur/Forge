@@ -18,34 +18,41 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
+from forge.ranking.signal_key import content_key
+
 if TYPE_CHECKING:
     from crucible_contracts import StrategyConfig
 
 
-def _signal_ids(config: StrategyConfig) -> frozenset[str]:
-    return frozenset(s.id for s in config.signals)
+def _signal_keys(config: StrategyConfig) -> frozenset[str]:
+    """Content-hash keys for proximity comparison (D024/D10)."""
+    return frozenset(content_key(s) for s in config.signals)
 
 
 def compute_prior_promotion_proximity(
     config: StrategyConfig,
     promoted_configs: Iterable[StrategyConfig],
 ) -> float:
-    """Max Jaccard overlap of `config`'s signal IDs vs each promoted config's.
+    """Max Jaccard overlap of `config`'s signal content-keys vs each promoted's.
 
     Returns `0.0` if `promoted_configs` is empty or if no promoted entry
     shares any signals with the candidate. Returns `1.0` if any promoted
     config has the identical signal set.
+
+    Phase 5 closes Phase 3 OQ-4 by switching from signal.id to content_key —
+    cross-batch comparisons now compare on content, not on the (potentially
+    drifting) ID strings.
     """
-    candidate = _signal_ids(config)
+    candidate = _signal_keys(config)
     if not candidate:
         return 0.0
     best = 0.0
     for promoted in promoted_configs:
-        promoted_ids = _signal_ids(promoted)
-        if not promoted_ids:
+        promoted_keys = _signal_keys(promoted)
+        if not promoted_keys:
             continue
-        intersection = candidate & promoted_ids
-        union = candidate | promoted_ids
+        intersection = candidate & promoted_keys
+        union = candidate | promoted_keys
         overlap = len(intersection) / len(union)
         best = max(best, overlap)
     return best

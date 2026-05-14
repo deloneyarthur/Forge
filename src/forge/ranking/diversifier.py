@@ -15,31 +15,41 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
+from forge.ranking.signal_key import content_key
+
 if TYPE_CHECKING:
     from crucible_contracts import StrategyConfig
 
     from forge.ranking.types import RankedCandidate
 
 
-def _signal_ids(config: StrategyConfig) -> frozenset[str]:
-    return frozenset(s.id for s in config.signals)
+def _signal_keys(config: StrategyConfig) -> frozenset[str]:
+    """Content-hash keys for similarity comparison (D024/D10).
+
+    Switched from `signal.id` to `content_key(signal)` in Phase 5 so
+    that signals with identical content but different ID strings count
+    as the same — required for honest cross-batch proximity scoring.
+    """
+    return frozenset(content_key(s) for s in config.signals)
 
 
 def jaccard_signal_ids(a: StrategyConfig, b: StrategyConfig) -> float:
-    """Jaccard overlap of two configs' signal IDs.
+    """Jaccard overlap of two configs' signal content-keys (D024/D10).
 
     Returns `1.0` for identical sets, `0.0` for disjoint sets, the
     standard intersection-over-union ratio otherwise. Either config
     having an empty signal set yields `0.0` (the diversifier never
     needs to compare such configs in practice — pre-filters reject
     them — but the metric stays defined).
+
+    Function name kept for back-compat; the key is now content-hash.
     """
-    a_ids = _signal_ids(a)
-    b_ids = _signal_ids(b)
-    if not a_ids or not b_ids:
+    a_keys = _signal_keys(a)
+    b_keys = _signal_keys(b)
+    if not a_keys or not b_keys:
         return 0.0
-    intersection = a_ids & b_ids
-    union = a_ids | b_ids
+    intersection = a_keys & b_keys
+    union = a_keys | b_keys
     return len(intersection) / len(union)
 
 

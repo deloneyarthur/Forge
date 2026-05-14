@@ -27,6 +27,8 @@ def _two_signal_config(
     from crucible_contracts import SignalSpec
 
     cfg = minimal_strategy_config()
+    # Phase 5 D024/D10: vary `params.key` with the id so content_key
+    # tracks the test's id-based intent under the new similarity scheme.
     return cfg.model_copy(
         update={
             "name": name,
@@ -36,14 +38,14 @@ def _two_signal_config(
                     type="threshold",
                     role="directional",
                     indicators=("rsi_2",),
-                    params={"threshold": 30.0},
+                    params={"threshold": 30.0, "key": directional_id},
                 ),
                 SignalSpec(
                     id=regime_id,
                     type="threshold",
                     role="regime_filter",
                     indicators=("iv_rank",),
-                    params={"threshold": 50.0},
+                    params={"threshold": 50.0, "key": regime_id},
                 ),
             ),
         },

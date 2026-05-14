@@ -33,13 +33,15 @@ def _named_config(name: str, signal_ids: tuple[str, ...]) -> StrategyConfig:
     if not signal_ids:
         msg = "_named_config: need at least one signal"
         raise ValueError(msg)
+    # Phase 5 D024/D10: vary params.key by id so the test's id-based
+    # intent maps to distinct content_keys under the new similarity scheme.
     signals = (
         SignalSpec(
             id=signal_ids[0],
             type="threshold",
             role="directional",
             indicators=("rsi_2",),
-            params={"threshold": 30.0},
+            params={"threshold": 30.0, "key": signal_ids[0]},
         ),
         *tuple(
             SignalSpec(
@@ -47,7 +49,7 @@ def _named_config(name: str, signal_ids: tuple[str, ...]) -> StrategyConfig:
                 type="threshold",
                 role="regime_filter",
                 indicators=("iv_rank",),
-                params={"threshold": 50.0},
+                params={"threshold": 50.0, "key": sid},
             )
             for sid in signal_ids[1:]
         ),
