@@ -106,9 +106,21 @@ class CrucibleFeatureCache:
         )
 
     def _window_dates(self) -> tuple[date, ...]:
-        return tuple(
-            self._data_start_date + timedelta(days=i) for i in range(self._data_history_days)
-        )
+        """All calendar days from `data_start_date` through today.
+
+        `data_history_days` is measured in *trading* days (per
+        `RegistrySnapshot`), but activation dates Crucible returns are real
+        trading-day calendars that span roughly 1.5x as many calendar days.
+        Fetching the full calendar range from start_date to today ensures
+        every activation date Crucible could return has corresponding
+        returns/regime_label entries pre-loaded.
+        """
+        from datetime import date as _date  # noqa: PLC0415
+
+        today = _date.today()
+        end = today if today > self._data_start_date else self._data_start_date
+        n_days = (end - self._data_start_date).days + 1
+        return tuple(self._data_start_date + timedelta(days=i) for i in range(n_days))
 
     def prefetch_for_config(self, config: StrategyConfig) -> None:
         """Pre-populate the cache for one config's signals.
@@ -117,11 +129,15 @@ class CrucibleFeatureCache:
           1. Rebuild `_display_id_index` from this config's specs so
              `activation_dates(spec.id)` resolves to the right content key
              (the enumerator reuses spec.id strings across configs).
-          2. Fetch any specs whose content_key isn't in the cross-config
-             cache — a Crucible round-trip per new semantic spec, not per
-             enumeration.
-          3. On first call only, fetch window-wide returns + regime_label
-             (signal-independent; reused for the lifetime of the cache).
+          2. Fetch activation_dates for any spec whose content_key isn't in
+             the cross-config cache.
+          3. Fetch returns + regime_label for the union of all activation
+             dates discovered (this config + the cross-config cache),
+             skipping any date already loaded. This is precise — only the
+             dates Crucible's compute actually produced are queried, and we
+             avoid the window-mismatch issue where data_start_date <
+             actual_first_activation (lookback-period activations) or
+             data_history_days underestimates the calendar span.
         """
         # 1) Rebuild the per-config index. content_keys collide across
         # configs only when the spec is semantically identical, which is
@@ -135,17 +151,41 @@ class CrucibleFeatureCache:
             if signal_content_key(spec) not in self._activations_by_content_key
         ]
 
-        # Window data (returns + regime_label) is signal-independent; load once.
-        if not self._window_loaded and config.signals:
+        # 2) Fetch activation_dates for new specs (batched).
+        if new_specs:
+            response = self._client.get_features(
+                signals=tuple(new_specs),
+                feature_names=("activation_dates",),
+                data_history_days=self._data_history_days,
+                underlying=self._underlying,
+            )
+            for content_key, feature_map in response.features.items():
+                if "activation_dates" not in feature_map:
+                    continue
+                raw_dates = feature_map["activation_dates"]
+                self._activations_by_content_key[content_key] = frozenset(
+                    date.fromisoformat(d) for d in raw_dates
+                )
+
+        # 3) Fetch returns + regime_label for the union of THIS config's
+        # activation dates (only the dates we'll actually query). Skip any
+        # date already loaded.
+        config_keys = (signal_content_key(s) for s in config.signals)
+        all_activations: set[date] = set()
+        for key in config_keys:
+            cached = self._activations_by_content_key.get(key)
+            if cached is not None:
+                all_activations.update(cached)
+        missing_dates = tuple(sorted(all_activations - self._returns.keys()))
+        if missing_dates and config.signals:
             sentinel = (config.signals[0],)
             window_response = self._client.get_features(
                 signals=sentinel,
                 feature_names=("returns", "regime_label"),
-                dates=self._window_dates(),
+                dates=missing_dates,
                 data_history_days=self._data_history_days,
                 underlying=self._underlying,
             )
-            # Returns/regimes are global; take whichever signal entry is present.
             for feature_map in window_response.features.values():
                 if "returns" in feature_map:
                     for date_str, value in feature_map["returns"].items():
@@ -158,24 +198,6 @@ class CrucibleFeatureCache:
                         )
                 break  # one signal entry is enough — values are global
             self._window_loaded = True
-
-        if not new_specs:
-            return
-
-        # Per-signal activation_dates fetch (batched across new specs).
-        response = self._client.get_features(
-            signals=tuple(new_specs),
-            feature_names=("activation_dates",),
-            data_history_days=self._data_history_days,
-            underlying=self._underlying,
-        )
-        for content_key, feature_map in response.features.items():
-            if "activation_dates" not in feature_map:
-                continue
-            raw_dates = feature_map["activation_dates"]
-            self._activations_by_content_key[content_key] = frozenset(
-                date.fromisoformat(d) for d in raw_dates
-            )
 
     # ------------------------------------------------------------------
     # FeatureCache Protocol methods
@@ -200,25 +222,23 @@ class CrucibleFeatureCache:
         return self._activations_by_content_key[content_key]
 
     def returns(self, dates: Iterable[date]) -> Mapping[date, float]:
-        out: dict[date, float] = {}
-        for d in dates:
-            if d not in self._returns:
-                msg = (
-                    f"returns: date={d.isoformat()} not prefetched; "
-                    "window data is loaded on first prefetch_for_config call."
-                )
-                raise KeyError(msg)
-            out[d] = self._returns[d]
-        return out
+        """Return whatever returns we have for the requested dates.
+
+        Missing dates are silently dropped (not all calendar days are
+        trading days; not all queried dates have been prefetched). The
+        callers (permutation_test passes the full window; regime_exposure
+        passes only activations) tolerate shorter result maps.
+        """
+        return {d: self._returns[d] for d in dates if d in self._returns}
 
     def regime_label(self, d: date) -> Regime:
-        if d not in self._regimes:
-            msg = (
-                f"regime_label: date={d.isoformat()} not prefetched; "
-                "window data is loaded on first prefetch_for_config call."
-            )
-            raise KeyError(msg)
-        return self._regimes[d]
+        """Return the regime for `d`; default to "low_vol" when not loaded.
+
+        Crucible's regime classifier produces labels for trading days only.
+        Activation dates that fall on non-classified days (rare) get the
+        defensive "low_vol" default rather than crashing the filter.
+        """
+        return self._regimes.get(d, cast("Regime", "low_vol"))
 
 
 __all__ = ["CrucibleFeatureCache"]

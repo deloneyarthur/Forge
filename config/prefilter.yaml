@@ -10,6 +10,12 @@ prefilter:
     max_single_regime_concentration: 0.80
   permutation_test:
     n_permutations: 100
+    # Operator-approved proposal 646a865f-1379-4535-b470-e1df4b91d0f2 (2026-05-14)
+    # was applied as a 0.10→0.50 loosen to bootstrap survival under synthetic
+    # cache. Reverted after Crucible's real feature cache shipped (commit
+    # b447597) + Forge's indicator-aware threshold sampling fixed the actual
+    # bottleneck. Threshold back to 0.10. The audit row in grammar_proposals
+    # remains.
     p_value_threshold: 0.10
   auto_tune:
     enabled: true

@@ -38,6 +38,10 @@ from crucible_contracts import (
 )
 
 from forge.enumeration import defaults
+from forge.enumeration.indicator_thresholds import (
+    is_threshold_skippable,
+    sample_threshold_params,
+)
 
 if TYPE_CHECKING:
     from crucible_contracts import IndicatorMetadata, RegistrySnapshot
@@ -133,6 +137,7 @@ def sample_config(
             type="threshold",
             role="directional",
             indicators=(directional_id,),
+            params=_directional_signal_params(directional_id, rng),
         ),
         SignalSpec(
             id="sig_regime",
@@ -199,12 +204,16 @@ def _viable_buckets(
         compat_directionals = [
             i
             for i in directional_pool
-            if i in by_id and _lookback_class(by_id[i].lookback) in allowed_cls
+            if i in by_id
+            and _lookback_class(by_id[i].lookback) in allowed_cls
+            and not is_threshold_skippable(i)
         ]
         compat_regimes = [
             i
             for i in regime_pool
-            if i in by_id and _lookback_class(by_id[i].lookback) in allowed_cls
+            if i in by_id
+            and _lookback_class(by_id[i].lookback) in allowed_cls
+            and not is_threshold_skippable(i)
         ]
         if _has_valid_pair(compat_directionals, compat_regimes, by_id):
             viable.append(bucket)
@@ -237,12 +246,16 @@ def _pick_directional_regime_pair(
     compat_directionals = tuple(
         i
         for i in space.directional_indicators_by_hypothesis[hypothesis]
-        if i in by_id and _lookback_class(by_id[i].lookback) in allowed_cls
+        if i in by_id
+        and _lookback_class(by_id[i].lookback) in allowed_cls
+        and not is_threshold_skippable(i)
     )
     compat_regimes = tuple(
         i
         for i in space.regime_indicators_by_hypothesis[hypothesis]
-        if i in by_id and _lookback_class(by_id[i].lookback) in allowed_cls
+        if i in by_id
+        and _lookback_class(by_id[i].lookback) in allowed_cls
+        and not is_threshold_skippable(i)
     )
 
     directional_id = rng.choice(compat_directionals)
@@ -320,17 +333,35 @@ def _build_exits(
     return tuple(ExitSpec(id=eid, params=_exit_params(eid, rng)) for eid in deduped)
 
 
+def _directional_signal_params(
+    indicator_id: str,
+    rng: random.Random,
+) -> dict[str, object]:
+    """Threshold params for the directional signal.
+
+    Sourced from `forge.enumeration.indicator_thresholds`, which encodes
+    audited per-indicator distributions on real SPY bars (see
+    `docs/INDICATOR_THRESHOLDS.md`, 2026-05-14). Prior to this audit Forge
+    emitted directional threshold signals with empty params; Crucible's
+    predicate then returned False on every bar, producing 0 activations
+    and 100% signal_density rejection under the real feature cache.
+    """
+    return sample_threshold_params(indicator_id, "directional", rng)
+
+
 def _regime_signal_params(
     hypothesis: str,
     regime_id: str,
     rng: random.Random,
 ) -> dict[str, object]:
-    """R1 demands ``params.threshold ≤ 50.0`` on the mean_reversion regime
-    iv_rank signal. R2/R3 have no param requirement. Other hypotheses pass
-    an empty dict."""
-    if hypothesis == "mean_reversion" and regime_id == "iv_rank":
-        return {"threshold": rng.randint(10, 50)}
-    return {}
+    """Threshold params for the regime_filter signal.
+
+    Uses `forge.enumeration.indicator_thresholds.sample_threshold_params`
+    for the audited per-indicator distributions. §3.5 R1's "threshold <= 50"
+    constraint on iv_rank is honored by the table's `regime_range=(10, 50)`
+    entry for that indicator; no special-case logic needed here.
+    """
+    return sample_threshold_params(regime_id, "regime_filter", rng)
 
 
 def _exit_params(exit_id: str, rng: random.Random) -> dict[str, object]:

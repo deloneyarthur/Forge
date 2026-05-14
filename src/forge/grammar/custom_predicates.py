@@ -397,6 +397,16 @@ def _p1_indicator_params_within_registry_ranges(
     JSON-Schema-ish but not pinned in contracts; full type-and-range
     validation is deferred to a follow-up rule.
     """
+    # Signal-type-specific predicate params that live on `signal.params` but
+    # are NOT indicator params (they configure the signal's evaluator, not
+    # the underlying indicator computation). P1 strips these before checking.
+    # See `crucible_contracts` ThresholdSignal._compare / passthrough.
+    _SIGNAL_TYPE_PREDICATE_PARAMS: dict[str, frozenset[str]] = {
+        "threshold": frozenset({"threshold", "op"}),
+        "passthrough": frozenset(),
+        "rule": frozenset(),
+    }
+
     for signal in config.signals:
         allowed_keys: set[str] = set()
         for ind_id in signal.indicators:
@@ -407,7 +417,8 @@ def _p1_indicator_params_within_registry_ranges(
                     detail=(f"P1: indicator {ind_id!r} (signal {signal.id!r}) not in registry"),
                 )
             allowed_keys |= set(im.params_schema)
-        unknown_keys = set(signal.params) - allowed_keys
+        signal_type_keys = _SIGNAL_TYPE_PREDICATE_PARAMS.get(signal.type, frozenset())
+        unknown_keys = set(signal.params) - allowed_keys - signal_type_keys
         # Permit unknown keys only when the indicator(s) declare an empty
         # schema (the registry hasn't documented any parameter shape
         # yet — typical for Phase-1 synthetic data).

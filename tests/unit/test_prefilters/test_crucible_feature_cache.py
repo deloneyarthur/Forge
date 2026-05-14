@@ -68,36 +68,31 @@ def _response(features: dict[str, dict[str, Any]]) -> FeatureBatchResponse:
 
 
 def test_prefetch_for_config_calls_client_for_signals_and_window() -> None:
-    """First config triggers two client calls: window data + activation_dates."""
+    """First config triggers two client calls: activations first, then returns/regime."""
     client = MagicMock()
     spec = _spec()
     content_key = signal_content_key(spec)
 
     client.get_features.side_effect = [
-        # Window data response (first call: returns + regime_label) — keyed
-        # by content_key as Crucible's compute returns.
+        # Call 1: activation_dates
+        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
+        # Call 2: returns + regime_label for the discovered activation dates
         _response(
             {
                 content_key: {
-                    "returns": {"2024-01-02": 0.01, "2024-01-03": -0.005},
-                    "regime_label": {"2024-01-02": "bull", "2024-01-03": "bull"},
+                    "returns": {"2024-01-02": 0.01},
+                    "regime_label": {"2024-01-02": "bull"},
                 }
             }
         ),
-        # Activation dates response (second call)
-        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
     ]
 
     cache = CrucibleFeatureCache(client, data_history_days=4, data_start_date=date(2024, 1, 1))
     cache.prefetch_for_config(_config(spec))
 
     assert client.get_features.call_count == 2
-    # Activation_dates is served by `spec.id` (the display id consumers pass),
-    # not by the content_key Crucible uses internally.
     assert cache.activation_dates(spec.id) == frozenset({date(2024, 1, 2)})
-    # Returns resolves for prefetched dates.
     assert cache.returns([date(2024, 1, 2)])[date(2024, 1, 2)] == pytest.approx(0.01)
-    # Regime label resolves.
     assert cache.regime_label(date(2024, 1, 2)) == "bull"
 
 
@@ -107,6 +102,7 @@ def test_second_prefetch_skips_already_cached_signals() -> None:
     spec = _spec()
     content_key = signal_content_key(spec)
     client.get_features.side_effect = [
+        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
         _response(
             {
                 content_key: {
@@ -115,11 +111,10 @@ def test_second_prefetch_skips_already_cached_signals() -> None:
                 }
             }
         ),
-        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
     ]
     cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
     cache.prefetch_for_config(_config(spec))
-    # Second call: window already loaded, signal.id already in cache → no client calls.
+    # Second call: signal.id already in cache + all activation dates loaded → no fetch.
     client.get_features.reset_mock()
     cache.prefetch_for_config(_config(spec))
     assert client.get_features.call_count == 0
@@ -133,18 +128,28 @@ def test_activation_dates_unprefetched_raises_keyerror() -> None:
         cache.activation_dates("nonexistent_signal_id")
 
 
-def test_returns_unprefetched_date_raises_keyerror() -> None:
+def test_returns_silently_skips_missing_dates() -> None:
+    """`returns(dates)` returns only the dates we have — no KeyError on misses.
+
+    The permutation_test filter passes the full data_history window; the
+    cache only loaded dates Crucible's compute produced. The result map is
+    shorter; the filter tolerates that.
+    """
     client = MagicMock()
     cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
-    with pytest.raises(KeyError, match="not prefetched"):
-        cache.returns([date(2024, 6, 1)])
+    result = cache.returns([date(2024, 6, 1), date(2024, 7, 1)])
+    assert result == {}
 
 
-def test_regime_label_unprefetched_date_raises_keyerror() -> None:
+def test_regime_label_defaults_to_low_vol_for_missing_dates() -> None:
+    """`regime_label(d)` returns "low_vol" default when not loaded.
+
+    Crucible's regime classifier may not produce labels for every date the
+    filter queries; returning a defensive default beats raising.
+    """
     client = MagicMock()
     cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
-    with pytest.raises(KeyError, match="not prefetched"):
-        cache.regime_label(date(2024, 6, 1))
+    assert cache.regime_label(date(2024, 6, 1)) == "low_vol"
 
 
 def test_repeated_spec_id_across_configs_resolves_to_correct_activations() -> None:
@@ -172,7 +177,9 @@ def test_repeated_spec_id_across_configs_resolves_to_correct_activations() -> No
     assert content_key_a != content_key_b
 
     client.get_features.side_effect = [
-        # Config A: window data
+        # Config A: activation_dates → fires on 2024-01-02 only
+        _response({content_key_a: {"activation_dates": ["2024-01-02"]}}),
+        # Config A: returns + regime for activation dates
         _response(
             {
                 content_key_a: {
@@ -181,10 +188,17 @@ def test_repeated_spec_id_across_configs_resolves_to_correct_activations() -> No
                 }
             }
         ),
-        # Config A: activation_dates → fires on 2024-01-02 only
-        _response({content_key_a: {"activation_dates": ["2024-01-02"]}}),
         # Config B: activation_dates → fires on 2024-01-03 only
         _response({content_key_b: {"activation_dates": ["2024-01-03"]}}),
+        # Config B: returns + regime for new date 2024-01-03
+        _response(
+            {
+                content_key_b: {
+                    "returns": {"2024-01-03": -0.005},
+                    "regime_label": {"2024-01-03": "low_vol"},
+                }
+            }
+        ),
     ]
     cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
     cache.prefetch_for_config(_config(spec_a))
@@ -203,7 +217,9 @@ def test_two_distinct_configs_share_window_data() -> None:
     content_key_a = signal_content_key(spec_a)
     content_key_b = signal_content_key(spec_b)
     client.get_features.side_effect = [
-        # Config A: window data
+        # Config A: activation_dates
+        _response({content_key_a: {"activation_dates": ["2024-01-02"]}}),
+        # Config A: returns + regime for those activation dates
         _response(
             {
                 content_key_a: {
@@ -212,9 +228,7 @@ def test_two_distinct_configs_share_window_data() -> None:
                 }
             }
         ),
-        # Config A: activation_dates
-        _response({content_key_a: {"activation_dates": ["2024-01-02"]}}),
-        # Config B: activation_dates only (window already loaded)
+        # Config B: activation_dates only — same date 2024-01-02 already in returns cache.
         _response({content_key_b: {"activation_dates": ["2024-01-02"]}}),
     ]
     cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
