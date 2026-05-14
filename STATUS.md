@@ -1,6 +1,7 @@
 # Forge — Status
 
-**Current phase:** 5 (Feedback + grammar refinement) — **COMPLETE; awaiting CLOSE review.** See `PHASE_5_HANDOFF.md`.
+**Current phase:** 6 (Polish + operational discipline) — **in flight** (started 2026-05-13). Closure plan D025 approved. Phase 5 close-review approved.
+**Previous phase:** 5 (Feedback + grammar refinement) — complete, last commit `63922c8`. See `PHASE_5_HANDOFF.md`.
 **Previous phase:** 4 (Ranking + submission) — complete (light review pending), last commit `c634c10`. See `PHASE_4_HANDOFF.md`.
 **Previous phase:** 3 (Pre-filter battery) — complete, last commit `367f4d3`. See `PHASE_3_HANDOFF.md`.
 **Previous-previous phase:** 2 (Enumerator) — complete, last commit `ca9dc8b`. See `PHASE_2_HANDOFF.md`.
