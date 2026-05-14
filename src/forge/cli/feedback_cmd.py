@@ -80,6 +80,8 @@ def cmd_feedback(
         forge_db=forge_db,
     )
 
+    from crucible_contracts.exceptions import QueryError
+
     from forge.enumeration._demo_registry import demo_registry
     from forge.feedback.analyzer import analyze_batch
     from forge.feedback.auto_tune import auto_tune
@@ -98,12 +100,20 @@ def cmd_feedback(
     now = utc_now()
 
     with db_connection(forge_db_path) as conn:
-        feedback = consume_batch_results(
-            conn,
-            crucible_db_path,
-            batch_id=resolved_batch_id,
-            since=parsed_since,
-        )
+        try:
+            feedback = consume_batch_results(
+                conn,
+                crucible_db_path,
+                batch_id=resolved_batch_id,
+                since=parsed_since,
+            )
+        except QueryError as err:
+            # Phase 6 D025/D3.i — Crucible offline: surface a clean error
+            # and exit. DuckDB autocommits inside consume_batch_results;
+            # a raise here leaves prior submission rows unchanged because
+            # the failure happens before any UPDATE runs.
+            typer.echo(f"error: Crucible DB unreachable: {err}", err=True)
+            raise typer.Exit(code=1) from err
 
         registry = demo_registry()
         report = analyze_batch(feedback, registry)
