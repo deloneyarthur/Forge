@@ -79,6 +79,22 @@ class CrucibleFeatureCache:
         self._regimes: dict[date, Regime] = {}
         self._window_loaded = False
 
+    def probe(self) -> None:
+        """Test-fetch a minimal request to verify the writer supports the protocol.
+
+        Raises `FeatureCacheUnavailableError` if the writer rejects the
+        `feature_batch` request kind (Crucible writer-side may not have
+        shipped the handler yet). Callers use this at startup to decide
+        whether to fall back to `SyntheticFeatureCache`.
+        """
+        self._client.get_features(
+            signals=(),
+            feature_names=("returns",),
+            dates=(self._data_start_date,),
+            data_history_days=self._data_history_days,
+            underlying=self._underlying,
+        )
+
     def _window_dates(self) -> tuple[date, ...]:
         return tuple(
             self._data_start_date + timedelta(days=i) for i in range(self._data_history_days)

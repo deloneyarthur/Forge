@@ -165,11 +165,16 @@ def _build_feature_cache(
                 authkey_path=authkey_path,
                 db_path=db_path,
             )
-            return CrucibleFeatureCache(
+            cache = CrucibleFeatureCache(
                 client,
                 data_history_days=registry.data_history_days,
                 data_start_date=registry.data_start_date,
             )
+            # Probe — Crucible's writer may not yet support feature_batch
+            # requests (the writer-side handler ships in a separate change).
+            # Falls back to SyntheticFeatureCache if the probe fails.
+            cache.probe()
+            return cache
         except FeatureCacheUnavailableError:
             pass
     return SyntheticFeatureCache(
