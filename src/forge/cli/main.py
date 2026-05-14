@@ -97,14 +97,14 @@ def cmd_enumerate(
 
     from forge.core.contracts_check import check_contracts_version
     from forge.enumeration import enumerate_candidates, registry_hash
-    from forge.enumeration._demo_registry import demo_registry
     from forge.grammar import load_grammar
+    from forge.persistence.registry_loader import load_registry
 
     check_contracts_version()
     grammar_path = Path(__file__).resolve().parents[3] / "config" / "grammar.yaml"
     archive_dir = grammar_path.parent / "grammar_archive"
     grammar = load_grammar(grammar_path, archive_dir=archive_dir)
-    registry = demo_registry()
+    registry = load_registry()
 
     typer.echo(
         f"grammar_version={grammar.grammar_version} "
@@ -159,8 +159,8 @@ def cmd_prefilter(
     from forge.core.contracts_check import check_contracts_version
     from forge.core.seed import SeedHierarchy
     from forge.enumeration import enumerate_candidates, registry_hash
-    from forge.enumeration._demo_registry import demo_registry
     from forge.grammar import load_grammar
+    from forge.persistence.registry_loader import load_registry
     from forge.prefilters import (
         SyntheticFeatureCache,
         default_filters,
@@ -175,7 +175,7 @@ def cmd_prefilter(
     prefilter_yaml = grammar_path.parent / "prefilter.yaml"
 
     grammar = load_grammar(grammar_path, archive_dir=archive_dir)
-    registry = demo_registry()
+    registry = load_registry()
     calibration = load_calibration(prefilter_yaml)
     seed_hierarchy = SeedHierarchy(seed)
     ctx = FilterContext(
@@ -313,7 +313,6 @@ def _consume_feedback_after_submit(
         typer.echo("feedback: skipped (no --crucible-db)")
         return
     from forge.core.clock import utc_now
-    from forge.enumeration._demo_registry import demo_registry
     from forge.feedback.analyzer import analyze_batch
     from forge.feedback.auto_tune import auto_tune
     from forge.feedback.consumer import consume_batch_results
@@ -321,12 +320,13 @@ def _consume_feedback_after_submit(
     from forge.feedback.proposal_writer import append_proposal
     from forge.feedback.proposer import propose
     from forge.persistence.db import db_connection
+    from forge.persistence.registry_loader import load_registry
     from forge.prefilters.calibration import load_calibration
 
     now = utc_now()
     with db_connection(forge_db_path) as conn:
         feedback = consume_batch_results(conn, crucible_db, batch_id=batch_id)  # type: ignore[arg-type]
-        registry = demo_registry()
+        registry = load_registry()
         report = analyze_batch(feedback, registry)
         if report.promoted_patterns:
             record_promoted_patterns(conn, report.promoted_patterns, discovered_at=now)
@@ -367,9 +367,9 @@ def _run_one_iteration(
     from forge.core.clock import utc_now
     from forge.core.contracts_check import check_contracts_version
     from forge.enumeration import registry_hash
-    from forge.enumeration._demo_registry import demo_registry
     from forge.grammar import load_grammar
     from forge.persistence.db import db_connection
+    from forge.persistence.registry_loader import load_registry
     from forge.prefilters import load_calibration
     from forge.ranking import Ranker, load_ranker_config, rank_batch
     from forge.submission import BatchContext, check_rate_limit, mint_batch_id, submit_batch
@@ -381,7 +381,7 @@ def _run_one_iteration(
     )
     calibration = load_calibration(config_root / "prefilter.yaml")
     ranker = Ranker(weights=load_ranker_config(config_root / "ranker.yaml").weights)
-    registry = demo_registry()
+    registry = load_registry()
     reg_hash = registry_hash(registry)
 
     typer.echo(
@@ -503,9 +503,7 @@ def _resolve_run_defaults(
         if max_candidates is not None
         else yaml_loaded.get("max_candidates", _RUN_DEFAULT_MAX_CANDIDATES),
         "inbox": inbox if inbox is not None else yaml_loaded.get("inbox"),
-        "crucible_db": crucible_db
-        if crucible_db is not None
-        else yaml_loaded.get("crucible_db"),
+        "crucible_db": crucible_db if crucible_db is not None else yaml_loaded.get("crucible_db"),
         "forge_db": forge_db if forge_db is not None else yaml_loaded.get("forge_db"),
         "poll_interval_seconds": poll_interval_seconds
         if poll_interval_seconds is not None

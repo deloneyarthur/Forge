@@ -82,7 +82,6 @@ def cmd_feedback(
 
     from crucible_contracts.exceptions import QueryError
 
-    from forge.enumeration._demo_registry import demo_registry
     from forge.feedback.analyzer import analyze_batch
     from forge.feedback.auto_tune import auto_tune
     from forge.feedback.consumer import consume_batch_results
@@ -90,6 +89,7 @@ def cmd_feedback(
     from forge.feedback.proposal_writer import append_proposal
     from forge.feedback.proposer import propose
     from forge.persistence.db import db_connection
+    from forge.persistence.registry_loader import load_registry
     from forge.prefilters.calibration import load_calibration
 
     resolved_batch_id = uuid.UUID(batch_id) if batch_id else None
@@ -115,7 +115,7 @@ def cmd_feedback(
             typer.echo(f"error: Crucible DB unreachable: {err}", err=True)
             raise typer.Exit(code=1) from err
 
-        registry = demo_registry()
+        registry = load_registry()
         report = analyze_batch(feedback, registry)
 
         if report.promoted_patterns:
