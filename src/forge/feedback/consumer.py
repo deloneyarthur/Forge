@@ -1,0 +1,233 @@
+"""§8.2 feedback consumer — joins Crucible's gated runs to Forge's submissions.
+
+`consume_batch_results(forge_db, crucible_db, *, batch_id=None, since=None)`
+returns one `BatchFeedback` for one batch. As a side effect:
+
+- For each matched submission, updates `submissions.status` from `submitted`
+  to `gated` and sets `crucible_run_id` to the Crucible-side run id.
+- Updates `batch_summaries.promotion_rate`, `common_failures`, and
+  (when 100% of submitted candidates are gated) `completed_at`.
+
+The function is idempotent: re-consuming the same batch returns an equivalent
+`BatchFeedback` and leaves the DB unchanged. The DESIGN.md §8.2 pseudo-code
+sketches `get_gated_runs(filter=batch_id)`; in practice Crucible has no
+`forge_batch_id` column, so the join is Forge-side via `config_hash`.
+
+D024/D1: signature is `(forge_db, crucible_db, *, batch_id=None, since=None)`.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import UTC
+from typing import TYPE_CHECKING
+
+from crucible_contracts import StrategyConfig, get_recent_gated_runs
+
+from forge.feedback.types import BatchFeedback, CandidateOutcome
+
+if TYPE_CHECKING:
+    from datetime import datetime
+    from pathlib import Path
+
+    import duckdb
+    from crucible_contracts import GatedRun
+
+
+# Conservative upper bound: pull this many recent gated runs from Crucible
+# and Python-side-filter. Phase 5 batches are O(200); this leaves headroom.
+_DEFAULT_CRUCIBLE_LIMIT: int = 10_000
+
+
+def _resolve_batch_id(
+    db: duckdb.DuckDBPyConnection,
+    *,
+    batch_id: uuid.UUID | None,
+    since: datetime | None,
+) -> uuid.UUID:
+    if batch_id is not None:
+        return batch_id
+    if since is None:
+        msg = "consume_batch_results requires batch_id or since (or both)"
+        raise ValueError(msg)
+    row = db.execute(
+        """
+        SELECT forge_batch_id
+        FROM submissions
+        WHERE status IN ('submitted', 'gated')
+        ORDER BY submitted_at DESC
+        LIMIT 1
+        """,
+    ).fetchone()
+    if row is None:
+        msg = "no batch with submitted rows found; pass batch_id explicitly"
+        raise ValueError(msg)
+    return uuid.UUID(str(row[0]))
+
+
+def _load_submissions(
+    db: duckdb.DuckDBPyConnection,
+    batch_id: uuid.UUID,
+) -> list[tuple[uuid.UUID, StrategyConfig, str]]:
+    """Return (candidate_id, config, status) tuples for one batch.
+
+    Skips rows with status='skipped_duplicate' or 'submission_failed' — those
+    never reached Crucible's inbox so they can't have a gated counterpart.
+    """
+    rows = db.execute(
+        """
+        SELECT forge_candidate_id, config_json, status
+        FROM submissions
+        WHERE forge_batch_id = ?
+          AND status IN ('submitted', 'gated')
+        ORDER BY submitted_at, forge_candidate_id
+        """,
+        [str(batch_id)],
+    ).fetchall()
+    out: list[tuple[uuid.UUID, StrategyConfig, str]] = []
+    for cid, cfg_json, status in rows:
+        cfg = StrategyConfig.model_validate_json(cfg_json)
+        out.append((uuid.UUID(str(cid)), cfg, str(status)))
+    return out
+
+
+def _update_submission_to_gated(
+    db: duckdb.DuckDBPyConnection,
+    candidate_id: uuid.UUID,
+    run_id: str,
+) -> None:
+    """Idempotent: only transitions 'submitted' -> 'gated'; re-runs are no-ops."""
+    db.execute(
+        """
+        UPDATE submissions
+        SET status = 'gated', crucible_run_id = ?
+        WHERE forge_candidate_id = ? AND status = 'submitted'
+        """,
+        [run_id, str(candidate_id)],
+    )
+
+
+def _common_failures(outcomes: tuple[CandidateOutcome, ...]) -> dict[str, int]:
+    """Count gate-failure occurrences across rejected outcomes."""
+    counts: dict[str, int] = {}
+    for o in outcomes:
+        if o.promoted:
+            continue
+        for gate_name, gate in o.gated_run.decision.gate_results.items():
+            if not gate.passed:
+                counts[gate_name] = counts.get(gate_name, 0) + 1
+    return counts
+
+
+def _update_batch_summary(
+    db: duckdb.DuckDBPyConnection,
+    *,
+    batch_id: uuid.UUID,
+    submitted_count: int,
+    outcomes: tuple[CandidateOutcome, ...],
+    completed: bool,
+    decided_at_max: datetime | None,
+) -> None:
+    promoted = sum(1 for o in outcomes if o.promoted)
+    rate = promoted / submitted_count if submitted_count > 0 else 0.0
+    common = _common_failures(outcomes)
+    common_json = json.dumps(common, sort_keys=True)
+    if completed and decided_at_max is not None:
+        db.execute(
+            """
+            UPDATE batch_summaries
+            SET promotion_rate = ?, common_failures = ?, completed_at = ?
+            WHERE forge_batch_id = ?
+            """,
+            [rate, common_json, decided_at_max, str(batch_id)],
+        )
+    else:
+        db.execute(
+            """
+            UPDATE batch_summaries
+            SET promotion_rate = ?, common_failures = ?
+            WHERE forge_batch_id = ?
+            """,
+            [rate, common_json, str(batch_id)],
+        )
+
+
+def consume_batch_results(
+    forge_db: duckdb.DuckDBPyConnection,
+    crucible_db: Path,
+    *,
+    batch_id: uuid.UUID | None = None,
+    since: datetime | None = None,
+) -> BatchFeedback:
+    """Join Crucible gated runs to Forge submissions and update DB state."""
+    if since is not None and since.tzinfo is None:
+        msg = "consume_batch_results: since must be timezone-aware (tzinfo required)"
+        raise ValueError(msg)
+
+    resolved_batch_id = _resolve_batch_id(forge_db, batch_id=batch_id, since=since)
+    submission_rows = _load_submissions(forge_db, resolved_batch_id)
+    submitted_count = len(submission_rows)
+    hash_to_row: dict[str, tuple[uuid.UUID, StrategyConfig, str]] = {
+        cfg.config_hash: (cid, cfg, status) for cid, cfg, status in submission_rows
+    }
+
+    crucible_runs: list[GatedRun] = get_recent_gated_runs(
+        crucible_db, limit=_DEFAULT_CRUCIBLE_LIMIT
+    )
+
+    matched: dict[str, GatedRun] = {}
+    for gr in crucible_runs:
+        h = gr.run.config_hash
+        if h not in hash_to_row:
+            continue
+        if since is not None:
+            # DuckDB returns TIMESTAMP rows as naive datetimes; normalize both
+            # sides to aware-UTC so the comparison is well-defined.
+            decided = gr.decision.decided_at
+            if decided.tzinfo is None:
+                decided = decided.replace(tzinfo=UTC)
+            if decided < since:
+                continue
+        if h not in matched:
+            matched[h] = gr
+
+    ordered_outcomes: list[tuple[CandidateOutcome, datetime]] = []
+    for _cid, cfg, _status in submission_rows:
+        matched_run = matched.get(cfg.config_hash)
+        if matched_run is None:
+            continue
+        ordered_outcomes.append(
+            (
+                CandidateOutcome(config=cfg, gated_run=matched_run),
+                matched_run.decision.decided_at,
+            )
+        )
+
+    for cid, cfg, _status in submission_rows:
+        matched_run = matched.get(cfg.config_hash)
+        if matched_run is None:
+            continue
+        _update_submission_to_gated(forge_db, cid, matched_run.run.run_id)
+
+    outcomes = tuple(o for o, _ in ordered_outcomes)
+    completed = len(outcomes) == submitted_count and submitted_count > 0
+    decided_at_max = max((d for _, d in ordered_outcomes), default=None)
+
+    _update_batch_summary(
+        forge_db,
+        batch_id=resolved_batch_id,
+        submitted_count=submitted_count,
+        outcomes=outcomes,
+        completed=completed,
+        decided_at_max=decided_at_max,
+    )
+
+    return BatchFeedback(
+        batch_id=resolved_batch_id,
+        submitted_count=submitted_count,
+        outcomes=outcomes,
+    )
+
+
+__all__ = ["consume_batch_results"]
