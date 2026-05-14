@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 import typer
 
+from forge.cli.feedback_cmd import cmd_feedback
 from forge.core.logging import configure_logging
 from forge.version import __version__
 
@@ -417,6 +418,9 @@ def cmd_run(
         f"skipped_duplicate={result.skipped_duplicate_count} "
         f"failed={result.failed_count}"
     )
+
+
+app.command("feedback")(cmd_feedback)
 
 
 def main() -> None:
