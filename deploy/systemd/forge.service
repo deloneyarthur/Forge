@@ -1,0 +1,23 @@
+[Unit]
+Description=Forge candidate strategy generator (Forge -> Crucible -> QuantIQ pipeline)
+Documentation=file:///home/aj/proj/Forge/docs/DESIGN.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/aj/proj/Forge
+ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=120
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forge
+
+# Conservative hardening for a personal single-user service.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

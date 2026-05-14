@@ -6,7 +6,7 @@ forge:
 
   crucible:
     inbox_path: ~/optbt_data/inbox        # where Forge writes
-    db_path: ~/optbt_data/results.duckdb  # where Forge reads (read-only)
+    db_path: ~/optbt_data/runs.duckdb     # where Forge reads (read-only)
     contracts_version: "1.6"
 
   enumeration:
