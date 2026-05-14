@@ -25,7 +25,7 @@ runner = CliRunner()
 def test_dry_run_prints_rank_summary() -> None:
     result = runner.invoke(
         app,
-        ["run", "--seed", "0", "--batch-size", "3", "--max", "30", "--dry-run"],
+        ["run", "--no-config", "--seed", "0", "--batch-size", "3", "--max", "30", "--dry-run"],
     )
     assert result.exit_code == 0, result.stdout
     assert "dry-run" in result.stdout
@@ -38,15 +38,19 @@ def test_dry_run_prints_rank_summary() -> None:
 def test_dry_run_does_not_require_inbox() -> None:
     result = runner.invoke(
         app,
-        ["run", "--seed", "0", "--batch-size", "2", "--max", "20", "--dry-run"],
+        ["run", "--no-config", "--seed", "0", "--batch-size", "2", "--max", "20", "--dry-run"],
     )
     assert result.exit_code == 0
     assert "error" not in result.stdout.lower()
 
 
 def test_dry_run_is_deterministic_for_same_seed() -> None:
-    a = runner.invoke(app, ["run", "--seed", "7", "--batch-size", "2", "--max", "20", "--dry-run"])
-    b = runner.invoke(app, ["run", "--seed", "7", "--batch-size", "2", "--max", "20", "--dry-run"])
+    a = runner.invoke(
+        app, ["run", "--no-config", "--seed", "7", "--batch-size", "2", "--max", "20", "--dry-run"]
+    )
+    b = runner.invoke(
+        app, ["run", "--no-config", "--seed", "7", "--batch-size", "2", "--max", "20", "--dry-run"]
+    )
     assert a.exit_code == 0
     assert b.exit_code == 0
     assert a.stdout == b.stdout
@@ -60,7 +64,7 @@ def test_dry_run_is_deterministic_for_same_seed() -> None:
 def test_missing_inbox_without_dry_run_exits_with_code_2(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
-        ["run", "--seed", "0", "--batch-size", "2", "--max", "20"],
+        ["run", "--no-config", "--seed", "0", "--batch-size", "2", "--max", "20"],
     )
     assert result.exit_code == 2
     # Typer routes err=True output to stdout by default in CliRunner with
@@ -81,6 +85,7 @@ def test_full_submit_writes_inbox_and_db(tmp_path: Path) -> None:
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",
@@ -122,6 +127,7 @@ def test_summary_line_shows_counts(tmp_path: Path) -> None:
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",
@@ -150,6 +156,7 @@ def test_rerun_same_seed_is_idempotent(tmp_path: Path) -> None:
     inbox = tmp_path / "inbox"
     args = [
         "run",
+        "--no-config",
         "--seed",
         "0",
         "--batch-size",

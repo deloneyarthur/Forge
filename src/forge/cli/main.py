@@ -455,14 +455,72 @@ def _run_one_iteration(
     return "submitted"
 
 
+_RUN_DEFAULT_SEED: int = 0
+_RUN_DEFAULT_BATCH_SIZE: int = 10
+_RUN_DEFAULT_MAX_CANDIDATES: int = 1000
+_RUN_DEFAULT_POLL_INTERVAL_SECONDS: int = 600
+
+
+def _resolve_run_defaults(
+    *,
+    config: Path,
+    no_config: bool,
+    seed: int | None,
+    batch_size: int | None,
+    max_candidates: int | None,
+    inbox: Path | None,
+    crucible_db: Path | None,
+    forge_db: Path | None,
+    poll_interval_seconds: int | None,
+) -> dict[str, object]:
+    """Resolve effective run args by merging yaml defaults with CLI overrides.
+
+    D025/D6 — When ``--no-config`` is set or the yaml file is missing,
+    fall back to hardcoded defaults. Otherwise load the yaml and use its
+    fields as defaults; CLI flags (where non-None) override.
+    """
+    yaml_loaded: dict[str, object] = {}
+    if not no_config and config.exists():
+        from forge.config import load_forge_config
+
+        cfg = load_forge_config(config)
+        yaml_loaded = {
+            "seed": cfg.enumeration.seed,
+            "batch_size": cfg.submission.batch_size,
+            "max_candidates": cfg.enumeration.max_candidates_per_batch,
+            "inbox": cfg.crucible.inbox_path,
+            "crucible_db": cfg.crucible.db_path,
+            "forge_db": cfg.db_path,
+            "poll_interval_seconds": cfg.submission.poll_interval_seconds,
+        }
+
+    return {
+        "seed": seed if seed is not None else yaml_loaded.get("seed", _RUN_DEFAULT_SEED),
+        "batch_size": batch_size
+        if batch_size is not None
+        else yaml_loaded.get("batch_size", _RUN_DEFAULT_BATCH_SIZE),
+        "max_candidates": max_candidates
+        if max_candidates is not None
+        else yaml_loaded.get("max_candidates", _RUN_DEFAULT_MAX_CANDIDATES),
+        "inbox": inbox if inbox is not None else yaml_loaded.get("inbox"),
+        "crucible_db": crucible_db
+        if crucible_db is not None
+        else yaml_loaded.get("crucible_db"),
+        "forge_db": forge_db if forge_db is not None else yaml_loaded.get("forge_db"),
+        "poll_interval_seconds": poll_interval_seconds
+        if poll_interval_seconds is not None
+        else yaml_loaded.get("poll_interval_seconds", _RUN_DEFAULT_POLL_INTERVAL_SECONDS),
+    }
+
+
 @app.command("run")
 def cmd_run(
-    seed: int = typer.Option(0, "--seed", help="RNG root seed"),
-    batch_size: int = typer.Option(
-        10, "--batch-size", min=1, help="top-N candidates to submit (§6.4 default 200)"
+    seed: int | None = typer.Option(None, "--seed", help="RNG root seed"),
+    batch_size: int | None = typer.Option(
+        None, "--batch-size", min=1, help="top-N candidates to submit (§6.4 default 200)"
     ),
-    max_candidates: int = typer.Option(
-        1000, "--max", "-n", min=1, help="enumeration cap before pre-filtering"
+    max_candidates: int | None = typer.Option(
+        None, "--max", "-n", min=1, help="enumeration cap before pre-filtering"
     ),
     inbox: Path | None = typer.Option(
         None, "--inbox", help="Crucible inbox directory (required unless --dry-run)"
@@ -490,8 +548,8 @@ def cmd_run(
         "--max-iterations",
         help="cap loop at N iterations (test/bounded operation); default is unbounded",
     ),
-    poll_interval_seconds: int = typer.Option(
-        600,
+    poll_interval_seconds: int | None = typer.Option(
+        None,
         "--poll-interval-seconds",
         help="seconds to sleep between iterations in --loop mode (default 600 = 10 min)",
     ),
@@ -510,10 +568,24 @@ def cmd_run(
         "--prefilter-yaml",
         help="path to prefilter.yaml (used by --consume-feedback auto-tune)",
     ),
+    config: Path = typer.Option(
+        Path("config/forge.yaml"),
+        "--config",
+        help="path to forge.yaml (loaded as defaults; CLI flags override)",
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help="skip yaml loading entirely; use hardcoded defaults + CLI flags only",
+    ),
 ) -> None:
     """Run the full Forge cycle once or in a daemon loop.
 
     Phase 5 (D024/D7) adds `--loop` for autonomous multi-batch operation.
+    Phase 6 (D025/D6) threads `config/forge.yaml` defaults: when the yaml
+    is reachable, its fields seed the run parameters; CLI flags override.
+    Pass ``--no-config`` for hermetic CLI-only behavior (tests).
+
     Each iteration runs the §2.1 per-batch order: enumerate → prefilter →
     rank → submit. With `--consume-feedback`, the feedback chain runs
     after submit. The loop sleeps `--poll-interval-seconds` between
@@ -522,6 +594,25 @@ def cmd_run(
     `--max-iterations N` caps the loop for tests / bounded operation.
     """
     import time
+
+    resolved = _resolve_run_defaults(
+        config=config,
+        no_config=no_config,
+        seed=seed,
+        batch_size=batch_size,
+        max_candidates=max_candidates,
+        inbox=inbox,
+        crucible_db=crucible_db,
+        forge_db=forge_db,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+    seed = int(resolved["seed"])  # type: ignore[arg-type]
+    batch_size = int(resolved["batch_size"])  # type: ignore[arg-type]
+    max_candidates = int(resolved["max_candidates"])  # type: ignore[arg-type]
+    inbox = resolved["inbox"]  # type: ignore[assignment]
+    crucible_db = resolved["crucible_db"]  # type: ignore[assignment]
+    forge_db = resolved["forge_db"]  # type: ignore[assignment]
+    poll_interval_seconds = int(resolved["poll_interval_seconds"])  # type: ignore[arg-type]
 
     if not dry_run and inbox is None:
         typer.echo("error: --inbox is required unless --dry-run", err=True)

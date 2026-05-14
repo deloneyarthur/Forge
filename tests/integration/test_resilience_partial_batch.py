@@ -158,6 +158,7 @@ def test_forge_run_exits_cleanly_with_partial_prior_batch(tmp_path: Path) -> Non
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",
@@ -204,6 +205,7 @@ def test_forge_run_unblocks_after_threshold_reached(tmp_path: Path) -> None:
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",
@@ -234,6 +236,7 @@ def test_forge_run_unblocks_after_threshold_reached(tmp_path: Path) -> None:
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",

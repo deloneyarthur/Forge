@@ -34,6 +34,7 @@ def test_run_loop_with_max_iterations_exits_cleanly(tmp_path: Path) -> None:
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",
@@ -77,6 +78,7 @@ def test_run_with_consume_feedback_runs_chain(tmp_path: Path) -> None:
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",
@@ -139,6 +141,7 @@ def test_loop_exits_on_max_iterations_even_when_blocked(tmp_path: Path) -> None:
         app,
         [
             "run",
+            "--no-config",
             "--seed",
             "0",
             "--batch-size",
