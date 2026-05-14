@@ -49,10 +49,11 @@ class CrucibleFeatureCache:
     """
 
     __slots__ = (
-        "_activations",
+        "_activations_by_content_key",
         "_client",
         "_data_history_days",
         "_data_start_date",
+        "_display_id_index",
         "_regimes",
         "_returns",
         "_underlying",
@@ -74,7 +75,16 @@ class CrucibleFeatureCache:
         self._underlying = underlying
         # Protocol attribute — pre-filters read this directly.
         self.data_history_days = data_history_days
-        self._activations: dict[str, frozenset[date]] = {}
+        # Cache by signal_content_key — survives across configs; two configs
+        # whose directional spec is semantically identical hit cache.
+        self._activations_by_content_key: dict[str, frozenset[date]] = {}
+        # display_id → content_key index, rebuilt per prefetch_for_config.
+        # The enumerator reuses spec.id="sig_directional"/"sig_regime" across
+        # every config (forge.enumeration.sampler:132/138), so keying the
+        # activation cache by spec.id directly would collide all 5000
+        # configs per batch onto a single bucket. The index is what bridges
+        # the Protocol's `signal_id: str` (spec.id) to the content key.
+        self._display_id_index: dict[str, str] = {}
         self._returns: dict[date, float] = {}
         self._regimes: dict[date, Regime] = {}
         self._window_loaded = False
@@ -103,13 +113,28 @@ class CrucibleFeatureCache:
     def prefetch_for_config(self, config: StrategyConfig) -> None:
         """Pre-populate the cache for one config's signals.
 
-        Fetches activation_dates for every signal in `config.signals` that
-        isn't already cached. The first call also fetches window-wide
-        returns + regime_label (signal-independent; reused for all configs).
+        Per-config flow:
+          1. Rebuild `_display_id_index` from this config's specs so
+             `activation_dates(spec.id)` resolves to the right content key
+             (the enumerator reuses spec.id strings across configs).
+          2. Fetch any specs whose content_key isn't in the cross-config
+             cache — a Crucible round-trip per new semantic spec, not per
+             enumeration.
+          3. On first call only, fetch window-wide returns + regime_label
+             (signal-independent; reused for the lifetime of the cache).
         """
+        # 1) Rebuild the per-config index. content_keys collide across
+        # configs only when the spec is semantically identical, which is
+        # the cache-hit case we want.
+        self._display_id_index = {
+            spec.id: signal_content_key(spec) for spec in config.signals
+        }
         new_specs = [
-            spec for spec in config.signals if signal_content_key(spec) not in self._activations
+            spec
+            for spec in config.signals
+            if signal_content_key(spec) not in self._activations_by_content_key
         ]
+
         # Window data (returns + regime_label) is signal-independent; load once.
         if not self._window_loaded and config.signals:
             sentinel = (config.signals[0],)
@@ -144,23 +169,35 @@ class CrucibleFeatureCache:
             data_history_days=self._data_history_days,
             underlying=self._underlying,
         )
-        for signal_id, feature_map in response.features.items():
-            if "activation_dates" in feature_map:
-                raw_dates = feature_map["activation_dates"]
-                self._activations[signal_id] = frozenset(date.fromisoformat(d) for d in raw_dates)
+        for content_key, feature_map in response.features.items():
+            if "activation_dates" not in feature_map:
+                continue
+            raw_dates = feature_map["activation_dates"]
+            self._activations_by_content_key[content_key] = frozenset(
+                date.fromisoformat(d) for d in raw_dates
+            )
 
     # ------------------------------------------------------------------
     # FeatureCache Protocol methods
     # ------------------------------------------------------------------
 
     def activation_dates(self, signal_id: str) -> frozenset[date]:
-        if signal_id not in self._activations:
+        content_key = self._display_id_index.get(signal_id)
+        if content_key is None:
             msg = (
-                f"activation_dates: signal_id={signal_id!r} not prefetched; "
-                "call prefetch_for_config(config) before querying the cache."
+                f"activation_dates: signal_id={signal_id!r} not in the current "
+                "config's display-id index; call prefetch_for_config(config) "
+                "before querying the cache."
             )
             raise KeyError(msg)
-        return self._activations[signal_id]
+        if content_key not in self._activations_by_content_key:
+            msg = (
+                f"activation_dates: content_key={content_key!r} for "
+                f"signal_id={signal_id!r} missing from Crucible response; "
+                "the prefetch may have failed silently."
+            )
+            raise KeyError(msg)
+        return self._activations_by_content_key[content_key]
 
     def returns(self, dates: Iterable[date]) -> Mapping[date, float]:
         out: dict[date, float] = {}
