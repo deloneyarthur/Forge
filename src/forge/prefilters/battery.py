@@ -60,6 +60,14 @@ def run_battery(
     notes: list[str] = []
     overall_passed = True
 
+    # If the feature cache supports per-config prefetch (CrucibleFeatureCache),
+    # batch-load this config's features before iterating filters. The
+    # SyntheticFeatureCache has no prefetch and serves per-call; the duck-type
+    # check keeps both implementations compatible.
+    prefetch = getattr(ctx.feature_cache, "prefetch_for_config", None)
+    if callable(prefetch):
+        prefetch(config)
+
     for f in ordered:
         result = f.apply(config, ctx)
         results[f.name] = result

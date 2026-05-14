@@ -137,6 +137,48 @@ def cmd_enumerate(
             typer.echo(f"  {rule:30s} {count}")
 
 
+def _build_feature_cache(
+    registry: RegistrySnapshot,
+    seed: int,
+) -> object:
+    """Construct the production FeatureCache; fall back to synthetic on failure.
+
+    Tries `crucible_contracts.FeatureCacheClient` against the default
+    `~/optbt_data/db_writer.sock`. If the writer socket isn't reachable
+    (no Crucible running, e.g. in test environments), falls back to
+    `SyntheticFeatureCache` so dev/test flows keep working.
+    """
+    from pathlib import Path
+
+    from crucible_contracts import FeatureCacheClient, FeatureCacheUnavailableError
+
+    from forge.prefilters import SyntheticFeatureCache
+    from forge.prefilters.crucible_feature_cache import CrucibleFeatureCache
+
+    socket_path = Path.home() / "optbt_data" / "db_writer.sock"
+    authkey_path = Path.home() / "optbt_data" / "db_writer.authkey"
+    db_path = Path.home() / "optbt_data" / "runs.duckdb"
+    if socket_path.exists() and authkey_path.exists():
+        try:
+            client = FeatureCacheClient(
+                socket_path=socket_path,
+                authkey_path=authkey_path,
+                db_path=db_path,
+            )
+            return CrucibleFeatureCache(
+                client,
+                data_history_days=registry.data_history_days,
+                data_start_date=registry.data_start_date,
+            )
+        except FeatureCacheUnavailableError:
+            pass
+    return SyntheticFeatureCache(
+        root_seed=seed,
+        data_history_days=registry.data_history_days,
+        start_date=registry.data_start_date,
+    )
+
+
 @app.command("prefilter")
 def cmd_prefilter(
     seed: int = typer.Option(0, "--seed", help="RNG root seed"),
@@ -162,7 +204,6 @@ def cmd_prefilter(
     from forge.grammar import load_grammar
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters import (
-        SyntheticFeatureCache,
         default_filters,
         load_calibration,
         run_battery,
@@ -180,7 +221,7 @@ def cmd_prefilter(
     seed_hierarchy = SeedHierarchy(seed)
     ctx = FilterContext(
         registry=registry,
-        feature_cache=SyntheticFeatureCache(root_seed=seed),
+        feature_cache=_build_feature_cache(registry, seed),  # type: ignore[arg-type]
         prior_config_hashes=frozenset(),
         prior_firing_dates={},
         calibration=calibration,
@@ -276,13 +317,13 @@ def _run_battery_for_seed(
     """Enumerate and run the §5.2 battery; return one PreFilterReport per config."""
     from forge.core.seed import SeedHierarchy
     from forge.enumeration import enumerate_candidates
-    from forge.prefilters import SyntheticFeatureCache, default_filters, run_battery
+    from forge.prefilters import default_filters, run_battery
     from forge.prefilters.types import FilterContext
 
     seed_hierarchy = SeedHierarchy(seed)
     ctx = FilterContext(
         registry=registry,
-        feature_cache=SyntheticFeatureCache(root_seed=seed),
+        feature_cache=_build_feature_cache(registry, seed),  # type: ignore[arg-type]
         prior_config_hashes=frozenset(),
         prior_firing_dates={},
         calibration=calibration,
