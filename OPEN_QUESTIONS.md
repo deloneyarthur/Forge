@@ -181,3 +181,25 @@ Alternatives rejected:
 3. Operator restart `forge.service` after Crucible v3 ships; observe end-to-end loop close.
 
 **Tag:** `crucible-v3-prerequisite`, `v1-go-live`
+
+**Closure update 2026-05-14 (v1 go-live operational):** Crucible Phase 9 v3 shipped 10 new indicators + EXPORT_LAYOUT publishing (Crucible commit `phase9v3`). Plus a runtime architectural gap surfaced — DuckDB's writer holds an exclusive lock blocking Forge's direct read-only opens. Closed by `crucible_contracts` v1.8.0 (`load_recent_gated_runs_from_export`) + Crucible's `crucible-gated-runs-publisher.service` writing `gated_runs_*.json` snapshots + Forge's rate limiter & feedback consumer switching to file-based reads. Q11 + Q12 considered closed; new survival-rate concern logged below as Q13.
+
+---
+
+## 2026-05-14 — Q13 — 100% pre-filter rejection at permutation_test under real Crucible registry — **MEDIUM SEVERITY**
+
+**Question:** First v1 go-live iteration after the registry/publisher work landed: enumerate 5000 candidates → 0 survivors. Diagnostic via `uv run forge prefilter --seed 42 --max 200 --summary` showed `permutation_test: 200 rejections` (the only rejecting filter; the other 6 in the cost-ascending battery passed every candidate). Auto-tune (Phase 5 D5) is designed to handle this over time, but the immediate effect is zero promotions per batch. Is the current pre-filter calibration honest under the real registry?
+
+**Root cause:** `SyntheticFeatureCache` (Phase 3 D1 stopgap) deterministically stubs feature values from config_hash. Under the demo registry (14 indicators) most candidates had p-values in a range that produced ~5-20% survival; under the real registry (33 indicators) the config_hash distribution shifts and the synthetic cache yields uniformly low signal-strength → uniform permutation_test failure.
+
+**This is `SyntheticFeatureCache` fidelity meeting calibration tuning** — both are known stopgaps:
+- Q10 (already deferred): the real Crucible-backed FeatureCache requires a contracts surface that hasn't shipped.
+- §5.5 auto-tune mechanism (Phase 5 D5): on 95%+ rejections by a single filter, auto-tighten/loosen proposes a calibration adjustment. Phase 5 ships the trigger; it requires a few batches of evidence before it fires.
+
+**What I did instead:** confirmed the pipeline is structurally correct (Forge submits 0, Crucible has nothing to backtest, Forge's feedback consumer cleanly reports 0 — no crash). Let `forge.service` continue to run; auto-tune will accumulate evidence over batches.
+
+**Severity:** **medium** — the loop closes end-to-end without errors; the 0-survivor signal is the auto-tune's intended trigger. Long-term: real feature cache is the right fix. Short-term: operator may manually relax `config/prefilter.yaml` `permutation_test.p_value_threshold` to bootstrap survival until auto-tune fires.
+
+**Resolution 2026-05-14:** Logged + watching auto-tune behavior across iterations. Not blocking v1 go-live operability.
+
+**Tag:** `auto-tune-candidate`, `synthetic-cache-fidelity`
