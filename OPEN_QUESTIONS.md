@@ -140,3 +140,44 @@ Operator reviews at every phase boundary.
 - Validate end-to-end: Forge submits → Crucible queues → backtests with Forge's signals → writes promotion_decisions → Forge consumes feedback + rate-limiter unblocks → submits batch 2.
 
 **Tag:** `crucible-v2-prerequisite`, `v1-go-live`
+
+**Closure update 2026-05-13 (Phase 9 v2 shipped):** Crucible Phase 9 v2 closed Gaps 3, 4, 5 above (commits `5623d85` exit-vocab parity, `d1322f5` from-config dispatcher, `7c7cd5d` Gap 3 stub, `e45a90e` Gap 3 minimal evaluator). First v2 re-process of the 2 stranded forge-source runs surfaced a **fourth layer** of mismatch, logged below as Q12.
+
+---
+
+## 2026-05-13 — Q12 — Indicator-vocabulary divergence between Forge demo registry and Crucible runtime — **HIGH SEVERITY**
+
+**Question:** After Phase 9 v2 re-processed the 2 stranded Forge configs, both failed with `Unknown indicator: 'iv_rank'` (mean_reversion run) and `Unknown indicator: 'expected_value_estimator'` (regime_arbitrage run). Forge's enumerator is sourcing from an in-Forge stub registry (`forge.enumeration._demo_registry`) that advertises indicators Crucible's runtime doesn't implement. How does the system reach indicator-vocabulary parity for v1 go-live?
+
+**Scope of the divergence:**
+
+| Side | Count | Notes |
+|---|---:|---|
+| Forge `_demo_registry` (Phase 2 stub — "ships ahead of the Phase 4 Crucible-registry wiring") | 14 | adx, days_to_earnings, days_to_fomc, ema_50, **expected_value_estimator** (X2-required), hurst, **iv_rank** (R1-required), momentum_252, pairs_zscore, put_call_flow, realized_vol, rsi_2, rsi_14, vix_level |
+| Crucible runtime (`features/` registry) | 23 | adx, amihud, atr, atr_pct, bb_pct, donchian, ema, ema_cross, garman_klass_vol, hurst, keltner_pct, macd, parkinson_vol, realized_vol, returns_12m_skip1, rolling_sharpe, rsi, rsi_2, sma, supertrend, vol_regime, yang_zhang_vol, zscore_returns |
+| **Intersection** | **4** | adx, hurst, realized_vol, rsi_2 |
+
+§3.5 R1 requires `iv_rank` for mean_reversion regime gates; §3.5 X2 requires `expected_value_estimator` for fractional Kelly sizing. Both are operator-owned grammar rules (CLAUDE.md hard rule #1) and cannot be relaxed Forge-side.
+
+**Architectural root cause:** Crucible's `EXPORT_LAYOUT.registry_snapshot_*.json` was never wired. Forge has been enumerating against a fictional registry the whole time. Phase 2 D6 + Phase 4 D5 + Phase 5 D9 all acknowledged this in passing (carrying `_demo_registry` forward) but the wiring was never built.
+
+**Severity:** **high** — first v1 go-live attempt is blocked here exactly the same way Q11 blocked it. The pipeline can't honestly produce candidates Crucible can backtest until the registry alignment lands.
+
+**Resolution 2026-05-13 (operator choice):** **Path A — Crucible implements all 10 missing indicators + publishes RegistrySnapshot per EXPORT_LAYOUT.** Driven via separate Crucible-side agent following `CRUCIBLE_PHASE9_V3_AGENT_PROMPT.md` at Forge repo root. Forge side pre-stages `forge.persistence.registry_loader` with graceful demo-registry fallback so Forge picks up the real snapshot automatically when it lands.
+
+Alternatives rejected:
+- **Path B** (shrink Forge grammar to Crucible's 23 known indicators) — would amputate §3.5 R1 + X2 + several hypothesis families; violates hard rule #1.
+- **Path C** (Crucible implements only load-bearing iv_rank + expected_value_estimator + aliases) — operator preferred completeness over band-aid; some of the deferred indicators (vix_level, days_to_earnings) are non-trivially load-bearing for hypotheses Forge can't dodge.
+
+**Action items:**
+1. Crucible side (per `CRUCIBLE_PHASE9_V3_AGENT_PROMPT.md`):
+   - Implement 10 new registered indicators (most have existing math/scaffolding to wrap)
+   - Publish `~/optbt_data/exports/registry_snapshot_<timestamp>.json`
+   - Verify the 2 stranded runs re-process cleanly under v3
+2. Forge side (this session):
+   - `forge.persistence.registry_loader` shipped with 8 unit tests
+   - 5 CLI sites threaded (4 in main.py + 1 in feedback_cmd.py) — fallback to demo on miss
+   - When Crucible publishes, no Forge code changes needed
+3. Operator restart `forge.service` after Crucible v3 ships; observe end-to-end loop close.
+
+**Tag:** `crucible-v3-prerequisite`, `v1-go-live`
