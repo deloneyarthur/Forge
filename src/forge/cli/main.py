@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 import typer
 
 from forge.cli.feedback_cmd import cmd_feedback
+from forge.cli.grammar_cmd import grammar_app
 from forge.core.logging import configure_logging
 from forge.version import __version__
 
@@ -569,6 +570,7 @@ def cmd_run(
 
 
 app.command("feedback")(cmd_feedback)
+app.add_typer(grammar_app, name="grammar")
 
 
 def main() -> None:
