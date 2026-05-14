@@ -159,3 +159,71 @@ def test_no_apply_loosening_function_in_module() -> None:
     names = {n for n, _ in members}
     assert "apply_loosening" not in names
     assert "apply_loosen" not in names
+
+
+# ---------------------------------------------------------------------------
+# Dedup of identical pending proposals (§8.4 trigger fires every batch)
+# ---------------------------------------------------------------------------
+
+
+def test_append_skips_identical_pending_proposal(tmp_path: Path) -> None:
+    """Two proposals with same (type, rationale) collapse to one pending row.
+
+    Auto-tune fires on every batch where the trigger condition holds.
+    Without dedup, OPEN_PROPOSALS.md floods with thousands of identical
+    entries. Dedup matches by (proposal_type, rationale, status='pending'):
+    the *intent* of a pending proposal is captured by those fields.
+    """
+    forge_db = tmp_path / "forge.db"
+    open_proposals = tmp_path / "OPEN_PROPOSALS.md"
+    p1 = _proposal(rationale="rolling promotion rate below threshold")
+    p2 = _proposal(rationale="rolling promotion rate below threshold")
+    with db_connection(forge_db) as conn:
+        wrote_p1 = append_proposal(p1, open_proposals_path=open_proposals, db=conn)
+        wrote_p2 = append_proposal(p2, open_proposals_path=open_proposals, db=conn)
+    assert wrote_p1 is True
+    assert wrote_p2 is False
+    # DB has exactly one pending row.
+    with db_connection(forge_db) as conn:
+        count_row = conn.execute(
+            "SELECT COUNT(*) FROM grammar_proposals WHERE status = 'pending'",
+        ).fetchone()
+    assert count_row is not None
+    assert count_row[0] == 1
+
+
+def test_append_writes_again_after_pending_resolves(tmp_path: Path) -> None:
+    """After the operator decides a pending proposal (approve/reject), a
+    fresh proposal with the same intent is allowed to be written.
+
+    The dedup match is `status='pending'` only; resolved proposals don't
+    block future writes — the auto-tune condition may legitimately fire
+    again after a calibration cycle.
+    """
+    forge_db = tmp_path / "forge.db"
+    open_proposals = tmp_path / "OPEN_PROPOSALS.md"
+    p1 = _proposal(rationale="recurring trigger")
+    p2 = _proposal(rationale="recurring trigger")
+    with db_connection(forge_db) as conn:
+        append_proposal(p1, open_proposals_path=open_proposals, db=conn)
+        # Operator decides p1.
+        conn.execute(
+            "UPDATE grammar_proposals SET status = 'rejected' WHERE proposal_id = ?",
+            [str(p1.proposal_id)],
+        )
+        # New proposal should now write.
+        wrote_p2 = append_proposal(p2, open_proposals_path=open_proposals, db=conn)
+    assert wrote_p2 is True
+
+
+def test_append_different_rationales_both_written(tmp_path: Path) -> None:
+    """Distinct rationales aren't deduped — they convey different signals."""
+    forge_db = tmp_path / "forge.db"
+    open_proposals = tmp_path / "OPEN_PROPOSALS.md"
+    p1 = _proposal(rationale="rationale A")
+    p2 = _proposal(rationale="rationale B")
+    with db_connection(forge_db) as conn:
+        a = append_proposal(p1, open_proposals_path=open_proposals, db=conn)
+        b = append_proposal(p2, open_proposals_path=open_proposals, db=conn)
+    assert a is True
+    assert b is True

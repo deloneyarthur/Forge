@@ -64,18 +64,59 @@ def _insert_grammar_proposals_row(
     )
 
 
+def _has_identical_pending_proposal(
+    db: duckdb.DuckDBPyConnection,
+    proposal: GrammarProposal,
+) -> bool:
+    """True if a pending proposal with identical (type, rationale) already exists.
+
+    The auto-tune trigger fires once per batch (§8.4); without dedup, every
+    batch where the rolling promotion rate stays below threshold appends a
+    new proposal. The semantics are identical — same target, same proposed
+    adjustment — so writing each one separately just floods
+    OPEN_PROPOSALS.md without surfacing new operator information.
+
+    Match key: `proposal_type + rationale + status='pending'`. Two proposals
+    with the same type and rationale convey the same operator-decision-
+    needed event; the rationale already encodes the target + magnitude.
+    Once the operator decides (approve / reject), the pending row exits
+    this match and a fresh proposal can be written.
+    """
+    row = db.execute(
+        """
+        SELECT 1 FROM grammar_proposals
+        WHERE proposal_type = ?
+          AND rationale = ?
+          AND status = 'pending'
+        LIMIT 1
+        """,
+        [proposal.proposal_type, proposal.rationale],
+    ).fetchone()
+    return row is not None
+
+
 def append_proposal(
     proposal: GrammarProposal,
     *,
     open_proposals_path: Path,
     db: duckdb.DuckDBPyConnection,
-) -> None:
-    """Append the proposal to OPEN_PROPOSALS.md and insert a pending row."""
+) -> bool:
+    """Append the proposal to OPEN_PROPOSALS.md and insert a pending row.
+
+    Returns ``True`` when the proposal was written, ``False`` when it was
+    skipped because an identical pending proposal already exists. The
+    skip-write is the structural prevention of OPEN_PROPOSALS.md flooding
+    (§8.4 trigger fires every batch; without dedup, an idle weekend
+    accumulates 1000+ identical entries).
+    """
+    if _has_identical_pending_proposal(db, proposal):
+        return False
     open_proposals_path.parent.mkdir(parents=True, exist_ok=True)
     block = _format_markdown_block(proposal)
     with open_proposals_path.open("a", encoding="utf-8") as fh:
         fh.write(block)
     _insert_grammar_proposals_row(db, proposal)
+    return True
 
 
 __all__ = ["append_proposal"]
