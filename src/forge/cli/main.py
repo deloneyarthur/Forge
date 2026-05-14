@@ -299,42 +299,70 @@ def _run_battery_for_seed(
     ]
 
 
-@app.command("run")
-def cmd_run(
-    seed: int = typer.Option(0, "--seed", help="RNG root seed"),
-    batch_size: int = typer.Option(
-        10, "--batch-size", min=1, help="top-N candidates to submit (§6.4 default 200)"
-    ),
-    max_candidates: int = typer.Option(
-        1000, "--max", "-n", min=1, help="enumeration cap before pre-filtering"
-    ),
-    inbox: Path | None = typer.Option(
-        None, "--inbox", help="Crucible inbox directory (required unless --dry-run)"
-    ),
-    crucible_db: Path | None = typer.Option(
-        None, "--crucible-db", help="Crucible runs DB (used by §7.3 rate limiter)"
-    ),
-    forge_db: Path | None = typer.Option(
-        None,
-        "--forge-db",
-        help="Forge state DB (defaults to in-memory; pass a file path for persistence)",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="run the pipeline but skip inbox writes + DB persistence",
-    ),
+def _consume_feedback_after_submit(
+    *,
+    forge_db_path: Path,
+    crucible_db: Path | None,
+    batch_id: object | None,
+    open_proposals: Path,
+    prefilter_yaml: Path,
 ) -> None:
-    """Run one full Forge cycle: enumerate -> prefilter -> rank -> submit.
+    """Best-effort feedback chain wrapper for `forge run --consume-feedback`."""
+    if crucible_db is None:
+        typer.echo("feedback: skipped (no --crucible-db)")
+        return
+    from forge.core.clock import utc_now
+    from forge.enumeration._demo_registry import demo_registry
+    from forge.feedback.analyzer import analyze_batch
+    from forge.feedback.auto_tune import auto_tune
+    from forge.feedback.consumer import consume_batch_results
+    from forge.feedback.promoted_patterns import record_promoted_patterns
+    from forge.feedback.proposal_writer import append_proposal
+    from forge.feedback.proposer import propose
+    from forge.persistence.db import db_connection
+    from forge.prefilters.calibration import load_calibration
 
-    Phase 4 single-batch implementation per D023/D6.a. Checks the §7.3
-    rate limiter; if the previous batch is < 80% gated in Crucible, the
-    command exits with a "waiting" message rather than submitting.
+    now = utc_now()
+    with db_connection(forge_db_path) as conn:
+        feedback = consume_batch_results(conn, crucible_db, batch_id=batch_id)  # type: ignore[arg-type]
+        registry = demo_registry()
+        report = analyze_batch(feedback, registry)
+        if report.promoted_patterns:
+            record_promoted_patterns(conn, report.promoted_patterns, discovered_at=now)
+        proposals = propose(report, feedback, at=now)
+        for proposal in proposals:
+            append_proposal(proposal, open_proposals_path=open_proposals, db=conn)
+        if prefilter_yaml.exists():
+            calibration = load_calibration(prefilter_yaml)
+            auto_tune(
+                db=conn,
+                calibration=calibration,
+                prefilter_yaml_path=prefilter_yaml,
+                open_proposals_path=open_proposals,
+                at=now,
+            )
+    typer.echo(
+        f"feedback: batch_id={feedback.batch_id} "
+        f"gated_count={feedback.gated_count} "
+        f"promoted_count={feedback.promoted_count} "
+        f"proposals={len(proposals)}"
+    )
 
-    Defaults are tuned for quick local exercise; the operator-tuned
-    `config/forge.yaml` values (batch_size=200, max=10000) need
-    explicit flags for now. Phase 5/6 will wire full YAML config.
-    """
+
+def _run_one_iteration(
+    *,
+    seed: int,
+    batch_size: int,
+    max_candidates: int,
+    inbox: Path | None,
+    crucible_db: Path | None,
+    forge_db_path: Path,
+    dry_run: bool,
+    consume_feedback: bool,
+    open_proposals: Path,
+    prefilter_yaml: Path,
+) -> str:
+    """Run one cycle; return one of 'submitted', 'blocked', 'dry-run'."""
     from forge.core.clock import utc_now
     from forge.core.contracts_check import check_contracts_version
     from forge.enumeration import registry_hash
@@ -360,11 +388,6 @@ def cmd_run(
         f"seed={seed} batch_size={batch_size} max={max_candidates}"
     )
 
-    if not dry_run and inbox is None:
-        typer.echo("error: --inbox is required unless --dry-run", err=True)
-        raise typer.Exit(code=2)
-
-    forge_db_path = forge_db if forge_db is not None else Path(":memory:")
     if crucible_db is not None and not dry_run:
         rate = check_rate_limit(forge_db_path, crucible_db)
         if not rate.clear:
@@ -373,7 +396,7 @@ def cmd_run(
                 f"{rate.pct_gated:.1%} gated ({rate.gated_count}/"
                 f"{rate.submitted_count}); waiting for >=80%"
             )
-            raise typer.Exit(code=0)
+            return "blocked"
 
     promoted = _fetch_promoted_configs(forge_db_path, crucible_db)
     reports = _run_battery_for_seed(grammar, registry, seed, max_candidates, calibration)
@@ -397,7 +420,7 @@ def cmd_run(
                 f"composite={candidate.composite_score:.4f} "
                 f"hash={candidate.report.config.config_hash}"
             )
-        return
+        return "dry-run"
 
     assert inbox is not None  # CLI guard above
     batch = BatchContext(
@@ -418,6 +441,131 @@ def cmd_run(
         f"skipped_duplicate={result.skipped_duplicate_count} "
         f"failed={result.failed_count}"
     )
+
+    if consume_feedback:
+        _consume_feedback_after_submit(
+            forge_db_path=forge_db_path,
+            crucible_db=crucible_db,
+            batch_id=result.batch_id,
+            open_proposals=open_proposals,
+            prefilter_yaml=prefilter_yaml,
+        )
+
+    return "submitted"
+
+
+@app.command("run")
+def cmd_run(
+    seed: int = typer.Option(0, "--seed", help="RNG root seed"),
+    batch_size: int = typer.Option(
+        10, "--batch-size", min=1, help="top-N candidates to submit (§6.4 default 200)"
+    ),
+    max_candidates: int = typer.Option(
+        1000, "--max", "-n", min=1, help="enumeration cap before pre-filtering"
+    ),
+    inbox: Path | None = typer.Option(
+        None, "--inbox", help="Crucible inbox directory (required unless --dry-run)"
+    ),
+    crucible_db: Path | None = typer.Option(
+        None, "--crucible-db", help="Crucible runs DB (used by §7.3 rate limiter)"
+    ),
+    forge_db: Path | None = typer.Option(
+        None,
+        "--forge-db",
+        help="Forge state DB (defaults to in-memory; pass a file path for persistence)",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="run the pipeline but skip inbox writes + DB persistence",
+    ),
+    loop: bool = typer.Option(
+        False,
+        "--loop",
+        help="daemon-loop: repeat the cycle, sleeping --poll-interval-seconds between (§7.3)",
+    ),
+    max_iterations: int | None = typer.Option(
+        None,
+        "--max-iterations",
+        help="cap loop at N iterations (test/bounded operation); default is unbounded",
+    ),
+    poll_interval_seconds: int = typer.Option(
+        600,
+        "--poll-interval-seconds",
+        help="seconds to sleep between iterations in --loop mode (default 600 = 10 min)",
+    ),
+    consume_feedback: bool = typer.Option(
+        False,
+        "--consume-feedback",
+        help="after submit, run the feedback chain (consumer/analyzer/proposer/auto_tune)",
+    ),
+    open_proposals: Path = typer.Option(
+        Path("OPEN_PROPOSALS.md"),
+        "--open-proposals",
+        help="path to OPEN_PROPOSALS.md (used by --consume-feedback)",
+    ),
+    prefilter_yaml: Path = typer.Option(
+        Path("config/prefilter.yaml"),
+        "--prefilter-yaml",
+        help="path to prefilter.yaml (used by --consume-feedback auto-tune)",
+    ),
+) -> None:
+    """Run the full Forge cycle once or in a daemon loop.
+
+    Phase 5 (D024/D7) adds `--loop` for autonomous multi-batch operation.
+    Each iteration runs the §2.1 per-batch order: enumerate → prefilter →
+    rank → submit. With `--consume-feedback`, the feedback chain runs
+    after submit. The loop sleeps `--poll-interval-seconds` between
+    iterations (default 600s per §7.3) and exits cleanly on SIGINT.
+
+    `--max-iterations N` caps the loop for tests / bounded operation.
+    """
+    import time
+
+    if not dry_run and inbox is None:
+        typer.echo("error: --inbox is required unless --dry-run", err=True)
+        raise typer.Exit(code=2)
+
+    forge_db_path = forge_db if forge_db is not None else Path(":memory:")
+
+    if not loop:
+        _run_one_iteration(
+            seed=seed,
+            batch_size=batch_size,
+            max_candidates=max_candidates,
+            inbox=inbox,
+            crucible_db=crucible_db,
+            forge_db_path=forge_db_path,
+            dry_run=dry_run,
+            consume_feedback=consume_feedback,
+            open_proposals=open_proposals,
+            prefilter_yaml=prefilter_yaml,
+        )
+        return
+
+    iteration = 0
+    try:
+        while max_iterations is None or iteration < max_iterations:
+            iteration += 1
+            typer.echo(f"--- loop iteration {iteration} ---")
+            _run_one_iteration(
+                seed=seed,
+                batch_size=batch_size,
+                max_candidates=max_candidates,
+                inbox=inbox,
+                crucible_db=crucible_db,
+                forge_db_path=forge_db_path,
+                dry_run=dry_run,
+                consume_feedback=consume_feedback,
+                open_proposals=open_proposals,
+                prefilter_yaml=prefilter_yaml,
+            )
+            if max_iterations is not None and iteration >= max_iterations:
+                break
+            time.sleep(poll_interval_seconds)
+    except KeyboardInterrupt:
+        typer.echo("loop: stopped on SIGINT")
+    typer.echo(f"loop: stopped after {iteration} iterations")
 
 
 app.command("feedback")(cmd_feedback)
