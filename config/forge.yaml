@@ -1,4 +1,4 @@
-# Forge main configuration. See FORGE_DESIGN.md §10.1.
+# Forge main configuration. See docs/DESIGN.md §10.1.
 forge:
   data_root: ~/forge_data
   db_path: ~/forge_data/forge.db
@@ -7,7 +7,7 @@ forge:
   crucible:
     inbox_path: ~/optbt_data/inbox        # where Forge writes
     db_path: ~/optbt_data/results.duckdb  # where Forge reads (read-only)
-    contracts_version: "1.1"
+    contracts_version: "1.6"
 
   enumeration:
     max_candidates_per_batch: 100000
