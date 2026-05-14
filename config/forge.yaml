@@ -10,7 +10,7 @@ forge:
     contracts_version: "1.6"
 
   enumeration:
-    max_candidates_per_batch: 100000
+    max_candidates_per_batch: 5000   # v1 go-live; ramp once loop stability is proven
     seed: 42
 
   submission:

@@ -101,7 +101,7 @@ def test_returns_clear_when_no_prior_batch(tmp_path: Path) -> None:
     crucible_db = tmp_path / "crucible.duckdb"
     with db_connection(forge_db):
         pass  # schema-ensure only
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is True
     assert status.blocking_batch_id is None
     assert status.submitted_count == 0
@@ -126,7 +126,7 @@ def test_returns_blocked_when_crucible_db_missing_and_prior_batch_exists(
         submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
     )
     missing_crucible = tmp_path / "does_not_exist.duckdb"
-    status = check_rate_limit(forge_db, missing_crucible)
+    status = check_rate_limit(forge_db, missing_crucible, exports_dir=tmp_path / "noexports")
     assert status.clear is False
     assert status.blocking_batch_id == batch
     assert status.gated_count == 0
@@ -150,7 +150,7 @@ def test_blocked_when_zero_percent_gated(tmp_path: Path) -> None:
             config_hash=f"hash_{i}",
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is False
     assert status.pct_gated == pytest.approx(0.0)
     assert status.gated_count == 0
@@ -177,7 +177,7 @@ def test_clear_at_threshold_exactly(tmp_path: Path) -> None:
         )
     for i in range(4):
         _insert_crucible_gated(crucible_db, config_hash=f"hash_{i}")
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is True
     assert status.pct_gated == pytest.approx(0.8)
     assert status.gated_count == 4
@@ -198,7 +198,7 @@ def test_blocked_just_below_threshold(tmp_path: Path) -> None:
         )
     for i in range(3):
         _insert_crucible_gated(crucible_db, config_hash=f"hash_{i}")
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is False
     assert status.pct_gated == pytest.approx(0.6)
     assert status.gated_count == 3
@@ -217,7 +217,7 @@ def test_clear_at_full_completion(tmp_path: Path) -> None:
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
         _insert_crucible_gated(crucible_db, config_hash=f"hash_{i}")
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is True
     assert status.pct_gated == pytest.approx(1.0)
 
@@ -242,8 +242,12 @@ def test_custom_threshold_is_respected(tmp_path: Path) -> None:
         )
     for i in range(2):
         _insert_crucible_gated(crucible_db, config_hash=f"h{i}")
-    blocked = check_rate_limit(forge_db, crucible_db, threshold=0.8)
-    cleared = check_rate_limit(forge_db, crucible_db, threshold=0.5)
+    blocked = check_rate_limit(
+        forge_db, crucible_db, threshold=0.8, exports_dir=tmp_path / "noexports"
+    )
+    cleared = check_rate_limit(
+        forge_db, crucible_db, threshold=0.5, exports_dir=tmp_path / "noexports"
+    )
     assert blocked.clear is False
     assert cleared.clear is True
 
@@ -276,7 +280,7 @@ def test_uses_most_recent_batch(tmp_path: Path) -> None:
             config_hash=f"new_{i}",
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is False
     assert status.blocking_batch_id == new_batch
 
@@ -291,7 +295,7 @@ def test_returns_rate_limit_status(tmp_path: Path) -> None:
     crucible_db = tmp_path / "crucible.duckdb"
     with db_connection(forge_db):
         pass
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert isinstance(status, RateLimitStatus)
 
 
@@ -300,6 +304,6 @@ def test_status_is_frozen(tmp_path: Path) -> None:
     crucible_db = tmp_path / "crucible.duckdb"
     with db_connection(forge_db):
         pass
-    status = check_rate_limit(forge_db, crucible_db)
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     with pytest.raises(Exception, match=r"cannot assign|frozen"):
         status.clear = False  # type: ignore[misc]

@@ -36,7 +36,9 @@ _DEFAULT_THRESHOLD = 0.80
 _GATED_QUERY_LIMIT_FACTOR = 4
 _GATED_QUERY_MIN = 1000
 
-_DEFAULT_EXPORTS_DIR = Path.home() / "optbt_data" / "exports"
+# Default exports dir resolved at call time (not module-load) so tests can
+# monkeypatch `Path.home()` without the import side-effect locking in the
+# operator's real home directory.
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +81,7 @@ def check_rate_limit(
     "waiting" iteration, a false-clear floods the inbox.
     """
     if exports_dir is None:
-        exports_dir = _DEFAULT_EXPORTS_DIR
+        exports_dir = Path.home() / "optbt_data" / "exports"
     with db_connection(forge_db_path) as conn:
         row = conn.execute(
             "SELECT forge_batch_id FROM submissions ORDER BY submitted_at DESC LIMIT 1",

@@ -21,15 +21,19 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from crucible_contracts import StrategyConfig, get_recent_gated_runs
+from crucible_contracts import (
+    StrategyConfig,
+    get_recent_gated_runs,
+    load_recent_gated_runs_from_export,
+)
 
 from forge.feedback.types import BatchFeedback, CandidateOutcome
 
 if TYPE_CHECKING:
     from datetime import datetime
-    from pathlib import Path
 
     import duckdb
     from crucible_contracts import GatedRun
@@ -153,14 +157,50 @@ def _update_batch_summary(
         )
 
 
+def _fetch_crucible_runs(
+    crucible_db: Path,
+    exports_dir: Path,
+) -> list[GatedRun]:
+    """Return recent gated runs via the EXPORT_LAYOUT file path with DB fallback.
+
+    Production path: read `EXPORT_LAYOUT.gated_runs_*.json` — works while
+    `crucible-db-writer.service` holds the DuckDB lock. Falls back to a
+    direct DuckDB read when no export exists (test fixtures).
+
+    Returns an empty list only when:
+      - exports_dir has no `gated_runs_*.json` file AND
+      - the direct DuckDB read returned no rows (NOT when it failed).
+
+    Raises `QueryError` when the export is missing AND the direct DuckDB
+    read fails — that's the "Crucible offline" condition the resilience
+    suite (Phase 6 D025/D3.i) expects callers to surface as a clean exit.
+    """
+    runs = load_recent_gated_runs_from_export(
+        exports_dir,
+        limit=_DEFAULT_CRUCIBLE_LIMIT,
+    )
+    if runs:
+        return runs
+    # No export file (or it's empty). Try the direct DB.
+    return get_recent_gated_runs(crucible_db, limit=_DEFAULT_CRUCIBLE_LIMIT)
+
+
 def consume_batch_results(
     forge_db: duckdb.DuckDBPyConnection,
     crucible_db: Path,
     *,
     batch_id: uuid.UUID | None = None,
     since: datetime | None = None,
+    exports_dir: Path | None = None,
 ) -> BatchFeedback:
-    """Join Crucible gated runs to Forge submissions and update DB state."""
+    """Join Crucible gated runs to Forge submissions and update DB state.
+
+    Reads gated-run state via `EXPORT_LAYOUT.gated_runs_*.json` (contracts
+    v1.8.0+) by default, falling back to a direct DuckDB read when no
+    export is present. The export path side-steps the writer-lock issue
+    that blocks direct read-only opens while `crucible-db-writer.service`
+    is running.
+    """
     if since is not None and since.tzinfo is None:
         msg = "consume_batch_results: since must be timezone-aware (tzinfo required)"
         raise ValueError(msg)
@@ -172,9 +212,9 @@ def consume_batch_results(
         cfg.config_hash: (cid, cfg, status) for cid, cfg, status in submission_rows
     }
 
-    crucible_runs: list[GatedRun] = get_recent_gated_runs(
-        crucible_db, limit=_DEFAULT_CRUCIBLE_LIMIT
-    )
+    if exports_dir is None:
+        exports_dir = Path.home() / "optbt_data" / "exports"
+    crucible_runs: list[GatedRun] = _fetch_crucible_runs(crucible_db, exports_dir)
 
     matched: dict[str, GatedRun] = {}
     for gr in crucible_runs:

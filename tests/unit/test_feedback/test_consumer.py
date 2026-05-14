@@ -144,7 +144,9 @@ def test_consume_returns_empty_outcomes_when_crucible_db_empty(tmp_path: Path) -
     with db_connection(forge_db) as conn:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=2)
         _insert_forge_submission(conn, config=minimal_strategy_config(), batch_id=batch_id)
-        result = consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        result = consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
     assert result.batch_id == batch_id
     assert result.gated_count == 0
     assert result.pending_count == 1
@@ -154,7 +156,7 @@ def test_consume_raises_when_neither_batch_id_nor_since(tmp_path: Path) -> None:
     forge_db, crucible_db = _setup_paths(tmp_path)
     build_synthetic_crucible_db(crucible_db).close()
     with db_connection(forge_db) as conn, pytest.raises(ValueError, match="batch_id"):
-        consume_batch_results(conn, crucible_db)
+        consume_batch_results(conn, crucible_db, exports_dir=tmp_path / "noexports")
 
 
 def test_consume_auto_discovers_latest_batch_with_submitted_rows(tmp_path: Path) -> None:
@@ -187,7 +189,12 @@ def test_consume_auto_discovers_latest_batch_with_submitted_rows(tmp_path: Path)
             batch_id=new_batch,
             submitted_at=datetime(2026, 5, 13, 12, tzinfo=UTC),
         )
-        result = consume_batch_results(conn, crucible_db, since=datetime(2026, 5, 1, tzinfo=UTC))
+        result = consume_batch_results(
+            conn,
+            crucible_db,
+            since=datetime(2026, 5, 1, tzinfo=UTC),
+            exports_dir=tmp_path / "noexports",
+        )
     assert result.batch_id == new_batch
 
 
@@ -205,7 +212,9 @@ def test_consume_joins_matching_config_hashes(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
         _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
-        result = consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        result = consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
     assert result.gated_count == 1
     assert result.promoted_count == 1
     assert result.rejected_count == 0
@@ -220,7 +229,9 @@ def test_consume_updates_submission_status_to_gated(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
         candidate_id = _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
-        consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
         row = conn.execute(
             "SELECT status, crucible_run_id FROM submissions WHERE forge_candidate_id = ?",
             [str(candidate_id)],
@@ -239,7 +250,9 @@ def test_consume_skips_unrelated_crucible_runs(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
         _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
-        result = consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        result = consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
     assert result.gated_count == 0
 
 
@@ -252,7 +265,9 @@ def test_consume_updates_batch_summary_promotion_rate(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=2)
         _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
-        consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
         row = conn.execute(
             "SELECT promotion_rate FROM batch_summaries WHERE forge_batch_id = ?",
             [str(batch_id)],
@@ -271,7 +286,9 @@ def test_consume_sets_completed_at_when_all_gated(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
         _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
-        consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
         row = conn.execute(
             "SELECT completed_at FROM batch_summaries WHERE forge_batch_id = ?",
             [str(batch_id)],
@@ -294,7 +311,9 @@ def test_consume_leaves_completed_at_null_when_pending_exists(tmp_path: Path) ->
             config=minimal_strategy_config().model_copy(update={"name": "decoy"}),
             batch_id=batch_id,
         )
-        consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
         row = conn.execute(
             "SELECT completed_at FROM batch_summaries WHERE forge_batch_id = ?",
             [str(batch_id)],
@@ -325,7 +344,9 @@ def test_consume_common_failures_aggregates_gate_failures(tmp_path: Path) -> Non
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=2)
         _insert_forge_submission(conn, config=cfg_a, batch_id=batch_id)
         _insert_forge_submission(conn, config=cfg_b, batch_id=batch_id)
-        consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
         row = conn.execute(
             "SELECT common_failures FROM batch_summaries WHERE forge_batch_id = ?",
             [str(batch_id)],
@@ -349,8 +370,12 @@ def test_consume_is_idempotent(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
         _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
-        first = consume_batch_results(conn, crucible_db, batch_id=batch_id)
-        second = consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        first = consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
+        second = consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
     assert first.gated_count == second.gated_count
     assert first.promoted_count == second.promoted_count
 
@@ -368,8 +393,12 @@ def test_consume_returns_outcomes_in_stable_order(tmp_path: Path) -> None:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=3)
         for cfg in cfgs:
             _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
-        first = consume_batch_results(conn, crucible_db, batch_id=batch_id)
-        second = consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        first = consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
+        second = consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
     first_hashes = [o.config_hash for o in first.outcomes]
     second_hashes = [o.config_hash for o in second.outcomes]
     assert first_hashes == second_hashes
