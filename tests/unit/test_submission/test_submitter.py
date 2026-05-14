@@ -113,8 +113,7 @@ def test_writes_one_inbox_file_per_candidate(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         result = submit_batch(conn, batch=batch, candidates=cands, inbox_root=inbox)
     assert result.submitted_count == 2
-    batch_inbox = inbox / str(batch.batch_id)
-    files = sorted(batch_inbox.glob("*.json"))
+    files = sorted(inbox.glob("*.json"))
     assert len(files) == 2
     for f in files:
         payload = json.loads(f.read_text())
@@ -275,18 +274,25 @@ def test_repeat_call_with_same_batch_id_does_not_duplicate_batch_summary(
 
 
 # ---------------------------------------------------------------------------
-# Inbox subdirectory layout
+# Inbox layout (D026 — flat, matching crucible_contracts.INBOX_LAYOUT)
 # ---------------------------------------------------------------------------
 
 
-def test_inbox_files_land_under_batch_subdir(tmp_path: Path) -> None:
-    """§7.2 spirit: `{inbox_root}/{batch_id}/{config_hash}.json`."""
+def test_inbox_files_land_flat_at_inbox_root(tmp_path: Path) -> None:
+    """`{inbox_root}/{config_hash}.json` — flat, per `INBOX_LAYOUT`.
+
+    Crucible's contract-compliant inbox watcher only scans top-level
+    `.json` files (skips subdirectories); per-batch grouping must live
+    in Forge's `submissions.forge_batch_id` column, not the filesystem.
+    """
     forge_db = tmp_path / "forge.db"
     inbox = tmp_path / "inbox"
     batch = _ctx(seed=5)
     cands = (_candidate("a", "dir_a"),)
     with db_connection(forge_db) as conn:
         submit_batch(conn, batch=batch, candidates=cands, inbox_root=inbox)
-    assert (inbox / str(batch.batch_id)).is_dir()
-    files = list((inbox / str(batch.batch_id)).glob("*.json"))
+    files = list(inbox.glob("*.json"))
     assert len(files) == 1
+    # No per-batch subdirectory should exist.
+    subdirs = [p for p in inbox.iterdir() if p.is_dir()]
+    assert subdirs == []

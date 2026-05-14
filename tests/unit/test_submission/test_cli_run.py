@@ -100,10 +100,8 @@ def test_full_submit_writes_inbox_and_db(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.stdout
     assert inbox.is_dir()
-    # At least one batch_id subdir with .json files inside.
-    batch_dirs = list(inbox.iterdir())
-    assert len(batch_dirs) >= 1
-    json_files = list(batch_dirs[0].glob("*.json"))
+    # Flat layout per INBOX_LAYOUT — top-level *.json files.
+    json_files = list(inbox.glob("*.json"))
     assert len(json_files) >= 1
     with db_connection(forge_db) as conn:
         sub_row = conn.execute("SELECT COUNT(*) FROM submissions").fetchone()

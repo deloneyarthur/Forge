@@ -138,9 +138,8 @@ def _submit_one(
             error=None,
         )
 
-    batch_inbox = inbox_root / str(batch.batch_id)
     try:
-        receipt = submit_candidate(config, batch_inbox)
+        receipt = submit_candidate(config, inbox_root)
     except Exception as err:  # contracts may raise IOError, etc.
         db.execute(
             "UPDATE submissions SET status = ? WHERE forge_candidate_id = ?",
@@ -182,8 +181,11 @@ def submit_batch(
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
-    Inbox layout: `{inbox_root}/{batch_id}/{config_hash}.json` (§7.2
-    spirit; D006 confirms JSON, not YAML).
+    Inbox layout: `{inbox_root}/{config_hash}.json` — flat, matching
+    `crucible_contracts.INBOX_LAYOUT` (D006 confirms JSON; D026 fixes the
+    earlier per-batch-subdir layout that Crucible's contract-compliant
+    inbox watcher silently skipped). Batch association is preserved via
+    the `submissions.forge_batch_id` column, not via filesystem grouping.
     """
     _insert_batch_summary(db, batch=batch, batch_size=len(candidates))
 
