@@ -5,11 +5,12 @@
 load once from `config/ranker.yaml` and are reused for every candidate
 in a batch. Same pattern as Phase 3 `Calibration`.
 
-Naming note: §6.2 calls the third weight ``regime_diversity``; Phase 3
-ships the corresponding filter as ``regime_exposure`` (§5.3.6). The
-ranker reads `regime_exposure.score` for the `regime_diversity` weight.
-Either name refers to the same number; the spec-side rename is a
-Phase 5/6 cleanup target.
+Naming note: the §5.3.6 filter is `regime_exposure`; §6.2 (post-Phase-6
+D025/D7 rename) uses `regime_exposure_score` for the same factor.
+Forge's code keeps the weight key as ``regime_diversity`` for yaml
+back-compat — the rename is intentionally doc-only. The scorer reads
+``filters["regime_exposure"].score`` and multiplies it by
+``weights.regime_diversity``.
 """
 
 from __future__ import annotations

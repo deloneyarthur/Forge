@@ -499,11 +499,13 @@ Each candidate has a composite score:
 score = (
     0.30 × signal_density_score +
     0.25 × novelty_score +
-    0.20 × regime_diversity_score +
+    0.20 × regime_exposure_score +
     0.15 × permutation_test_score +
     0.10 × prior_promotion_proximity_score
 )
 ```
+
+`regime_exposure_score`: output of the §5.3.6 `regime_exposure` filter (named after the property being measured — concentration of trade dates in any one regime label). Earlier drafts called this `regime_diversity_score`; the rename keeps §6.2's score names in lockstep with §5.3 filter names. The corresponding weight key in `config/ranker.yaml` is `regime_diversity` (back-compat — yaml key intentionally preserved across this rename).
 
 `prior_promotion_proximity_score`: high if the candidate is structurally similar to a previously-promoted strategy (in terms of signals used, hypothesis, etc.). This is a learning signal — once we know a region is promising, sample more from it.
 
