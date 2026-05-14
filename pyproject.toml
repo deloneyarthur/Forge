@@ -12,7 +12,6 @@ dependencies = [
     "polars>=1.10,<2",
     "duckdb>=1.0,<2",
     "pyyaml>=6.0",
-    "networkx>=3.2",
     "structlog>=24.0",
     "typer>=0.12",
 ]
@@ -99,10 +98,6 @@ warn_return_any = true
 namespace_packages = true
 explicit_package_bases = true
 mypy_path = "src"
-
-[[tool.mypy.overrides]]
-module = ["networkx.*"]
-ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
 # Pytest

@@ -85,7 +85,14 @@ def cmd_approve_proposal(
     initials: str = typer.Option(..., "--initials", help="operator initials for audit"),
     forge_db: Path = typer.Option(Path(":memory:"), "--forge-db", help="Forge state DB"),
 ) -> None:
-    """Mark a proposal as approved (operator audit row)."""
+    """Mark a proposal as approved (operator audit row).
+
+    This command does NOT auto-mutate `config/grammar.yaml`. The actual
+    yaml edit, version bump, archive, and Decision Log entry stay manual
+    so each grammar change crosses the §13.2 review boundary intentionally
+    (hard rule #10). After approval, the operator edits the yaml directly
+    and the pre-commit hook enforces the four-step contract.
+    """
     _update_proposal_status(
         forge_db,
         proposal_id=uuid.UUID(proposal_id),
