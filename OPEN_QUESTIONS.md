@@ -101,3 +101,42 @@ Operator reviews at every phase boundary.
 **Resolution 2026-05-13 (Phase 6 closure):** **D025/D9 — deferred**. Re-confirmed at every phase boundary; the contracts gap is upstream and outside Forge's scope to resolve. Phase 6 ships with synthetic cache. Next action: when Crucible/contracts adds a feature-cache surface, swap `forge.prefilters.feature_cache.SyntheticFeatureCache` to the real adapter behind the same Protocol — call sites need no changes.
 
 **Tag:** `contracts-dependency`
+
+---
+
+## 2026-05-13 — Q11 — v1 go-live paused; Crucible Phase 9 v2 is the real prerequisite — **HIGH SEVERITY**
+
+**Question:** First v1 go-live attempt (this session) surfaced three stacked gaps between Forge's emitted configs and Crucible's current runtime, with no honest path forward until Crucible's Phase 9 v2 lands. How does v1 go-live actually achieve closed-loop operation?
+
+**What we discovered during go-live:**
+
+1. **Inbox layout mismatch** (resolved as D026, this session) — Forge wrote `inbox/{batch_id}/{config_hash}.json`; Crucible's contract-compliant inbox watcher skips subdirectories. Fixed by writing flat per `INBOX_LAYOUT`. Crucible queued the 2 stranded submissions within 30s of the move.
+
+2. **Name-prefix routing gap** (resolved in Crucible commit `98f1eeb`, this session) — Crucible's `_detect_strategy_name` only routed `genome_<...>` configs; Forge emits `forge_<hypothesis>_<bucket>_<hash>`. Stale convention. Added `forge_` arm matching the existing scaffold comment. One run then completed; the second hit gap #3 below.
+
+3. **Exit-vocabulary divergence (NEW, unresolved):** `crucible_contracts.KNOWN_EXIT_IDS` (per D011) lists 14 exit IDs; Crucible's backtest engine implements 10. The intersection misses 6 contract-only exits:
+   - `atr_underlying_stop_loss` (per D012 stop-loss family)
+   - `event_passed_exit` (tail_hedge hypothesis-required exit per S5)
+   - `hard_profit_target` (trend_continuation forbids; harmless if unimplemented)
+   - `premium_stop_loss` (per D012 — Crucible has `premium_stop` instead; likely an unsynced rename)
+   - `regime_flip_exit` (regime_arbitrage hypothesis-required exit per S5; surfaced as Run 2's failure)
+   - `roll_on_schedule_exit` (calendar hypothesis-required exit)
+   Plus 2 Crucible-only ids missing from the contract: `blow_out_exit`, `premium_stop`.
+
+4. **From-config dispatcher gap (NEW, unresolved):** Even Run 1 (mean_reversion) "completed" with all-zeros metrics (`n_trades=0`, `final_equity=100000=initial`). Per `Crucible/src/optbt/data/runner.py:199` comment: *"v2: a proper 'from-config' dispatcher."* Crucible currently routes Forge configs to the `regime_mean_revert` template — it ignores Forge's actual signal config and runs the template. Honest backtests of Forge configs require Phase 9 v2.
+
+5. **Promotion gate gap (NEW, unresolved):** `promotion_decisions` table is empty across the test runs. Crucible's gate evaluator for `source='forge'` runs isn't wired (refit-source has a stub via `_make_refit_evaluator_stub`; forge-source has nothing). `_GATED_QUERY_BASE` is an INNER JOIN with `promotion_decisions`, so even successfully-completed runs never appear gated. **Forge's rate limiter (§7.3, ≥80% gated) blocks indefinitely** in current state.
+
+**What I did instead:** Stopped `forge.service` (left enabled). Documented the three new gaps and the v1 go-live status here.
+
+**Severity:** **high** — v1 go-live is the boundary between "code is structurally complete" and "system actually produces strategy candidates." Forge cannot achieve the latter alone; Crucible v2 must (a) sync exit vocabulary with the contract, (b) implement from-config dispatch so Forge configs backtest honestly, (c) wire a forge-source gate evaluator that writes `promotion_decisions`.
+
+**Resolution 2026-05-13 (operator choice):** **Pause v1 go-live, scope Crucible Phase 9 v2 in a separate session.** Forge's Phase 7 (minimal + Q9) work loses its testing ground until real promotion data exists; reassess Phase 7 scope after Crucible v2 ships at least one real `gated` row.
+
+**Action items for the Crucible Phase 9 v2 scoping session:**
+- Reconcile `crucible_contracts.KNOWN_EXIT_IDS` with the runtime exit table. Determine which side renames (`premium_stop` ↔ `premium_stop_loss`?), which exits Crucible must implement vs deferred, and whether `blow_out_exit` should be added to the contract.
+- Implement a from-config dispatcher in `runner.py` so source='forge' runs evaluate Forge's actual signal config (not a placeholder template).
+- Wire a forge-source gate evaluator that writes `promotion_decisions` after each completed forge-source run (decision can be reject for v1, mirroring the refit stub — what matters is the row exists for `_GATED_QUERY_BASE`).
+- Validate end-to-end: Forge submits → Crucible queues → backtests with Forge's signals → writes promotion_decisions → Forge consumes feedback + rate-limiter unblocks → submits batch 2.
+
+**Tag:** `crucible-v2-prerequisite`, `v1-go-live`
