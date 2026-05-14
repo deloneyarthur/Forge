@@ -21,7 +21,10 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from crucible_contracts import get_recent_gated_runs
+from crucible_contracts import (
+    get_recent_gated_runs,
+    load_recent_gated_runs_from_export,
+)
 from crucible_contracts.exceptions import QueryError
 
 from forge.persistence.db import db_connection
@@ -32,6 +35,8 @@ _DEFAULT_THRESHOLD = 0.80
 # typical batch size (200 per §6.4) with headroom for parallelism.
 _GATED_QUERY_LIMIT_FACTOR = 4
 _GATED_QUERY_MIN = 1000
+
+_DEFAULT_EXPORTS_DIR = Path.home() / "optbt_data" / "exports"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,19 +59,27 @@ def check_rate_limit(
     crucible_db_path: Path,
     *,
     threshold: float = _DEFAULT_THRESHOLD,
+    exports_dir: Path | None = None,
 ) -> RateLimitStatus:
     """Return whether a new batch may submit.
 
     Steps:
     1. Find the most-recent `forge_batch_id` in `submissions`.
     2. Collect that batch's `config_hash`es.
-    3. Query Crucible's gated runs (read-only) and intersect.
+    3. Query Crucible's gated runs and intersect. Production path reads
+       `EXPORT_LAYOUT`-published `gated_runs_*.json` (contracts v1.8.0+);
+       Crucible's db_writer holds an exclusive file lock so direct
+       read-only DuckDB opens fail. Falls back to `get_recent_gated_runs`
+       (direct DuckDB) for test fixtures where no exports dir exists.
     4. Clear if `intersection / batch_size >= threshold`.
 
     If the Forge DB has no submissions, `clear=True` (first-run case).
-    If the Crucible DB is missing or unreadable, the gated-count is
-    treated as 0 (blocked).
+    If both the export and direct-DB paths fail, the gated-count is
+    treated as 0 (blocked) — conservative; a false-block costs a
+    "waiting" iteration, a false-clear floods the inbox.
     """
+    if exports_dir is None:
+        exports_dir = _DEFAULT_EXPORTS_DIR
     with db_connection(forge_db_path) as conn:
         row = conn.execute(
             "SELECT forge_batch_id FROM submissions ORDER BY submitted_at DESC LIMIT 1",
@@ -99,14 +112,21 @@ def check_rate_limit(
         )
 
     gated_count = 0
+    limit = max(submitted_count * _GATED_QUERY_LIMIT_FACTOR, _GATED_QUERY_MIN)
     try:
-        recent = get_recent_gated_runs(
-            crucible_db_path,
-            limit=max(submitted_count * _GATED_QUERY_LIMIT_FACTOR, _GATED_QUERY_MIN),
-        )
+        # Production path: read the EXPORT_LAYOUT-published snapshot.
+        # `db_writer.service` holds the DuckDB file lock so direct read-only
+        # opens fail with QueryError; the file-based path side-steps that.
+        recent = load_recent_gated_runs_from_export(exports_dir, limit=limit)
+        if not recent:
+            # No export present (or empty). Fall back to direct DuckDB for
+            # tests/fixtures where no writer service is running.
+            recent = get_recent_gated_runs(crucible_db_path, limit=limit)
         gated_count = sum(1 for r in recent if r.run.config_hash in batch_hashes)
     except QueryError:
-        # Crucible DB missing or unreadable -> 0 gated; remain blocked.
+        # Both paths failed (or only one tried and failed) -> 0 gated;
+        # remain blocked. Loud-log nothing: the rate limiter is hot-loop
+        # and we don't want to spam.
         gated_count = 0
 
     pct = gated_count / submitted_count
