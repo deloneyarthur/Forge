@@ -1,6 +1,7 @@
 # Forge — Status
 
-**Current phase:** 4 (Ranking + submission) — **COMPLETE; awaiting LIGHT review.** See `PHASE_4_HANDOFF.md`.
+**Current phase:** 5 (Feedback + grammar refinement) — **in-flight.** Pre-code closure plan locked as D024 (`1.a..11.a`).
+**Previous phase:** 4 (Ranking + submission) — complete (light review pending), last commit `c634c10`. See `PHASE_4_HANDOFF.md`.
 **Previous phase:** 3 (Pre-filter battery) — complete, last commit `367f4d3`. See `PHASE_3_HANDOFF.md`.
 **Previous-previous phase:** 2 (Enumerator) — complete, last commit `ca9dc8b`. See `PHASE_2_HANDOFF.md`.
 **Phase 1 (Grammar engine)** — complete, last commit `ac98e81`. See `PHASE_1_HANDOFF.md`.
@@ -60,3 +61,4 @@ None. Q7 closed by D008 (contracts v1.2.0 adopted).
 - 2026-05-13 (session 4): **Phase 3 close review approved; Phase 4 (Ranking + submission) kickoff.** Pre-code closure plan presented (D1–D8); operator approved (`1.a, 2.a, 3.a, 4.a, 5.b, 6.a, 7.ok, 8.ok`). D5 resolved by contracts side-trip → **contracts v1.6.0 shipped** (commit `073ad61`) adding `RegistrySnapshot.data_start_date: date`. Forge pin bumped to `"1.6.0"`; 9 RegistrySnapshot constructor sites threaded with `date(2022, 1, 1)`; `permutation_test.py` refactored to read `ctx.registry.data_start_date` (closes Phase 3 OQ-2); registry-hash sensitivity test extended. Logged as **D022** (contracts adoption) + **D023** (full closure plan). Full suite 599/599; gates clean. Phase 4 module-build begins.
 - 2026-05-13 (session 4, cont.): **Phase 4 modules 1-11 shipped** across commits `21015bc` (ranking.types) → `479475c` (ranking.config) → `bc767fa` (ranking.prior_promotion) → `f47654a` (ranking.scorer) → `c886562` (ranking.diversifier) → `fe2f520` (ranking.queue) → `c50ea03` + `ed6a96f` (submission.batch + __init__) → `2f5d1ef` (submission.rate_limiter) → `dbe11be` (submission.pre_filter_logger) → `c6170f7` (submission.submitter) → `291b38f` (cli `forge run`). 130 new tests; full suite 729/729.
 - 2026-05-13 (session 4, cont.): **Phase 4 module 12 shipped**: invariants test file covering §13.4 idempotency, §13.1 batch_id determinism, ranker score in [0,1], diversifier returns-exactly-N + no-repeats, rank_batch determinism, submitter writes consistent config_hashes, perf 30-candidate end-to-end < 5s. `PHASE_4_HANDOFF.md` written. Full suite 740/740; ruff + format + mypy --strict clean. **Phase 4 complete; awaiting LIGHT review.**
+- 2026-05-13 (session 5): **Phase 5 (Feedback + grammar refinement) kickoff.** Pre-code closure plan presented (D1-D11); operator approved with "All recommended options are fine" (`1.a..11.a`). No contracts gap surfaced — Phase 5 stays pinned to `crucible_contracts == 1.6.0`. Logged as **D024**. Phase 5 module-build begins (tasks #57-#70).
