@@ -21,19 +21,26 @@ silent per-call round-trips — the design intent is per-config batching.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import date, timedelta
+from datetime import date
 from typing import TYPE_CHECKING, cast
 
 from crucible_contracts import (
     DEFAULT_DATA_HISTORY_DAYS,
     DEFAULT_UNDERLYING,
     FeatureCacheClient,
+    SignalSpec,
     StrategyConfig,
     signal_content_key,
 )
 
 if TYPE_CHECKING:
     from crucible_contracts import Regime
+
+
+# Chunk size for `prefetch_for_batch`. Bounds the writer's per-request work
+# and the connection-message envelope size. 500 splits a typical
+# unique-spec count (~2k-10k per batch) into 4-20 round-trips.
+_BATCH_PREFETCH_CHUNK = 500
 
 
 class CrucibleFeatureCache:
@@ -105,22 +112,90 @@ class CrucibleFeatureCache:
             underlying=self._underlying,
         )
 
-    def _window_dates(self) -> tuple[date, ...]:
-        """All calendar days from `data_start_date` through today.
+    def _fetch_activation_dates_chunked(self, specs: list[SignalSpec]) -> None:
+        """Fetch + cache `activation_dates` for `specs` in size-bounded chunks."""
+        for i in range(0, len(specs), _BATCH_PREFETCH_CHUNK):
+            chunk = specs[i : i + _BATCH_PREFETCH_CHUNK]
+            response = self._client.get_features(
+                signals=tuple(chunk),
+                feature_names=("activation_dates",),
+                data_history_days=self._data_history_days,
+                underlying=self._underlying,
+            )
+            for content_key, feature_map in response.features.items():
+                if "activation_dates" not in feature_map:
+                    continue
+                raw_dates = feature_map["activation_dates"]
+                self._activations_by_content_key[content_key] = frozenset(
+                    date.fromisoformat(d) for d in raw_dates
+                )
 
-        `data_history_days` is measured in *trading* days (per
-        `RegistrySnapshot`), but activation dates Crucible returns are real
-        trading-day calendars that span roughly 1.5x as many calendar days.
-        Fetching the full calendar range from start_date to today ensures
-        every activation date Crucible could return has corresponding
-        returns/regime_label entries pre-loaded.
+    def _fetch_window_for_dates(
+        self,
+        dates_to_fetch: tuple[date, ...],
+        sentinel: SignalSpec,
+    ) -> None:
+        """Fetch + cache `returns` + `regime_label` for `dates_to_fetch`."""
+        response = self._client.get_features(
+            signals=(sentinel,),
+            feature_names=("returns", "regime_label"),
+            dates=dates_to_fetch,
+            data_history_days=self._data_history_days,
+            underlying=self._underlying,
+        )
+        for feature_map in response.features.values():
+            if "returns" in feature_map:
+                for date_str, value in feature_map["returns"].items():
+                    self._returns[date.fromisoformat(date_str)] = float(value)
+            if "regime_label" in feature_map:
+                for date_str, label in feature_map["regime_label"].items():
+                    self._regimes[date.fromisoformat(date_str)] = cast(
+                        "Regime",
+                        str(label),
+                    )
+            break  # one signal entry is enough — values are global
+        self._window_loaded = True
+
+    def prefetch_for_batch(self, configs: Iterable[StrategyConfig]) -> None:
+        """One-shot prefetch across an entire batch — amortises round-trips.
+
+        The per-config `prefetch_for_config` makes up to 2 socket round-trips
+        per config. With 5000 configs per batch and a sampler that mints
+        fresh thresholds per spec (so `signal_content_key` is unique per
+        spec, defeating the cross-config cache), that is ~10k round-trips.
+
+        This method fetches the same data in 2 chunked passes:
+          1. `activation_dates` for all uncached unique specs, batched in
+             chunks of `_BATCH_PREFETCH_CHUNK` signals to bound the writer's
+             per-request work and JSON envelope size.
+          2. `returns` + `regime_label` for the union of activation dates
+             across the whole batch, in a single round-trip.
+
+        After this runs, `prefetch_for_config` does only the per-config
+        index rebuild (no I/O).
         """
-        from datetime import date as _date  # noqa: PLC0415
+        configs_list = list(configs)
+        seen_keys: set[str] = set()
+        new_specs: list[SignalSpec] = []
+        for cfg in configs_list:
+            for spec in cfg.signals:
+                key = signal_content_key(spec)
+                if key in self._activations_by_content_key or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                new_specs.append(spec)
 
-        today = _date.today()
-        end = today if today > self._data_start_date else self._data_start_date
-        n_days = (end - self._data_start_date).days + 1
-        return tuple(self._data_start_date + timedelta(days=i) for i in range(n_days))
+        self._fetch_activation_dates_chunked(new_specs)
+
+        all_activations: set[date] = set()
+        for cfg in configs_list:
+            for spec in cfg.signals:
+                cached = self._activations_by_content_key.get(signal_content_key(spec))
+                if cached is not None:
+                    all_activations.update(cached)
+        missing_dates = tuple(sorted(all_activations - self._returns.keys()))
+        if missing_dates and configs_list and configs_list[0].signals:
+            self._fetch_window_for_dates(missing_dates, configs_list[0].signals[0])
 
     def prefetch_for_config(self, config: StrategyConfig) -> None:
         """Pre-populate the cache for one config's signals.
@@ -142,9 +217,7 @@ class CrucibleFeatureCache:
         # 1) Rebuild the per-config index. content_keys collide across
         # configs only when the spec is semantically identical, which is
         # the cache-hit case we want.
-        self._display_id_index = {
-            spec.id: signal_content_key(spec) for spec in config.signals
-        }
+        self._display_id_index = {spec.id: signal_content_key(spec) for spec in config.signals}
         new_specs = [
             spec
             for spec in config.signals
@@ -153,19 +226,7 @@ class CrucibleFeatureCache:
 
         # 2) Fetch activation_dates for new specs (batched).
         if new_specs:
-            response = self._client.get_features(
-                signals=tuple(new_specs),
-                feature_names=("activation_dates",),
-                data_history_days=self._data_history_days,
-                underlying=self._underlying,
-            )
-            for content_key, feature_map in response.features.items():
-                if "activation_dates" not in feature_map:
-                    continue
-                raw_dates = feature_map["activation_dates"]
-                self._activations_by_content_key[content_key] = frozenset(
-                    date.fromisoformat(d) for d in raw_dates
-                )
+            self._fetch_activation_dates_chunked(new_specs)
 
         # 3) Fetch returns + regime_label for the union of THIS config's
         # activation dates (only the dates we'll actually query). Skip any
@@ -178,26 +239,7 @@ class CrucibleFeatureCache:
                 all_activations.update(cached)
         missing_dates = tuple(sorted(all_activations - self._returns.keys()))
         if missing_dates and config.signals:
-            sentinel = (config.signals[0],)
-            window_response = self._client.get_features(
-                signals=sentinel,
-                feature_names=("returns", "regime_label"),
-                dates=missing_dates,
-                data_history_days=self._data_history_days,
-                underlying=self._underlying,
-            )
-            for feature_map in window_response.features.values():
-                if "returns" in feature_map:
-                    for date_str, value in feature_map["returns"].items():
-                        self._returns[date.fromisoformat(date_str)] = float(value)
-                if "regime_label" in feature_map:
-                    for date_str, label in feature_map["regime_label"].items():
-                        self._regimes[date.fromisoformat(date_str)] = cast(
-                            "Regime",
-                            str(label),
-                        )
-                break  # one signal entry is enough — values are global
-            self._window_loaded = True
+            self._fetch_window_for_dates(missing_dates, config.signals[0])
 
     # ------------------------------------------------------------------
     # FeatureCache Protocol methods
@@ -238,7 +280,7 @@ class CrucibleFeatureCache:
         Activation dates that fall on non-classified days (rare) get the
         defensive "low_vol" default rather than crashing the filter.
         """
-        return self._regimes.get(d, cast("Regime", "low_vol"))
+        return self._regimes.get(d, "low_vol")
 
 
 __all__ = ["CrucibleFeatureCache"]

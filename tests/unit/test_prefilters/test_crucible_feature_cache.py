@@ -209,6 +209,115 @@ def test_repeated_spec_id_across_configs_resolves_to_correct_activations() -> No
     assert cache.activation_dates("sig_directional") == frozenset({date(2024, 1, 3)})
 
 
+def test_prefetch_for_batch_fetches_all_signals_then_one_window() -> None:
+    """`prefetch_for_batch` does N chunked activation calls + 1 window call.
+
+    With 3 configs x 1 spec each = 3 unique specs, we expect:
+      - 1 activations call (chunk size = 500 default; well above 3)
+      - 1 returns+regime call covering the union of activation dates
+    """
+    client = MagicMock()
+    spec_a = _spec("rsi_2", "directional")
+    spec_b = _spec("rsi_14", "directional")
+    spec_c = _spec("adx_14", "directional")
+    ck_a = signal_content_key(spec_a)
+    ck_b = signal_content_key(spec_b)
+    ck_c = signal_content_key(spec_c)
+    client.get_features.side_effect = [
+        # Call 1: activation_dates for all 3 specs
+        _response(
+            {
+                ck_a: {"activation_dates": ["2024-01-02"]},
+                ck_b: {"activation_dates": ["2024-01-03"]},
+                ck_c: {"activation_dates": ["2024-01-04"]},
+            }
+        ),
+        # Call 2: returns + regime for the union
+        _response(
+            {
+                ck_a: {
+                    "returns": {
+                        "2024-01-02": 0.01,
+                        "2024-01-03": -0.005,
+                        "2024-01-04": 0.02,
+                    },
+                    "regime_label": {
+                        "2024-01-02": "bull",
+                        "2024-01-03": "low_vol",
+                        "2024-01-04": "bull",
+                    },
+                }
+            }
+        ),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
+    cache.prefetch_for_batch([_config(spec_a), _config(spec_b), _config(spec_c)])
+
+    assert client.get_features.call_count == 2
+    assert cache._activations_by_content_key[ck_a] == frozenset({date(2024, 1, 2)})
+    assert cache._activations_by_content_key[ck_b] == frozenset({date(2024, 1, 3)})
+    assert cache._activations_by_content_key[ck_c] == frozenset({date(2024, 1, 4)})
+    assert cache.regime_label(date(2024, 1, 3)) == "low_vol"
+
+
+def test_prefetch_for_batch_then_config_is_io_free() -> None:
+    """After batch prefetch, `prefetch_for_config` does NO socket calls.
+
+    The display-id index rebuild is the only per-config work; the cross-
+    config content_key cache and the returns+regime cache are warm.
+    """
+    client = MagicMock()
+    spec = _spec("rsi_2", "directional")
+    ck = signal_content_key(spec)
+    client.get_features.side_effect = [
+        _response({ck: {"activation_dates": ["2024-01-02"]}}),
+        _response(
+            {
+                ck: {
+                    "returns": {"2024-01-02": 0.01},
+                    "regime_label": {"2024-01-02": "bull"},
+                }
+            }
+        ),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
+    cfg = _config(spec)
+    cache.prefetch_for_batch([cfg])
+    assert client.get_features.call_count == 2
+
+    client.get_features.reset_mock()
+    cache.prefetch_for_config(cfg)
+    assert client.get_features.call_count == 0
+    assert cache.activation_dates(spec.id) == frozenset({date(2024, 1, 2)})
+
+
+def test_prefetch_for_batch_skips_already_cached_content_keys() -> None:
+    """Specs whose content_key is in the cache from a prior batch aren't refetched."""
+    client = MagicMock()
+    spec = _spec("rsi_2", "directional")
+    ck = signal_content_key(spec)
+    client.get_features.side_effect = [
+        # Initial batch loads spec
+        _response({ck: {"activation_dates": ["2024-01-02"]}}),
+        _response(
+            {
+                ck: {
+                    "returns": {"2024-01-02": 0.01},
+                    "regime_label": {"2024-01-02": "bull"},
+                }
+            }
+        ),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
+    cache.prefetch_for_batch([_config(spec)])
+    assert client.get_features.call_count == 2
+
+    # Second batch with the same spec: no new specs, no new dates → 0 calls.
+    client.get_features.reset_mock()
+    cache.prefetch_for_batch([_config(spec)])
+    assert client.get_features.call_count == 0
+
+
 def test_two_distinct_configs_share_window_data() -> None:
     """Second config's prefetch only fetches its new signals, not window data again."""
     client = MagicMock()

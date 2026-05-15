@@ -335,15 +335,22 @@ def _run_battery_for_seed(
         rng_factory=seed_hierarchy.rng,
     )
     filters = default_filters()
-    return [
-        run_battery(cfg, ctx, filters)
-        for cfg in enumerate_candidates(
+    configs = list(
+        enumerate_candidates(
             grammar,
             registry,
             seed=seed,
             max_candidates=max_candidates,
         )
-    ]
+    )
+    # Hoist the per-config socket round-trips into one batched prefetch when
+    # the cache supports it. CrucibleFeatureCache collapses 5000 x 2 calls
+    # into ~20 chunked calls; SyntheticFeatureCache has no batch hook and
+    # falls through to the per-config path below.
+    batch_prefetch = getattr(ctx.feature_cache, "prefetch_for_batch", None)
+    if callable(batch_prefetch):
+        batch_prefetch(configs)
+    return [run_battery(cfg, ctx, filters) for cfg in configs]
 
 
 def _consume_feedback_after_submit(
