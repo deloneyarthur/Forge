@@ -35,6 +35,8 @@ from forge.core.logging import configure_logging
 from forge.version import __version__
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
     from forge.grammar import Grammar
@@ -281,6 +283,39 @@ def cmd_prefilter(
                 typer.echo(f"  {name:30s} {count}")
 
 
+def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
+    """Compute per-hypothesis posterior promotion rates for failure-biased sampling.
+
+    Reads Crucible's gated_runs export (file-based to avoid the writer's
+    exclusive DuckDB lock; see contracts v1.8.0) and joins against
+    Forge's `submissions` table on config_hash. Empty result (no exports,
+    no overlap with submissions) is the normal cold-start path — the
+    sampler treats `{}` as "use uniform `rng.choice`".
+
+    Exceptions on the export read are caught and converted to `{}` so
+    a missing/corrupt export file never crashes the iteration loop —
+    the operator sees no `hypothesis_weights:` journal line and Forge
+    falls back to uniform sampling.
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import compute_hypothesis_weights
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=1000)
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_hypothesis_weights(conn, gated_runs)
+
+
 def _fetch_promoted_configs(
     forge_db_path: Path,
     crucible_db_path: Path | None,
@@ -318,6 +353,8 @@ def _run_battery_for_seed(
     seed: int,
     max_candidates: int,
     calibration: Calibration,
+    *,
+    hypothesis_weights: Mapping[str, float] | None = None,
 ) -> list[PreFilterReport]:
     """Enumerate and run the §5.2 battery; return one PreFilterReport per config."""
     from forge.core.seed import SeedHierarchy
@@ -341,6 +378,7 @@ def _run_battery_for_seed(
             registry,
             seed=seed,
             max_candidates=max_candidates,
+            hypothesis_weights=hypothesis_weights,
         )
     )
     # Hoist the per-config socket round-trips into one batched prefetch when
@@ -409,8 +447,7 @@ def _consume_feedback_after_submit(
     if report.gate_failures:
         top_gates = report.gate_failures[:5]
         gate_str = ", ".join(
-            f"{row.gate_name}={row.failure_count}({row.failure_rate:.0%})"
-            for row in top_gates
+            f"{row.gate_name}={row.failure_count}({row.failure_rate:.0%})" for row in top_gates
         )
         typer.echo(f"feedback_gates: {gate_str}")
     # Per-hypothesis-class telemetry (Tier 2 #4). Helps identify dead
@@ -521,7 +558,18 @@ def _run_one_iteration(
             return "blocked"
 
     promoted = _fetch_promoted_configs(forge_db_path, crucible_db)
-    reports = _run_battery_for_seed(grammar, registry, seed, max_candidates, calibration)
+    hypothesis_weights = _load_hypothesis_weights(forge_db_path)
+    if hypothesis_weights:
+        weights_str = ", ".join(f"{h}={w:.3f}" for h, w in sorted(hypothesis_weights.items()))
+        typer.echo(f"hypothesis_weights: {weights_str}")
+    reports = _run_battery_for_seed(
+        grammar,
+        registry,
+        seed,
+        max_candidates,
+        calibration,
+        hypothesis_weights=hypothesis_weights,
+    )
     passed = sum(1 for r in reports if r.passed)
     typer.echo(f"enumerated={len(reports)} passed_prefilter={passed}")
 

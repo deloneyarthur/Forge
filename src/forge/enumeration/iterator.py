@@ -24,7 +24,7 @@ from forge.grammar import validate
 
 if TYPE_CHECKING:
     from collections import Counter
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
 
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
@@ -52,6 +52,7 @@ def enumerate_candidates(
     *,
     max_candidates: int,
     rejection_counter: Counter[str] | None = None,
+    hypothesis_weights: Mapping[str, float] | None = None,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
 
@@ -89,7 +90,7 @@ def enumerate_candidates(
         attempts += 1
 
         try:
-            cfg = sample_config(space, registry, rng)
+            cfg = sample_config(space, registry, rng, hypothesis_weights=hypothesis_weights)
         except SamplerError as exc:
             if rejection_counter is not None:
                 rejection_counter["sampler"] += 1

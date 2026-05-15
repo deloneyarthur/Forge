@@ -44,9 +44,18 @@ from forge.enumeration.indicator_thresholds import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from crucible_contracts import IndicatorMetadata, RegistrySnapshot
 
     from forge.enumeration.search_space import SearchSpace
+
+
+# Prior mean for hypotheses absent from the rejection-weights map.
+# Mirrors `forge.feedback.rejection_weights.prior_mean` to avoid a
+# circular import between enumeration and feedback. Kept local but
+# semantically tied to DEFAULT_ALPHA / DEFAULT_BETA there.
+_HYPOTHESIS_WEIGHT_PRIOR_MEAN: float = 1.0 / 11.0
 
 
 class SamplerError(Exception):
@@ -90,11 +99,18 @@ def sample_config(
     space: SearchSpace,
     registry: RegistrySnapshot,
     rng: random.Random,
+    *,
+    hypothesis_weights: Mapping[str, float] | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
 
     Raises ``SamplerError`` only when the registry is so sparse that no
     grammar-valid config can be built (empty pool at some CSP step).
+
+    ``hypothesis_weights`` biases the hypothesis pick toward those with
+    higher posterior promotion rates (long-term #1). When None, falls
+    back to uniform `rng.choice`. Hypotheses missing from the map get
+    the prior-mean weight so they remain explorable.
     """
     by_id: dict[str, IndicatorMetadata] = {ind.id: ind for ind in registry.indicators}
 
@@ -111,7 +127,13 @@ def sample_config(
         msg = "no sizer mode is samplable in the current registry"
         raise SamplerError(msg)
 
-    hypothesis = rng.choice(samplable_hypotheses)
+    if hypothesis_weights:
+        weights = [
+            hypothesis_weights.get(h, _HYPOTHESIS_WEIGHT_PRIOR_MEAN) for h in samplable_hypotheses
+        ]
+        hypothesis = rng.choices(samplable_hypotheses, weights=weights, k=1)[0]
+    else:
+        hypothesis = rng.choice(samplable_hypotheses)
     mode = rng.choice(space.samplable_sizer_modes)
     chain_id = space.sizer_required_indicator.get(mode)
 
