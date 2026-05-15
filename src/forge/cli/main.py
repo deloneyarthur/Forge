@@ -372,6 +372,7 @@ def _consume_feedback_after_submit(
     from forge.feedback.promoted_patterns import record_promoted_patterns
     from forge.feedback.proposal_writer import append_proposal
     from forge.feedback.proposer import propose
+    from forge.feedback.stuck_state import is_stuck
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters.calibration import load_calibration
@@ -395,6 +396,7 @@ def _consume_feedback_after_submit(
                 open_proposals_path=open_proposals,
                 at=now,
             )
+        stuck_flag, stuck_streak = is_stuck(conn)
     typer.echo(
         f"feedback: batch_id={feedback.batch_id} "
         f"gated_count={feedback.gated_count} "
@@ -419,6 +421,17 @@ def _consume_feedback_after_submit(
             for row in report.hypothesis_metrics
         )
         typer.echo(f"feedback_hypotheses: {h_str}")
+    # Stuck-state detector (long-term #3). A long run of zero-promotion
+    # batches is signal — sterile grammar, prefilter mis-calibration, or
+    # pipeline bug. The streak count is always logged so the operator
+    # sees the trend; the WARN line fires when crossing threshold.
+    if stuck_streak > 0:
+        typer.echo(f"stuck_state: zero_promotion_streak={stuck_streak}")
+    if stuck_flag:
+        typer.echo(
+            f"stuck_state: WARN — {stuck_streak} consecutive zero-promotion "
+            "batches; investigate grammar / prefilter / pipeline health"
+        )
 
 
 def _next_iteration_number(forge_db_path: Path) -> int:
