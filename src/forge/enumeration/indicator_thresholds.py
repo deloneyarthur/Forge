@@ -194,17 +194,11 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         directional_range=(-2.0, -1.0),  # extreme divergence entry
         regime_range=(-1.5, 1.5),
     ),
-    # expected_value_estimator: temporarily skipped (2026-05-14). Crucible's
-    # v2 implementation makes a synchronous DBProxy call from inside its own
-    # writer's compute loop, deadlocking the writer (see
-    # CRUCIBLE_EV_DEADLOCK_AGENT_PROMPT.md). Restore the threshold ranges +
-    # ops below once Crucible ships the BatchContext fix.
-    #   directional_range=(0.0, 0.005), op_directional=">",
-    #   regime_range=(0.0, 0.01),       op_regime=">",
     "expected_value_estimator": IndicatorThresholdSpec(
-        directional_range=None,
-        regime_range=None,
-        is_skip=True,
+        directional_range=(0.0, 0.005),  # marginal EV
+        regime_range=(0.0, 0.01),
+        op_directional=">",  # fire when EV > threshold
+        op_regime=">",
     ),
     # ----- Microstructure (low signal on SPY) -----
     "amihud": IndicatorThresholdSpec(
