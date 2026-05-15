@@ -403,6 +403,43 @@ def _consume_feedback_after_submit(
     )
 
 
+def _next_iteration_number(forge_db_path: Path) -> int:
+    """Return the next iteration number (1-indexed) for seed derivation.
+
+    Counts distinct `forge_batch_id`s in the `submissions` table. Each
+    iteration produces exactly one `batch_id`, so this gives us a
+    persistent counter that survives process restarts: restart → resume
+    from where the last process left off rather than re-enumerating the
+    seed=0 slice every time.
+
+    Returns `1` when the DB is in-memory or has no prior submissions.
+    """
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:"):
+        return 1
+    if not forge_db_path.exists():
+        return 1
+    with db_connection(forge_db_path) as conn:
+        row = conn.execute("SELECT COUNT(DISTINCT forge_batch_id) FROM submissions").fetchone()
+    prior = int(row[0]) if row and row[0] is not None else 0
+    return prior + 1
+
+
+def _effective_seed(root_seed: int, iteration: int) -> int:
+    """Derive a per-iteration effective seed from `(root_seed, iteration)`.
+
+    Reproducibility (hard rule #6): given the same root + iteration,
+    returns the same effective seed. Each iteration explores a different
+    5000-config slice of the grammar without breaking determinism — the
+    submitter's §13.4 unique-config-hash index would otherwise reject
+    every config in iter 2+ as a duplicate of iter 1.
+    """
+    from forge.core.seed import SeedHierarchy
+
+    return SeedHierarchy(root_seed).derive(f"batch_{iteration:08d}")
+
+
 def _run_one_iteration(
     *,
     seed: int,
@@ -672,8 +709,11 @@ def cmd_run(
     forge_db_path = forge_db if forge_db is not None else Path(":memory:")
 
     if not loop:
+        iter_number = _next_iteration_number(forge_db_path)
+        effective_seed = _effective_seed(seed, iter_number)
+        typer.echo(f"iteration={iter_number} root_seed={seed} effective_seed={effective_seed}")
         _run_one_iteration(
-            seed=seed,
+            seed=effective_seed,
             batch_size=batch_size,
             max_candidates=max_candidates,
             inbox=inbox,
@@ -686,13 +726,21 @@ def cmd_run(
         )
         return
 
-    iteration = 0
+    # Resume the iteration counter from prior batches in the DB so a
+    # restart picks up where we left off rather than replaying batch_1.
+    # Global iteration counter (persistent across restarts) advances the
+    # seed; local counter caps this process's run via --max-iterations.
+    iter_offset = _next_iteration_number(forge_db_path) - 1
+    local_iter = 0
+    iteration = iter_offset
     try:
-        while max_iterations is None or iteration < max_iterations:
-            iteration += 1
-            typer.echo(f"--- loop iteration {iteration} ---")
+        while max_iterations is None or local_iter < max_iterations:
+            local_iter += 1
+            iteration = iter_offset + local_iter
+            effective_seed = _effective_seed(seed, iteration)
+            typer.echo(f"--- loop iteration {iteration} (effective_seed={effective_seed}) ---")
             _run_one_iteration(
-                seed=seed,
+                seed=effective_seed,
                 batch_size=batch_size,
                 max_candidates=max_candidates,
                 inbox=inbox,
@@ -703,12 +751,12 @@ def cmd_run(
                 open_proposals=open_proposals,
                 prefilter_yaml=prefilter_yaml,
             )
-            if max_iterations is not None and iteration >= max_iterations:
+            if max_iterations is not None and local_iter >= max_iterations:
                 break
             time.sleep(poll_interval_seconds)
     except KeyboardInterrupt:
         typer.echo("loop: stopped on SIGINT")
-    typer.echo(f"loop: stopped after {iteration} iterations")
+    typer.echo(f"loop: stopped after {local_iter} iterations (global iter={iteration})")
 
 
 app.command("feedback")(cmd_feedback)
