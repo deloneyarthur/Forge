@@ -401,6 +401,24 @@ def _consume_feedback_after_submit(
         f"promoted_count={feedback.promoted_count} "
         f"proposals={len(proposals)}"
     )
+    # Per-filter failure histogram (Tier 2 #5). Top 5 gates by failure
+    # count so the operator can see what's killing candidates without
+    # querying the DB. report.gate_failures is pre-sorted by count.
+    if report.gate_failures:
+        top_gates = report.gate_failures[:5]
+        gate_str = ", ".join(
+            f"{row.gate_name}={row.failure_count}({row.failure_rate:.0%})"
+            for row in top_gates
+        )
+        typer.echo(f"feedback_gates: {gate_str}")
+    # Per-hypothesis-class telemetry (Tier 2 #4). Helps identify dead
+    # vs promising hypothesis families.
+    if report.hypothesis_metrics:
+        h_str = ", ".join(
+            f"{row.hypothesis}={row.sample_size}/p{row.promotion_rate:.0%}"
+            for row in report.hypothesis_metrics
+        )
+        typer.echo(f"feedback_hypotheses: {h_str}")
 
 
 def _next_iteration_number(forge_db_path: Path) -> int:
