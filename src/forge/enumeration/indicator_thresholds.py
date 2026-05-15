@@ -209,18 +209,35 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     "ema": _SKIP_SPEC,
     "ema_50": _SKIP_SPEC,
     "sma": _SKIP_SPEC,
+    # atr returns price-scale values (true range in dollars). Like ema/sma,
+    # threshold semantics depend on the underlying's absolute price level,
+    # which makes a fixed (low, high) range honest-impossible. Skip from
+    # directional/regime; still available as a confluence indicator.
+    "atr": _SKIP_SPEC,
 }
 
 
 def is_threshold_skippable(indicator_id: str) -> bool:
     """True if the indicator should not be used in threshold-style signals.
 
-    Such indicators (price-scale ema/sma) are still valid in `passthrough`
-    or comparison signals; this only excludes them from the directional /
-    regime_filter threshold paths.
+    Returns True in two cases:
+      1. Explicit `is_skip=True` in the table (price-scale ema/sma/atr).
+      2. Indicator is NOT in the table at all — defensive: if the registry
+         adds an indicator that lacks an audited threshold range, we don't
+         silently emit a `type='threshold'` SignalSpec with empty params
+         (which Crucible's predicate treats as "never fires" → 0 trades
+         → gate-reject on min_oos_trade_count). The audit-test in
+         `tests/unit/test_enumeration/test_no_empty_threshold_leak.py`
+         enforces this invariant.
+
+    Such indicators are still valid in `passthrough` / `confluence`
+    signals; this only excludes them from directional / regime_filter
+    threshold paths.
     """
     spec = _INDICATOR_THRESHOLD_TABLE.get(indicator_id)
-    return spec is not None and spec.is_skip
+    if spec is None:
+        return True
+    return spec.is_skip
 
 
 def sample_threshold_params(

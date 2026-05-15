@@ -147,6 +147,21 @@ def sample_config(
             params=_regime_signal_params(hypothesis, regime_id, rng),
         ),
     ]
+    # Belt-and-suspenders: a `type='threshold'` signal with no `threshold`
+    # key in params bypasses Crucible's predicate (`lambda _v: False`) and
+    # silently gate-rejects on min_oos_trade_count. The `_viable_buckets`
+    # + `_pick_directional_regime_pair` filters call `is_threshold_skippable`
+    # to exclude indicators without audited threshold ranges; this assert
+    # catches any future regression where an indicator slips through.
+    for sig in signals:
+        if sig.type == "threshold" and "threshold" not in sig.params:
+            msg = (
+                f"empty-threshold leak: signal id={sig.id} "
+                f"indicators={sig.indicators} type=threshold but params "
+                f"missing 'threshold' key — add the indicator to "
+                "_INDICATOR_THRESHOLD_TABLE or mark it is_skip=True"
+            )
+            raise SamplerError(msg)
     if chain_id is not None and chain_id not in {directional_id, regime_id}:
         signals.append(
             SignalSpec(
