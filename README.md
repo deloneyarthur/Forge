@@ -31,6 +31,7 @@ pytest         # full test suite
 | `forge grammar list-proposals` | 5 | List pending grammar refinement proposals. |
 | `forge grammar approve-proposal` | 5 | Mark a proposal approved with operator initials (manual yaml-merge still required per §13.2). |
 | `forge grammar reject-proposal` | 5 | Mark a proposal rejected with operator initials. |
+| `forge grammar apply-proposal` | 5 | Apply a pending tighten — yaml edit + audit row + grammar_versions entry, atomic. |
 
 ## Architecture (§2.1)
 

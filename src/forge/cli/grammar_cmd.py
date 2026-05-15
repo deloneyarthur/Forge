@@ -116,4 +116,127 @@ def cmd_reject_proposal(
     )
 
 
+@grammar_app.command("apply-proposal")
+def cmd_apply_proposal(
+    proposal_id: str = typer.Option(..., "--id", help="proposal UUID to apply"),
+    initials: str = typer.Option(..., "--initials", help="operator initials for audit"),
+    forge_db: Path = typer.Option(Path(":memory:"), "--forge-db", help="Forge state DB"),
+    prefilter_yaml: Path = typer.Option(
+        Path("config/prefilter.yaml"),
+        "--prefilter-yaml",
+        help="path to prefilter.yaml (target=prefilter_calibration proposals)",
+    ),
+) -> None:
+    """Apply a pending proposal — yaml edit + audit row + grammar_versions entry.
+
+    The §13.2 contract for a prefilter_calibration tighten is: (1) edit
+    prefilter.yaml with the new threshold values; (2) record the
+    operator's approval in `grammar_proposals.decided_by`; (3) append
+    a `grammar_versions` row for the audit trail. `approve-proposal`
+    only does step 2. This command does all three atomically, the same
+    way `auto_tune` does for its own auto-applied tightens — reusing
+    `propose_adjustment` + `apply_tightening` for the actual delta.
+
+    Today only `target=prefilter_calibration` proposals are supported.
+    `target=grammar` proposals stay manual (operator edits
+    `config/grammar.yaml` directly) because the changes there are too
+    structurally varied for a single CLI shape.
+    """
+    import json
+
+    from forge.core.clock import utc_now
+    from forge.feedback.auto_tune import _write_grammar_versions_row, write_calibration_yaml
+    from forge.prefilters.calibration import (
+        apply_tightening,
+        load_calibration,
+        propose_adjustment,
+    )
+
+    # Proposals whose evidence_json.trigger lands in this set route to the
+    # prefilter_calibration tighten path (parsed prefilter.yaml, 10% step,
+    # write back). Other triggers (e.g., 'hypothesis_dominance') target the
+    # grammar yaml itself and stay on the manual §13.2 path.
+    supported_triggers = {"gate_failure_concentration"}
+
+    if not initials.strip():
+        typer.echo("error: --initials must be non-empty", err=True)
+        raise typer.Exit(code=2)
+    pid = uuid.UUID(proposal_id)
+    now = utc_now()
+    with db_connection(forge_db) as conn:
+        row = conn.execute(
+            """
+            SELECT proposal_type, status, evidence_json
+            FROM grammar_proposals
+            WHERE proposal_id = ?
+            """,
+            [str(pid)],
+        ).fetchone()
+        if row is None:
+            typer.echo(f"error: proposal {pid} not found", err=True)
+            raise typer.Exit(code=1)
+        proposal_type, status, evidence_raw = row
+        if status not in ("pending", "approved"):
+            typer.echo(
+                f"error: proposal {pid} status={status!r} — must be pending or approved",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        if proposal_type != "tighten":
+            # Loosens stay on the manual path — hard rule #4 + §13.2 reserve
+            # loosening for an explicit, narrowly-scoped operator yaml edit.
+            typer.echo(
+                f"error: apply-proposal supports proposal_type='tighten' only; "
+                f"got {proposal_type!r}. Edit {prefilter_yaml.name} manually "
+                "for loosens.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        evidence: dict[str, object] = (
+            json.loads(evidence_raw) if isinstance(evidence_raw, str) else (evidence_raw or {})
+        )
+        trigger = evidence.get("trigger")
+        if trigger not in supported_triggers:
+            typer.echo(
+                f"error: apply-proposal does not yet support trigger={trigger!r} "
+                f"(supported: {sorted(supported_triggers)}). Edit "
+                f"{prefilter_yaml.name} or config/grammar.yaml manually.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        if not prefilter_yaml.exists():
+            typer.echo(f"error: prefilter yaml missing: {prefilter_yaml}", err=True)
+            raise typer.Exit(code=1)
+        calibration = load_calibration(prefilter_yaml)
+        adjustment = propose_adjustment(
+            calibration,
+            direction="tighten",
+            reason=f"manual apply-proposal {pid} by {initials}",
+        )
+        new_cal = apply_tightening(calibration, adjustment)
+        write_calibration_yaml(new_cal, prefilter_yaml)
+        _write_grammar_versions_row(
+            conn,
+            change_type="manual_tighten_calibration",
+            description=(
+                f"step_pct={calibration.auto_tune.adjustment_pct_per_step:.4f} "
+                f"applied_via=apply-proposal proposal_id={pid}"
+            ),
+            at=now,
+        )
+        conn.execute(
+            """
+            UPDATE grammar_proposals
+            SET status = 'applied', decided_at = ?, decided_by = ?
+            WHERE proposal_id = ?
+            """,
+            [now, initials, str(pid)],
+        )
+    typer.echo(
+        f"proposal {pid} -> applied (by {initials}); "
+        f"{prefilter_yaml.name} tightened by "
+        f"{calibration.auto_tune.adjustment_pct_per_step:.0%}"
+    )
+
+
 __all__ = ["grammar_app"]
