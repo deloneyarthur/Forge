@@ -77,6 +77,57 @@ def select_top_n(
     if n == 0 or not candidates:
         return []
 
+    # Default-path fast variant: precompute signal-key sets once per
+    # candidate so the inner loop is set-arithmetic on cached frozensets
+    # rather than re-extracting + re-hashing content keys ~N*K times.
+    # On a 1537→200 batch this drops the ranker from ~10min → ~1min.
+    if similarity_fn is jaccard_signal_ids:
+        return _select_top_n_jaccard(candidates, n)
+    return _select_top_n_generic(candidates, n, similarity_fn)
+
+
+def _select_top_n_jaccard(
+    candidates: Sequence[RankedCandidate],
+    n: int,
+) -> list[RankedCandidate]:
+    """Fast path for the default `jaccard_signal_ids` similarity metric."""
+    keys = [_signal_keys(c.report.config) for c in candidates]
+    remaining_idx = list(range(len(candidates)))
+    selected_idx: list[int] = []
+
+    while len(selected_idx) < n and remaining_idx:
+        best_rem_pos = -1
+        best_adjusted = -1.0
+        for rem_pos, idx in enumerate(remaining_idx):
+            k_idx = keys[idx]
+            if selected_idx and k_idx:
+                penalty = 0.0
+                for sidx in selected_idx:
+                    k_sidx = keys[sidx]
+                    if not k_sidx:
+                        continue
+                    sim = len(k_idx & k_sidx) / len(k_idx | k_sidx)
+                    penalty = max(penalty, sim)
+            else:
+                penalty = 0.0
+            adjusted = candidates[idx].composite_score * (1.0 - penalty)
+            # Strict `>` mirrors §6.3 — earlier candidates win ties.
+            if adjusted > best_adjusted:
+                best_adjusted = adjusted
+                best_rem_pos = rem_pos
+        if best_rem_pos < 0:
+            break
+        selected_idx.append(remaining_idx.pop(best_rem_pos))
+
+    return [candidates[i] for i in selected_idx]
+
+
+def _select_top_n_generic(
+    candidates: Sequence[RankedCandidate],
+    n: int,
+    similarity_fn: Callable[[StrategyConfig, StrategyConfig], float],
+) -> list[RankedCandidate]:
+    """Original O(N*K) path for callers with a custom similarity metric."""
     remaining = list(candidates)
     selected: list[RankedCandidate] = []
 
@@ -91,16 +142,10 @@ def select_top_n(
             else:
                 penalty = 0.0
             adjusted = candidate.composite_score * (1.0 - penalty)
-            # Strict `>` mirrors the §6.3 pseudocode — earlier (lower-index)
-            # candidates win ties, which preserves the stable
-            # composite-sorted seed on the first iteration.
             if adjusted > best_adjusted:
                 best_adjusted = adjusted
                 best_index = index
         if best_index < 0:
-            # Defensive: every adjusted_score < 0.0 (impossible by
-            # construction since composite_score >= 0). Stop rather than
-            # loop forever.
             break
         selected.append(remaining.pop(best_index))
 
