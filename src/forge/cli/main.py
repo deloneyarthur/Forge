@@ -25,7 +25,7 @@ Subcommands for analyze / grammar arrive in their respective phases.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 import typer
 
@@ -630,6 +630,23 @@ _RUN_DEFAULT_MAX_CANDIDATES: int = 1000
 _RUN_DEFAULT_POLL_INTERVAL_SECONDS: int = 600
 
 
+class _ResolvedRunDefaults(TypedDict):
+    """Strongly-typed payload for `_resolve_run_defaults`.
+
+    Replaces the previous `dict[str, object]` return type so call sites
+    don't need `# type: ignore[arg-type]` (which was masking real
+    mismatches — mypy actually wanted `call-overload`).
+    """
+
+    seed: int
+    batch_size: int
+    max_candidates: int
+    inbox: Path | None
+    crucible_db: Path | None
+    forge_db: Path | None
+    poll_interval_seconds: int
+
+
 def _resolve_run_defaults(
     *,
     config: Path,
@@ -641,43 +658,55 @@ def _resolve_run_defaults(
     crucible_db: Path | None,
     forge_db: Path | None,
     poll_interval_seconds: int | None,
-) -> dict[str, object]:
+) -> _ResolvedRunDefaults:
     """Resolve effective run args by merging yaml defaults with CLI overrides.
 
     D025/D6 — When ``--no-config`` is set or the yaml file is missing,
     fall back to hardcoded defaults. Otherwise load the yaml and use its
     fields as defaults; CLI flags (where non-None) override.
     """
-    yaml_loaded: dict[str, object] = {}
+    yaml_seed: int | None = None
+    yaml_batch_size: int | None = None
+    yaml_max_candidates: int | None = None
+    yaml_inbox: Path | None = None
+    yaml_crucible_db: Path | None = None
+    yaml_forge_db: Path | None = None
+    yaml_poll_interval: int | None = None
     if not no_config and config.exists():
         from forge.config import load_forge_config
 
         cfg = load_forge_config(config)
-        yaml_loaded = {
-            "seed": cfg.enumeration.seed,
-            "batch_size": cfg.submission.batch_size,
-            "max_candidates": cfg.enumeration.max_candidates_per_batch,
-            "inbox": cfg.crucible.inbox_path,
-            "crucible_db": cfg.crucible.db_path,
-            "forge_db": cfg.db_path,
-            "poll_interval_seconds": cfg.submission.poll_interval_seconds,
-        }
+        yaml_seed = cfg.enumeration.seed
+        yaml_batch_size = cfg.submission.batch_size
+        yaml_max_candidates = cfg.enumeration.max_candidates_per_batch
+        yaml_inbox = cfg.crucible.inbox_path
+        yaml_crucible_db = cfg.crucible.db_path
+        yaml_forge_db = cfg.db_path
+        yaml_poll_interval = cfg.submission.poll_interval_seconds
 
-    return {
-        "seed": seed if seed is not None else yaml_loaded.get("seed", _RUN_DEFAULT_SEED),
-        "batch_size": batch_size
+    return _ResolvedRunDefaults(
+        seed=seed
+        if seed is not None
+        else (yaml_seed if yaml_seed is not None else _RUN_DEFAULT_SEED),
+        batch_size=batch_size
         if batch_size is not None
-        else yaml_loaded.get("batch_size", _RUN_DEFAULT_BATCH_SIZE),
-        "max_candidates": max_candidates
+        else (yaml_batch_size if yaml_batch_size is not None else _RUN_DEFAULT_BATCH_SIZE),
+        max_candidates=max_candidates
         if max_candidates is not None
-        else yaml_loaded.get("max_candidates", _RUN_DEFAULT_MAX_CANDIDATES),
-        "inbox": inbox if inbox is not None else yaml_loaded.get("inbox"),
-        "crucible_db": crucible_db if crucible_db is not None else yaml_loaded.get("crucible_db"),
-        "forge_db": forge_db if forge_db is not None else yaml_loaded.get("forge_db"),
-        "poll_interval_seconds": poll_interval_seconds
+        else (
+            yaml_max_candidates if yaml_max_candidates is not None else _RUN_DEFAULT_MAX_CANDIDATES
+        ),
+        inbox=inbox if inbox is not None else yaml_inbox,
+        crucible_db=crucible_db if crucible_db is not None else yaml_crucible_db,
+        forge_db=forge_db if forge_db is not None else yaml_forge_db,
+        poll_interval_seconds=poll_interval_seconds
         if poll_interval_seconds is not None
-        else yaml_loaded.get("poll_interval_seconds", _RUN_DEFAULT_POLL_INTERVAL_SECONDS),
-    }
+        else (
+            yaml_poll_interval
+            if yaml_poll_interval is not None
+            else _RUN_DEFAULT_POLL_INTERVAL_SECONDS
+        ),
+    )
 
 
 @app.command("run")
@@ -773,13 +802,13 @@ def cmd_run(
         forge_db=forge_db,
         poll_interval_seconds=poll_interval_seconds,
     )
-    seed = int(resolved["seed"])  # type: ignore[arg-type]
-    batch_size = int(resolved["batch_size"])  # type: ignore[arg-type]
-    max_candidates = int(resolved["max_candidates"])  # type: ignore[arg-type]
-    inbox = resolved["inbox"]  # type: ignore[assignment]
-    crucible_db = resolved["crucible_db"]  # type: ignore[assignment]
-    forge_db = resolved["forge_db"]  # type: ignore[assignment]
-    poll_interval_seconds = int(resolved["poll_interval_seconds"])  # type: ignore[arg-type]
+    seed = resolved["seed"]
+    batch_size = resolved["batch_size"]
+    max_candidates = resolved["max_candidates"]
+    inbox = resolved["inbox"]
+    crucible_db = resolved["crucible_db"]
+    forge_db = resolved["forge_db"]
+    poll_interval_seconds = resolved["poll_interval_seconds"]
 
     if not dry_run and inbox is None:
         typer.echo("error: --inbox is required unless --dry-run", err=True)
