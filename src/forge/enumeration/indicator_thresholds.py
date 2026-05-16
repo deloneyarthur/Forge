@@ -130,7 +130,7 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     ),
     # ----- Z-score / sharpe (signed) -----
     "zscore_returns": IndicatorThresholdSpec(
-        directional_range=(-2.0, -1.0),  # extreme low: fires when zscore < -1
+        directional_range=(-1.5, -0.5),  # D031 widened: -2/-1 was too extreme on SPY OOS
         regime_range=(-1.5, 1.5),  # normal range
     ),
     "rolling_sharpe": IndicatorThresholdSpec(
@@ -183,7 +183,9 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=(10.0, 50.0),  # R1: <= 50.0
     ),
     "vix_level": IndicatorThresholdSpec(
-        directional_range=(15.0, 22.0),  # low-vol entry window
+        # D031: widened from (15, 22). Real SPY VIX OOS mean=16.7 with most
+        # days 14-22; old range sampled thresholds often below median, firing <20%.
+        directional_range=(18.0, 25.0),
         regime_range=(15.0, 30.0),  # calm-regime gate
     ),
     "put_call_flow": IndicatorThresholdSpec(
@@ -191,7 +193,9 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=(-0.3, 0.3),
     ),
     "pairs_zscore": IndicatorThresholdSpec(
-        directional_range=(-2.0, -1.0),  # extreme divergence entry
+        # D031: widened from (-2, -1). relative_value's only directional pool
+        # is pairs_zscore, so fire-rate dominates trade_count for that hypothesis.
+        directional_range=(-1.5, -0.5),
         regime_range=(-1.5, 1.5),
     ),
     "expected_value_estimator": IndicatorThresholdSpec(

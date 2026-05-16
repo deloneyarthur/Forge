@@ -472,3 +472,52 @@ Total: 14 ids.
 - `OPEN_QUESTIONS.md` Q14 — discovery + resolution notes.
 
 941/941 Forge tests pass; ruff + format + mypy --strict clean on changed scope.
+
+---
+
+## D031 — 2026-05-15 — Reframe "stubs" + recalibrate three low-fire indicator ranges
+
+**Spec section:** Follows D030. Triggered by 27-batch zero-promotion streak with all 1000 sampled gated_runs showing trade_count=0.
+**Discovery:** Parallel audit (Forge + Crucible) revealed the "5 stub indicators" framing is wrong. All five (`iv_rank`, `vix_level`, `pairs_zscore`, `put_call_flow`, `expected_value_estimator`) have shipped real `version=2` implementations in Crucible. Direct compute on the SPY OOS window (2025-06-02 → 2025-09-05) confirms real values:
+  - `vix_level`: 67 rows / 0 NaN / range 14.22 → 21.60 / mean 16.69
+  - `iv_rank`: 67 rows / 1 NaN / range 0 → 100 / mean 27.43
+  - `put_call_flow`: 67 rows / 0 NaN / range -0.50 → 0.02
+  Data sources (VIX bars, SPY chain_snapshots 2024-01 → 2025-12, XOM/CVX bars, runs.duckdb) are backfilled.
+
+**Root cause of 0-trade cascade** (now diagnosed correctly):
+1. Crucible's registry publisher last ran 2026-05-14 08:03 — Forge enumerated against `version=1` metadata for 24+ hours after Crucible bumped to v2. Cosmetic only (Crucible's runner uses code directly), but a confusing trap.
+2. Threshold ranges in `indicator_thresholds.py` were audited against *generic* historical distributions, not actual SPY OOS firing rates. Three indicators sample thresholds that fire <20% of the time, which combined with the §3.5 grammar mapping (e.g. `tail_hedge` directional = `vix_level` only) drives effective trade counts to ~0 on a 60-day OOS window.
+3. Orthogonal Crucible-side question: `min_oos_trade_count=30` may be structurally incompatible with `swing_short` (14-21 DTE) on a single ~60-day OOS window — even continuous firing of a non-overlapping swing strategy caps at ~4 trades per window. Filed as `CRUCIBLE_TRADE_COUNT_GATE_AGENT_PROMPT.md`.
+
+**Decision:**
+1. Trigger `crucible-registry-publisher.service` to refresh snapshot to v2 (done 2026-05-15 20:55 UTC; new file `registry_snapshot_2026-05-16T035511Z.json`). Forge `load_registry()` picks latest by mtime so next loop iteration runs against v2 metadata automatically.
+2. Widen directional ranges for three low-fire indicators in `_INDICATOR_THRESHOLD_TABLE`:
+
+   | Indicator | Before | After | Reason |
+   |---|---|---|---|
+   | `vix_level` directional | (15.0, 22.0) | (18.0, 25.0) | Real SPY VIX mean 16.69; old range often sampled below median → <20% fire |
+   | `pairs_zscore` directional | (-2.0, -1.0) | (-1.5, -0.5) | `relative_value` has pairs_zscore as ONLY directional; dominant fire-rate driver |
+   | `zscore_returns` directional | (-2.0, -1.0) | (-1.5, -0.5) | Same logic; -2 was overly extreme on actual returns distribution |
+
+   Regime ranges unchanged (already permissive).
+3. Out of scope: structural `min_oos_trade_count` vs swing-DTE mismatch — see Crucible agent prompt.
+
+**Hard rules check:**
+- Not a `grammar.yaml` change → no archive / version bump required (hard rule #10).
+- Not a loosening of Crucible's gate → does not violate hard rule #3.
+- Auto-tightening adjacent: this is auto-widening of *enumeration scope*, mirror operation. Hard rule #4 reserves auto-loosening of `grammar.yaml` for operator approval — this edits a sampler helper, not grammar.
+
+**Rationale:** D030 marked these 5 indicators as "stubs returning NaN" based on Crucible's pre-Phase-9-v2 state. Crucible has since shipped real implementations and the data is loaded; D030's hold-until-stubs-implemented framing is obsolete. The remaining 0-trade pathology is mostly threshold calibration and partly a Crucible-side gate question.
+
+**Alternatives considered:**
+- Skip stubs from directional pools (D-NN-as-originally-proposed): rejected once we discovered they're not stubs.
+- Lower `min_oos_trade_count`: rejected — Crucible's gate, hard rule #3.
+- Touch grammar mapping (`tail_hedge` directional pool of one): deferred — separate decision, broader scope.
+
+**Action:**
+- `crucible-registry-publisher.service` restarted (one-shot); new snapshot live.
+- `src/forge/enumeration/indicator_thresholds.py` — 3 spec entries updated with inline `D031` annotation.
+- `IMPLEMENTATION_DECISIONS.md` D031 (this entry).
+- `CRUCIBLE_TRADE_COUNT_GATE_AGENT_PROMPT.md` — kickoff brief for Crucible-side investigation.
+
+Tests pending: existing `test_no_empty_threshold_leak.py` still passes (no structural change); calibration test not added — values are data-derived, regression-guarded by the 27-batch zero-promotion stuck_state alarm if they over-correct.
