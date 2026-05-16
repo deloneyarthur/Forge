@@ -47,6 +47,9 @@ coverage.xml
 *.swp
 *.swo
 
+# Claude Code local session state (PID/sessionId-scoped locks)
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db
