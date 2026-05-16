@@ -178,7 +178,7 @@ wheels = [
 
 [[package]]
 name = "crucible-contracts"
-version = "1.9.0"
+version = "1.10.0"
 source = { editable = "../crucible_contracts" }
 dependencies = [
     { name = "duckdb" },
