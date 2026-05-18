@@ -629,9 +629,9 @@ def _consume_feedback_after_submit(  # noqa: PLR0915 — T2.3/T2.5 wiring adds s
                     "before treating it as a stable promotion.\n"
                 ),
                 rationale=(
-                    f"Promoted run {flag.run_id} has concentration proxy "
-                    f"{flag.proxy_score:.3f} > threshold {flag.threshold:.3f} "
-                    f"(profit_factor={flag.profit_factor:.2f}, "
+                    f"Promoted run {flag.run_id} has concentration "
+                    f"{flag.metric_type}={flag.score:.3f} > threshold "
+                    f"{flag.threshold:.3f} (profit_factor={flag.profit_factor:.2f}, "
                     f"n_trades={flag.n_trades}, win_rate={flag.win_rate:.2f}). "
                     "Likely few outsized winners drive the P&L — operator review."
                 ),
@@ -639,7 +639,8 @@ def _consume_feedback_after_submit(  # noqa: PLR0915 — T2.3/T2.5 wiring adds s
                     "trigger": "promotion_concentration_suspect",
                     "target": flag.run_id,  # used by intent-dedup
                     "config_hash": flag.config_hash,
-                    "proxy_score": flag.proxy_score,
+                    "score": flag.score,
+                    "metric_type": flag.metric_type,
                     "profit_factor": flag.profit_factor,
                     "n_trades": flag.n_trades,
                     "win_rate": flag.win_rate,

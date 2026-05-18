@@ -1176,3 +1176,33 @@ The first post-restart iteration will write the missing `v2` row via the self-he
 - `src/forge/cli/grammar_cmd.py` — T2.4 persistent-tag in `cmd_list_proposals`.
 - `IMPLEMENTATION_DECISIONS.md` D049 (this entry).
 - 3047 historical configs re-queued.
+
+
+## D050 — 2026-05-18 — T2.5 swap: heuristic proxy → real `top_3_trade_pnl_share` metric
+
+**Context:** D047 shipped T2.5's post-batch trade-concentration analyzer with a heuristic proxy (`profit_factor / (n_trades × win_rate)`) because Forge had no access to per-trade P&L. D049's wiring made the analyzer fire on every batch. Crucible commit `6a57ee5` (2026-05-18) shipped the real metric `top_3_trade_pnl_share = sum(|pnl| of top-3 trades) / sum(|pnl| of all)` directly in the gated_runs export per the Forge-side prompt `CRUCIBLE_TRADE_CONCENTRATION_METRIC_AGENT_PROMPT.md`.
+
+**Change:** `src/forge/feedback/trade_concentration.py` now prefers the real metric over the proxy:
+1. `_extract_metric(metrics)` reads `top_3_trade_pnl_share` from the metrics dict; if present, returns `(value, "top_3_share", 0.40)`. If absent (pre-Crucible-6a57ee5 runs in the export), falls back to `compute_concentration_proxy(...)` and returns `(proxy, "fallback_proxy", 0.05)`.
+2. `ConcentrationFlag` schema updated: `proxy_score` → `score` with `metric_type: Literal["top_3_share", "fallback_proxy"]`. Downstream consumers (the OPEN_PROPOSALS flag in `cli/main.py::_consume_feedback_after_submit`) updated to use the new field names.
+3. Default thresholds calibrated per-scale: `top_3_share_threshold=0.40` (the draft Enhancement 1's headline value), `fallback_proxy_threshold=0.05` (existing).
+
+**Why graceful fallback**: the gated_runs export is a rolling window; on the day of the Crucible deploy it contains a mix of pre-deploy rows (no `top_3_trade_pnl_share` key) and post-deploy rows (key present). The dual-path analyzer handles both correctly without operator intervention. Once the export window fully rolls past the deploy time, all rows carry the real metric and the fallback path becomes dead code (safe to remove in a future cleanup).
+
+**Hard rules check:**
+- Hard rule #2: no Crucible internals imported; reads only the contracts-blessed export.
+- Hard rule #3: not a Crucible gate change; analyzer surfaces operator-actionable signals only.
+- Hard rule #4: any concentration-driven proposal writes to OPEN_PROPOSALS for operator review (D049 wiring already in place); never auto-applies.
+
+**Verification:**
+- 15 unit tests covering: real-metric path (4 cases: passing balance, flagged concentration, exact-threshold boundary, just-above-threshold), fallback proxy path (2 cases), mixed-export transition (1 case), shared behaviors (ignore-rejected, sort-descending, diagnostic fields, threshold overrides).
+- 1055 tests pass (full Forge suite, including 5 net-new T2.5 tests on top of D047's 10).
+- Ruff + mypy strict clean.
+
+**Verified live:** Crucible commit `6a57ee5` shipped in the active runner; the latest gated_runs export at `~/optbt_data/exports/gated_runs_2026-05-18T173931Z.json` contains the new key (though current post-deploy runs all have `n_trades=0` so the field is `None` until a non-zero-trade run completes).
+
+**Action:**
+- `src/forge/feedback/trade_concentration.py` — dual-path metric extraction.
+- `src/forge/cli/main.py::_consume_feedback_after_submit` — rationale/evidence_json updated for new fields.
+- `tests/unit/test_feedback/test_trade_concentration.py` — rewritten for both paths.
+- `IMPLEMENTATION_DECISIONS.md` D050 (this entry).
