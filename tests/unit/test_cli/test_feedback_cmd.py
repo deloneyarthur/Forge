@@ -241,3 +241,54 @@ def test_feedback_idempotent_for_same_batch(tmp_path: Path) -> None:
     # Both runs see the same gated outcome
     assert "gated_count=1" in first.stdout
     assert "gated_count=1" in second.stdout
+
+
+# ---------------------------------------------------------------------------
+# D054 / P1-2 — `forge feedback` produces the same enrichment as the loop
+# ---------------------------------------------------------------------------
+
+
+def test_d054_feedback_cmd_stamps_counterfactual_phase_into_proposals(
+    tmp_path: Path,
+) -> None:
+    """D054: manual `forge feedback` must apply the same T2.3 counterfactual
+    enrichment as the autonomous loop's `_consume_feedback_after_submit`.
+    Both call sites should produce identical OPEN_PROPOSALS.md output for
+    the same input batch, so the operator's manual diagnostic path is not
+    second-class. Pre-D054 the manual command bypassed enrichment entirely,
+    silently producing different evidence_json than the loop."""
+    forge_db = tmp_path / "forge.db"
+    crucible_db = tmp_path / "crucible.db"
+    build_synthetic_crucible_db(crucible_db).close()
+    cfgs = [minimal_strategy_config().model_copy(update={"name": f"d54_{i}"}) for i in range(4)]
+    for cfg in cfgs:
+        _insert_crucible_gated(crucible_db, config_hash=cfg.config_hash, decision="promote")
+    batch_id = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch_id, batch_size=4)
+        for cfg in cfgs:
+            _insert_forge_submission(conn, batch_id=batch_id, cfg_override=cfg)
+    open_proposals = tmp_path / "OPEN_PROPOSALS.md"
+    result = runner.invoke(
+        app,
+        [
+            "feedback",
+            "--no-config",
+            "--forge-db", str(forge_db),
+            "--crucible-db", str(crucible_db),
+            "--batch-id", str(batch_id),
+            "--open-proposals", str(open_proposals),
+        ],
+    )
+    assert result.exit_code == 0
+    assert open_proposals.exists()
+    content = open_proposals.read_text(encoding="utf-8")
+    # T2.3 counterfactual fields must appear in every proposal's evidence.
+    assert "counterfactual_phase" in content, (
+        "manual `forge feedback` did not stamp counterfactual_phase into "
+        "evidence_json — diverges from the autonomous loop output."
+    )
+    assert "counterfactual_rejection_rate" in content
+    assert "counterfactual_promoted_count" in content
+    # And the static disclaimer note.
+    assert "phase-1 binary safety floor" in content

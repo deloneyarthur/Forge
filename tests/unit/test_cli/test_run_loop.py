@@ -241,3 +241,33 @@ def test_loop_exits_on_max_iterations_even_when_blocked(tmp_path: Path) -> None:
     assert result.exit_code == 0
     # Should be blocked all 3 iterations
     assert result.stdout.count("blocked") >= 1
+
+
+# ---------------------------------------------------------------------------
+# D060 / P2-5 — warn-once when NoveltyFilter dedup is disabled (no DB path)
+# ---------------------------------------------------------------------------
+
+
+def test_d060_novelty_dedup_disabled_warning_fires_when_db_is_none(
+    capsys: object,
+) -> None:
+    """D060 / P2-5: the autonomous loop populates `prior_structural_fingerprints`
+    from `submissions` via `_load_prior_structural_fingerprints`. Calling
+    `_run_battery_for_seed` with `forge_db_path=None` (the demo path)
+    structurally disables T2.7 dedup. Surface a stderr warning so a future
+    caller that legitimately runs the autonomous loop without a DB sees
+    that NoveltyFilter is degraded."""
+    from forge.cli import main as _main
+
+    # Reset the module-level warn-once flag so this test is independent
+    # of any prior test that may have triggered the warning.
+    _main._NOVELTY_DEDUP_WARNED = False
+    _main._warn_once_novelty_dedup_disabled()
+    captured = capsys.readouterr()  # type: ignore[attr-defined]
+    assert "NoveltyFilter structural-fingerprint dedup" in captured.err
+    # Second call is a silent no-op (warn-once contract).
+    _main._warn_once_novelty_dedup_disabled()
+    second = capsys.readouterr()  # type: ignore[attr-defined]
+    assert second.err == ""
+    # Reset for downstream tests.
+    _main._NOVELTY_DEDUP_WARNED = False

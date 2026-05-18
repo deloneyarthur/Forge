@@ -31,17 +31,26 @@ from __future__ import annotations
 
 import json
 import os
+import uuid as _uuid
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from forge.feedback.proposer import (
+    COUNTERFACTUAL_PHASE_1_NOTE,
+    evaluate_counterfactual,
+)
+from forge.feedback.trade_concentration import analyze_promotion_concentration
+from forge.feedback.types import GrammarProposal
+
 if TYPE_CHECKING:
+    from datetime import datetime
     from pathlib import Path
 
     import duckdb
 
-    from forge.feedback.types import GrammarProposal
+    from forge.feedback.types import BatchFeedback
 
 
 CONTRACT_HEADER = "# contract: forge-proposals/v1"
@@ -244,6 +253,95 @@ def _has_identical_pending_proposal(
     return False
 
 
+def enrich_and_append_proposals(
+    proposals: list[GrammarProposal],
+    *,
+    feedback: BatchFeedback,
+    open_proposals_path: Path,
+    db: duckdb.DuckDBPyConnection,
+    at: datetime,
+) -> int:
+    """D054 / P1-2 — single enrichment path shared by `forge run` and
+    `forge feedback`.
+
+    Applies the T2.3 counterfactual annotation (D050 + D053 phase label +
+    disclaimer note) to each proposer-emitted proposal, then runs the T2.5
+    promotion-concentration analyzer over the batch's outcomes and emits a
+    tighten-grammar proposal per flagged run.
+
+    Both call sites use this helper so manual diagnostic runs and the
+    autonomous loop produce identical OPEN_PROPOSALS.md output. Returns
+    the total number of proposals appended (including concentration
+    flags).
+
+    Pre-D054 the manual `forge feedback` command iterated proposals and
+    called ``append_proposal`` directly, silently bypassing both T2.3
+    enrichment and T2.5 concentration. That divergence is the operator
+    surprise this helper removes.
+    """
+    count = 0
+    for proposal in proposals:
+        cf = evaluate_counterfactual(
+            proposal,
+            recent_promoted_count=feedback.promoted_count,
+        )
+        annotated_evidence = dict(proposal.evidence_json or {})
+        annotated_evidence["counterfactual_rejection_rate"] = cf.rejection_rate
+        annotated_evidence["counterfactual_promoted_count"] = cf.promoted_count
+        annotated_evidence["counterfactual_phase"] = cf.phase
+        annotated_evidence["counterfactual_note"] = COUNTERFACTUAL_PHASE_1_NOTE
+        proposal_with_cf = GrammarProposal(
+            proposal_id=proposal.proposal_id,
+            proposed_at=proposal.proposed_at,
+            proposal_type=proposal.proposal_type,
+            target=proposal.target,
+            proposal_yaml=proposal.proposal_yaml,
+            rationale=proposal.rationale,
+            evidence_json=annotated_evidence,
+            sample_size=proposal.sample_size,
+            confidence=proposal.confidence,
+        )
+        if append_proposal(proposal_with_cf, open_proposals_path=open_proposals_path, db=db):
+            count += 1
+
+    gated_runs = tuple(o.gated_run for o in feedback.outcomes)
+    concentration_flags = analyze_promotion_concentration(gated_runs)
+    for flag in concentration_flags:
+        cf_proposal = GrammarProposal(
+            proposal_id=_uuid.uuid4(),
+            proposed_at=at,
+            proposal_type="tighten",
+            target="grammar",
+            proposal_yaml=(
+                "# T2.5 — promoted-strategy concentration suspect.\n"
+                "# Operator: review the trade ledger for this run "
+                "before treating it as a stable promotion.\n"
+            ),
+            rationale=(
+                f"Promoted run {flag.run_id} has concentration "
+                f"{flag.metric_type}={flag.score:.3f} > threshold "
+                f"{flag.threshold:.3f} (profit_factor={flag.profit_factor:.2f}, "
+                f"n_trades={flag.n_trades}, win_rate={flag.win_rate:.2f}). "
+                "Likely few outsized winners drive the P&L — operator review."
+            ),
+            evidence_json={
+                "trigger": "promotion_concentration_suspect",
+                "target": flag.run_id,  # used by intent-dedup
+                "config_hash": flag.config_hash,
+                "score": flag.score,
+                "metric_type": flag.metric_type,
+                "profit_factor": flag.profit_factor,
+                "n_trades": flag.n_trades,
+                "win_rate": flag.win_rate,
+            },
+            sample_size=flag.n_trades,
+        )
+        if append_proposal(cf_proposal, open_proposals_path=open_proposals_path, db=db):
+            count += 1
+
+    return count
+
+
 def append_proposal(
     proposal: GrammarProposal,
     *,
@@ -289,4 +387,4 @@ def append_proposal(
     return True
 
 
-__all__ = ["CONTRACT_HEADER", "append_proposal"]
+__all__ = ["CONTRACT_HEADER", "append_proposal", "enrich_and_append_proposals"]

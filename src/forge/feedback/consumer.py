@@ -22,6 +22,15 @@ one Forge poll cycle; once latency exceeded that, older batches stranded
 silently. `consume_batch_results` gained an optional `crucible_runs`
 argument so the reconciler can fetch the export once and reuse it across
 every in-flight batch.
+
+D052 (2026-05-18): `reconcile_all_pending` flushes rows that predate the
+export's MIN(decided_at) low-watermark. Crucible's gated-runs export is a
+rolling top-1000 window; decisions older than the window are unreachable
+via export. Without a watermark fallback those rows stay `submitted`
+forever and D046's oldest-batch rate-limit policy pins the loop. The flush
+writes `status='gated'` and a sentinel `crucible_run_id` so the row is
+distinguishable from a normal reconcile in audit queries. No watermark
+is computed when the snapshot is empty (Crucible-offline condition).
 """
 
 from __future__ import annotations
@@ -50,6 +59,12 @@ if TYPE_CHECKING:
 # Conservative upper bound: pull this many recent gated runs from Crucible
 # and Python-side-filter. Phase 5 batches are O(200); this leaves headroom.
 _DEFAULT_CRUCIBLE_LIMIT: int = 10_000
+
+# D052 — nil UUID written to `submissions.crucible_run_id` when a row is
+# flushed because its decision aged out of Crucible's rolling export window.
+# Audit queries filter aged-out rows via this sentinel; the column stays
+# typed `UUID` (real run_ids are RFC-4122 random).
+_AGED_OUT_SENTINEL_RUN_ID = "00000000-0000-0000-0000-000000000000"
 
 
 def _resolve_batch_id(
@@ -284,6 +299,67 @@ def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
     )
 
 
+def _flush_aged_out_submissions(
+    forge_db: duckdb.DuckDBPyConnection,
+    runs: list[GatedRun],
+) -> int:
+    """D052: flush `submitted` rows that predate the export's low-watermark.
+
+    Crucible's gated-runs export is a rolling top-N window. A `submitted` row
+    older than `MIN(decided_at)` in the current export AND not appearing in
+    the export by config_hash means Crucible's decision (if any) has rolled
+    off — the join via `consume_batch_results` cannot match. Without this
+    flush those rows persist forever and pin D046's oldest-batch rate-limit
+    policy.
+
+    The `config_hash NOT IN` guard prevents false-flushing rows that ARE in
+    the current export but whose `submitted_at` happens to precede the
+    watermark (e.g., a row submitted at noon whose decision came at 2pm —
+    the watermark is the 2pm decision and the noon submitted_at falls below
+    it). Those rows reconcile via the normal join.
+
+    Returns the number of rows transitioned. Empty `runs` is a no-op
+    (Crucible-offline condition: leaving rows alone is the safe choice).
+    """
+    if not runs:
+        return 0
+    decided_ats = []
+    export_hashes: set[str] = set()
+    for gr in runs:
+        d = gr.decision.decided_at
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=UTC)
+        decided_ats.append(d)
+        export_hashes.add(gr.run.config_hash)
+    # D061: strip tzinfo to match the naive `submitted_at` column convention.
+    # D061's primary defense is pinning the DuckDB session TZ to UTC in
+    # `open_db`, but a naive watermark is the canonical match for a naive
+    # column and survives any future caller that opens a connection without
+    # going through `db_connection`.
+    watermark = min(decided_ats).astimezone(UTC).replace(tzinfo=None)
+    # Inline the NOT IN list at Python level — DuckDB's bind-list semantics
+    # for IN aren't always reliable across versions; a comma-joined literal
+    # of single-quoted hashes is what every other call site does, and
+    # config_hashes are SHA-256 hex slices so they're SQL-safe by construction.
+    candidates = forge_db.execute(
+        "SELECT forge_candidate_id, config_hash FROM submissions "
+        "WHERE status = 'submitted' AND submitted_at < ?",
+        [watermark],
+    ).fetchall()
+    aged_out = [str(cid) for cid, h in candidates if str(h) not in export_hashes]
+    if not aged_out:
+        return 0
+    forge_db.executemany(
+        """
+        UPDATE submissions
+        SET status = 'gated', crucible_run_id = ?
+        WHERE forge_candidate_id = ? AND status = 'submitted'
+        """,
+        [(_AGED_OUT_SENTINEL_RUN_ID, cid) for cid in aged_out],
+    )
+    return len(aged_out)
+
+
 def reconcile_all_pending(
     forge_db: duckdb.DuckDBPyConnection,
     crucible_db: Path,
@@ -300,18 +376,31 @@ def reconcile_all_pending(
     never reached — by 2026-05-17 the loop had 11 stranded batches and 3,712
     un-reconciled candidates.
 
-    This function reads the gated-runs export once and per-batch reconciles
-    every `forge_batch_id` that still has `status='submitted'` rows. Each
-    per-batch call is itself idempotent (re-running over the same data is a
-    no-op), so the whole sweep is safe to invoke on every poll.
+    D052 (2026-05-18): before the per-batch join, flush any `submitted` row
+    that predates the current export's MIN(decided_at). Those rows are
+    unreachable via export and would otherwise pin D046's oldest-batch rate
+    limiter indefinitely. The flush writes a sentinel `crucible_run_id`
+    (`_AGED_OUT_SENTINEL_RUN_ID`) so audits can distinguish it from a normal
+    join.
 
-    Returns one `BatchFeedback` per batch reconciled, sorted by the batch's
-    minimum `submitted_at` (oldest first) so the caller's logging stays
-    deterministic across runs.
+    This function reads the gated-runs export once, runs the watermark flush,
+    and per-batch reconciles every `forge_batch_id` that still has
+    `status='submitted'` rows. Each per-batch call is itself idempotent
+    (re-running over the same data is a no-op), so the whole sweep is safe
+    to invoke on every poll.
+
+    Returns one `BatchFeedback` per batch with rows still reachable via the
+    export's current window (so the caller can drive per-batch analytics).
+    Fully-aged-out batches are flushed silently — their rows aren't visible
+    to the downstream join, so there's no BatchFeedback to emit.
     """
     if exports_dir is None:
         exports_dir = Path.home() / "optbt_data" / "exports"
     runs = _fetch_crucible_runs(crucible_db, exports_dir)
+
+    # D052 — flush aged-out rows BEFORE the per-batch loop so the batch
+    # query only enumerates batches still reachable via the export window.
+    _flush_aged_out_submissions(forge_db, runs)
 
     batch_rows = forge_db.execute(
         """

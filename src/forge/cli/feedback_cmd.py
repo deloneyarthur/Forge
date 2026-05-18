@@ -86,7 +86,7 @@ def cmd_feedback(
     from forge.feedback.auto_tune import auto_tune
     from forge.feedback.consumer import consume_batch_results
     from forge.feedback.promoted_patterns import record_promoted_patterns
-    from forge.feedback.proposal_writer import append_proposal
+    from forge.feedback.proposal_writer import enrich_and_append_proposals
     from forge.feedback.proposer import propose
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
@@ -122,8 +122,15 @@ def cmd_feedback(
             record_promoted_patterns(conn, report.promoted_patterns, discovered_at=now)
 
         proposals = propose(report, feedback, at=now)
-        for proposal in proposals:
-            append_proposal(proposal, open_proposals_path=open_proposals, db=conn)
+        # D054 — shared enrichment path: T2.3 counterfactual + T2.5 concentration.
+        # Identical to the autonomous loop's `_consume_feedback_after_submit`.
+        enrich_and_append_proposals(
+            proposals,
+            feedback=feedback,
+            open_proposals_path=open_proposals,
+            db=conn,
+            at=now,
+        )
 
         if prefilter_yaml.exists():
             calibration = load_calibration(prefilter_yaml)

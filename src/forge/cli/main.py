@@ -376,6 +376,29 @@ def _fetch_promoted_configs(
     return [StrategyConfig.model_validate_json(r[0]) for r in rows]
 
 
+# D060 / P2-5 — warn-once flag for the no-DB code path. NoveltyFilter's
+# structural-fingerprint dedup is a no-op when prior_structural_fingerprints
+# is empty by default. The demo `forge prefilter` CLI legitimately runs
+# without a DB; the autonomous loop should always have one. Surface the
+# transition state so a future caller can't silently regress dedup.
+_NOVELTY_DEDUP_WARNED = False
+
+
+def _warn_once_novelty_dedup_disabled() -> None:
+    global _NOVELTY_DEDUP_WARNED  # noqa: PLW0603 — module-level warn-once state
+    if _NOVELTY_DEDUP_WARNED:
+        return
+    _NOVELTY_DEDUP_WARNED = True
+    import sys
+
+    sys.stderr.write(
+        "WARN: forge_db_path=None — NoveltyFilter structural-fingerprint dedup "
+        "is disabled for this run. This is expected for the demo `forge prefilter` "
+        "CLI; if you see it from the autonomous loop, that's a regression of T2.7 "
+        "(D049 / D060 / P2-5).\n"
+    )
+
+
 def _load_prior_structural_fingerprints(forge_db_path: Path) -> frozenset[str]:
     """T2.7 wiring (D049): populate `prior_structural_fingerprints` from
     Forge's historical submissions.
@@ -433,11 +456,16 @@ def _run_battery_for_seed(
     # T2.7 wiring (D049): structural-fingerprint dedup against historical
     # submissions. forge_db_path is optional so the demo `cmd_prefilter`
     # path (no DB) still constructs a valid context.
-    prior_fingerprints = (
-        _load_prior_structural_fingerprints(forge_db_path)
-        if forge_db_path is not None
-        else frozenset()
-    )
+    #
+    # D060 / P2-5: warn-once when the dedup is structurally disabled. The
+    # demo CLI path is fine; an autonomous loop that ever invokes this
+    # without a DB path is a regression (NoveltyFilter would silently
+    # accept structurally-identical configs that it should have rejected).
+    if forge_db_path is None:
+        _warn_once_novelty_dedup_disabled()
+        prior_fingerprints: frozenset[str] = frozenset()
+    else:
+        prior_fingerprints = _load_prior_structural_fingerprints(forge_db_path)
     ctx = FilterContext(
         registry=registry,
         feature_cache=_build_feature_cache(registry, seed),  # type: ignore[arg-type]
@@ -480,7 +508,7 @@ def _ensure_grammar_version_recorded_silently(
     grammar: object,
     yaml_path: Path,
 ) -> None:
-    """D047: self-heal the grammar_versions audit row for the active grammar.
+    """D051: self-heal the grammar_versions audit row for the active grammar.
 
     Called at the start of every `_run_one_cycle` invocation (production
     loop). Idempotent — a SELECT-only no-op when the row already exists.
@@ -545,7 +573,7 @@ def _reconcile_pending_silently(
     )
 
 
-def _consume_feedback_after_submit(  # noqa: PLR0915 — T2.3/T2.5 wiring adds statements; refactor would be net harm
+def _consume_feedback_after_submit(
     *,
     forge_db_path: Path,
     crucible_db: Path | None,
@@ -557,21 +585,15 @@ def _consume_feedback_after_submit(  # noqa: PLR0915 — T2.3/T2.5 wiring adds s
     if crucible_db is None:
         typer.echo("feedback: skipped (no --crucible-db)")
         return
-    import uuid as _uuid
 
     from forge.core.clock import utc_now
     from forge.feedback.analyzer import analyze_batch
     from forge.feedback.auto_tune import auto_tune
     from forge.feedback.consumer import consume_batch_results
     from forge.feedback.promoted_patterns import record_promoted_patterns
-    from forge.feedback.proposal_writer import append_proposal
-    from forge.feedback.proposer import (
-        evaluate_counterfactual,
-        propose,
-    )
+    from forge.feedback.proposal_writer import enrich_and_append_proposals
+    from forge.feedback.proposer import propose
     from forge.feedback.stuck_state import is_stuck, most_recent_grammar_change
-    from forge.feedback.trade_concentration import analyze_promotion_concentration
-    from forge.feedback.types import GrammarProposal
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters.calibration import load_calibration
@@ -584,70 +606,15 @@ def _consume_feedback_after_submit(  # noqa: PLR0915 — T2.3/T2.5 wiring adds s
         if report.promoted_patterns:
             record_promoted_patterns(conn, report.promoted_patterns, discovered_at=now)
         proposals = propose(report, feedback, at=now)
-        # T2.3 wiring (D050): annotate each proposal with its counterfactual
-        # against this batch's promotions. Stored in evidence_json so the
-        # operator sees the safe/escalate signal when reviewing in
-        # `forge grammar list-proposals` or downstream tooling.
-        for proposal in proposals:
-            cf = evaluate_counterfactual(
-                proposal,
-                recent_promoted_count=feedback.promoted_count,
-            )
-            # GrammarProposal is frozen; build evidence_json delta and
-            # construct a copy carrying the counterfactual annotation.
-            annotated_evidence = dict(proposal.evidence_json or {})
-            annotated_evidence["counterfactual_rejection_rate"] = cf.rejection_rate
-            annotated_evidence["counterfactual_promoted_count"] = cf.promoted_count
-            proposal_with_cf = GrammarProposal(
-                proposal_id=proposal.proposal_id,
-                proposed_at=proposal.proposed_at,
-                proposal_type=proposal.proposal_type,
-                target=proposal.target,
-                proposal_yaml=proposal.proposal_yaml,
-                rationale=proposal.rationale,
-                evidence_json=annotated_evidence,
-                sample_size=proposal.sample_size,
-                confidence=proposal.confidence,
-            )
-            append_proposal(proposal_with_cf, open_proposals_path=open_proposals, db=conn)
-        # T2.5 wiring (D050): post-batch trade-concentration analyzer.
-        # Scan promoted gated runs for concentration suspects; emit a
-        # tighten-grammar proposal per flagged run so the operator can
-        # review the strategies that promoted on a fragile P&L
-        # distribution.
-        gated_runs = tuple(o.gated_run for o in feedback.outcomes)
-        concentration_flags = analyze_promotion_concentration(gated_runs)
-        for flag in concentration_flags:
-            cf_proposal = GrammarProposal(
-                proposal_id=_uuid.uuid4(),
-                proposed_at=now,
-                proposal_type="tighten",
-                target="grammar",
-                proposal_yaml=(
-                    "# T2.5 — promoted-strategy concentration suspect.\n"
-                    "# Operator: review the trade ledger for this run "
-                    "before treating it as a stable promotion.\n"
-                ),
-                rationale=(
-                    f"Promoted run {flag.run_id} has concentration "
-                    f"{flag.metric_type}={flag.score:.3f} > threshold "
-                    f"{flag.threshold:.3f} (profit_factor={flag.profit_factor:.2f}, "
-                    f"n_trades={flag.n_trades}, win_rate={flag.win_rate:.2f}). "
-                    "Likely few outsized winners drive the P&L — operator review."
-                ),
-                evidence_json={
-                    "trigger": "promotion_concentration_suspect",
-                    "target": flag.run_id,  # used by intent-dedup
-                    "config_hash": flag.config_hash,
-                    "score": flag.score,
-                    "metric_type": flag.metric_type,
-                    "profit_factor": flag.profit_factor,
-                    "n_trades": flag.n_trades,
-                    "win_rate": flag.win_rate,
-                },
-                sample_size=flag.n_trades,
-            )
-            append_proposal(cf_proposal, open_proposals_path=open_proposals, db=conn)
+        # D054 — shared T2.3 (counterfactual) + T2.5 (concentration) enrichment.
+        # Identical path to manual `forge feedback` (see `cli/feedback_cmd.py`).
+        enrich_and_append_proposals(
+            proposals,
+            feedback=feedback,
+            open_proposals_path=open_proposals,
+            db=conn,
+            at=now,
+        )
         if prefilter_yaml.exists():
             calibration = load_calibration(prefilter_yaml)
             auto_tune(
@@ -774,8 +741,8 @@ def _run_one_iteration(
         f"seed={seed} batch_size={batch_size} max={max_candidates}"
     )
 
-    # D047: self-heal the hard-rule-#10 audit trail for manual grammar bumps.
-    # The three pre-D047 write paths (auto_tune / apply-proposal / revert) don't
+    # D051: self-heal the hard-rule-#10 audit trail for manual grammar bumps.
+    # The three pre-D051 write paths (auto_tune / apply-proposal / revert) don't
     # fire on operator-edited grammar.yaml, so the `grammar_versions` table was
     # silently empty post-D039 v1→v2. Idempotent: a no-op once the row exists.
     if not dry_run:

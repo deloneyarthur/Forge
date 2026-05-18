@@ -286,15 +286,41 @@ def propose(
     return proposals
 
 
+# D053 — phase identifiers for `CounterfactualResult.phase`. Phase-1 is the
+# binary safety floor (any-promotions → escalate); phase-2 is the per-strategy
+# re-validation (P1-1 option b — deferred). When phase-2 lands, the function
+# body changes; consumers reading `evidence_json["counterfactual_phase"]` can
+# tell which signal they're looking at without reading source.
+PHASE_1_BINARY = "1_binary_safety_floor"
+PHASE_2_PER_STRATEGY = "2_per_strategy_revalidation"
+
+# Human-readable disclaimer written alongside the phase identifier so
+# operators reading raw evidence_json see the limitation without having
+# to know the codebase. Keep in sync with `evaluate_counterfactual`'s
+# docstring.
+COUNTERFACTUAL_PHASE_1_NOTE = (
+    "phase-1 binary safety floor: rejection_rate is a worst-case "
+    "assumption (1.0 if any recent promotion, 0.0 otherwise), not a "
+    "per-strategy measurement. Implements draft Enhancement 8 phase 1."
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CounterfactualResult:
     """T2.3 / D044 — result of a counterfactual evaluation against
-    the proposal's effect on prior promoted strategies."""
+    the proposal's effect on prior promoted strategies.
+
+    D053: `phase` identifies which evaluation implementation produced
+    the result. Phase-1 is the binary safety floor (current default);
+    phase-2 will be per-strategy re-validation once `submissions.config_json`
+    history queries are wired (draft Enhancement 8 phase 2).
+    """
 
     promoted_count: int
     would_be_rejected_count: int
     rejection_rate: float
     would_be_rejected_ids: tuple[str, ...] = ()
+    phase: str = PHASE_1_BINARY
 
 
 def evaluate_counterfactual(
@@ -304,19 +330,23 @@ def evaluate_counterfactual(
     """T2.3 / D044 — would applying ``proposal`` regress any promoted
     strategy?
 
-    Phase 1 (framework): coarse rejection-rate estimate from raw
+    Phase 1 (framework, current): coarse rejection-rate estimate from raw
     promotion count. The full per-strategy re-validation (draft
-    Enhancement 8) requires re-running the pre-filter battery
-    against each promoted strategy's historical activations — out of
-    scope for this T2.3 ship; framework-only. Replace this body with
-    the per-strategy check once `submissions.config_json` history
-    queries are wired.
+    Enhancement 8 phase 2) requires re-running the pre-filter battery
+    against each promoted strategy's historical activations — deferred
+    P1-1 option (b). When that lands, replace the body and bump the
+    returned `phase` to `PHASE_2_PER_STRATEGY`.
 
-    Conservative interpretation today:
+    Conservative phase-1 interpretation:
     - 0 promoted → 0.0 rejection_rate, safe.
     - >0 promoted → 1.0 rejection_rate (worst-case assumption); the
       caller's `should_auto_apply_proposal` will escalate to operator
       review.
+
+    D053: the result carries `phase=PHASE_1_BINARY` so the call site
+    can stamp evidence_json with structured phase metadata; operators
+    reading proposals know the rejection_rate is a binary safety floor,
+    not a real measurement.
     """
     del proposal  # phase-1 framework doesn't use the proposal's specifics
     if recent_promoted_count == 0:
@@ -324,6 +354,7 @@ def evaluate_counterfactual(
             promoted_count=0,
             would_be_rejected_count=0,
             rejection_rate=0.0,
+            phase=PHASE_1_BINARY,
         )
     return CounterfactualResult(
         promoted_count=recent_promoted_count,
@@ -331,6 +362,7 @@ def evaluate_counterfactual(
         # affect promoted strategies until the per-strategy check is wired.
         would_be_rejected_count=recent_promoted_count,
         rejection_rate=1.0,
+        phase=PHASE_1_BINARY,
     )
 
 

@@ -531,3 +531,154 @@ def test_reconcile_all_pending_returns_empty_when_no_submitted_rows(tmp_path: Pa
             conn, crucible_db, exports_dir=tmp_path / "noexports"
         )
     assert feedbacks == ()
+
+
+# ---------------------------------------------------------------------------
+# D052 — reconcile_all_pending: flush rows predating the export low-watermark
+# ---------------------------------------------------------------------------
+
+
+AGED_OUT_SENTINEL = "00000000-0000-0000-0000-000000000000"
+
+
+def test_reconcile_all_pending_flushes_predates_export_window(tmp_path: Path) -> None:
+    """D052: rows submitted before the oldest decided_at in the current export
+    are 'aged-out' (Crucible's rolling export has rolled past their decision).
+    The reconciler must flush them with sentinel run_id so D046's oldest-batch
+    rate-limit policy doesn't pin the loop forever."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    stranded_cfg = minimal_strategy_config().model_copy(update={"name": "stranded"})
+    visible_cfg = minimal_strategy_config().model_copy(update={"name": "visible"})
+    # Crucible's export window only contains the recent (visible) run; the
+    # stranded row's decision rolled off ~3 days ago.
+    _insert_crucible_gated(crucible_db, config_hash=visible_cfg.config_hash)
+    stranded_batch = uuid.uuid4()
+    visible_batch = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(
+            conn, batch_id=stranded_batch, batch_size=1,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        _insert_batch_summary(
+            conn, batch_id=visible_batch, batch_size=1,
+            submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+        )
+        _insert_forge_submission(
+            conn, config=stranded_cfg, batch_id=stranded_batch,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        _insert_forge_submission(
+            conn, config=visible_cfg, batch_id=visible_batch,
+            submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+        )
+        feedbacks = reconcile_all_pending(
+            conn, crucible_db, exports_dir=tmp_path / "noexports"
+        )
+        rows = conn.execute(
+            "SELECT config_hash, status, crucible_run_id FROM submissions ORDER BY submitted_at"
+        ).fetchall()
+    by_hash = {str(r[0]): (str(r[1]), str(r[2])) for r in rows}
+    # Stranded: flushed with sentinel run_id.
+    assert by_hash[stranded_cfg.config_hash][0] == "gated"
+    assert by_hash[stranded_cfg.config_hash][1] == AGED_OUT_SENTINEL
+    # Visible: gated normally (real run_id, not sentinel).
+    assert by_hash[visible_cfg.config_hash][0] == "gated"
+    assert by_hash[visible_cfg.config_hash][1] != AGED_OUT_SENTINEL
+    # The aged-out flush is a maintenance pass — only the in-window batch
+    # produces a BatchFeedback. The stranded batch's row was reconciled
+    # via sentinel, not via a join.
+    assert len(feedbacks) == 1
+    assert feedbacks[0].batch_id == visible_batch
+
+
+def test_reconcile_all_pending_does_not_flush_rows_inside_export_window(
+    tmp_path: Path,
+) -> None:
+    """D052: a `submitted` row younger than the export's MIN(decided_at) is
+    still in flight from Crucible's perspective. Reconciler must leave it
+    alone (no false-positive flush)."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    # Crucible's export has one decision from 2026-05-13 14:00 UTC.
+    visible_cfg = minimal_strategy_config().model_copy(update={"name": "visible"})
+    _insert_crucible_gated(crucible_db, config_hash=visible_cfg.config_hash)
+    # Our submitted row is from 2026-05-14 — newer than the watermark, so
+    # Crucible may simply not have decided yet. Don't flush.
+    in_flight_cfg = minimal_strategy_config().model_copy(update={"name": "in_flight"})
+    batch = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(
+            conn, batch_id=batch, batch_size=1,
+            submitted_at=datetime(2026, 5, 14, tzinfo=UTC),
+        )
+        _insert_forge_submission(
+            conn, config=in_flight_cfg, batch_id=batch,
+            submitted_at=datetime(2026, 5, 14, tzinfo=UTC),
+        )
+        reconcile_all_pending(
+            conn, crucible_db, exports_dir=tmp_path / "noexports"
+        )
+        rows = conn.execute(
+            "SELECT status, crucible_run_id FROM submissions"
+        ).fetchall()
+    assert rows[0][0] == "submitted"  # untouched
+    assert rows[0][1] is None  # no sentinel either
+
+
+def test_reconcile_all_pending_aged_out_flush_idempotent(tmp_path: Path) -> None:
+    """D052: re-running the reconciler over already-flushed aged-out rows is
+    a no-op (status stays 'gated', sentinel run_id unchanged)."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    stranded_cfg = minimal_strategy_config().model_copy(update={"name": "stranded"})
+    visible_cfg = minimal_strategy_config().model_copy(update={"name": "visible"})
+    _insert_crucible_gated(crucible_db, config_hash=visible_cfg.config_hash)
+    batch = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(
+            conn, batch_id=batch, batch_size=1,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        _insert_forge_submission(
+            conn, config=stranded_cfg, batch_id=batch,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
+        first_run_id = conn.execute(
+            "SELECT crucible_run_id FROM submissions WHERE config_hash = ?",
+            [stranded_cfg.config_hash],
+        ).fetchone()[0]
+        # Second pass — already flushed; nothing should change.
+        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
+        second_run_id = conn.execute(
+            "SELECT crucible_run_id FROM submissions WHERE config_hash = ?",
+            [stranded_cfg.config_hash],
+        ).fetchone()[0]
+    assert str(first_run_id) == AGED_OUT_SENTINEL
+    assert str(second_run_id) == AGED_OUT_SENTINEL
+
+
+def test_reconcile_all_pending_no_flush_when_export_empty(tmp_path: Path) -> None:
+    """D052: with no Crucible runs at all, there's no watermark — old
+    `submitted` rows must stay untouched (false-clear here would mask a
+    Crucible-offline event)."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    stranded_cfg = minimal_strategy_config().model_copy(update={"name": "stranded"})
+    batch = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(
+            conn, batch_id=batch, batch_size=1,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        _insert_forge_submission(
+            conn, config=stranded_cfg, batch_id=batch,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
+        row = conn.execute(
+            "SELECT status, crucible_run_id FROM submissions"
+        ).fetchone()
+    assert row[0] == "submitted"  # no false flush on Crucible-offline
+    assert row[1] is None

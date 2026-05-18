@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from forge.persistence.db import db_connection
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src" / "forge"
 
@@ -115,4 +117,23 @@ def test_no_llm_sdk_in_production_loop() -> None:
     assert not offenders, (
         "LLM SDK imports found in src/forge (hard rule #5 — production loop "
         f"is deterministic Python only): {offenders}"
+    )
+
+
+def test_db_connection_pins_session_timezone_to_utc() -> None:
+    """D061: every connection from `db_connection` must have session TZ=UTC.
+
+    All Forge timestamps flow through `forge.core.clock.utc_now()` (hard
+    rule #8). On-disk naive TIMESTAMP values are therefore implicit-UTC
+    wall clocks. Without pinning, DuckDB coerces them via the host's
+    session TZ on read, silently shifting aware-vs-naive comparisons —
+    the D052 aged-out flush no-op'd in production for exactly this reason
+    on a PDT (UTC-7) host. Pinning the session TZ at connection open is
+    the structural defense; this invariant ensures it can never regress.
+    """
+    with db_connection(":memory:") as conn:
+        (tz,) = conn.execute("SELECT current_setting('TimeZone')").fetchone()
+    assert tz == "UTC", (
+        f"db_connection must pin session TZ to UTC (got {tz!r}). "
+        "D061: see src/forge/persistence/db.py."
     )

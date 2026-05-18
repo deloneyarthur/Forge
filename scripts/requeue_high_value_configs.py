@@ -53,11 +53,27 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
 
 import duckdb
+
+
+def _read_grammar_version(grammar_yaml: Path) -> str:
+    """Read the `grammar_version: vN` field from `grammar_yaml` without
+    importing Forge modules — keeps the script stdlib-only on the
+    cold-start path. Falls back to `v1` if the field can't be located
+    (consistent with the legacy assumption pre-D055).
+    """
+    if not grammar_yaml.exists():
+        return "v1"
+    text = grammar_yaml.read_text(encoding="utf-8")
+    match = re.search(r"^grammar_version:\s*([^\s#]+)", text, re.MULTILINE)
+    if match is None:
+        return "v1"
+    return match.group(1).strip().strip("\"'")
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,7 +89,74 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--include-tail-hedge", action="store_true", default=True)
     p.add_argument("--include-relative-value", action="store_true", default=True)
     p.add_argument("--dry-run", action="store_true", default=False)
+    # D055 / P1-3 — grammar_version filter (on by default).
+    p.add_argument(
+        "--grammar-yaml",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent / "config" / "grammar.yaml",
+        help="grammar yaml: derive current_grammar_version (others get skipped)",
+    )
+    p.add_argument(
+        "--skip-grammar-filter",
+        action="store_true",
+        default=False,
+        help="bypass the grammar_version filter (re-queue stale-version configs anyway)",
+    )
     return p.parse_args()
+
+
+def filter_to_current_grammar_version(
+    forge_db: Path,
+    candidate_hashes: list[str],
+    current_grammar_version: str,
+) -> tuple[list[str], dict[str, int]]:
+    """D055 / P1-3 — partition `candidate_hashes` by grammar_version.
+
+    Returns ``(matching, skipped_by_version)`` where ``matching`` is the
+    subset of `candidate_hashes` whose originating batch was enumerated
+    under ``current_grammar_version``, and ``skipped_by_version`` counts
+    rejections per stale version (plus an `(unknown)` bucket for hashes
+    not present in `submissions`).
+
+    The join is `submissions.forge_batch_id` → `batch_summaries.forge_batch_id`
+    → `batch_summaries.grammar_version`. Pre-D055 the script re-queued
+    v1-era configs into a v2-active Crucible; v1-only signals reject
+    silently on Crucible's side, invisible to Forge.
+
+    Order of `matching` is the input order so caller dedup / category
+    accounting stays stable.
+    """
+    if not candidate_hashes:
+        return ([], {})
+    # config_hashes are 16-char hex slices (SHA-256 derivatives) so they're
+    # SQL-safe by construction. The IN-list is built from a placeholder
+    # vector parameterized via positional bind — `noqa: S608` because the
+    # placeholders are a count, not user input.
+    placeholders = ",".join(["?"] * len(candidate_hashes))
+    conn = duckdb.connect(str(forge_db), read_only=True)
+    try:
+        rows = conn.execute(
+            f"SELECT s.config_hash, b.grammar_version "  # noqa: S608
+            f"FROM submissions s "
+            f"JOIN batch_summaries b USING (forge_batch_id) "
+            f"WHERE s.config_hash IN ({placeholders})",
+            candidate_hashes,
+        ).fetchall()
+    finally:
+        conn.close()
+    by_hash: dict[str, str] = {str(h): str(v) for h, v in rows}
+    matching: list[str] = []
+    skipped: dict[str, int] = {}
+    for h in candidate_hashes:
+        v = by_hash.get(h)
+        if v is None:
+            skipped["(unknown)"] = skipped.get("(unknown)", 0) + 1
+            continue
+        if v == current_grammar_version:
+            matching.append(h)
+        else:
+            skipped[v] = skipped.get(v, 0) + 1
+    return (matching, skipped)
 
 
 def select_config_hashes(forge_db: Path, top_n: int, include_tail_hedge: bool,
@@ -149,7 +232,7 @@ def requeue_one(config_hash: str, processed_dir: Path, inbox_dir: Path,
     return "copied"
 
 
-def main() -> int:
+def main() -> int:  # noqa: PLR0912 — D055 filter adds branches; alternative is over-decomposition for a one-off script
     args = parse_args()
     if not args.forge_db.exists():
         print(f"ERROR: Forge DB not found at {args.forge_db}", file=sys.stderr)
@@ -163,6 +246,31 @@ def main() -> int:
         args.forge_db, args.top_n,
         args.include_tail_hedge, args.include_relative_value,
     )
+
+    # D055 / P1-3 — drop configs from stale grammar versions. v1-only signals
+    # silently reject on a v2-active Crucible; without this filter the
+    # re-queue ships configs that never run. The filter is opt-out so an
+    # operator who explicitly wants the legacy behavior can pass
+    # --skip-grammar-filter.
+    if not args.skip_grammar_filter:
+        current_grammar_version = _read_grammar_version(args.grammar_yaml)
+        print(f"grammar_filter: active (current={current_grammar_version})")
+        skipped_total: dict[str, int] = {}
+        for category, hashes in list(selection.items()):
+            matching, skipped = filter_to_current_grammar_version(
+                args.forge_db, hashes, current_grammar_version,
+            )
+            selection[category] = matching
+            for v, n in skipped.items():
+                skipped_total[v] = skipped_total.get(v, 0) + n
+        if skipped_total:
+            print("  skipped by grammar_version:")
+            for v, n in sorted(skipped_total.items()):
+                print(f"    {v}: {n}")
+        else:
+            print("  no stale-version configs in selection")
+    else:
+        print("grammar_filter: SKIPPED (--skip-grammar-filter)")
 
     # Deduplicate across categories — a top-N tail_hedge config shouldn't
     # be copied twice.

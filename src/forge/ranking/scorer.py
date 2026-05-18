@@ -51,6 +51,15 @@ class Ranker:
     def score(self, report: PreFilterReport, prior_promotion_score: float) -> float:
         """Return the §6.2 weighted composite in `[0, 1]`.
 
+        **Precondition (D060 / P2-4):** the caller MUST only invoke
+        `score` on reports with `report.passed == True`. A short-circuited
+        report (any filter rejected; remaining filters skipped) is
+        missing the four ranker-relevant filter results and the method
+        raises `ValueError` to surface the misuse loudly rather than
+        producing a meaningless 0.0. Today the production caller is
+        `forge.ranking.batch_ranker.rank_batch` which iterates only
+        passed reports; this contract pins that requirement.
+
         Raises:
             ValueError: if the report is missing any of the four
                 ranker-relevant filter results (incomplete short-circuit

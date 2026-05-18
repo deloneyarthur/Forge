@@ -459,6 +459,43 @@ def test_t23_should_auto_apply_safe_with_high_confidence_and_no_promotions() -> 
 
 
 # ---------------------------------------------------------------------------
+# D053 — counterfactual phase labeling (P1-1 honesty fix)
+# ---------------------------------------------------------------------------
+
+
+def test_d053_counterfactual_result_carries_phase_field() -> None:
+    """D053: `CounterfactualResult` carries a `phase` field so consumers can
+    distinguish the phase-1 binary safety floor (the current stub) from a
+    future per-strategy re-validation. Defaults to `PHASE_1_BINARY` so
+    existing call sites stay valid."""
+    from forge.feedback.proposer import (
+        PHASE_1_BINARY,
+        CounterfactualResult,
+    )
+    cf = CounterfactualResult(promoted_count=0, would_be_rejected_count=0, rejection_rate=0.0)
+    assert cf.phase == PHASE_1_BINARY
+
+
+def test_d053_evaluate_counterfactual_marks_phase_1() -> None:
+    """D053: `evaluate_counterfactual` (still the binary safety floor)
+    stamps `phase == PHASE_1_BINARY` so the call site has structured data
+    to write to evidence_json. When the per-strategy implementation lands
+    later, only the function body changes — the field already exists."""
+    from forge.feedback.proposer import PHASE_1_BINARY, evaluate_counterfactual
+    failures = (GateFailureRow(gate_name="x", failure_count=300, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=400,
+        outcomes=(_outcome(promote=True),),
+    )
+    p = propose(report, feedback, at=_AT)[0]
+    cf_safe = evaluate_counterfactual(p, recent_promoted_count=0)
+    cf_conservative = evaluate_counterfactual(p, recent_promoted_count=5)
+    assert cf_safe.phase == PHASE_1_BINARY
+    assert cf_conservative.phase == PHASE_1_BINARY
+
+
+# ---------------------------------------------------------------------------
 # T2.4 / D045 — persistent proposal detection
 # ---------------------------------------------------------------------------
 

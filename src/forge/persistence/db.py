@@ -34,6 +34,13 @@ def open_db(path: Path | str = ":memory:") -> duckdb.DuckDBPyConnection:
         p = Path(path).expanduser()
         p.parent.mkdir(parents=True, exist_ok=True)
         conn = duckdb.connect(str(p))
+    # D061: pin session TZ to UTC. All Forge timestamps flow through
+    # forge.core.clock.utc_now() (hard rule #8), so on-disk naive TIMESTAMP
+    # values are implicit-UTC wall clocks. Without this, DuckDB coerces them
+    # via the host's session TZ on read, silently shifting aware-vs-naive
+    # comparisons (the D052 aged-out flush no-op'd in production for exactly
+    # this reason — see IMPLEMENTATION_DECISIONS.md D061).
+    conn.execute("SET TimeZone='UTC'")
     ensure_schema(conn)
     return conn
 

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from forge.grammar import Rule, load_grammar, validate
+from forge.grammar import load_grammar, validate
 from tests.fixtures.strategy_configs import (
     grammar_valid_baseline,
     minimal_registry_snapshot,
@@ -148,18 +148,8 @@ def test_v1_grammar_invalid_config_reports_named_rule_errors(grammar: object) ->
     assert "P3" in failing_ids
 
 
-def test_v1_grammar_rule_count_per_category(grammar: object) -> None:
-    """D001-fixed count: 5 structural, 4 composition, 4 parameter, 3 exit,
-    3 regime, 2 risk = 21."""
-    counts: dict[str, int] = {}
-    for rule in grammar.rules:  # type: ignore[attr-defined]
-        assert isinstance(rule, Rule)
-        counts[rule.category] = counts.get(rule.category, 0) + 1
-    assert counts == {
-        "structural": 5,
-        "composition": 4,
-        "parameter": 4,
-        "exit": 3,
-        "regime": 3,
-        "risk": 2,
-    }
+# NOTE (D057 / P3-2 2026-05-18): `test_v1_grammar_rule_count_per_category`
+# was moved to `tests/invariants/test_phase1_invariants.py`. Hard rule #1
+# ("the 21 v1 grammar rules in §3.5 are operator-owned") is a structural
+# invariant, not an end-to-end integration property. See D057 in
+# IMPLEMENTATION_DECISIONS.md for the rationale.

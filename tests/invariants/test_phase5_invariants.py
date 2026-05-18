@@ -487,15 +487,15 @@ def test_duckdb_constraint_exception_imports() -> None:
 
 
 # ---------------------------------------------------------------------------
-# D047 — grammar_versions audit row landed for the active grammar
+# D051 — grammar_versions audit row landed for the active grammar
 # ---------------------------------------------------------------------------
 
 
 def test_ensure_grammar_version_recorded_lands_active_grammar(tmp_path: Path) -> None:
-    """D047 / hard rule #10: after one round of self-healing, the
+    """D051 / hard rule #10: after one round of self-healing, the
     `grammar_versions` table contains exactly one row for the active
     `config/grammar.yaml`. The D035 stuck-state-floor mechanism depends
-    on this row existing; before D047 the table stayed empty under
+    on this row existing; before D051 the table stayed empty under
     manual operator yaml bumps and the floor never reset on a grammar
     change."""
     from pathlib import Path as _Path
@@ -524,11 +524,11 @@ def test_ensure_grammar_version_recorded_lands_active_grammar(tmp_path: Path) ->
 
 
 def test_run_one_iteration_calls_audit_row_helper() -> None:
-    """D047: `_run_one_iteration` in `cli/main.py` must invoke the audit-row
+    """D051: `_run_one_iteration` in `cli/main.py` must invoke the audit-row
     self-healer so manual operator yaml bumps don't silently skip the
     `grammar_versions` table. This is the structural assertion that the
     contract is wired — pulling the call out without replacement would
-    re-introduce the regression that D047 fixed.
+    re-introduce the regression that D051 fixed.
 
     Hard rule #10 + D035: the stuck-state floor reads
     `MAX(grammar_versions.changed_at)`; if the production loop stops
@@ -541,8 +541,169 @@ def test_run_one_iteration_calls_audit_row_helper() -> None:
     source = inspect.getsource(main._run_one_iteration)
     assert "_ensure_grammar_version_recorded_silently" in source, (
         "_run_one_iteration no longer calls _ensure_grammar_version_recorded_silently"
-        "; the D047 audit-row self-heal has been silently removed."
+        "; the D051 audit-row self-heal has been silently removed."
     )
+
+
+# ---------------------------------------------------------------------------
+# D052 — aged-out flush sentinel discipline
+# ---------------------------------------------------------------------------
+
+
+def test_aged_out_sentinel_is_nil_uuid() -> None:
+    """D052: the sentinel `crucible_run_id` written by the aged-out flush
+    must be the RFC-4122 nil UUID. The nil UUID is reserved by spec and
+    cannot collide with a randomly generated Crucible run_id, so audit
+    queries can filter aged-out rows via a single literal comparison.
+
+    If this constant ever drifts to a different sentinel, callers that
+    distinguish 'reached-via-join' from 'flushed-via-watermark' will
+    silently break.
+    """
+    from forge.feedback.consumer import _AGED_OUT_SENTINEL_RUN_ID
+
+    assert _AGED_OUT_SENTINEL_RUN_ID == "00000000-0000-0000-0000-000000000000"
+    # Must parse as a valid UUID so the `crucible_run_id UUID` column
+    # accepts it without coercion errors.
+    assert uuid.UUID(_AGED_OUT_SENTINEL_RUN_ID).int == 0
+
+
+def test_reconcile_all_pending_calls_aged_out_flush() -> None:
+    """D052: `reconcile_all_pending` must invoke the aged-out flush before
+    the per-batch join loop. Removing the call would re-introduce the
+    P0-1 condition where D046's oldest-batch policy pins the loop forever
+    on rows whose decisions have rolled off Crucible's export window."""
+    import inspect
+
+    from forge.feedback import consumer
+
+    source = inspect.getsource(consumer.reconcile_all_pending)
+    assert "_flush_aged_out_submissions" in source, (
+        "reconcile_all_pending no longer calls _flush_aged_out_submissions"
+        "; the D052 export-window low-watermark fallback has been removed."
+    )
+
+
+# ---------------------------------------------------------------------------
+# D053 — counterfactual phase labeling at the proposer call site
+# ---------------------------------------------------------------------------
+
+
+def test_enrich_and_append_proposals_writes_counterfactual_phase() -> None:
+    """D053 / D054: the shared enrichment helper must stamp the phase +
+    the phase-1 note into each proposal's evidence_json so operators
+    reading OPEN_PROPOSALS.md know `counterfactual_rejection_rate=1.0`
+    is a binary safety floor, not a real per-strategy measurement.
+
+    Pulled out of `_consume_feedback_after_submit` in D054 — both the
+    autonomous loop and manual `forge feedback` share one helper, so a
+    single structural assertion here covers both call sites. A future
+    refactor that drops the stamping would silently re-introduce the
+    operator-facing noise that D053 fixed."""
+    import inspect
+
+    from forge.feedback import proposal_writer
+
+    source = inspect.getsource(proposal_writer.enrich_and_append_proposals)
+    assert "counterfactual_phase" in source, (
+        "enrich_and_append_proposals no longer writes counterfactual_phase"
+        " to evidence_json; D053 stamp has been removed."
+    )
+    assert "counterfactual_note" in source, (
+        "enrich_and_append_proposals no longer writes counterfactual_note"
+        " to evidence_json; D053 disclaimer has been removed."
+    )
+
+
+def test_forge_run_and_forge_feedback_share_enrichment_helper() -> None:
+    """D054 / P1-2: `_consume_feedback_after_submit` (autonomous loop) and
+    `cmd_feedback` (manual) must both call `enrich_and_append_proposals`.
+    If either drifts to a direct `append_proposal` loop without the
+    enrichment, the operator-facing diagnostic output silently diverges
+    from the autonomous output."""
+    import inspect
+
+    from forge.cli import feedback_cmd, main
+
+    loop_src = inspect.getsource(main._consume_feedback_after_submit)
+    manual_src = inspect.getsource(feedback_cmd.cmd_feedback)
+    assert "enrich_and_append_proposals" in loop_src, (
+        "_consume_feedback_after_submit no longer calls "
+        "enrich_and_append_proposals; loop bypasses D053+T2.5."
+    )
+    assert "enrich_and_append_proposals" in manual_src, (
+        "cmd_feedback no longer calls enrich_and_append_proposals; "
+        "manual `forge feedback` bypasses D053+T2.5."
+    )
+
+
+# ---------------------------------------------------------------------------
+# D056 / P3-1 — hard rule #3 direct invariant: Crucible's promotion gate floors
+# ---------------------------------------------------------------------------
+
+
+def test_grammar_p4_per_trade_risk_max_within_contracts_ceiling() -> None:
+    """D056 / hard rule #3: the grammar's P4 `sizer.per_trade_risk_pct.max`
+    must never exceed `crucible_contracts.ABSOLUTE_MAX_PER_TRADE_RISK_PCT`.
+
+    Before D056 this was only tested indirectly via rule #4's
+    `apply_loosening` ban. The ban prevents an automated path from
+    increasing the upper bound; it does NOT structurally enforce that
+    the static grammar.yaml respects the contracts ceiling. A manual
+    operator edit could in principle bump P4's max above 0.02 — the
+    contracts validator would catch it on submission, but the rule-#3
+    spirit ("never propose relaxations that lower the gate") asks us
+    to floor it structurally at the grammar layer too."""
+    import yaml as _yaml
+    from crucible_contracts import ABSOLUTE_MAX_PER_TRADE_RISK_PCT
+
+    yaml_path = Path(__file__).resolve().parents[2] / "config" / "grammar.yaml"
+    raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    p4 = next(
+        (r for r in raw["rules"] if r["id"] == "P4"),
+        None,
+    )
+    assert p4 is not None, "grammar P4 (per_trade_risk_pct range) is missing"
+    assert p4["predicate"]["type"] == "numerical_range"
+    assert p4["predicate"]["field"] == "sizer.per_trade_risk_pct"
+    assert p4["predicate"]["max"] <= ABSOLUTE_MAX_PER_TRADE_RISK_PCT, (
+        f"grammar P4.max={p4['predicate']['max']} exceeds contracts cap "
+        f"{ABSOLUTE_MAX_PER_TRADE_RISK_PCT}; violates hard rule #3"
+    )
+
+
+def test_enumerated_configs_respect_absolute_risk_caps(tmp_path: Path) -> None:
+    """D056 / hard rule #3: every config Forge enumerates from the active
+    grammar must respect both contracts ceilings (per-trade + concurrent).
+
+    This is a roundtrip property test — the sampler produces a config,
+    Pydantic validates against the SizerSpec field_validators, and we
+    assert neither cap was exceeded. Pre-D056 the only check was the
+    sampler-side bound on per-trade range (which depended on grammar.yaml
+    being correct); if a grammar edit drifted, no test caught it."""
+    from crucible_contracts import (
+        ABSOLUTE_MAX_CONCURRENT_RISK_PCT,
+        ABSOLUTE_MAX_PER_TRADE_RISK_PCT,
+    )
+
+    from forge.enumeration import enumerate_candidates
+    from forge.grammar import load_grammar
+    from forge.persistence.registry_loader import load_registry
+
+    yaml_path = Path(__file__).resolve().parents[2] / "config" / "grammar.yaml"
+    archive_dir = yaml_path.parent / "grammar_archive"
+    grammar = load_grammar(yaml_path, archive_dir=archive_dir)
+    registry = load_registry()
+    n_checked = 0
+    for cfg in enumerate_candidates(
+        grammar, registry, seed=0xD056, max_candidates=50,
+    ):
+        assert cfg.sizer.per_trade_risk_pct <= ABSOLUTE_MAX_PER_TRADE_RISK_PCT
+        assert cfg.sizer.max_concurrent_risk_pct <= ABSOLUTE_MAX_CONCURRENT_RISK_PCT
+        n_checked += 1
+    # Guard: the test should actually exercise the property, not silently
+    # pass on an empty enumeration.
+    assert n_checked > 0, "enumerate_candidates produced no configs to check"
 
 
 # Suppress unused-import lint

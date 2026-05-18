@@ -1,5 +1,7 @@
 # Forge — Status
 
+> **Note (D059 / P3-4 2026-05-18):** Some historical entries below reference Crucible coordination prompts (`CRUCIBLE_*_AGENT_PROMPT.md` at repo root) that were deleted in commit `e85f0d4` after their work shipped. The references are preserved as historical narrative; the prompt files are recoverable via `git show e85f0d4^:<filename>`. See the matching D059 entry in `IMPLEMENTATION_DECISIONS.md` for the deleted-file list.
+
 **v1 go-live status:** **DEGRADED 2026-05-18** — service is running but the feedback path has been silently broken since 2026-05-14. Per the 2026-05-17 audit: 4,020 submissions, 308 gated (all from a single batch on 2026-05-14), `forge.submissions.crucible_run_id ∩ export.gated_runs.run_id = 0` after 2026-05-14, rate-limit-blocked on batch `e2658f76` for 8+ hours. Auto-tune fired 19 stale tighten proposals during the gap (suppressed post-D034). Q14 issues + D031-D045 in-flight (42 modified + 6 new files uncommitted; 1028/1028 tests green locally). Root-cause diagnosis + fix in progress; v1-go-live framing was true once (2026-05-14 00:23:32 PDT, D029) but has not held since.
 
 **Tests:** 1028/1028 (was 934 at v1-go-live; +94 from D031-D045). Ruff + mypy strict clean.

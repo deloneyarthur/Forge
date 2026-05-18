@@ -144,9 +144,9 @@ def ensure_grammar_version_recorded(
 ) -> bool:
     """Write a `grammar_versions` audit row for `grammar.grammar_version` if missing.
 
-    D047 (2026-05-18): bridges the hard-rule-#10 audit trail for MANUAL operator
+    D051 (2026-05-18): bridges the hard-rule-#10 audit trail for MANUAL operator
     yaml bumps, which don't pass through `apply-proposal` / `revert` / auto-tune
-    (the three pre-D047 write paths). The D035 stuck-state grammar-change floor
+    (the three pre-D051 write paths). The D035 stuck-state grammar-change floor
     reads `MAX(grammar_versions.changed_at)`; without this self-healing helper,
     a manual grammar bump (like D039's R3 v1→v2) never wrote a row, so the
     stuck counter never reset on the bump.

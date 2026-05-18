@@ -91,3 +91,40 @@ def test_custom_predicate_registry_does_not_reference_equity() -> None:
     assert "equity" not in text.lower().replace("equityhedgespec", ""), (
         "forge.grammar.custom_predicates references 'equity'; investigate."
     )
+
+
+# ---------------------------------------------------------------------------
+# D057 / P3-2 — hard rule #1: 21 v1 grammar rules, structural per-category counts
+# ---------------------------------------------------------------------------
+
+
+def test_v1_grammar_rule_count_per_category() -> None:
+    """D057 / hard rule #1 + D001: the active grammar must have exactly the
+    21 §3.5 rules distributed as 5 structural / 4 composition / 4 parameter /
+    3 exit / 3 regime / 2 risk = 21.
+
+    Relocated from `tests/integration/test_v1_grammar.py` per P3-2. That
+    file remains the end-to-end suite (loading, doc-cross-ref, baseline
+    validation); the count check belongs with the structural invariants
+    because hard rule #1 says "the 21 v1 grammar rules in §3.5 are
+    operator-owned." A drift in count is a hard-rule violation, not an
+    integration regression.
+    """
+    from forge.grammar import Rule, load_grammar
+
+    yaml_path = REPO_ROOT / "config" / "grammar.yaml"
+    archive_dir = yaml_path.parent / "grammar_archive"
+    grammar = load_grammar(yaml_path, archive_dir=archive_dir)
+    counts: dict[str, int] = {}
+    for rule in grammar.rules:
+        assert isinstance(rule, Rule)
+        counts[rule.category] = counts.get(rule.category, 0) + 1
+    assert counts == {
+        "structural": 5,
+        "composition": 4,
+        "parameter": 4,
+        "exit": 3,
+        "regime": 3,
+        "risk": 2,
+    }
+    assert sum(counts.values()) == 21

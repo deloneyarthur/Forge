@@ -4,6 +4,8 @@ Append-only. Each entry: ID, date, spec section, decision, rationale, alternativ
 
 Order is chronological. Decisions are referenced from `STATUS.md`, `OPEN_QUESTIONS.md`, and `PHASE_N_HANDOFF.md`.
 
+> **Note (D059 / P3-4 2026-05-18):** Older entries reference Crucible coordination prompts (`CRUCIBLE_*_AGENT_PROMPT.md` at repo root) that were deleted in commit `e85f0d4` ("docs: archive paired Crucible coordination docs + drop completed unpaired prompts") after their work shipped. The references are preserved in the historical narrative below; the prompt files themselves are recoverable via `git show e85f0d4^:CRUCIBLE_*_AGENT_PROMPT.md`. The 7 deleted prompts: `CRUCIBLE_FEATURE_CACHE_AGENT_PROMPT.md`, `CRUCIBLE_PHASE9_V3_AGENT_PROMPT.md`, `CRUCIBLE_STUB_IMPLEMENTATIONS_AGENT_PROMPT.md`, `CRUCIBLE_EV_DEADLOCK_AGENT_PROMPT.md`, `CRUCIBLE_EMPTY_THRESHOLD_AGENT_PROMPT.md`, `CRUCIBLE_DB_CHECKPOINT_ON_BATCH_AGENT_PROMPT.md`, `CRUCIBLE_TRADE_CONCENTRATION_METRIC_AGENT_PROMPT.md`.
+
 ---
 
 ## D001 — 2026-05-13 — v1 grammar contains 21 rules, not 25
@@ -1097,7 +1099,13 @@ uv run python scripts/requeue_high_value_configs.py \
 **Verification:** ruff + mypy clean (no test for this script — operational tooling, exercised by manual runs in the recovery cycles).
 
 
-## D049 — 2026-05-18 — Grammar version audit row self-healing
+## D051 — 2026-05-18 — Grammar version audit row self-healing
+
+(Originally written as D049; renumbered to D051 because the parallel-agent
+commit `6db2be5` also took D049 for "T2.3/T2.4/T2.5/T2.7 framework wiring +
+re-queue execution." This entry chronologically precedes that one but the
+parallel agent's commit was on disk first, so the natural resolution is to
+push the later doc-only entry forward to the next free number.)
 
 **Spec section:** CLAUDE.md hard rule #10 (grammar archive + decision-log audit on every yaml change); D035 (stuck-state floor reads `MAX(grammar_versions.changed_at)`); DESIGN.md §13.3 (no silent grammar changes); 2026-05-17 audit P1 finding "empty `grammar_versions` table despite v2 active."
 
@@ -1206,3 +1214,355 @@ The first post-restart iteration will write the missing `v2` row via the self-he
 - `src/forge/cli/main.py::_consume_feedback_after_submit` — rationale/evidence_json updated for new fields.
 - `tests/unit/test_feedback/test_trade_concentration.py` — rewritten for both paths.
 - `IMPLEMENTATION_DECISIONS.md` D050 (this entry).
+
+
+## D052 — 2026-05-18 — Reconciler export-window low-watermark fallback
+
+**Spec section:** §7.3 rate limiter; §8.2 feedback consumer; D046 (oldest-batch rate-limit policy); CLAUDE.md per-batch operation order step 8.
+
+**Context:** D046 shipped oldest-batch rate-limit semantics on 2026-05-18 — Forge now waits for the OLDEST in-flight batch to reach the gating threshold before submitting a new batch. The 2026-05-18 11:36 PDT post-restart audit surfaced the corollary failure mode: Crucible's gated-runs export is a rolling top-1000 window (`Crucible/scripts/export_gated_runs.py:44`). Forge's reconciler reads only what's currently in that window. A `submitted` row whose decision rolled off the window — concretely batch `716677d6-7fee-401e-8ff7-59f6e050a20d`, 2 configs submitted 2026-05-13 20:40, decisions rendered 2026-05-13 23:44 and last visible in the export at `gated_runs_2026-05-15T091106Z.json` — has no path back to `gated` status. Per D046, that batch pins the loop forever.
+
+**Decision:** Add `_flush_aged_out_submissions(forge_db, runs)` in `forge.feedback.consumer`. Before each per-batch reconcile pass, compute `watermark = min(decided_at)` over the current export's `GatedRun`s and the set of `config_hash`es in the export. Any `submitted` row whose `submitted_at < watermark` AND whose `config_hash` is not in the export is "aged out": Crucible's decision for it (if any was made) has rolled off the window and is unreachable. Transition such rows to `status='gated'` with `crucible_run_id = '00000000-0000-0000-0000-000000000000'` (RFC-4122 nil UUID sentinel — distinguishable from any real run_id in audit queries). Empty `runs` (Crucible-offline) is a no-op: flushing in that condition would mask a Crucible outage.
+
+**Why the dual guard** (`submitted_at < watermark` AND `config_hash NOT IN export_hashes`):
+- Watermark alone false-flushes rows that ARE in the export but whose `submitted_at` happens to precede their own decision time (e.g., row submitted at noon, Crucible decides at 2pm — watermark is the 2pm decision, noon falls below it). Those rows must reconcile via the normal join, not the sentinel path.
+- Hash-not-in-export alone false-flushes recent submissions Crucible hasn't yet processed (still in pending queue). The watermark guarantees enough time has passed for a decision to have been rendered.
+
+**Hard rules check:**
+- Hard rule #2 (no Crucible internals): contracts-blessed `GatedRun` only. No new imports outside `crucible_contracts`.
+- Hard rule #6 (determinism): the flush touches `submissions` rows only; no enumeration state, no seed dependency.
+- Hard rule #8 (clock/seed): no `datetime.now()`; the watermark is derived from contracts data.
+- Hard rule #9 (submission idempotency): the sentinel update is gated by `WHERE status = 'submitted'`, so re-running over an already-flushed row is a no-op.
+
+**Alternatives considered:**
+- **Increase Crucible's export window size to "unlimited".** Rejected — that's a Crucible-side change, doesn't address the structural Forge dependency on export-window-size, and would unbounded-grow the export file. Forge should not depend on the window being any particular size.
+- **Reconcile against `runs.duckdb` directly when the export misses.** Rejected — Crucible's `db_writer` service holds an exclusive lock on the writer file; this is the original reason for the export-based path (see `rate_limiter.py:160-167`). Forge would need a separate read replica or a contracts query helper that doesn't yet exist.
+- **Mark with a distinct status (`gated_via_timeout`) rather than `gated`+sentinel.** Rejected — every downstream query (`SELECT ... WHERE status='gated'`, `WHERE status IN ('submitted','gated')`) would need updating. Many call sites; one would be missed. The sentinel `crucible_run_id` is queryable for distinction when needed (`WHERE crucible_run_id = '00000000-...-000000000000'`) and invisible everywhere else.
+- **Skip the watermark; use only `config_hash NOT IN export_hashes`.** Rejected — would flush a row submitted 10 seconds ago whose decision Crucible hasn't yet rendered (still in the writer queue). The watermark provides the "enough time has passed" guarantee.
+
+**Verification:**
+- 4 new unit tests in `tests/unit/test_feedback/test_consumer.py`:
+  - `test_reconcile_all_pending_flushes_predates_export_window` — stranded row gets sentinel; visible row reconciles via join.
+  - `test_reconcile_all_pending_does_not_flush_rows_inside_export_window` — row younger than watermark stays `submitted` (no false-positive flush).
+  - `test_reconcile_all_pending_aged_out_flush_idempotent` — second pass over already-flushed row is a no-op.
+  - `test_reconcile_all_pending_no_flush_when_export_empty` — Crucible-offline condition: no false flushes.
+- 2 new invariant tests in `tests/invariants/test_phase5_invariants.py`:
+  - `test_aged_out_sentinel_is_nil_uuid` — sentinel value pinned to RFC-4122 nil UUID.
+  - `test_reconcile_all_pending_calls_aged_out_flush` — structural call-site check (no silent un-wire).
+- Full Forge suite: 1059 passing. Ruff + mypy strict clean.
+
+**Operator unstick action for the existing 2 stranded rows:**
+The 2 zombie rows from batch `716677d6` predate the structural fix. On the next `forge.service` restart with this change live, the first iteration's reconciler pass will flush them via the new path: their `submitted_at = 2026-05-13 20:40` is well below any plausible current watermark and their `config_hash`es are no longer in the export window. No manual SQL needed. (For faster unblock, the operator may still apply the one-time UPDATE in the brief — but with this fix in place it's a convenience, not a requirement.)
+
+**Action:**
+- `src/forge/feedback/consumer.py` — `_flush_aged_out_submissions` helper + `reconcile_all_pending` call site + module-level `_AGED_OUT_SENTINEL_RUN_ID`.
+- `tests/unit/test_feedback/test_consumer.py` — 4 new D052 unit tests.
+- `tests/invariants/test_phase5_invariants.py` — 2 new D052 invariants.
+- `IMPLEMENTATION_DECISIONS.md` D052 (this entry).
+- Service restart required to pick up the helper.
+
+
+## D053 — 2026-05-18 — Counterfactual phase labeling (P1-1 honesty fix)
+
+**Spec section:** T2.3 (counterfactual evaluation framework, D044); P1-1 from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** T2.3's `evaluate_counterfactual` in `forge.feedback.proposer` is a phase-1 binary safety floor — `del proposal; if recent_promoted_count > 0: rejection_rate = 1.0 else 0.0`. The function's docstring is honest about that; the call site in `cli/main.py` was not. Every proposal got `counterfactual_rejection_rate=1.0` stamped into `evidence_json` whenever the prior batch had any promotion, so operators reading OPEN_PROPOSALS.md saw "1.0 rejection rate" and interpreted it as "every promoted strategy would be rejected" — a real per-strategy measurement that the system does not yet make.
+
+The follow-up brief offered two options: (a) label the phase explicitly so the operator can filter the noise, or (b) implement real per-strategy re-validation (draft Enhancement 8 phase 2). Option (a) is the immediate honesty fix; (b) is deferred because `submissions.config_json` history queries + a pre-filter-battery harness against historical configs are substantial scope.
+
+**Decision:** Make the data self-describing at its source. Add a `phase: str` field to `CounterfactualResult` (default `PHASE_1_BINARY = "1_binary_safety_floor"`). `evaluate_counterfactual` returns `phase=PHASE_1_BINARY`. Expose a module-level `COUNTERFACTUAL_PHASE_1_NOTE` constant with the human-readable disclaimer ("phase-1 binary safety floor: rejection_rate is a worst-case assumption..."). The call site (and any downstream caller) stamps both `counterfactual_phase` and `counterfactual_note` alongside the existing numeric fields, so the operator reading raw `evidence_json` sees the disclaimer without having to read source. When phase 2 lands, only `evaluate_counterfactual` changes its return body to `PHASE_2_PER_STRATEGY`; consumers' code stays identical, and the operator can tell post-fact whether a given proposal was annotated under the binary floor or the real measurement.
+
+**Hard rules check:**
+- Hard rule #4 (no auto-loosening): UNCHANGED. `should_auto_apply_proposal` still has zero production callers — even with a labeled phase, no path auto-applies a proposer-emitted proposal. The fix is operator-facing honesty, not safety.
+- Hard rule #6: no determinism impact.
+- Hard rule #8: no clock/seed touch.
+
+**Alternatives considered:**
+- **Don't stamp the rejection_rate field at all under phase-1.** Rejected — downstream tooling and the dashboard reasonably expect a consistent field set; quietly omitting it under a phase is its own surprise.
+- **Rename `counterfactual_rejection_rate` to `counterfactual_safety_signal`.** Considered. Rejected — broader API rename, every consumer needs updating, doesn't help operators who already have the old name in muscle memory. Phase label + note achieves the honesty goal with a smaller blast radius.
+- **Skip the constant and just inline the disclaimer string at the call site.** Rejected — drifts. The constant + module-level export keeps the disclaimer in one place; phase 2's flip flows naturally.
+
+**Verification:**
+- 2 new unit tests in `tests/unit/test_feedback/test_proposer.py`:
+  - `test_d053_counterfactual_result_carries_phase_field` — dataclass default.
+  - `test_d053_evaluate_counterfactual_marks_phase_1` — function return value.
+- The D053 invariant test was rewritten in D054 (see below) to point at the shared enrichment helper.
+- Ruff + mypy strict clean across the modified files.
+
+**Action:**
+- `src/forge/feedback/proposer.py` — `PHASE_1_BINARY`, `PHASE_2_PER_STRATEGY`, `COUNTERFACTUAL_PHASE_1_NOTE` constants; `CounterfactualResult.phase`; updated docstring.
+- `src/forge/cli/main.py::_consume_feedback_after_submit` — stamps `counterfactual_phase` and `counterfactual_note` (later moved into the shared helper by D054).
+- `tests/unit/test_feedback/test_proposer.py` — 2 new D053 unit tests.
+- `IMPLEMENTATION_DECISIONS.md` D053 (this entry).
+
+
+## D054 — 2026-05-18 — Shared T2.3 + T2.5 enrichment helper (P1-2)
+
+**Spec section:** T2.3 (counterfactual), T2.5 (trade-concentration analyzer), D049 wiring; P1-2 from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** D049 wired T2.3 + T2.5 into the autonomous loop's `_consume_feedback_after_submit` in `cli/main.py`. The manual `forge feedback` command (`cli/feedback_cmd.py:125-126`) was not updated — it iterated proposals and called `append_proposal` directly, silently bypassing both the counterfactual annotation AND the concentration analyzer. Two call sites consuming the same upstream state (Crucible's gated runs) produced different `OPEN_PROPOSALS.md` content. An operator running a manual diagnostic batch via `forge feedback --batch-id X` saw fewer proposals + missing evidence_json fields than the loop's autonomous output for the same batch.
+
+**Decision:** Factor the enrichment block into `forge.feedback.proposal_writer.enrich_and_append_proposals(proposals, *, feedback, open_proposals_path, db, at)`. The helper applies T2.3 enrichment (counterfactual + D053 phase label + note) to each proposer-emitted proposal, then runs `analyze_promotion_concentration` over `feedback.outcomes` and emits a tighten-grammar proposal per flagged run. Both `_consume_feedback_after_submit` and `cmd_feedback` import and call this helper. Structurally they CAN'T diverge — there's no inline enrichment in either call site.
+
+**Hard rules check:**
+- Hard rule #2: imports stay within `forge.feedback.*` and `crucible_contracts`. No Crucible-internal imports introduced.
+- Hard rule #4: no loosening path added; the helper writes via `append_proposal`, which already enforces the dedup + grammar_proposals discipline.
+- Hard rule #6: no determinism impact.
+
+**Alternatives considered:**
+- **Inline duplication.** Keeps each call site self-contained but is exactly the divergence trap we just fell into. Rejected.
+- **A new `forge.feedback.enrichment` module.** Considered. Rejected because `proposal_writer.py` is already the "write the proposal somewhere" module and `enrich_and_append_proposals` is just the enriched analog of `append_proposal`. Splitting it across modules adds an import without adding clarity.
+
+**Verification:**
+- 1 new unit test in `tests/unit/test_cli/test_feedback_cmd.py`:
+  - `test_d054_feedback_cmd_stamps_counterfactual_phase_into_proposals` — manual `forge feedback` invocation produces proposals with the full enrichment fields in OPEN_PROPOSALS.md.
+- 2 new invariant tests in `tests/invariants/test_phase5_invariants.py` (D053 + D054 family):
+  - `test_enrich_and_append_proposals_writes_counterfactual_phase` — the helper still stamps the phase + note.
+  - `test_forge_run_and_forge_feedback_share_enrichment_helper` — both call sites must call `enrich_and_append_proposals`.
+- Full Forge suite: 1064 passing post-P1-2. Ruff + mypy strict clean.
+
+**Side benefit:** the `_consume_feedback_after_submit` PLR0915 noqa is now obsolete — extracting the inline block dropped the function back under the statement-count limit.
+
+**Action:**
+- `src/forge/feedback/proposal_writer.py` — `enrich_and_append_proposals` + top-level imports of `proposer.COUNTERFACTUAL_PHASE_1_NOTE`, `proposer.evaluate_counterfactual`, `trade_concentration.analyze_promotion_concentration`, `types.GrammarProposal`.
+- `src/forge/cli/main.py::_consume_feedback_after_submit` — replace the inline enrichment block with a call to the helper.
+- `src/forge/cli/feedback_cmd.py::cmd_feedback` — switch from direct `append_proposal` loop to the helper.
+- `tests/unit/test_cli/test_feedback_cmd.py` — 1 new D054 unit test.
+- `tests/invariants/test_phase5_invariants.py` — 2 D053+D054 invariants (the earlier D053 invariant was redirected to point at the helper).
+- `IMPLEMENTATION_DECISIONS.md` D054 (this entry).
+
+
+## D055 — 2026-05-18 — Re-queue script grammar_version filter (P1-3)
+
+**Spec section:** P1-3 from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** `scripts/requeue_high_value_configs.py` selectively re-queues historically-tested configs from `inbox/processed/` back into Crucible's inbox. Pre-D055 the script did not check the originating batch's grammar version — it shipped v1-era configs into a v2-active Crucible. v1-only signals (e.g., the pre-D039 R3 indicator set, or pre-D033 SPY-locked configs) silently reject on Crucible's side: the config validates against StrategyConfig's pydantic shape (still parses) but fails Crucible's signal-content validation. The rejection produces no gated_runs entry, so Forge's reconciler sees nothing, and the re-queued configs effectively vanish.
+
+A dry-run against the operator's current `~/forge_data/forge.db` showed **3,010 configs** would have been re-queued under v1 grammar (every batch_summary row is `grammar_version='v1'`). With v2 active, every one of those re-queues would have been wasted compute.
+
+**Decision:** Add `filter_to_current_grammar_version(forge_db, candidate_hashes, current_grammar_version) -> (matching, skipped_by_version)`. The filter joins `submissions.forge_batch_id` → `batch_summaries.forge_batch_id` → `batch_summaries.grammar_version`, partitions the candidate set, and returns:
+- `matching`: hashes whose originating batch matches the active grammar.
+- `skipped_by_version`: counts by version (plus `(unknown)` bucket for hashes not present in `submissions`).
+
+The script's `main()` invokes the filter by default. The CLI gains two flags:
+- `--grammar-yaml PATH` (default: `config/grammar.yaml`) — used to derive `current_grammar_version` via a stdlib-only `_read_grammar_version` regex parser (no Forge module dep — keeps the script's stdlib-only cold-start path intact).
+- `--skip-grammar-filter` (default: false) — operator override for the rare case where re-queueing stale-version configs is desired (e.g., archival testing or a grammar-version downgrade).
+
+The summary output prints `grammar_filter: active (current=vN)` and a per-version skip table so the operator immediately sees the rejection picture.
+
+**Hard rules check:**
+- Hard rule #2 (no Crucible internals): unchanged. The script only reads Forge's DB.
+- Hard rule #10 (grammar archive + audit): unchanged. The filter consumes the active grammar; doesn't touch the archive.
+
+**Alternatives considered:**
+- **(b) Re-write each config's grammar_version to current after validating signal compat.** Rejected — verifying signal compatibility requires running the full grammar validator against each config, which is what Crucible's inbox-watcher does. Duplicating that logic in the re-queue script is bad layering and risks divergence. The skip path is the conservative correct move.
+- **(c) Log per-version counts but don't filter.** Rejected as too weak — the script still ships doomed configs, just with a friendlier console summary.
+- **Drop the entire script.** Considered (it's a one-off recovery tool). Rejected because the operator may want it again after future grammar bumps; making it correct is more durable than removing it.
+
+**Verification:**
+- 3 new unit tests in `tests/integration/test_requeue_high_value_configs.py` (loaded via `importlib` since `scripts/` isn't on `pythonpath`):
+  - `test_d055_filter_keeps_only_current_grammar_version` — happy path: v1-era skipped, v2-era passes.
+  - `test_d055_filter_handles_unknown_hashes` — hashes not in submissions get the `(unknown)` bucket.
+  - `test_d055_filter_no_skips_when_all_match` — identity case.
+- End-to-end dry-run against the operator's real Forge DB: shows `grammar_filter: active (current=v2)` and `skipped by grammar_version: v1: 3010`. Total would-copy = 0 (no v2 batches exist yet — the active grammar is v2 but only v1 batches are recorded).
+- Ruff + mypy strict clean.
+
+**Action:**
+- `scripts/requeue_high_value_configs.py` — `filter_to_current_grammar_version` helper, `_read_grammar_version` parser, CLI flags `--grammar-yaml` and `--skip-grammar-filter`, summary output extended.
+- `tests/integration/test_requeue_high_value_configs.py` — 3 new D055 unit tests.
+- `IMPLEMENTATION_DECISIONS.md` D055 (this entry).
+
+
+## D056 — 2026-05-18 — Hard rule #3 direct invariant via contracts risk caps (P3-1)
+
+**Spec section:** CLAUDE.md hard rule #3 ("never propose grammar relaxations that lower Crucible's promotion gate"); `crucible_contracts.ABSOLUTE_MAX_PER_TRADE_RISK_PCT` (0.02), `ABSOLUTE_MAX_CONCURRENT_RISK_PCT` (0.15); P3-1 from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** Hard rule #3 had no dedicated `tests/invariants/` check. The protection leaned indirectly on rule #4's `apply_loosening` ban: no code path can auto-raise a calibration threshold, so by transitivity no auto path can lower the gate. That argument covers automated changes but not manual operator edits to `config/grammar.yaml`. A future operator (or a future LLM session) could in principle bump P4's `sizer.per_trade_risk_pct.max` above 0.02 — contracts validation would catch it on submission, but the rule-#3 spirit asks for the floor at the grammar layer too. Pre-D056 we had no structural check that the grammar's static bounds respect the contracts ceiling.
+
+**Decision:** Two complementary invariants in `tests/invariants/test_phase5_invariants.py`:
+
+1. `test_grammar_p4_per_trade_risk_max_within_contracts_ceiling` — parse `config/grammar.yaml`, find rule P4, assert `predicate.max ≤ ABSOLUTE_MAX_PER_TRADE_RISK_PCT`. Catches a stale grammar.yaml bound regardless of code paths.
+
+2. `test_enumerated_configs_respect_absolute_risk_caps` — load active grammar + registry, enumerate 50 configs, assert every `cfg.sizer.per_trade_risk_pct ≤ 0.02` and `cfg.sizer.max_concurrent_risk_pct ≤ 0.15`. Roundtrip property: even if the grammar or sampler changed shape, the output respects the gates.
+
+**Hard rules check:**
+- Hard rule #3: this entry IS the structural piece rule #3 has been depending on implicitly.
+- Hard rule #6: enumeration uses a fixed seed (0xD056) so the property check is deterministic across runs.
+
+**Alternatives considered:**
+- **Single integration test that runs every reasonable seed**. Rejected — would slow the invariants suite and the property holds for any seed; 50 configs at one seed exercises the sampler's full path.
+- **Hypothesis-based property test (`@given`).** Considered. Rejected for now — the existing test suite doesn't lean on Hypothesis; adding it for one invariant raises maintenance cost without proportional confidence gain. Revisit if the grammar grows enough range-style rules that fixed-seed sampling becomes thin.
+
+**Verification:** 2 new invariants pass under the current v2 grammar (P4.max=0.02, sampler emits per_trade_risk_pct ∈ [0.005, 0.02], max_concurrent_risk_pct defaults to 0.15).
+
+**Action:**
+- `tests/invariants/test_phase5_invariants.py` — 2 new D056 invariants.
+- `IMPLEMENTATION_DECISIONS.md` D056 (this entry).
+
+
+## D057 — 2026-05-18 — Relocate hard rule #1 count invariant to invariants/ (P3-2)
+
+**Spec section:** CLAUDE.md hard rule #1 (21 v1 grammar rules); D001; P3-2 from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** `tests/integration/test_v1_grammar.py::test_v1_grammar_rule_count_per_category` enforced the §3.5 / D001 invariant of 5/4/4/3/3/2=21 rules per category. Wrong directory: invariants live in `tests/invariants/`, integration tests are for end-to-end workflows. A reviewer auditing rule-#1 protection by reading `tests/invariants/test_phase1_invariants.py` would have concluded the invariant didn't exist.
+
+**Decision:** Move the test to `tests/invariants/test_phase1_invariants.py` (rule #1 is grammar-scoped → phase 1). Replace the original with a NOTE-comment pointing at the new location, so anyone grep-ing for `test_v1_grammar_rule_count_per_category` lands on a breadcrumb rather than a dead reference. Loading the grammar fresh in the relocated test (rather than depending on the integration suite's `grammar` fixture) keeps the invariant self-contained.
+
+**Hard rules check:**
+- Hard rule #1: same test, stronger location.
+- No spec change.
+
+**Alternatives considered:**
+- **Keep the test in both places (integration + invariants).** Rejected — duplicates the assertion; one failure becomes two and they can drift.
+- **Move other `test_v1_grammar_*` tests too.** Considered. The other tests in that file genuinely are end-to-end integration (load+validate+cross-reference docs); they belong where they are. Only the count-per-category test was misclassified.
+
+**Verification:**
+- `tests/invariants/test_phase1_invariants.py::test_v1_grammar_rule_count_per_category` passes (counts and total agree with §3.5).
+- `tests/integration/test_v1_grammar.py` still passes after the relocation; its line count dropped by 15 lines.
+
+**Action:**
+- `tests/invariants/test_phase1_invariants.py` — relocated test.
+- `tests/integration/test_v1_grammar.py` — NOTE-comment breadcrumb.
+- `IMPLEMENTATION_DECISIONS.md` D057 (this entry).
+
+
+## D058 — 2026-05-18 — D051 self-heal idempotency under writer race (P3-3)
+
+**Spec section:** D051 (grammar_versions audit-row self-healing); P3-3 from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** D051's `ensure_grammar_version_recorded` uses a SELECT-then-INSERT pattern: check whether a row for `grammar.grammar_version` exists, and INSERT if not. In a single-process world that's idempotent. The brief flagged a hypothetical race: the autonomous loop's `_ensure_grammar_version_recorded_silently` and an operator-driven `cmd_apply_proposal` / `cmd_revert` could in principle both observe an empty `grammar_versions` table at the same instant, then both INSERT — producing two rows for the same version. The `version VARCHAR(20) PRIMARY KEY` constraint catches the loser's INSERT, but no test pinned the contract that exactly one row lands either way.
+
+**Decision:** Add `test_d058_ensure_grammar_version_no_duplicate_under_concurrent_writers` to `tests/unit/test_feedback/test_auto_tune.py`. The test uses `threading.Barrier(2)` to release two worker threads simultaneously; each opens its own DuckDB connection on the same file and calls `ensure_grammar_version_recorded`. Asserts:
+
+1. **Outcome correctness:** exactly one `grammar_versions` row exists for the active version.
+2. **At-least-one writer succeeded:** one thread reports `wrote=True` (or in the lucky case where the SELECT-then-INSERT serializes, both succeed at the contract level — one writes, one returns `False`).
+3. **Loser path observed:** either a returns-False worker (later writer sees the row exists) OR a `ConstraintException` (race on INSERT) — the test accepts both because both preserve the invariant.
+
+The test catches a future refactor that switches the idempotency mechanism (e.g., to INSERT-OR-IGNORE without the SELECT preflight) where the contract could silently break.
+
+**Hard rules check:**
+- Hard rule #10 (grammar archive + audit): the test pins the audit-row uniqueness directly, strengthening rule #10's enforcement in concurrent-writer conditions.
+
+**Alternatives considered:**
+- **`multiprocessing`-based race test.** Considered for closer prod fidelity (forge.service and CLI are separate processes). Rejected because `threading` with separate DuckDB connections on the same file exercises the OS-level file-lock the same way; multiprocessing adds fork/spawn overhead without changing what's being tested.
+- **Wrap the SELECT-then-INSERT in an explicit `BEGIN/COMMIT`.** Considered. Rejected as gold-plating — DuckDB statement auto-commit + PRIMARY KEY enforces the invariant; an explicit transaction doesn't add safety.
+
+**Verification:**
+- New unit test passes deterministically (5 consecutive runs).
+- Existing 2 D051 idempotency tests still green.
+- Ruff + mypy strict clean.
+
+**Action:**
+- `tests/unit/test_feedback/test_auto_tune.py` — 1 new D058 race test.
+- `IMPLEMENTATION_DECISIONS.md` D058 (this entry).
+
+
+## D059 — 2026-05-18 — Breadcrumb annotations for deleted Crucible prompts (P3-4)
+
+**Spec section:** P3-4 from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** Commit `e85f0d4` deleted 7 Crucible coordination prompts after the corresponding work shipped:
+- `CRUCIBLE_FEATURE_CACHE_AGENT_PROMPT.md`
+- `CRUCIBLE_PHASE9_V3_AGENT_PROMPT.md`
+- `CRUCIBLE_STUB_IMPLEMENTATIONS_AGENT_PROMPT.md`
+- `CRUCIBLE_EV_DEADLOCK_AGENT_PROMPT.md`
+- `CRUCIBLE_EMPTY_THRESHOLD_AGENT_PROMPT.md`
+- `CRUCIBLE_DB_CHECKPOINT_ON_BATCH_AGENT_PROMPT.md`
+- `CRUCIBLE_TRADE_CONCENTRATION_METRIC_AGENT_PROMPT.md`
+
+`STATUS.md`, `IMPLEMENTATION_DECISIONS.md`, and `OPEN_QUESTIONS.md` still carried 10 bare textual references to these (e.g., D028's entry cites `CRUCIBLE_PHASE9_V3_AGENT_PROMPT.md` as "see operator-recommended specs"). A new contributor following one of those references would land on a dead path.
+
+**Decision:** Add a single breadcrumb at the top of each of the three state docs pointing at `e85f0d4` and listing the deleted files. Per-reference inline edits were considered but the count (10) and pattern (uniform — "see prompt X" inside historical narrative) made the global note cleaner: one read at the top of any document tells the reader what happened to every `CRUCIBLE_*_AGENT_PROMPT.md` reference in that document.
+
+The prompt files remain recoverable via `git show e85f0d4^:<filename>` for any reader who wants the original content.
+
+**Hard rules check:**
+- None impacted. Pure documentation hygiene.
+
+**Alternatives considered:**
+- **Per-reference `(deleted in e85f0d4)` annotations.** Lower-noise per-paragraph but higher-noise globally; 10 surgical edits. Rejected as harder to maintain (future doc edits could orphan the breadcrumb).
+- **Move historical content to a `docs/deleted-prompt-references-2026-05-18.md` appendix.** Too aggressive — the references are integral to the surrounding narrative, not stand-alone content.
+- **Restore the prompts.** Rejected — they document workstreams that already shipped; restoring them adds noise without value.
+
+**Verification:**
+- Breadcrumb visible at top of each of the 3 files.
+- `grep -n "CRUCIBLE_*_AGENT_PROMPT" ...` still finds the references; readers landing there can scroll up to the breadcrumb or `git show` the original.
+
+**Action:**
+- `STATUS.md` — D059 breadcrumb at top.
+- `IMPLEMENTATION_DECISIONS.md` — D059 breadcrumb at top + this entry.
+- `OPEN_QUESTIONS.md` — D059 breadcrumb at top.
+
+
+## D060 — 2026-05-18 — Ranker contract docstring + NoveltyFilter dedup warning (P2-4 + P2-5)
+
+**Spec section:** §6.2 ranker (P2-4); T2.7 / D049 structural-fingerprint dedup (P2-5); both from FORGE_REAUDIT_FOLLOWUP_AGENT_PROMPT.md.
+
+**Context:** Two small hardening items batched into one decision log entry because both touch the same audit-trail surface (operator-visible behavior contracts that were implicit pre-D060).
+
+**P2-4 — Ranker contract:** `Ranker.score` in `src/forge/ranking/scorer.py` lists 4 required filter keys; missing any raises `ValueError`. Today the production caller `rank_batch` iterates only `passed=True` reports so the precondition holds, but it isn't documented. A future caller that passes a short-circuited report would hit `ValueError` with no clear "you violated the contract" signal.
+
+**P2-5 — NoveltyFilter dedup:** `_run_battery_for_seed(forge_db_path=None)` falls through to `prior_structural_fingerprints=frozenset()`, which silently disables T2.7 structural-fingerprint dedup. The demo `forge prefilter` CLI legitimately invokes this without a DB; the autonomous loop should never. Pre-D060 there was no signal distinguishing the two paths, so a future caller could regress T2.7 without noticing.
+
+**Decision:**
+- P2-4: add a "Precondition" paragraph in `Ranker.score`'s docstring pinning the `report.passed == True` requirement. Names the production caller (`rank_batch`) so future contributors know where to look.
+- P2-5: add a module-level `_NOVELTY_DEDUP_WARNED` flag and a `_warn_once_novelty_dedup_disabled` helper that writes to stderr the first time `_run_battery_for_seed` is called without a DB path. Idempotent (warn-once); never raises; pure observability.
+
+**Hard rules check:**
+- None impacted.
+- Hard rule #6 (determinism): P2-5's warning is stderr-only and does not affect enumeration output.
+
+**Alternatives considered:**
+- **P2-4: change `_REQUIRED_FILTER_KEYS` to a method-time class attribute.** Considered. Rejected — the docstring is the right place for a behavioral contract; class structure is the right place for what's enforced, not why.
+- **P2-5: raise `ValueError` on no-DB path.** Rejected — the demo `forge prefilter` path is intentional. A warning is the right severity: surfaces the degraded state without breaking valid demo use.
+- **P2-5: use `warnings.warn(...)`.** Considered. Rejected because `warnings.warn` has a default filter discipline that can suppress repeated warnings differently across environments; stderr write-once with a module flag is predictable.
+
+**Verification:**
+- 1 new unit test in `tests/unit/test_cli/test_run_loop.py`: `test_d060_novelty_dedup_disabled_warning_fires_when_db_is_none` — first call writes to stderr, second call is silent (warn-once), flag reset on exit so the test is order-independent.
+- Ruff + mypy strict clean.
+
+**Action:**
+- `src/forge/ranking/scorer.py` — Precondition docstring on `Ranker.score`.
+- `src/forge/cli/main.py` — `_NOVELTY_DEDUP_WARNED` flag, `_warn_once_novelty_dedup_disabled` helper, call site at `_run_battery_for_seed` top.
+- `tests/unit/test_cli/test_run_loop.py` — 1 new D060 test.
+- `IMPLEMENTATION_DECISIONS.md` D060 (this entry).
+
+
+## D061 — 2026-05-18 — Pin DuckDB session timezone to UTC at connection open
+
+**Spec section:** Hard rule #8 (blessed clock); §13.4 (submission idempotency, indirectly).
+
+**Context:** D052's aged-out flush (`_flush_aged_out_submissions` in `src/forge/feedback/consumer.py`) silently no-op'd in production. Forge.service iterations 54→167 (~110 min) all logged `blocked: oldest in-flight batch 196dc597 is 0.0% gated (0/110); waiting for >=50%` while 1,182 stuck `submitted` rows accumulated. Investigation:
+
+1. `forge.core.clock.utc_now()` (hard rule #8) returns aware-UTC datetimes. The flush builds `watermark = min(decided_ats)` with `tzinfo=UTC` and binds it to `WHERE submitted_at < ?` against a naive `TIMESTAMP submitted_at` column.
+2. DuckDB's default session TZ on this host is `America/Los_Angeles` (PDT = UTC-7 in May). On aware-vs-naive comparison, DuckDB coerces the naive column via the session TZ → every `submitted_at` shifts +7h forward (08:26 naive → 15:26 UTC).
+3. Watermark is 15:10:57 UTC. Production rows shift past the watermark and the WHERE clause matches 0 rows. The flush never executed since deploy.
+
+Existing D052 unit test (`test_reconcile_all_pending_flushes_predates_export_window`) passed because its `submitted_at` (2026-05-10) and watermark (2026-05-13 14:00) were 3+ days apart — the 7-hour shift didn't flip the inequality. Production datetimes cluster within hours, so the shift does flip it.
+
+**Decision:**
+- **Primary fix:** Pin DuckDB session TZ to UTC inside `open_db` (`src/forge/persistence/db.py`) via `conn.execute("SET TimeZone='UTC'")`. Encodes the project's actual contract — all timestamps flow through `utc_now()` (hard rule #8), so on-disk naive `TIMESTAMP` values are implicit-UTC wall clocks; the session TZ should match.
+- **Defense-in-depth:** Convert the watermark in `_flush_aged_out_submissions` to naive UTC (`min(decided_ats).astimezone(UTC).replace(tzinfo=None)`) to match the naive column convention. Survives any future caller that opens a connection outside `db_connection`.
+- **Structural guard:** New invariant test `test_db_connection_pins_session_timezone_to_utc` in `tests/invariants/test_phase0_invariants.py` asserts every `db_connection` opens with TZ=UTC. Prevents regression.
+
+**Hard rules check:**
+- Hard rule #8 (blessed clock): reinforced. This is the read-side complement to the write-side `utc_now()` discipline.
+- Hard rule #6 (deterministic enumeration): unaffected — session TZ does not influence enumeration output.
+- Hard rule #9 (submission idempotency): unaffected — config_hash uniqueness is the structural guard; D061 only fixes the read-time comparison that the D052 aged-out flush depends on.
+
+**Alternatives considered:**
+- **Migrate all timestamp columns to TIMESTAMPTZ.** Schema-level proper fix. Rejected for now — touches 8 columns across 6 tables, requires data migration on the production DB (~4,000 rows), every reader, every test fixture. DuckDB strips tzinfo cleanly on write to TIMESTAMP, so stored values are already correct UTC; the bug is exclusively in coercion-on-read. Pinning session TZ is the surgical match for the actual defect. Migration remains available as a future option if the implicit-UTC convention proves fragile.
+- **Strip tzinfo from watermark only (no session-TZ pin).** Fixes D052 in isolation but leaves the latent bug for every other aware-vs-naive comparison in the codebase (current and future). Rejected — same class of bug, different call site.
+- **Set TZ via env var (`DUCKDB_SETTINGS`).** Not a DuckDB feature; the `SET TimeZone` statement is the canonical mechanism.
+- **One-shot SQL flush of the 1,015 aged-out rows in production, defer the code fix.** Unblocks tonight but the bug persists; the same backlog regrows. Rejected once the proper fix proved trivial.
+
+**Verification:**
+- Dry-run against `/home/aj/forge_data/forge.db` (read-only): default session TZ matches 0 stuck rows; `SET TimeZone='UTC'` matches 963 of 1,182; naive watermark matches the same 963 — confirms next iteration after restart will flush ~963 rows and unblock the loop. The remaining 219 are inside the export window and reconcile via the normal join.
+- All 28 tests in `tests/invariants/test_phase0_invariants.py` + `tests/unit/test_feedback/test_consumer.py` pass.
+- Ruff + mypy strict clean on changed scope (`src/forge/persistence/db.py`, `src/forge/feedback/consumer.py`).
+
+**Action:**
+- `src/forge/persistence/db.py` — `SET TimeZone='UTC'` at connection open in `open_db`.
+- `src/forge/feedback/consumer.py` — naive watermark in `_flush_aged_out_submissions`.
+- `tests/invariants/test_phase0_invariants.py` — new `test_db_connection_pins_session_timezone_to_utc` invariant.
+- Operator restart of `forge.service` required to pick up the change (no schema migration; existing data unaffected).
