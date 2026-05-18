@@ -121,13 +121,44 @@ def test_propose_empty_report_returns_no_proposals() -> None:
 def test_trigger_a_fires_at_95pct_gate_concentration() -> None:
     failures = (GateFailureRow(gate_name="sharpe_gate", failure_count=19, failure_rate=0.95),)
     report = _report(gate_failures=failures)
-    feedback = BatchFeedback(batch_id=report.batch_id, submitted_count=20, outcomes=())
+    # D034 guard: trigger only fires when there's at least one promotion in
+    # the batch (otherwise every gate has 100% failure rate against rejects
+    # and the signal is degenerate).
+    feedback = BatchFeedback(
+        batch_id=report.batch_id,
+        submitted_count=20,
+        outcomes=(_outcome(promote=True),),
+    )
     proposals = propose(report, feedback, at=_AT)
     sharpe = [p for p in proposals if "sharpe_gate" in p.evidence_json.get("target", "")]
     assert len(sharpe) == 1
     assert sharpe[0].proposal_type == "tighten"
     assert sharpe[0].target == "prefilter_calibration"
     assert sharpe[0].is_loosen is False
+
+
+def test_trigger_a_suppressed_when_zero_promotions() -> None:
+    """D034: gate-failure trigger is suppressed when promoted_count == 0.
+
+    Reasoning: in a 0-promotion regime EVERY gate fails 100% of rejects
+    (because EVERY candidate is rejected). The "tighten the pre-filter for
+    gate X" signal becomes degenerate noise — there's nothing to compare
+    against to identify which gate is actually the weakest. Pre-D034 this
+    flooded OPEN_PROPOSALS.md with one proposal per gate per batch in any
+    stretch where the pipeline hadn't found a promotable strategy yet.
+    """
+    failures = (
+        GateFailureRow(gate_name="sharpe_gate", failure_count=19, failure_rate=0.95),
+        GateFailureRow(gate_name="trade_count_gate", failure_count=19, failure_rate=0.95),
+    )
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(batch_id=report.batch_id, submitted_count=20, outcomes=())
+    proposals = propose(report, feedback, at=_AT)
+    # No proposals from trigger (a). Other triggers may still fire (none here).
+    assert all(
+        p.evidence_json.get("trigger") != "gate_failure_concentration"
+        for p in proposals
+    )
 
 
 def test_trigger_a_does_not_fire_below_threshold() -> None:
@@ -297,3 +328,188 @@ def test_propose_rejects_naive_at() -> None:
             feedback,
             at=datetime(2026, 5, 13),  # noqa: DTZ001 — intentional naive
         )
+
+
+# ---------------------------------------------------------------------------
+# T2.1 / D041 — confidence-weighted proposals
+# ---------------------------------------------------------------------------
+
+
+def test_t21_compute_confidence_step_function() -> None:
+    """T2.1: confidence step function — <20 = 0.1, 100 = 0.7, 500 = 1.0."""
+    from forge.feedback.proposer import compute_confidence
+    assert compute_confidence(0) == 0.1
+    assert compute_confidence(19) == 0.1
+    assert compute_confidence(20) == pytest.approx(0.3, abs=1e-9)
+    assert compute_confidence(100) == pytest.approx(0.7, abs=1e-9)
+    assert compute_confidence(500) == pytest.approx(1.0, abs=1e-9)
+    assert compute_confidence(1000) == 1.0
+
+
+def test_t21_compute_confidence_rejects_negative() -> None:
+    from forge.feedback.proposer import compute_confidence
+    with pytest.raises(ValueError, match="sample_size"):
+        compute_confidence(-1)
+
+
+def test_t21_proposal_carries_sample_size_and_confidence() -> None:
+    """T2.1: every proposer-emitted proposal exposes sample_size + confidence."""
+    failures = (GateFailureRow(gate_name="sharpe_gate", failure_count=300, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=400,
+        outcomes=(_outcome(promote=True),),
+    )
+    proposals = propose(report, feedback, at=_AT)
+    assert len(proposals) >= 1
+    p = proposals[0]
+    assert p.sample_size == 300
+    # confidence(300) is in the [0.7, 1.0] band per the step function
+    assert 0.7 <= p.confidence <= 1.0
+    # Also stored in evidence_json for downstream consumers
+    assert p.evidence_json["sample_size"] == 300
+    assert p.evidence_json["confidence"] == p.confidence
+
+
+# ---------------------------------------------------------------------------
+# T2.3 / D044 — counterfactual evaluation
+# ---------------------------------------------------------------------------
+
+
+def test_t23_counterfactual_safe_when_no_recent_promotions() -> None:
+    """T2.3: 0 recent promotions → rejection_rate=0, safe to auto-apply."""
+    from forge.feedback.proposer import evaluate_counterfactual
+    failures = (GateFailureRow(gate_name="x", failure_count=300, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=400,
+        outcomes=(_outcome(promote=True),),
+    )
+    p = propose(report, feedback, at=_AT)[0]
+    cf = evaluate_counterfactual(p, recent_promoted_count=0)
+    assert cf.rejection_rate == 0.0
+    assert cf.promoted_count == 0
+
+
+def test_t23_counterfactual_conservative_when_promotions_exist() -> None:
+    """T2.3 phase-1: any recent promotions → 1.0 rejection_rate (worst-case)."""
+    from forge.feedback.proposer import evaluate_counterfactual
+    failures = (GateFailureRow(gate_name="x", failure_count=300, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=400,
+        outcomes=(_outcome(promote=True),),
+    )
+    p = propose(report, feedback, at=_AT)[0]
+    cf = evaluate_counterfactual(p, recent_promoted_count=5)
+    assert cf.rejection_rate == 1.0
+    assert cf.would_be_rejected_count == 5
+
+
+def test_t23_should_auto_apply_escalates_on_counterfactual() -> None:
+    """T2.3: should_auto_apply returns False when counterfactual would reject promoted."""
+    from forge.feedback.proposer import CounterfactualResult, should_auto_apply_proposal
+    failures = (GateFailureRow(gate_name="x", failure_count=500, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=600,
+        outcomes=(_outcome(promote=True),),
+    )
+    p = propose(report, feedback, at=_AT)[0]
+    cf = CounterfactualResult(promoted_count=3, would_be_rejected_count=1, rejection_rate=1/3)
+    should_apply, reason = should_auto_apply_proposal(p, cf)
+    assert should_apply is False
+    assert reason is not None
+    assert "counterfactual" in reason
+
+
+def test_t23_should_auto_apply_escalates_on_low_confidence() -> None:
+    """T2.3: even with safe counterfactual, low confidence → escalate."""
+    from forge.feedback.proposer import CounterfactualResult, should_auto_apply_proposal
+    # Small sample → low confidence (<0.7)
+    failures = (GateFailureRow(gate_name="x", failure_count=10, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=20,
+        outcomes=(_outcome(promote=True),),
+    )
+    p = propose(report, feedback, at=_AT)[0]
+    assert p.confidence < 0.7
+    cf = CounterfactualResult(promoted_count=0, would_be_rejected_count=0, rejection_rate=0.0)
+    should_apply, reason = should_auto_apply_proposal(p, cf)
+    assert should_apply is False
+    assert reason is not None
+    assert "confidence" in reason
+
+
+def test_t23_should_auto_apply_safe_with_high_confidence_and_no_promotions() -> None:
+    """T2.3 happy path: high confidence + no promotions → auto-apply."""
+    from forge.feedback.proposer import CounterfactualResult, should_auto_apply_proposal
+    failures = (GateFailureRow(gate_name="x", failure_count=500, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=600,
+        outcomes=(_outcome(promote=True),),
+    )
+    p = propose(report, feedback, at=_AT)[0]
+    cf = CounterfactualResult(promoted_count=0, would_be_rejected_count=0, rejection_rate=0.0)
+    should_apply, reason = should_auto_apply_proposal(p, cf)
+    assert should_apply is True
+    assert reason is None
+
+
+# ---------------------------------------------------------------------------
+# T2.4 / D045 — persistent proposal detection
+# ---------------------------------------------------------------------------
+
+
+def test_t24_persistent_detection_finds_recurring_theme() -> None:
+    """T2.4: 3 proposals with same (trigger, target) → 1 PersistentProposal."""
+    from forge.feedback.proposer import detect_persistent_proposals
+    failures = (GateFailureRow(gate_name="sharpe", failure_count=200, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=300,
+        outcomes=(_outcome(promote=True),),
+    )
+    # Generate 3 proposals (same trigger + target each time)
+    proposals = [propose(report, feedback, at=_AT)[0] for _ in range(3)]
+    persistent = detect_persistent_proposals(proposals)
+    assert len(persistent) == 1
+    assert persistent[0].occurrence_count == 3
+    assert persistent[0].theme_trigger == "gate_failure_concentration"
+    assert persistent[0].theme_detail == "sharpe"
+
+
+def test_t24_persistent_detection_below_threshold_returns_empty() -> None:
+    """T2.4: 2 occurrences with default threshold=3 → no persistent flag."""
+    from forge.feedback.proposer import detect_persistent_proposals
+    failures = (GateFailureRow(gate_name="sharpe", failure_count=200, failure_rate=0.95),)
+    report = _report(gate_failures=failures)
+    feedback = BatchFeedback(
+        batch_id=report.batch_id, submitted_count=300,
+        outcomes=(_outcome(promote=True),),
+    )
+    proposals = [propose(report, feedback, at=_AT)[0] for _ in range(2)]
+    persistent = detect_persistent_proposals(proposals)
+    assert len(persistent) == 0
+
+
+def test_t24_persistent_detection_distinguishes_themes() -> None:
+    """Different (trigger, target) tuples → separate themes; only those
+    reaching threshold are flagged."""
+    from forge.feedback.proposer import detect_persistent_proposals
+    failures_a = (GateFailureRow(gate_name="sharpe", failure_count=200, failure_rate=0.95),)
+    failures_b = (GateFailureRow(gate_name="profit_factor", failure_count=200, failure_rate=0.95),)
+    feedback = BatchFeedback(
+        batch_id=_report().batch_id, submitted_count=300,
+        outcomes=(_outcome(promote=True),),
+    )
+    # 3 sharpe + 1 profit_factor; only sharpe reaches threshold
+    proposals = [
+        *(propose(_report(gate_failures=failures_a), feedback, at=_AT)[0] for _ in range(3)),
+        propose(_report(gate_failures=failures_b), feedback, at=_AT)[0],
+    ]
+    persistent = detect_persistent_proposals(proposals)
+    assert len(persistent) == 1
+    assert persistent[0].theme_detail == "sharpe"

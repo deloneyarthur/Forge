@@ -115,7 +115,25 @@ _P3_DELTA_BAND: dict[str, tuple[float, float]] = {
 
 # §3.5 R2/R3 regime-gate indicator requirements.
 _R2_TREND_STRENGTH_INDICATORS = ("adx", "hurst")
-_R3_EVENT_PROXIMITY_INDICATORS = ("days_to_earnings", "days_to_fomc")
+# T1.4 (PROMPT_5_FORGE_V1_1_REVISED, grammar v2): expanded from
+# (days_to_earnings, days_to_fomc) to include macro-event indicators
+# (days_to_cpi, days_to_nfp, days_to_opex) that Crucible Prompt 6 added
+# in 2026-05-17. The expansion makes the vol_event hypothesis usable on
+# ETFs (SPY/QQQ/IWM/DIA), which return sentinel 999 for days_to_earnings
+# (no earnings on ETFs) and would silently produce zero trades pre-T1.4.
+_R3_EVENT_PROXIMITY_INDICATORS = (
+    "days_to_earnings",
+    "days_to_fomc",
+    "days_to_cpi",
+    "days_to_nfp",
+    "days_to_opex",
+)
+# ETF underlyings have no earnings — `days_to_earnings` returns the
+# sentinel 999 on these tickers and the gate never fires. T1.4 forbids
+# the (etf-underlying, days_to_earnings-regime) combination at validation
+# time to prevent silent zero-trade outcomes.
+_R3_ETF_INCOMPATIBLE_INDICATORS = frozenset({"days_to_earnings"})
+_R3_ETF_UNDERLYINGS = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 
 # §3.5 R1 IV-rank gate parameters.
 _R1_IV_RANK_INDICATOR = "iv_rank"
@@ -640,20 +658,52 @@ def _r3_volatility_event_requires_event_proximity_gate(
     config: StrategyConfig,
     registry: RegistrySnapshot,
 ) -> PredicateResult:
+    """§3.5 R3 — volatility_event configs need at least one event-proximity
+    regime gate, AND the gate must be ETF-compatible when the config's
+    underlying is an ETF (T1.4 / grammar v2).
+
+    Pre-grammar-v2: only checked the event-proximity-gate requirement.
+    Tier 2 expansion (D033) exposed the silent-failure case where
+    `days_to_earnings` returns sentinel 999 on ETF underlyings — the
+    gate never fires and the config produces 0 trades. Grammar v2
+    rejects (vol_event, ETF, days_to_earnings) combinations at
+    validation time.
+    """
     del registry
     if config.hypothesis != "volatility_event":
         return PredicateResult(passed=True)
+
+    is_etf_underlying = (config.underlying or "") in _R3_ETF_UNDERLYINGS
+    matched_indicator: str | None = None
     for regime in _regime_filter_signals(config):
-        if any(
-            ind in _R3_EVENT_PROXIMITY_INDICATORS
-            for ind in regime.indicators  # type: ignore[attr-defined]
-        ):
-            return PredicateResult(passed=True)
+        for ind in regime.indicators:  # type: ignore[attr-defined]
+            if ind in _R3_EVENT_PROXIMITY_INDICATORS:
+                matched_indicator = ind
+                # On ETF underlyings, reject indicators that return
+                # sentinel values (e.g., days_to_earnings = 999) and
+                # would silently produce zero trades. Continue scanning
+                # other indicators in case the config also has an
+                # ETF-compatible one.
+                if is_etf_underlying and ind in _R3_ETF_INCOMPATIBLE_INDICATORS:
+                    continue
+                return PredicateResult(passed=True)
+    if matched_indicator is None:
+        return PredicateResult(
+            passed=False,
+            detail=(
+                f"R3: hypothesis=volatility_event requires a regime_filter "
+                f"signal using one of {list(_R3_EVENT_PROXIMITY_INDICATORS)}"
+            ),
+        )
+    # Matched an event-proximity indicator but it's ETF-incompatible.
     return PredicateResult(
         passed=False,
         detail=(
-            f"R3: hypothesis=volatility_event requires a regime_filter "
-            f"signal using one of {list(_R3_EVENT_PROXIMITY_INDICATORS)}"
+            f"R3: hypothesis=volatility_event with underlying="
+            f"{config.underlying!r} (ETF) cannot use regime_filter indicator "
+            f"{matched_indicator!r}; ETF underlyings have no earnings (sentinel 999). "
+            f"Use one of "
+            f"{sorted(set(_R3_EVENT_PROXIMITY_INDICATORS) - _R3_ETF_INCOMPATIBLE_INDICATORS)}"
         ),
     )
 

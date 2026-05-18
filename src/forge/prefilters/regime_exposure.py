@@ -9,7 +9,7 @@ Score is normalized Shannon entropy across the six §5.3.6 regimes:
 uniform -> 1.0, all-in-one-regime -> 0.0. Empty activation set passes
 with score 0.0 (earlier filters would reject for density anyway).
 
-O(N) activations; cost_tier=6 in the §5.2 battery.
+O(N) activations; cost_tier=8 in the §5.2 battery (post-T1.3 + T2.6 insertions).
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ class RegimeExposureFilter:
     """§5.3.6 — reject configs concentrated in a single macro regime."""
 
     name = "regime_exposure"
-    cost_tier = 6
+    cost_tier = 8
 
     def apply(self, config: StrategyConfig, ctx: FilterContext) -> FilterResult:
         directional = _directional_signal(config)

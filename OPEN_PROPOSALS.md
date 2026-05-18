@@ -1,224 +1,326 @@
-
-
-<!-- 2026-05-14 cleanup: 480 duplicate loosen proposals bulk-rejected (proposer dedup now active; commit 8422cab). Operator audit: decided_by='aj-bulk-2026-05-14'. -->
-
----
-- proposal_id: 646a865f-1379-4535-b470-e1df4b91d0f2
-- STATUS: APPROVED at 2026-05-14T08:43:57.394115
-- proposed_at: 2026-05-14T08:05:51.852643+00:00
-- proposal_type: loosen
-- target: prefilter_calibration
-- rationale: Rolling 2-batch promotion rate is below 0.0050; propose loosening pre-filter thresholds by 10%.
-- evidence_json: {"trigger": "auto_tune_loosen"}
-- proposal_yaml: |
-    # Proposed pre-filter loosening — rolling promotion rate below min threshold
-    # step_pct: 0.1000
----
-- proposal_id: c6a8eba9-3578-4530-bf95-42f07f8e1f94
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `ablation_arm` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "ablation_arm", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for ablation_arm
-    # Triggered by failure_rate=1.00
----
-- proposal_id: facc310b-5d82-45d0-a87b-4b574304a88d
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `cpcv_sharpe_p25` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "cpcv_sharpe_p25", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for cpcv_sharpe_p25
-    # Triggered by failure_rate=1.00
----
-- proposal_id: bb8b3a0d-7315-4fe8-b5b6-ddf0abcdf4ba
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `deflated_sharpe` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "deflated_sharpe", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for deflated_sharpe
-    # Triggered by failure_rate=1.00
----
-- proposal_id: 00a2afd1-be78-45ee-9fbf-28dfd86485ba
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `min_oos_trade_count` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "min_oos_trade_count", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for min_oos_trade_count
-    # Triggered by failure_rate=1.00
----
-- proposal_id: 40e8eb39-2468-4b55-b896-f7b137b37c2b
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `pbo` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "pbo", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for pbo
-    # Triggered by failure_rate=1.00
----
-- proposal_id: b0946a31-4a47-42a1-946e-b4d812c7cd3d
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `profit_factor` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "profit_factor", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for profit_factor
-    # Triggered by failure_rate=1.00
----
-- proposal_id: 4fac1dbe-1d3f-450f-86d7-5350bbfdfc09
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `regime_stress_p25_return` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "regime_stress_p25_return", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for regime_stress_p25_return
-    # Triggered by failure_rate=1.00
----
-- proposal_id: 3d7dd548-1931-4136-ab47-ef3e2aa2fa16
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `sharpe_baseline` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "sharpe_baseline", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for sharpe_baseline
-    # Triggered by failure_rate=1.00
----
-- proposal_id: dba68e07-233b-4c4f-89da-3bc1cf22c639
-- STATUS: PENDING
-- proposed_at: 2026-05-14T16:38:04.630964+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 110 of all rejected candidates failed `walk_forward_sharpe_median` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 110, "failure_rate": 1.0, "target": "walk_forward_sharpe_median", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for walk_forward_sharpe_median
-    # Triggered by failure_rate=1.00
+# contract: forge-proposals/v1
+# Generated by Forge auto-tune and human refinement workflows.
+# Operator approval flow:
+#   1. Forge appends new PENDING docs to this file.
+#   2. Operator reviews via QuantIQ dashboard or `quantiq forge list-proposals`.
+#   3. Approval/rejection writes a marker JSON to <approval_inbox>/<id>.{approved,rejected}.json
+#   4. Forge folds approved changes into config/grammar.yaml on the next loop.
+# DO NOT edit `status` lines manually — use the approval flow so the audit trail is preserved.
 
 ---
-- proposal_id: 4b155abd-67f2-47a7-9d49-9996a70365cd
-- proposed_at: 2026-05-15T05:17:37.942916+00:00
-- proposal_type: loosen
-- target: prefilter_calibration
-- rationale: Rolling 2-batch promotion rate is below 0.0050; propose loosening pre-filter thresholds by 10%.
-- evidence_json: {"trigger": "auto_tune_loosen"}
-- proposal_yaml: |
-    # Proposed pre-filter loosening — rolling promotion rate below min threshold
-    # step_pct: 0.1000
-
+proposal_id: 646a865f-1379-4535-b470-e1df4b91d0f2
+status: APPROVED
+proposed_at: '2026-05-14T08:05:51.852643+00:00'
+proposal_type: loosen
+target: prefilter_calibration
+rationale: Rolling 2-batch promotion rate is below 0.0050; propose loosening pre-filter
+  thresholds by 10%.
+evidence:
+  trigger: auto_tune_loosen
+proposal_yaml: |
+  # Proposed pre-filter loosening — rolling promotion rate below min threshold
+  # step_pct: 0.1000
+decided_at: '2026-05-14T08:43:57.394115'
+decided_by: aj-bulk-2026-05-14
+decision_marker: null
 ---
-- proposal_id: ecad3240-087a-4307-b7d7-e9dfe1a934b4
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `ablation_arm` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "ablation_arm", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for ablation_arm
-    # Triggered by failure_rate=1.00
-
+proposal_id: c6a8eba9-3578-4530-bf95-42f07f8e1f94
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `ablation_arm` (100%); propose tightening
+  the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: ablation_arm
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for ablation_arm
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: c4956d0c-e2a8-4abf-b57b-77e8d47f317f
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `cpcv_sharpe_p25` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "cpcv_sharpe_p25", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for cpcv_sharpe_p25
-    # Triggered by failure_rate=1.00
-
+proposal_id: facc310b-5d82-45d0-a87b-4b574304a88d
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `cpcv_sharpe_p25` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: cpcv_sharpe_p25
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for cpcv_sharpe_p25
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: 65e1a949-f60e-4788-ad89-2ba441072657
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `deflated_sharpe` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "deflated_sharpe", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for deflated_sharpe
-    # Triggered by failure_rate=1.00
-
+proposal_id: bb8b3a0d-7315-4fe8-b5b6-ddf0abcdf4ba
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `deflated_sharpe` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: deflated_sharpe
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for deflated_sharpe
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: 7d798b4e-07ad-45d3-83b3-350bc07cf430
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `min_oos_trade_count` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "min_oos_trade_count", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for min_oos_trade_count
-    # Triggered by failure_rate=1.00
-
+proposal_id: 00a2afd1-be78-45ee-9fbf-28dfd86485ba
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `min_oos_trade_count` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: min_oos_trade_count
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for min_oos_trade_count
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: 60397deb-a009-4a51-9b20-00e756613808
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `pbo` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "pbo", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for pbo
-    # Triggered by failure_rate=1.00
-
+proposal_id: 40e8eb39-2468-4b55-b896-f7b137b37c2b
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `pbo` (100%); propose tightening
+  the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: pbo
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for pbo
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: 5b6070ad-4d8c-48cc-8d73-45c964ff8fe5
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `profit_factor` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "profit_factor", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for profit_factor
-    # Triggered by failure_rate=1.00
-
+proposal_id: b0946a31-4a47-42a1-946e-b4d812c7cd3d
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `profit_factor` (100%); propose tightening
+  the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: profit_factor
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for profit_factor
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: f1dcc5c4-21cd-4316-abed-f521f4b1201b
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `regime_stress_p25_return` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "regime_stress_p25_return", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for regime_stress_p25_return
-    # Triggered by failure_rate=1.00
-
+proposal_id: 4fac1dbe-1d3f-450f-86d7-5350bbfdfc09
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `regime_stress_p25_return` (100%);
+  propose tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: regime_stress_p25_return
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for regime_stress_p25_return
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: ad0bda38-25e7-41ab-93b9-89599efaba04
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `sharpe_baseline` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "sharpe_baseline", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for sharpe_baseline
-    # Triggered by failure_rate=1.00
-
+proposal_id: 3d7dd548-1931-4136-ab47-ef3e2aa2fa16
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `sharpe_baseline` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: sharpe_baseline
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for sharpe_baseline
+  # Triggered by failure_rate=1.00
 ---
-- proposal_id: 476f7cb6-b34c-4e61-921c-5b41e23bdf0e
-- proposed_at: 2026-05-15T05:37:17.250900+00:00
-- proposal_type: tighten
-- target: prefilter_calibration
-- rationale: 308 of all rejected candidates failed `walk_forward_sharpe_median` (100%); propose tightening the pre-filter that catches this earlier.
-- evidence_json: {"failure_count": 308, "failure_rate": 1.0, "target": "walk_forward_sharpe_median", "trigger": "gate_failure_concentration"}
-- proposal_yaml: |
-    # Proposed tightening — pre-filter for walk_forward_sharpe_median
-    # Triggered by failure_rate=1.00
+proposal_id: dba68e07-233b-4c4f-89da-3bc1cf22c639
+status: PENDING
+proposed_at: '2026-05-14T16:38:04.630964+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 110 of all rejected candidates failed `walk_forward_sharpe_median` (100%);
+  propose tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 110
+  failure_rate: 1.0
+  target: walk_forward_sharpe_median
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for walk_forward_sharpe_median
+  # Triggered by failure_rate=1.00
+---
+proposal_id: 4b155abd-67f2-47a7-9d49-9996a70365cd
+status: PENDING
+proposed_at: '2026-05-15T05:17:37.942916+00:00'
+proposal_type: loosen
+target: prefilter_calibration
+rationale: Rolling 2-batch promotion rate is below 0.0050; propose loosening pre-filter
+  thresholds by 10%.
+evidence:
+  trigger: auto_tune_loosen
+proposal_yaml: |
+  # Proposed pre-filter loosening — rolling promotion rate below min threshold
+  # step_pct: 0.1000
+---
+proposal_id: ecad3240-087a-4307-b7d7-e9dfe1a934b4
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `ablation_arm` (100%); propose tightening
+  the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: ablation_arm
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for ablation_arm
+  # Triggered by failure_rate=1.00
+---
+proposal_id: c4956d0c-e2a8-4abf-b57b-77e8d47f317f
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `cpcv_sharpe_p25` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: cpcv_sharpe_p25
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for cpcv_sharpe_p25
+  # Triggered by failure_rate=1.00
+---
+proposal_id: 65e1a949-f60e-4788-ad89-2ba441072657
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `deflated_sharpe` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: deflated_sharpe
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for deflated_sharpe
+  # Triggered by failure_rate=1.00
+---
+proposal_id: 7d798b4e-07ad-45d3-83b3-350bc07cf430
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `min_oos_trade_count` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: min_oos_trade_count
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for min_oos_trade_count
+  # Triggered by failure_rate=1.00
+---
+proposal_id: 60397deb-a009-4a51-9b20-00e756613808
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `pbo` (100%); propose tightening
+  the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: pbo
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for pbo
+  # Triggered by failure_rate=1.00
+---
+proposal_id: 5b6070ad-4d8c-48cc-8d73-45c964ff8fe5
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `profit_factor` (100%); propose tightening
+  the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: profit_factor
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for profit_factor
+  # Triggered by failure_rate=1.00
+---
+proposal_id: f1dcc5c4-21cd-4316-abed-f521f4b1201b
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `regime_stress_p25_return` (100%);
+  propose tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: regime_stress_p25_return
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for regime_stress_p25_return
+  # Triggered by failure_rate=1.00
+---
+proposal_id: ad0bda38-25e7-41ab-93b9-89599efaba04
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `sharpe_baseline` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: sharpe_baseline
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for sharpe_baseline
+  # Triggered by failure_rate=1.00
+---
+proposal_id: 476f7cb6-b34c-4e61-921c-5b41e23bdf0e
+status: PENDING
+proposed_at: '2026-05-15T05:37:17.250900+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 308 of all rejected candidates failed `walk_forward_sharpe_median` (100%);
+  propose tightening the pre-filter that catches this earlier.
+evidence:
+  failure_count: 308
+  failure_rate: 1.0
+  target: walk_forward_sharpe_median
+  trigger: gate_failure_concentration
+proposal_yaml: |
+  # Proposed tightening — pre-filter for walk_forward_sharpe_median
+  # Triggered by failure_rate=1.00

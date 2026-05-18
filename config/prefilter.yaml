@@ -4,8 +4,20 @@ prefilter:
     min_activations: 30
   expected_trade_count:
     min_trades: 50
+  predicted_activations:
+    # T1.3 (PROMPT_5_FORGE_V1_1_REVISED): floor on the intersection of
+    # directional x regime activations. Catches silently-inert configs
+    # (e.g., days_to_earnings regime gate on SPY where the ETF has no
+    # earnings -> empty intersection) before submission.
+    min_entries: 10
   novelty:
     max_jaccard_overlap: 0.80
+  signal_correlation:
+    # T2.6 (PROMPT_5_FORGE_V1_1_REVISED): max pairwise Jaccard overlap
+    # between any two signals' activation_dates in a single config.
+    # Catches empirically-redundant signal pairs that pass C1's
+    # structural family-disjointness check.
+    max_jaccard_overlap: 0.85
   regime_exposure:
     max_single_regime_concentration: 0.80
   permutation_test:

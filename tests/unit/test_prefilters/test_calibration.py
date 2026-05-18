@@ -137,8 +137,12 @@ prefilter:
     min_activations: -5
   expected_trade_count:
     min_trades: 50
+  predicted_activations:
+    min_entries: 10
   novelty:
     max_jaccard_overlap: 0.80
+  signal_correlation:
+    max_jaccard_overlap: 0.85
   regime_exposure:
     max_single_regime_concentration: 0.80
   permutation_test:
@@ -166,8 +170,12 @@ prefilter:
     min_activations: 30
   expected_trade_count:
     min_trades: 50
+  predicted_activations:
+    min_entries: 10
   novelty:
     max_jaccard_overlap: 1.5
+  signal_correlation:
+    max_jaccard_overlap: 0.85
   regime_exposure:
     max_single_regime_concentration: 0.80
   permutation_test:
@@ -303,7 +311,9 @@ def test_calibration_module_public_surface() -> None:
         "ExpectedTradeCountCalibration",
         "NoveltyCalibration",
         "PermutationTestCalibration",
+        "PredictedActivationsCalibration",  # T1.3 (D038)
         "RegimeExposureCalibration",
+        "SignalCorrelationCalibration",  # T2.6 (D042)
         "SignalDensityCalibration",
         "apply_tightening",
         "load_calibration",

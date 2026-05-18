@@ -269,6 +269,15 @@ class GrammarProposal:
     `proposal_type ∈ {tighten, loosen, add_rule, remove_rule}` maps to
     the table column; `is_loosen` is the structural lever for hard rule
     #4 — loosen-direction proposals never auto-apply.
+
+    `sample_size` / `confidence` (T2.1 / D041): the proposer fills these
+    in based on the trigger's evidence (e.g., failure_count for the
+    gate-failure trigger). Confidence is a coarse step function over
+    sample size (see `proposer.compute_confidence`). Low-confidence
+    proposals are flagged for operator review; T2.3 (counterfactual)
+    additionally gates auto-application on `confidence >= 0.7`. Stored
+    inside `evidence_json` for back-compat with the existing DB schema
+    (no migration needed).
     """
 
     proposal_id: uuid.UUID
@@ -278,6 +287,8 @@ class GrammarProposal:
     proposal_yaml: str
     rationale: str
     evidence_json: dict[str, Any] = field(default_factory=dict)
+    sample_size: int = 0
+    confidence: float = 0.0
 
     def __post_init__(self) -> None:
         if self.proposed_at.tzinfo is None:

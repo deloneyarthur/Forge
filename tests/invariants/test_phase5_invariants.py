@@ -119,14 +119,18 @@ def test_auto_tune_tighten_writes_grammar_versions_audit_row(tmp_path: Path) -> 
         ExpectedTradeCountCalibration,
         NoveltyCalibration,
         PermutationTestCalibration,
+        PredictedActivationsCalibration,
         RegimeExposureCalibration,
+        SignalCorrelationCalibration,
         SignalDensityCalibration,
     )
 
     cal = Calibration(
         signal_density=SignalDensityCalibration(min_activations=30),
         expected_trade_count=ExpectedTradeCountCalibration(min_trades=50),
+        predicted_activations=PredictedActivationsCalibration(min_entries=10),
         novelty=NoveltyCalibration(max_jaccard_overlap=0.80),
+        signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=0.85),
         regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=0.80),
         permutation_test=PermutationTestCalibration(n_permutations=100, p_value_threshold=0.10),
         auto_tune=AutoTuneCalibration(
@@ -185,14 +189,18 @@ def test_auto_tune_does_not_exceed_cumulative_cap(tmp_path: Path) -> None:
         ExpectedTradeCountCalibration,
         NoveltyCalibration,
         PermutationTestCalibration,
+        PredictedActivationsCalibration,
         RegimeExposureCalibration,
+        SignalCorrelationCalibration,
         SignalDensityCalibration,
     )
 
     cal = Calibration(
         signal_density=SignalDensityCalibration(min_activations=30),
         expected_trade_count=ExpectedTradeCountCalibration(min_trades=50),
+        predicted_activations=PredictedActivationsCalibration(min_entries=10),
         novelty=NoveltyCalibration(max_jaccard_overlap=0.80),
+        signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=0.85),
         regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=0.80),
         permutation_test=PermutationTestCalibration(n_permutations=100, p_value_threshold=0.10),
         auto_tune=AutoTuneCalibration(

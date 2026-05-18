@@ -87,6 +87,59 @@ _LOOKBACK_SHORT_MAX = 6
 _LOOKBACK_MEDIUM_MAX = 89
 
 
+# D033 — Tier 1 + Tier 2 underlyings, mirroring
+# ``/home/aj/proj/Crucible/config/universe.yaml`` (tier_1.tickers + tier_2.tickers).
+# Hardcoded here as a v1 expedient; drift risk if Crucible's universe.yaml
+# changes without updating this list. Future: expose via `crucible_contracts`
+# (e.g., `crucible_contracts.universe.tier_tickers(tier=2)`) to remove the
+# drift hazard. For now, the post-D033 batch summary should surface any
+# trade-count-zero pattern that points at a missing ticker.
+_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
+    # Tier 1 — index ETFs
+    "SPY", "QQQ", "IWM", "DIA",
+    # Tier 2 — top-liquidity single names
+    "AAPL", "MSFT", "NVDA", "TSLA", "AMD", "META", "AMZN", "GOOGL",
+    "NFLX", "AVGO", "BAC", "JPM", "XOM", "CVX", "BA", "GE",
+    "GS", "MS", "COIN", "MSTR",
+)
+
+
+_TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"})
+
+
+def _pick_underlying(
+    rng: random.Random,
+    hypothesis: str,
+    regime_indicators: tuple[str, ...] = (),
+) -> str | None:
+    """Per-config underlying selection from the Tier 1+2 pool.
+
+    Returns None for `relative_value` — that hypothesis routes to Crucible's
+    pairs_convergence template (`runner.py:_HYPOTHESIS_TO_TEMPLATE`) which
+    selects its own pair; setting `config.underlying` would either be
+    ignored or confuse the pairs picker.
+
+    Single-underlying hypotheses (trend_continuation, mean_reversion,
+    regime_arbitrage, volatility_event, tail_hedge) get a uniform pick
+    from the 24-ticker pool. Determinism is preserved via the shared rng.
+
+    T1.4 (grammar v2 / D039): when the regime indicators include any
+    ETF-incompatible indicator (e.g., `days_to_earnings`), the pool is
+    constrained to single-names only — preserves grammar R3's ETF-aware
+    compatibility constraint at sample time so the validator doesn't have
+    to reject the config downstream.
+    """
+    if hypothesis == "relative_value":
+        return None
+    # ETF-incompatible regime indicators force the underlying to be a single name.
+    if any(ind == "days_to_earnings" for ind in regime_indicators):
+        single_names = tuple(
+            u for u in _TIER_1_2_UNDERLYINGS if u not in _TIER_1_ETF_UNDERLYINGS
+        )
+        return rng.choice(single_names)
+    return rng.choice(_TIER_1_2_UNDERLYINGS)
+
+
 def _lookback_class(lookback: int) -> str:
     if lookback <= _LOOKBACK_SHORT_MAX:
         return "short_lookback"
@@ -101,6 +154,7 @@ def sample_config(
     rng: random.Random,
     *,
     hypothesis_weights: Mapping[str, float] | None = None,
+    forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
 
@@ -111,6 +165,13 @@ def sample_config(
     higher posterior promotion rates (long-term #1). When None, falls
     back to uniform `rng.choice`. Hypotheses missing from the map get
     the prior-mean weight so they remain explorable.
+
+    ``forced_hypothesis`` (D037) overrides the weighted pick when set —
+    use it from the iterator to enforce a per-hypothesis stratified
+    floor and prevent the failure-bias sampler from collapsing onto a
+    single hypothesis. Raises ``SamplerError`` if the forced hypothesis
+    is not in the samplable pool (i.e., has empty directional or regime
+    pools under the current registry).
     """
     by_id: dict[str, IndicatorMetadata] = {ind.id: ind for ind in registry.indicators}
 
@@ -127,7 +188,15 @@ def sample_config(
         msg = "no sizer mode is samplable in the current registry"
         raise SamplerError(msg)
 
-    if hypothesis_weights:
+    if forced_hypothesis is not None:
+        if forced_hypothesis not in samplable_hypotheses:
+            msg = (
+                f"forced_hypothesis={forced_hypothesis!r} not in samplable pool "
+                f"{list(samplable_hypotheses)} — empty directional or regime pool"
+            )
+            raise SamplerError(msg)
+        hypothesis = forced_hypothesis
+    elif hypothesis_weights:
         weights = [
             hypothesis_weights.get(h, _HYPOTHESIS_WEIGHT_PRIOR_MEAN) for h in samplable_hypotheses
         ]
@@ -203,8 +272,26 @@ def sample_config(
         name=config_name,
         hypothesis=hypothesis,  # type: ignore[arg-type]
         dte_bucket=bucket,  # type: ignore[arg-type]
-        underlying=None,
-        tier=1,
+        # D033 — per-config underlying from Tier 1+2 pool. Pre-D033 the
+        # sampler emitted None, which Crucible falls back to SPY at
+        # `inbox.py:_FALLBACK_UNDERLYING`. That made D032's `tier=2` flip
+        # a no-op for single-underlying hypotheses. Setting per-config
+        # underlying makes Tier 2 actually trade Tier 2 tickers.
+        # `relative_value` returns None (pairs template picks its own pair).
+        # T1.4: pass regime indicator IDs so the picker can constrain to
+        # single-names when the regime contains an ETF-incompatible
+        # indicator (e.g., days_to_earnings — sentinel 999 on ETFs).
+        underlying=_pick_underlying(
+            rng,
+            hypothesis,
+            regime_indicators=tuple(
+                ind
+                for sig in signals
+                if sig.role == "regime_filter"
+                for ind in sig.indicators
+            ),
+        ),
+        tier=2,
         signals=tuple(signals),
         combiner=CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1),
         selector=selector,

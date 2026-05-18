@@ -10,8 +10,9 @@ permuted distribution (p-value ~ 0.5) and gets rejected. A genuine
 signal lands above most permutations and survives.
 
 All randomness flows through `ctx.rng_factory("permutation_test")`
-(hard rule #8). Cost_tier=7, the most expensive filter in the §5.2
-battery — runs last for short-circuit efficiency.
+(hard rule #8). Cost_tier=9, the most expensive filter in the §5.2
+battery (post-T1.3 + T2.6 insertions) — runs last for short-circuit
+efficiency.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ class PermutationTestFilter:
     permuted bulk."""
 
     name = "permutation_test"
-    cost_tier = 7
+    cost_tier = 9
 
     def apply(self, config: StrategyConfig, ctx: FilterContext) -> FilterResult:
         directional = _directional_signal(config)

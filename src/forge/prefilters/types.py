@@ -85,6 +85,16 @@ class FilterContext:
     `prior_firing_dates` maps a prior config's hash to the set of dates
     on which its directional signal fired. The novelty filter (§5.3.5)
     consumes this to compute Jaccard overlap against the candidate.
+
+    `prior_structural_fingerprints` (T2.7 / D043) is the set of
+    structural-fingerprint hashes of prior tested candidates. NoveltyFilter
+    rejects the candidate when its fingerprint exactly matches a prior —
+    catches "parameter-only variations" that the temporal Jaccard check
+    misses (different threshold, same structure → identical firings on
+    some bars, different on others; structural fingerprint captures the
+    intent that's invariant to parameter scan). Defaults to empty
+    frozenset for back-compat with callers that don't yet wire structural
+    history.
     """
 
     registry: RegistrySnapshot
@@ -93,6 +103,7 @@ class FilterContext:
     prior_firing_dates: Mapping[str, frozenset[date]]
     calibration: Calibration
     rng_factory: Callable[[str], random.Random]
+    prior_structural_fingerprints: frozenset[str] = field(default_factory=frozenset)
 
 
 @runtime_checkable

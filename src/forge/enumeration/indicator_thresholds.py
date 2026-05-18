@@ -13,13 +13,13 @@ indicator gets:
   * `directional_range`: sampling range for directional signals (extreme/contrarian)
   * `regime_range`: sampling range for regime_filter signals (allow-window)
   * `op_directional` / `op_regime`: comparison operator (`<` low-side, `>` high-side)
-  * `is_skip`: indicator can't be thresholded honestly (price-scale, stubs)
+  * `is_skip`: indicator can't be thresholded honestly (price-scale only)
 
-Stub indicators (iv_rank, expected_value_estimator, pairs_zscore, put_call_flow,
-vix_level) are included with generic thresholds; per operator decision 2026-05-14
-they remain enumerable until Crucible ships real implementations, at which point
-this table updates with audited ranges. Their fire rate is currently 0 — the
-pipeline is structurally honest about that.
+D030's "stub" framing for iv_rank, vix_level, pairs_zscore, put_call_flow,
+expected_value_estimator is obsolete as of D031 (2026-05-15) — Crucible
+shipped real `version=2` implementations of all five and they were
+re-calibrated with audited SPY-OOS ranges. They are now treated identically
+to other bounded/signed indicators in this table.
 
 Price-scale indicators (ema, ema_50, sma) are flagged `is_skip=True` because
 their absolute values (~250-700 USD on SPY) make threshold-style signals
@@ -54,13 +54,6 @@ class IndicatorThresholdSpec:
     op_regime: str = "<"
     is_skip: bool = False
 
-
-# Stubs returning NaN under real Crucible — generic threshold; 0 fire rate
-# until Crucible implements them properly (see CRUCIBLE_STUB_IMPLEMENTATIONS).
-_STUB_SPEC = IndicatorThresholdSpec(
-    directional_range=(0.3, 0.5),
-    regime_range=(0.3, 0.5),
-)
 
 # Price-scale indicators — never threshold-style; passthrough-only.
 _SKIP_SPEC = IndicatorThresholdSpec(
@@ -176,7 +169,7 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         directional_range=(5.0, 30.0),
         regime_range=(7.0, 60.0),
     ),
-    # ----- Stubs (NaN until Crucible implements; educated value ranges for v1.1+) -----
+    # ----- IV / event / pairs / macro (post-D031 real Crucible v2 implementations) -----
     # iv_rank: §3.5 R1 demands threshold <= 50 on mean_reversion regime; honored here.
     "iv_rank": IndicatorThresholdSpec(
         directional_range=(20.0, 40.0),  # low-IV entry

@@ -32,6 +32,7 @@ pytest         # full test suite
 | `forge grammar approve-proposal` | 5 | Mark a proposal approved with operator initials (manual yaml-merge still required per §13.2). |
 | `forge grammar reject-proposal` | 5 | Mark a proposal rejected with operator initials. |
 | `forge grammar apply-proposal` | 5 | Apply a pending tighten — yaml edit + audit row + grammar_versions entry, atomic. |
+| `forge grammar revert` | v1.1 / T2.2 | Revert grammar.yaml to a prior archived version by promoting it forward as a new bumped version. Preserves the audit trail. |
 
 ## Architecture (§2.1)
 

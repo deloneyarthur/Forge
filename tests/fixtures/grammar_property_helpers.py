@@ -103,7 +103,12 @@ _TEMPLATES: tuple[_Template, ...] = (
     _Template(
         hypothesis="volatility_event",
         directional_indicator="put_call_flow",  # flow family, lookback=5 → short
-        regime_indicator="days_to_earnings",
+        # T1.4 / grammar v2 / D039: switched from days_to_earnings to
+        # days_to_fomc because the property-test fixture hardcodes
+        # underlying="SPY" (an ETF) and R3 v2 rejects days_to_earnings
+        # on ETFs (sentinel-999 silent-failure case). days_to_fomc is
+        # ETF-compatible.
+        regime_indicator="days_to_fomc",
         regime_params={"threshold": 7},
         extra_required_exits=(
             ExitSpec(id="iv_crush_exit"),

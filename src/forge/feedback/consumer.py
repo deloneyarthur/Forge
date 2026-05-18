@@ -14,6 +14,14 @@ sketches `get_gated_runs(filter=batch_id)`; in practice Crucible has no
 `forge_batch_id` column, so the join is Forge-side via `config_hash`.
 
 D024/D1: signature is `(forge_db, crucible_db, *, batch_id=None, since=None)`.
+
+D046 (2026-05-18): `reconcile_all_pending` reconciles ALL batches with
+`submitted` rows against the gated-runs export — not just the latest.
+The single-batch path was correct when Crucible processed a batch within
+one Forge poll cycle; once latency exceeded that, older batches stranded
+silently. `consume_batch_results` gained an optional `crucible_runs`
+argument so the reconciler can fetch the export once and reuse it across
+every in-flight batch.
 """
 
 from __future__ import annotations
@@ -192,6 +200,7 @@ def consume_batch_results(
     batch_id: uuid.UUID | None = None,
     since: datetime | None = None,
     exports_dir: Path | None = None,
+    crucible_runs: list[GatedRun] | None = None,
 ) -> BatchFeedback:
     """Join Crucible gated runs to Forge submissions and update DB state.
 
@@ -200,6 +209,10 @@ def consume_batch_results(
     export is present. The export path side-steps the writer-lock issue
     that blocks direct read-only opens while `crucible-db-writer.service`
     is running.
+
+    When `crucible_runs` is supplied (D046 reconciler path), the export
+    fetch is skipped — the caller is responsible for passing the same
+    snapshot to every per-batch invocation in a reconcile pass.
     """
     if since is not None and since.tzinfo is None:
         msg = "consume_batch_results: since must be timezone-aware (tzinfo required)"
@@ -212,9 +225,10 @@ def consume_batch_results(
         cfg.config_hash: (cid, cfg, status) for cid, cfg, status in submission_rows
     }
 
-    if exports_dir is None:
-        exports_dir = Path.home() / "optbt_data" / "exports"
-    crucible_runs: list[GatedRun] = _fetch_crucible_runs(crucible_db, exports_dir)
+    if crucible_runs is None:
+        if exports_dir is None:
+            exports_dir = Path.home() / "optbt_data" / "exports"
+        crucible_runs = _fetch_crucible_runs(crucible_db, exports_dir)
 
     matched: dict[str, GatedRun] = {}
     for gr in crucible_runs:
@@ -270,4 +284,57 @@ def consume_batch_results(
     )
 
 
-__all__ = ["consume_batch_results"]
+def reconcile_all_pending(
+    forge_db: duckdb.DuckDBPyConnection,
+    crucible_db: Path,
+    *,
+    exports_dir: Path | None = None,
+) -> tuple[BatchFeedback, ...]:
+    """Reconcile every batch with `submitted` rows against the gated-runs export.
+
+    D046 (2026-05-18): the single-batch `consume_batch_results` path was the
+    Phase 5 default and is correct when Crucible processes a batch within one
+    Forge poll cycle. Once Crucible's per-run latency exceeded the cycle (post
+    Tier-2 D033 / pre Crucible-side concurrency tuning), older batches
+    accumulated stranded `submitted` rows that the latest-batch-only path
+    never reached — by 2026-05-17 the loop had 11 stranded batches and 3,712
+    un-reconciled candidates.
+
+    This function reads the gated-runs export once and per-batch reconciles
+    every `forge_batch_id` that still has `status='submitted'` rows. Each
+    per-batch call is itself idempotent (re-running over the same data is a
+    no-op), so the whole sweep is safe to invoke on every poll.
+
+    Returns one `BatchFeedback` per batch reconciled, sorted by the batch's
+    minimum `submitted_at` (oldest first) so the caller's logging stays
+    deterministic across runs.
+    """
+    if exports_dir is None:
+        exports_dir = Path.home() / "optbt_data" / "exports"
+    runs = _fetch_crucible_runs(crucible_db, exports_dir)
+
+    batch_rows = forge_db.execute(
+        """
+        SELECT forge_batch_id, MIN(submitted_at) AS first_submitted
+        FROM submissions
+        WHERE status = 'submitted'
+        GROUP BY forge_batch_id
+        ORDER BY first_submitted ASC, forge_batch_id ASC
+        """,
+    ).fetchall()
+
+    feedbacks: list[BatchFeedback] = []
+    for batch_id_raw, _ts in batch_rows:
+        batch_id = uuid.UUID(str(batch_id_raw))
+        fb = consume_batch_results(
+            forge_db,
+            crucible_db,
+            batch_id=batch_id,
+            exports_dir=exports_dir,
+            crucible_runs=runs,
+        )
+        feedbacks.append(fb)
+    return tuple(feedbacks)
+
+
+__all__ = ["consume_batch_results", "reconcile_all_pending"]

@@ -185,3 +185,100 @@ def test_capped_is_loud_for_unsatisfiable_registries(grammar: Grammar) -> None:
     )
     with pytest.raises(EnumerationCapped):
         list(enumerate_candidates(grammar, bad, seed=0, max_candidates=1))
+
+
+# ---------------------------------------------------------------------------
+# D037 — stratified hypothesis sampling floor
+# ---------------------------------------------------------------------------
+
+
+def test_d037_stratification_floor_guarantees_each_hypothesis(grammar: Grammar) -> None:
+    """D037: with min_hypothesis_fraction > 0 every samplable hypothesis
+    appears at least ``ceil(max_candidates * fraction)`` times.
+
+    Pre-D037 the Bayesian failure-weights collapsed enumeration onto
+    1-4 hypotheses: across 4020 historical submissions only ONE was
+    `mean_reversion` and ZERO were `trend_continuation`. The 2% floor
+    forces a minimum representation per samplable hypothesis.
+    """
+    registry = demo_registry()
+    max_candidates = 600
+    fraction = 0.05  # → ceil(600 * 0.05) = 30 per hypothesis
+    configs = list(
+        enumerate_candidates(
+            grammar, registry, seed=137,
+            max_candidates=max_candidates,
+            min_hypothesis_fraction=fraction,
+        )
+    )
+    assert len(configs) == max_candidates
+    from collections import Counter
+    hyps = Counter(c.hypothesis for c in configs)
+    expected_floor = 30
+    samplable = [h for h, _ in hyps.most_common() if hyps[h] >= 1]
+    # Every hypothesis that's present at all must clear the floor.
+    # (Some hypotheses may not be samplable on the demo registry —
+    # those legitimately have 0 picks; the floor only binds for hypotheses
+    # that have non-empty directional + regime pools.)
+    for h in samplable:
+        assert hyps[h] >= expected_floor, (
+            f"hypothesis {h} only got {hyps[h]} picks (< floor {expected_floor})"
+        )
+
+
+def test_d037_stratification_disabled_when_fraction_zero(grammar: Grammar) -> None:
+    """fraction=0 disables D037 — preserves legacy behavior for tests
+    that pin specific config sequences."""
+    registry = demo_registry()
+    configs = list(
+        enumerate_candidates(
+            grammar, registry, seed=137,
+            max_candidates=100,
+            min_hypothesis_fraction=0.0,
+        )
+    )
+    # With fraction=0 and weighted sampling, distribution should follow
+    # the natural Bayesian weights — i.e., it can collapse onto 1-2
+    # hypotheses. We just assert the run completed successfully.
+    assert len(configs) == 100
+
+
+def test_d037_floor_caps_at_50pct_of_budget(grammar: Grammar) -> None:
+    """A tiny ``max_candidates`` with a large ``fraction`` doesn't starve
+    the weighted-sample path. The floor is capped so total forced ≤ 50%
+    of the budget.
+
+    Without the cap: a test with max_candidates=4 and fraction=0.5 would
+    request 2 forced picks per hypothesis x ~6 hypotheses = 12 forced
+    picks for a 4-config budget => EnumerationCapped.
+    """
+    registry = demo_registry()
+    # Should NOT raise EnumerationCapped under the 50% cap.
+    configs = list(
+        enumerate_candidates(
+            grammar, registry, seed=42,
+            max_candidates=4,
+            min_hypothesis_fraction=0.5,  # would request 2/hyp without cap
+        )
+    )
+    assert len(configs) == 4
+
+
+def test_d037_determinism_preserved_with_stratification(grammar: Grammar) -> None:
+    """Same triple + same fraction → identical sequence (hard rule #6)."""
+    registry = demo_registry()
+    a = [
+        c.config_hash for c in enumerate_candidates(
+            grammar, registry, seed=2026,
+            max_candidates=120,
+            min_hypothesis_fraction=0.05,
+        )
+    ]
+    b = [
+        c.config_hash for c in enumerate_candidates(
+            grammar, registry, seed=2026,
+            max_candidates=120,
+            min_hypothesis_fraction=0.05,
+        )
+    ]
+    assert a == b

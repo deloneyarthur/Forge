@@ -16,8 +16,10 @@ from typing import TYPE_CHECKING
 from forge.prefilters.expected_trades import ExpectedTradesFilter
 from forge.prefilters.novelty import NoveltyFilter
 from forge.prefilters.permutation_test import PermutationTestFilter
+from forge.prefilters.predicted_activations import PredictedActivationsFilter
 from forge.prefilters.regime_exposure import RegimeExposureFilter
 from forge.prefilters.resource_feasibility import ResourceFeasibilityFilter
+from forge.prefilters.signal_correlation import SignalCorrelationFilter
 from forge.prefilters.signal_density import SignalDensityFilter
 from forge.prefilters.structural_redundancy import StructuralRedundancyFilter
 from forge.prefilters.types import Filter, FilterResult, PreFilterReport
@@ -31,13 +33,21 @@ if TYPE_CHECKING:
 
 
 def default_filters() -> tuple[Filter, ...]:
-    """The seven §5 filters in cost_tier order (1..7)."""
+    """The nine §5 filters in cost_tier order (1..9).
+
+    Insertions over v1.0:
+      - T1.3 (D038): PredictedActivationsFilter at cost_tier=5
+      - T2.6 (D042): SignalCorrelationFilter at cost_tier=7
+    RegimeExposureFilter and PermutationTestFilter bumped accordingly.
+    """
     return (
         StructuralRedundancyFilter(),
         ResourceFeasibilityFilter(),
         SignalDensityFilter(),
         ExpectedTradesFilter(),
+        PredictedActivationsFilter(),
         NoveltyFilter(),
+        SignalCorrelationFilter(),
         RegimeExposureFilter(),
         PermutationTestFilter(),
     )

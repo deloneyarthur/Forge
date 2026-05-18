@@ -62,10 +62,17 @@ def _permissive_calibration() -> Calibration:
     deterministically — the determinism guard is on those scores, not
     on threshold-vs-score outcomes.
     """
+    from forge.prefilters.calibration import (
+        PredictedActivationsCalibration,
+        SignalCorrelationCalibration,
+    )
+
     return Calibration(
         signal_density=SignalDensityCalibration(min_activations=0),
         expected_trade_count=ExpectedTradeCountCalibration(min_trades=0),
+        predicted_activations=PredictedActivationsCalibration(min_entries=0),
         novelty=NoveltyCalibration(max_jaccard_overlap=1.0),
+        signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=1.0),
         regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=1.0),
         permutation_test=PermutationTestCalibration(n_permutations=20, p_value_threshold=1.0),
         auto_tune=AutoTuneCalibration(

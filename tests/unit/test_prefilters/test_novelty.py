@@ -75,7 +75,9 @@ def test_satisfies_filter_protocol() -> None:
 def test_name_and_cost_tier() -> None:
     f = NoveltyFilter()
     assert f.name == "novelty"
-    assert f.cost_tier == 5
+    # T1.3 (PROMPT_5_FORGE_V1_1_REVISED) inserted PredictedActivationsFilter at 5;
+    # novelty bumped 5 -> 6.
+    assert f.cost_tier == 6
 
 
 def test_passes_with_no_priors() -> None:
@@ -198,3 +200,145 @@ def test_scales_with_prior_count(n_priors: int) -> None:
     result = f.apply(cfg, _ctx(_days(100), prior_firing_dates=priors))
     # n_priors_checked matches how many we passed in
     assert result.details["n_priors_checked"] == n_priors
+
+
+# ---------------------------------------------------------------------------
+# T2.7 / D043 — structural fingerprint check
+# ---------------------------------------------------------------------------
+
+
+def test_t27_structural_fingerprint_is_stable_across_param_changes() -> None:
+    """T2.7: same structural skeleton + different thresholds → same fingerprint."""
+    from crucible_contracts import (
+        CombinerSpec,
+        ExitSpec,
+        SelectorSpec,
+        SignalSpec,
+        SizerSpec,
+        StrategyConfig,
+    )
+
+    from forge.prefilters.novelty import compute_structural_fingerprint
+
+    def _make_cfg(threshold: float) -> StrategyConfig:
+        return StrategyConfig(
+            name=f"cfg_{threshold}",
+            hypothesis="mean_reversion",
+            dte_bucket="swing_short",
+            underlying="SPY",
+            tier=1,
+            signals=(
+                SignalSpec(id="sig_directional", type="threshold", role="directional",
+                           indicators=("rsi_2",), params={"threshold": threshold}),
+                SignalSpec(id="sig_regime", type="threshold", role="regime_filter",
+                           indicators=("iv_rank",), params={"threshold": 50.0}),
+            ),
+            combiner=CombinerSpec(),
+            selector=SelectorSpec(delta_target=0.45, delta_tolerance=0.05, dte_min=14, dte_max=21),
+            sizer=SizerSpec(mode="fixed_risk_pct"),
+            exits=(
+                ExitSpec(id="expiry_exit"),
+                ExitSpec(id="theta_cliff_exit"),
+                ExitSpec(id="earnings_exit"),
+                ExitSpec(id="liquidity_exit"),
+            ),
+        )
+
+    fp_a = compute_structural_fingerprint(_make_cfg(20.0))
+    fp_b = compute_structural_fingerprint(_make_cfg(30.0))
+    assert fp_a == fp_b  # parameter difference, identical structure
+    assert len(fp_a) == 16  # 16-hex-char short hash
+
+
+def test_t27_structural_fingerprint_distinguishes_indicator_swap() -> None:
+    """Different directional indicator -> different fingerprint."""
+    from crucible_contracts import (
+        CombinerSpec,
+        ExitSpec,
+        SelectorSpec,
+        SignalSpec,
+        SizerSpec,
+        StrategyConfig,
+    )
+
+    from forge.prefilters.novelty import compute_structural_fingerprint
+
+    def _make_cfg(directional_id: str) -> StrategyConfig:
+        return StrategyConfig(
+            name="x",
+            hypothesis="mean_reversion",
+            dte_bucket="swing_short",
+            underlying="SPY",
+            tier=1,
+            signals=(
+                SignalSpec(id="sig_directional", type="threshold", role="directional",
+                           indicators=(directional_id,), params={"threshold": 30.0}),
+                SignalSpec(id="sig_regime", type="threshold", role="regime_filter",
+                           indicators=("iv_rank",), params={"threshold": 50.0}),
+            ),
+            combiner=CombinerSpec(),
+            selector=SelectorSpec(delta_target=0.45, delta_tolerance=0.05, dte_min=14, dte_max=21),
+            sizer=SizerSpec(mode="fixed_risk_pct"),
+            exits=(
+                ExitSpec(id="expiry_exit"),
+                ExitSpec(id="theta_cliff_exit"),
+                ExitSpec(id="earnings_exit"),
+                ExitSpec(id="liquidity_exit"),
+            ),
+        )
+
+    fp_rsi2 = compute_structural_fingerprint(_make_cfg("rsi_2"))
+    fp_rsi14 = compute_structural_fingerprint(_make_cfg("rsi_14"))
+    assert fp_rsi2 != fp_rsi14
+
+
+def test_t27_novelty_rejects_matching_structural_fingerprint() -> None:
+    """T2.7 invariant: candidate whose fingerprint matches a prior is rejected
+    even when its temporal Jaccard is zero (no temporal overlap)."""
+    from crucible_contracts import (
+        CombinerSpec,
+        ExitSpec,
+        SelectorSpec,
+        SignalSpec,
+        SizerSpec,
+        StrategyConfig,
+    )
+
+    from forge.prefilters.novelty import NoveltyFilter, compute_structural_fingerprint
+
+    cfg = StrategyConfig(
+        name="x",
+        hypothesis="mean_reversion",
+        dte_bucket="swing_short",
+        underlying="SPY",
+        tier=1,
+        signals=(
+            SignalSpec(id="sig_directional", type="threshold", role="directional",
+                       indicators=("rsi_2",), params={"threshold": 30.0}),
+            SignalSpec(id="sig_regime", type="threshold", role="regime_filter",
+                       indicators=("iv_rank",), params={"threshold": 50.0}),
+        ),
+        combiner=CombinerSpec(),
+        selector=SelectorSpec(delta_target=0.45, delta_tolerance=0.05, dte_min=14, dte_max=21),
+        sizer=SizerSpec(mode="fixed_risk_pct"),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+        ),
+    )
+    fp = compute_structural_fingerprint(cfg)
+    ctx = FilterContext(
+        registry=minimal_registry_snapshot(),
+        feature_cache=_FixedActivationsCache(_days(30)),
+        prior_config_hashes=frozenset(),
+        prior_firing_dates={},  # no temporal overlap to find
+        prior_structural_fingerprints=frozenset({fp}),  # but fingerprint matches!
+        calibration=load_calibration(_PREFILTER_YAML),
+        rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
+    )
+    f = NoveltyFilter()
+    result = f.apply(cfg, ctx)
+    assert result.passed is False
+    assert result.details["reject_reason"] == "structural_fingerprint_match"

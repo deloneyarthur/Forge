@@ -50,7 +50,9 @@ def write_calibration_yaml(calibration: Calibration, path: Path) -> None:
         "prefilter": {
             "signal_density": asdict(calibration.signal_density),
             "expected_trade_count": asdict(calibration.expected_trade_count),
+            "predicted_activations": asdict(calibration.predicted_activations),
             "novelty": asdict(calibration.novelty),
+            "signal_correlation": asdict(calibration.signal_correlation),
             "regime_exposure": asdict(calibration.regime_exposure),
             "permutation_test": asdict(calibration.permutation_test),
             "auto_tune": asdict(calibration.auto_tune),

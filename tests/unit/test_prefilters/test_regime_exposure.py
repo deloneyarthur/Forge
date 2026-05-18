@@ -108,7 +108,9 @@ def test_satisfies_filter_protocol() -> None:
 def test_name_and_cost_tier() -> None:
     f = RegimeExposureFilter()
     assert f.name == "regime_exposure"
-    assert f.cost_tier == 6
+    # T1.3 bumped 6->7 for PredictedActivationsFilter at 5; T2.6 bumped
+    # 7->8 for SignalCorrelationFilter at 7.
+    assert f.cost_tier == 8
 
 
 def test_passes_with_balanced_distribution() -> None:

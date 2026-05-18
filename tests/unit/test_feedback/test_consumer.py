@@ -22,7 +22,7 @@ from crucible_contracts import (
     StrategyConfig,
 )
 
-from forge.feedback.consumer import consume_batch_results
+from forge.feedback.consumer import consume_batch_results, reconcile_all_pending
 from forge.persistence.db import db_connection
 from tests.fixtures.strategy_configs import minimal_strategy_config
 from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
@@ -448,3 +448,86 @@ def test_consume_rejects_naive_since(tmp_path: Path) -> None:
                 batch_id=batch_id,
                 since=datetime(2026, 5, 13),  # noqa: DTZ001 — intentional naive
             )
+
+
+# ---------------------------------------------------------------------------
+# D046 — reconcile_all_pending: flush every batch with `submitted` rows
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_all_pending_processes_every_in_flight_batch(tmp_path: Path) -> None:
+    """D046: when multiple batches have stranded `submitted` rows, a single
+    `reconcile_all_pending` call processes each one (not just the latest)."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    old_batch = uuid.uuid4()
+    new_batch = uuid.uuid4()
+    old_cfg = minimal_strategy_config().model_copy(update={"name": "old_cfg"})
+    new_cfg = minimal_strategy_config().model_copy(update={"name": "new_cfg"})
+    _insert_crucible_gated(crucible_db, config_hash=old_cfg.config_hash, decision="promote")
+    _insert_crucible_gated(crucible_db, config_hash=new_cfg.config_hash, decision="reject")
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(
+            conn,
+            batch_id=old_batch,
+            batch_size=1,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        _insert_batch_summary(
+            conn,
+            batch_id=new_batch,
+            batch_size=1,
+            submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+        )
+        _insert_forge_submission(
+            conn, config=old_cfg, batch_id=old_batch,
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+        )
+        _insert_forge_submission(
+            conn, config=new_cfg, batch_id=new_batch,
+            submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+        )
+        feedbacks = reconcile_all_pending(
+            conn, crucible_db, exports_dir=tmp_path / "noexports"
+        )
+        # Verify both batches' rows were transitioned to status='gated'.
+        gated_rows = conn.execute(
+            "SELECT forge_batch_id FROM submissions WHERE status = 'gated' ORDER BY submitted_at"
+        ).fetchall()
+    assert len(feedbacks) == 2
+    feedback_ids = {fb.batch_id for fb in feedbacks}
+    assert {old_batch, new_batch} == feedback_ids
+    assert {uuid.UUID(str(r[0])) for r in gated_rows} == {old_batch, new_batch}
+
+
+def test_reconcile_all_pending_is_idempotent(tmp_path: Path) -> None:
+    """D046: re-running the reconciler over already-gated rows is a no-op."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    cfg = minimal_strategy_config()
+    _insert_crucible_gated(crucible_db, config_hash=cfg.config_hash)
+    batch_id = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
+        _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
+        # First pass: row transitions to gated.
+        first = reconcile_all_pending(
+            conn, crucible_db, exports_dir=tmp_path / "noexports"
+        )
+        # Second pass: nothing to reconcile (no `submitted` rows left).
+        second = reconcile_all_pending(
+            conn, crucible_db, exports_dir=tmp_path / "noexports"
+        )
+    assert len(first) == 1
+    assert len(second) == 0  # no `submitted` rows remain → empty batch list
+
+
+def test_reconcile_all_pending_returns_empty_when_no_submitted_rows(tmp_path: Path) -> None:
+    """D046: a fresh DB with no `submitted` rows yields an empty result tuple."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    with db_connection(forge_db) as conn:
+        feedbacks = reconcile_all_pending(
+            conn, crucible_db, exports_dir=tmp_path / "noexports"
+        )
+    assert feedbacks == ()

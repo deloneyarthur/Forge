@@ -1,6 +1,18 @@
 # Forge — Status
 
-**v1 go-live status:** **OPERATIONAL 2026-05-14** — Forge → Crucible → Forge loop closes end-to-end. First successful iteration on 2026-05-14 00:23:32 PDT. `forge.service` running; Crucible services running including the new `crucible-gated-runs-publisher.service`; loop sleeping 10 min between iterations. **Q11 + Q12 closed; new Q13** logged for 100% permutation_test rejection under real registry (auto-tune territory — §5.5 will accumulate evidence over batches). **D029** captures the milestone + 13-step integration trail (D026 inbox flat-layout, Crucible v2/v3, contracts v1.7.0/v1.8.0, registry loader, rate limiter + consumer export paths, conftest isolation, yaml tuning). Phase 7 closure-plan drafting resumes once auto-tune has produced a few proposals.
+**v1 go-live status:** **DEGRADED 2026-05-18** — service is running but the feedback path has been silently broken since 2026-05-14. Per the 2026-05-17 audit: 4,020 submissions, 308 gated (all from a single batch on 2026-05-14), `forge.submissions.crucible_run_id ∩ export.gated_runs.run_id = 0` after 2026-05-14, rate-limit-blocked on batch `e2658f76` for 8+ hours. Auto-tune fired 19 stale tighten proposals during the gap (suppressed post-D034). Q14 issues + D031-D045 in-flight (42 modified + 6 new files uncommitted; 1028/1028 tests green locally). Root-cause diagnosis + fix in progress; v1-go-live framing was true once (2026-05-14 00:23:32 PDT, D029) but has not held since.
+
+**Tests:** 1028/1028 (was 934 at v1-go-live; +94 from D031-D045). Ruff + mypy strict clean.
+
+**Audit findings (2026-05-17, see audit summary in conversation log):**
+- **P0**: feedback writeback gap (above) — under investigation.
+- **P1**: `grammar_versions` table empty despite v2 active — hard rule #10 audit-row gap on manual yaml bumps; fix landing this session.
+- **P1**: D036 (rate-limit threshold drop 0.80 → 0.50) was missing from `IMPLEMENTATION_DECISIONS.md`; back-filled 2026-05-18.
+- **P1**: pre-filter pass rate is 100% on 4,020 candidates (28,140 `pre_filter_logs` rows; zero rejections) — calibration too loose, opposite of Q13's framing. Investigation queued.
+- **P2**: in-flight work (D031-D045) grouped into 6 coherent commits awaiting operator OK.
+- **P3**: hard rules #2/#5 and grammar-version-bump have no dedicated invariant tests; cheap to add — landing this session.
+
+**Historical milestone (D029, 2026-05-14):** Forge → Crucible → Forge loop closed end-to-end for the first time. 13-step integration trail (D026 inbox flat-layout, Crucible v2/v3, contracts v1.7.0/v1.8.0, registry loader, rate limiter + consumer export paths, conftest isolation, yaml tuning).
 
 **Current phase:** 6 (Polish + operational discipline) — **COMPLETE; awaiting LIGHT review.** See `PHASE_6_HANDOFF.md`.
 **Previous phase:** 5 (Feedback + grammar refinement) — complete, last commit `63922c8`. See `PHASE_5_HANDOFF.md`.

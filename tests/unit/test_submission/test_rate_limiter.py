@@ -30,7 +30,16 @@ def _insert_submission(
     forge_batch_id: uuid.UUID,
     config_hash: str,
     submitted_at: datetime,
+    status: str = "submitted",
 ) -> None:
+    """Test fixture: insert a submission row directly.
+
+    Production submitter inserts as 'pending' then transitions to
+    'submitted' after the inbox write succeeds (or to 'submission_failed').
+    Tests skip the inbox-write step, so we go straight to 'submitted' —
+    that's the steady state for an in-flight candidate the rate-limiter
+    expects to see.
+    """
     with db_connection(forge_db_path) as conn:
         conn.execute(
             """
@@ -45,7 +54,7 @@ def _insert_submission(
                 config_hash,
                 "{}",
                 submitted_at,
-                "pending",
+                status,
             ],
         )
 
@@ -184,7 +193,12 @@ def test_clear_at_threshold_exactly(tmp_path: Path) -> None:
 
 
 def test_blocked_just_below_threshold(tmp_path: Path) -> None:
-    """3 of 5 gated == 60% -- below 80% threshold."""
+    """1 of 5 gated == 20% -- below 50% threshold.
+
+    D036 dropped `_DEFAULT_THRESHOLD` from 0.80 → 0.50 while waiting on
+    the Tier 2 batch to ship. Test now exercises the "below threshold"
+    branch against the new default.
+    """
     forge_db = tmp_path / "forge.db"
     crucible_db = tmp_path / "crucible.duckdb"
     build_synthetic_crucible_db(crucible_db).close()
@@ -196,12 +210,12 @@ def test_blocked_just_below_threshold(tmp_path: Path) -> None:
             config_hash=f"hash_{i}",
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
-    for i in range(3):
-        _insert_crucible_gated(crucible_db, config_hash=f"hash_{i}")
+    # 1 of 5 = 20%; below the 0.50 default → blocked.
+    _insert_crucible_gated(crucible_db, config_hash="hash_0")
     status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is False
-    assert status.pct_gated == pytest.approx(0.6)
-    assert status.gated_count == 3
+    assert status.pct_gated == pytest.approx(0.2)
+    assert status.gated_count == 1
 
 
 def test_clear_at_full_completion(tmp_path: Path) -> None:
@@ -253,13 +267,19 @@ def test_custom_threshold_is_respected(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Multi-batch — most-recent batch is the one that matters
+# Multi-batch — D046 oldest-unfinished-batch semantics
 # ---------------------------------------------------------------------------
 
 
-def test_uses_most_recent_batch(tmp_path: Path) -> None:
-    """Older batch is fully gated; newer batch is 0% gated. Rate limit
-    should look at the *newest* batch and block."""
+def test_uses_oldest_unfinished_batch(tmp_path: Path) -> None:
+    """D046: with multiple batches stranded in `status='submitted'`, the
+    rate limiter blocks on the OLDEST one — not the latest.
+
+    The latest-batch heuristic was the pre-D046 behavior; once Crucible
+    processing exceeded one Forge poll cycle it silently deadlocked the
+    loop because the newest batch (at the back of Crucible's queue) was
+    always 0% gated while older batches accumulated unread results.
+    """
     forge_db = tmp_path / "forge.db"
     crucible_db = tmp_path / "crucible.duckdb"
     build_synthetic_crucible_db(crucible_db).close()
@@ -272,7 +292,35 @@ def test_uses_most_recent_batch(tmp_path: Path) -> None:
             config_hash=f"old_{i}",
             submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
         )
-        _insert_crucible_gated(crucible_db, config_hash=f"old_{i}")
+    for i in range(2):
+        _insert_submission(
+            forge_db,
+            forge_batch_id=new_batch,
+            config_hash=f"new_{i}",
+            submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+        )
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
+    assert status.clear is False
+    assert status.blocking_batch_id == old_batch
+
+
+def test_oldest_batch_with_local_gated_rows_clears_to_next(tmp_path: Path) -> None:
+    """D046: once the oldest batch's rows have all reconciled to `status='gated'`
+    locally, it's no longer the blocker — the next-oldest with `submitted` rows
+    takes over."""
+    forge_db = tmp_path / "forge.db"
+    crucible_db = tmp_path / "crucible.duckdb"
+    build_synthetic_crucible_db(crucible_db).close()
+    old_batch = uuid.uuid4()
+    new_batch = uuid.uuid4()
+    for i in range(2):
+        _insert_submission(
+            forge_db,
+            forge_batch_id=old_batch,
+            config_hash=f"old_{i}",
+            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+            status="gated",
+        )
     for i in range(2):
         _insert_submission(
             forge_db,
@@ -283,6 +331,29 @@ def test_uses_most_recent_batch(tmp_path: Path) -> None:
     status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     assert status.clear is False
     assert status.blocking_batch_id == new_batch
+    assert status.gated_count == 0
+    assert status.submitted_count == 2
+
+
+def test_no_submitted_rows_clears_completely(tmp_path: Path) -> None:
+    """D046: when every row is already `gated` locally there's nothing in
+    flight; rate limit is trivially clear."""
+    forge_db = tmp_path / "forge.db"
+    crucible_db = tmp_path / "crucible.duckdb"
+    build_synthetic_crucible_db(crucible_db).close()
+    batch = uuid.uuid4()
+    for i in range(3):
+        _insert_submission(
+            forge_db,
+            forge_batch_id=batch,
+            config_hash=f"h{i}",
+            submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+            status="gated",
+        )
+    status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
+    assert status.clear is True
+    assert status.blocking_batch_id is None
+    assert status.submitted_count == 0
 
 
 # ---------------------------------------------------------------------------

@@ -139,21 +139,26 @@ def test_filter_results_record_all_run_filter_outcomes() -> None:
     assert report.filter_results["b"].score == 0.5
 
 
-def test_default_filters_returns_seven_in_cost_order() -> None:
-    """§5.2 — the seven canonical filters, cost 1..7."""
+def test_default_filters_returns_nine_in_cost_order() -> None:
+    """§5.2 + T1.3 + T2.6 — the nine canonical filters, cost 1..9.
+
+    T1.3 (D038): PredictedActivationsFilter at cost_tier=5.
+    T2.6 (D042): SignalCorrelationFilter at cost_tier=7.
+    regime_exposure/permutation_test bumped accordingly.
+    """
     filters = default_filters()
-    assert len(filters) == 7
+    assert len(filters) == 9
     tiers = [f.cost_tier for f in filters]
     assert tiers == sorted(tiers)
-    # Specific identity check: each filter Protocol-instances at the
-    # expected tier.
     names = [f.name for f in filters]
     assert names == [
         "structural_redundancy",
         "resource_feasibility",
         "signal_density",
         "expected_trades",
+        "predicted_activations",
         "novelty",
+        "signal_correlation",
         "regime_exposure",
         "permutation_test",
     ]

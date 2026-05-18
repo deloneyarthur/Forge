@@ -756,7 +756,11 @@ def test_r3_baseline_passes_vacuously() -> None:
 
 
 def test_r3_volatility_event_with_days_to_earnings_passes() -> None:
+    # T1.4 / grammar v2 / D039: days_to_earnings is valid for single-name
+    # underlyings but rejected on ETFs (where it returns sentinel 999).
+    # Default baseline uses SPY (ETF); override to a single-name here.
     cfg = grammar_valid_baseline(
+        underlying="AAPL",
         hypothesis="volatility_event",
         signals=(
             SignalSpec(
@@ -770,6 +774,83 @@ def test_r3_volatility_event_with_days_to_earnings_passes() -> None:
                 type="threshold",
                 role="regime_filter",
                 indicators=("days_to_earnings",),
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="iv_crush_exit"),
+            ExitSpec(id="event_passed_exit"),
+        ),
+    )
+    result = evaluate(
+        _predicate("volatility_event_requires_event_proximity_gate"),
+        cfg,
+        _registry(),
+    )
+    assert result.passed
+
+
+def test_r3_volatility_event_with_days_to_earnings_on_etf_rejects() -> None:
+    """T1.4 / D039: vol_event + ETF + days_to_earnings is the silent-failure
+    case from the translation corpus (sentinel 999 → 0 trades). R3 v2
+    rejects it at validation time."""
+    cfg = grammar_valid_baseline(
+        underlying="SPY",  # ETF — days_to_earnings is sentinel 999 here
+        hypothesis="volatility_event",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("put_call_flow",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("days_to_earnings",),
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="iv_crush_exit"),
+            ExitSpec(id="event_passed_exit"),
+        ),
+    )
+    result = evaluate(
+        _predicate("volatility_event_requires_event_proximity_gate"),
+        cfg,
+        _registry(),
+    )
+    assert not result.passed
+    assert "ETF" in (result.detail or "")
+    assert "days_to_earnings" in (result.detail or "")
+
+
+def test_r3_volatility_event_with_days_to_fomc_passes_on_etf() -> None:
+    """T1.4: macro-event indicators (days_to_fomc, days_to_cpi, etc.) are
+    valid on ETFs. Only days_to_earnings is ETF-incompatible."""
+    cfg = grammar_valid_baseline(
+        underlying="SPY",
+        hypothesis="volatility_event",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("put_call_flow",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("days_to_fomc",),
             ),
         ),
         exits=(

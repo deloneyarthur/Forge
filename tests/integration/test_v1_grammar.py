@@ -68,7 +68,9 @@ def grammar() -> object:
 
 
 def test_v1_grammar_loads(grammar: object) -> None:
-    assert grammar.grammar_version == "v1"  # type: ignore[attr-defined]
+    # D039 / T1.4 bumped grammar v1 -> v2 (R3 expanded with macro-event
+    # indicators + ETF compatibility).
+    assert grammar.grammar_version == "v2"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

@@ -372,6 +372,12 @@ def _run_battery_for_seed(
         rng_factory=seed_hierarchy.rng,
     )
     filters = default_filters()
+    # D037 — stratified sampling floor: every samplable hypothesis gets
+    # at least 2% of the budget (capped at 50%) to prevent the Bayesian
+    # failure-bias sampler from collapsing onto 1-2 hypotheses. See
+    # IMPLEMENTATION_DECISIONS.md D037.
+    from forge.enumeration.iterator import _PRODUCTION_MIN_HYPOTHESIS_FRACTION
+
     configs = list(
         enumerate_candidates(
             grammar,
@@ -379,6 +385,7 @@ def _run_battery_for_seed(
             seed=seed,
             max_candidates=max_candidates,
             hypothesis_weights=hypothesis_weights,
+            min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
     # Hoist the per-config socket round-trips into one batched prefetch when
@@ -389,6 +396,40 @@ def _run_battery_for_seed(
     if callable(batch_prefetch):
         batch_prefetch(configs)
     return [run_battery(cfg, ctx, filters) for cfg in configs]
+
+
+def _reconcile_pending_silently(
+    forge_db_path: Path,
+    crucible_db: Path,
+) -> None:
+    """D046: flush stranded `submitted` rows to `gated` against the export.
+
+    Called at the start of every `_run_one_cycle` invocation before the
+    rate-limit check so the oldest-batch heuristic has fresh local state.
+    Swallows `QueryError` (Crucible offline) — the rate-limit check will
+    handle that case via its own conservative path. Logs the per-batch
+    reconciliation count when there's something to report; silent otherwise.
+    """
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.consumer import reconcile_all_pending
+    from forge.persistence.db import db_connection
+
+    try:
+        with db_connection(forge_db_path) as conn:
+            feedbacks = reconcile_all_pending(conn, crucible_db)
+    except QueryError:
+        # Crucible offline / both fetch paths failed. The rate-limit check
+        # has its own fallback; nothing more to do here.
+        return
+    if not feedbacks:
+        return
+    flipped = sum(fb.gated_count for fb in feedbacks)
+    if flipped == 0:
+        return
+    typer.echo(
+        f"reconciled: batches={len(feedbacks)} newly_gated_total={flipped}"
+    )
 
 
 def _consume_feedback_after_submit(
@@ -410,7 +451,7 @@ def _consume_feedback_after_submit(
     from forge.feedback.promoted_patterns import record_promoted_patterns
     from forge.feedback.proposal_writer import append_proposal
     from forge.feedback.proposer import propose
-    from forge.feedback.stuck_state import is_stuck
+    from forge.feedback.stuck_state import is_stuck, most_recent_grammar_change
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters.calibration import load_calibration
@@ -434,7 +475,11 @@ def _consume_feedback_after_submit(
                 open_proposals_path=open_proposals,
                 at=now,
             )
-        stuck_flag, stuck_streak = is_stuck(conn)
+        # D035: floor the zero-promotion streak at the last grammar bump so
+        # post-bump batches start fresh; pre-bump stretches don't poison
+        # the post-bump warmup window. None floor = all-time count.
+        grammar_change_at = most_recent_grammar_change(conn)
+        stuck_flag, stuck_streak = is_stuck(conn, since=grammar_change_at)
     typer.echo(
         f"feedback: batch_id={feedback.batch_id} "
         f"gated_count={feedback.gated_count} "
@@ -548,12 +593,17 @@ def _run_one_iteration(
     )
 
     if crucible_db is not None and not dry_run:
+        # D046: reconcile every batch with `submitted` rows against the
+        # gated-runs export before checking the rate limit. Without this,
+        # older batches stay in `submitted` indefinitely and the oldest-batch
+        # rate limit logic blocks the loop forever.
+        _reconcile_pending_silently(forge_db_path, crucible_db)
         rate = check_rate_limit(forge_db_path, crucible_db)
         if not rate.clear:
             typer.echo(
-                f"blocked: prev batch {rate.blocking_batch_id} is "
+                f"blocked: oldest in-flight batch {rate.blocking_batch_id} is "
                 f"{rate.pct_gated:.1%} gated ({rate.gated_count}/"
-                f"{rate.submitted_count}); waiting for >=80%"
+                f"{rate.submitted_count}); waiting for >={rate.threshold:.0%}"
             )
             return "blocked"
 

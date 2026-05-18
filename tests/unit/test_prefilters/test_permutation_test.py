@@ -84,7 +84,9 @@ def test_satisfies_filter_protocol() -> None:
 def test_name_and_cost_tier() -> None:
     f = PermutationTestFilter()
     assert f.name == "permutation_test"
-    assert f.cost_tier == 7
+    # T1.3 bumped 7->8 for PredictedActivationsFilter at 5;
+    # T2.6 bumped 8->9 for SignalCorrelationFilter at 7.
+    assert f.cost_tier == 9
 
 
 def test_informative_signal_passes() -> None:

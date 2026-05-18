@@ -190,6 +190,12 @@ def test_loop_exits_on_max_iterations_even_when_blocked(tmp_path: Path) -> None:
 
     bid = uuid.uuid4()
     cid = uuid.uuid4()
+    # Minimal valid StrategyConfig JSON — the CLI run-loop may parse it
+    # downstream (feedback consumer reconstructs StrategyConfigs). The
+    # config's hypothesis/structure doesn't matter for rate-limiter blocking;
+    # it just needs to deserialize cleanly.
+    from tests.fixtures.strategy_configs import minimal_strategy_config
+    valid_cfg_json = minimal_strategy_config().model_dump_json()
     with db_connection(forge_db) as conn:
         conn.execute(
             "INSERT INTO batch_summaries (forge_batch_id, batch_size, submitted_at, "
@@ -203,7 +209,7 @@ def test_loop_exits_on_max_iterations_even_when_blocked(tmp_path: Path) -> None:
                 str(cid),
                 str(bid),
                 "blocking_hash_xx",
-                "{}",
+                valid_cfg_json,
                 datetime(2026, 5, 13, tzinfo=UTC),
                 "submitted",
             ],

@@ -24,7 +24,9 @@ from forge.prefilters.calibration import (
     ExpectedTradeCountCalibration,
     NoveltyCalibration,
     PermutationTestCalibration,
+    PredictedActivationsCalibration,
     RegimeExposureCalibration,
+    SignalCorrelationCalibration,
     SignalDensityCalibration,
 )
 
@@ -33,7 +35,9 @@ def _default_calibration() -> Calibration:
     return Calibration(
         signal_density=SignalDensityCalibration(min_activations=30),
         expected_trade_count=ExpectedTradeCountCalibration(min_trades=50),
+        predicted_activations=PredictedActivationsCalibration(min_entries=10),
         novelty=NoveltyCalibration(max_jaccard_overlap=0.80),
+        signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=0.85),
         regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=0.80),
         permutation_test=PermutationTestCalibration(n_permutations=100, p_value_threshold=0.10),
         auto_tune=AutoTuneCalibration(

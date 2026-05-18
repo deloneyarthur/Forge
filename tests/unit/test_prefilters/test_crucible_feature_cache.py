@@ -254,9 +254,12 @@ def test_prefetch_for_batch_fetches_all_signals_then_one_window() -> None:
     cache.prefetch_for_batch([_config(spec_a), _config(spec_b), _config(spec_c)])
 
     assert client.get_features.call_count == 2
-    assert cache._activations_by_content_key[ck_a] == frozenset({date(2024, 1, 2)})
-    assert cache._activations_by_content_key[ck_b] == frozenset({date(2024, 1, 3)})
-    assert cache._activations_by_content_key[ck_c] == frozenset({date(2024, 1, 4)})
+    # D033 — activations are keyed by (underlying, content_key); _config() uses underlying="SPY".
+    assert cache._activations[("SPY", ck_a)] == frozenset({date(2024, 1, 2)})
+    assert cache._activations[("SPY", ck_b)] == frozenset({date(2024, 1, 3)})
+    assert cache._activations[("SPY", ck_c)] == frozenset({date(2024, 1, 4)})
+    # Set active underlying so regime_label resolves to the right slice.
+    cache._active_underlying = "SPY"
     assert cache.regime_label(date(2024, 1, 3)) == "low_vol"
 
 
@@ -354,3 +357,122 @@ def test_two_distinct_configs_share_window_data() -> None:
     # configs route to the right content_key.
     with pytest.raises(KeyError, match="display-id index"):
         cache.activation_dates(spec_a.id)
+
+
+def _config_with_underlying(underlying: str, *signals: SignalSpec) -> StrategyConfig:
+    """`_config` variant for per-underlying tests (D033)."""
+    return StrategyConfig(
+        name=f"test_cfg_{underlying}",
+        hypothesis="mean_reversion",
+        dte_bucket="swing_short",
+        underlying=underlying,
+        tier=2,
+        signals=signals,
+        combiner=CombinerSpec(),
+        selector=SelectorSpec(
+            delta_target=0.45,
+            delta_tolerance=0.05,
+            dte_min=14,
+            dte_max=21,
+        ),
+        sizer=SizerSpec(mode="fixed_risk_pct"),
+        exits=_MANDATORY_EXITS,
+    )
+
+
+def test_d033_two_configs_different_underlyings_do_not_collide() -> None:
+    """D033 invariant: same signal spec on two underlyings must NOT share cache.
+
+    Pre-D033 the activations cache keyed by `signal_content_key(spec)` alone,
+    so an SPY config's activations for `rsi_2 < 30` would be returned to an
+    AAPL config asking for `rsi_2 < 30` — silently miscalibrating every
+    per-filter score for the second config. Post-D033 the key is
+    `(underlying, content_key)` so the same spec under two underlyings gets
+    two independent fetches and two independent activation sets.
+    """
+    client = MagicMock()
+    spec = _spec()
+    content_key = signal_content_key(spec)
+    client.get_features.side_effect = [
+        # Config A (SPY): activation_dates fetch
+        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
+        # Config A: returns + regime fetch
+        _response(
+            {
+                content_key: {
+                    "returns": {"2024-01-02": 0.01},
+                    "regime_label": {"2024-01-02": "bull"},
+                }
+            }
+        ),
+        # Config B (AAPL): activation_dates fetch — same spec, different
+        # ticker, DIFFERENT activation dates.
+        _response({content_key: {"activation_dates": ["2024-01-03", "2024-01-04"]}}),
+        # Config B: returns + regime fetch
+        _response(
+            {
+                content_key: {
+                    "returns": {"2024-01-03": 0.02, "2024-01-04": -0.01},
+                    "regime_label": {"2024-01-03": "high_vol", "2024-01-04": "high_vol"},
+                }
+            }
+        ),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=2, data_start_date=date(2024, 1, 1))
+
+    # Config A — SPY
+    spy_cfg = _config_with_underlying("SPY", spec)
+    cache.prefetch_for_config(spy_cfg)
+    spy_activations = cache.activation_dates(spec.id)
+    assert spy_activations == frozenset({date(2024, 1, 2)})
+    assert cache.regime_label(date(2024, 1, 2)) == "bull"
+
+    # Config B — AAPL with the SAME spec. Pre-D033 would have hit the SPY
+    # cache and returned `{2024-01-02}`. Post-D033 it must hit Crucible
+    # again and produce `{2024-01-03, 2024-01-04}`.
+    aapl_cfg = _config_with_underlying("AAPL", spec)
+    cache.prefetch_for_config(aapl_cfg)
+    aapl_activations = cache.activation_dates(spec.id)
+    assert aapl_activations == frozenset({date(2024, 1, 3), date(2024, 1, 4)})
+    assert cache.regime_label(date(2024, 1, 3)) == "high_vol"
+    # Total client calls: 4 (2 per config) — proves no cross-underlying cache hit.
+    assert client.get_features.call_count == 4
+
+    # Switching back to SPY context should re-serve the SPY slice.
+    cache.prefetch_for_config(spy_cfg)
+    assert cache.activation_dates(spec.id) == frozenset({date(2024, 1, 2)})
+    assert cache.regime_label(date(2024, 1, 2)) == "bull"
+
+
+def test_d033_underlying_none_falls_back_to_default() -> None:
+    """`config.underlying is None` should fall back to the cache's default
+    underlying (mirrors Crucible's `inbox.py:_FALLBACK_UNDERLYING = "SPY"`).
+    Pre-D033 the cache held a single underlying at construction; this test
+    pins the new fallback semantic for None.
+    """
+    client = MagicMock()
+    spec = _spec()
+    content_key = signal_content_key(spec)
+    client.get_features.side_effect = [
+        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
+        _response(
+            {
+                content_key: {
+                    "returns": {"2024-01-02": 0.01},
+                    "regime_label": {"2024-01-02": "bull"},
+                }
+            }
+        ),
+    ]
+    cache = CrucibleFeatureCache(
+        client, data_history_days=2, data_start_date=date(2024, 1, 1),
+        underlying="SPY",
+    )
+    # underlying=None on the config — should resolve to "SPY" (the cache default).
+    none_cfg = _config_with_underlying("SPY", spec)
+    none_cfg = none_cfg.model_copy(update={"underlying": None})
+    cache.prefetch_for_config(none_cfg)
+    # Cache stored the activations under ("SPY", content_key) — proves
+    # the fallback applied.
+    assert ("SPY", content_key) in cache._activations
+    assert cache.activation_dates(spec.id) == frozenset({date(2024, 1, 2)})

@@ -52,8 +52,12 @@ prefilter:
     min_activations: 30
   expected_trade_count:
     min_trades: 50
+  predicted_activations:
+    min_entries: 10
   novelty:
     max_jaccard_overlap: 0.80
+  signal_correlation:
+    max_jaccard_overlap: 0.85
   regime_exposure:
     max_single_regime_concentration: 0.80
   permutation_test:
@@ -424,3 +428,119 @@ def test_apply_proposal_missing_id_errors(tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "not found" in result.output
+
+
+# ---------------------------------------------------------------------------
+# T2.2 / D040 — `forge grammar revert` CLI
+# ---------------------------------------------------------------------------
+
+
+def _write_grammar_yaml(path: Path, version: str, rule_count: int = 1) -> None:
+    """Minimal valid grammar.yaml for revert tests."""
+    path.write_text(
+        f"grammar_version: {version}\n"
+        f"rules:\n"
+        + "".join(
+            f"  - id: S{i}\n    category: structural\n    version: 1\n"
+            f"    active: true\n    rationale_ref: GRAMMAR.md#S{i}\n"
+            f"    predicate:\n      type: cardinality\n      field: hypothesis\n      count: 1\n"
+            f"    cost_estimate: low\n"
+            for i in range(1, rule_count + 1)
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_revert_promotes_prior_version_forward(tmp_path: Path) -> None:
+    """T2.2 / D040 — revert to v1 produces a new v3 with v1's content.
+
+    v1.yaml in archive (original) stays untouched. Current grammar.yaml
+    becomes "v3 grammar_version + v1 rule content". v2 (the bad version
+    we're reverting from) stays in archive for forensics.
+    """
+    forge_db = tmp_path / "forge.db"
+    grammar_yaml = tmp_path / "grammar.yaml"
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir()
+    # Build a v1 + v2 + current grammar.yaml(=v2)
+    v1_archive = archive_dir / "v1.yaml"
+    _write_grammar_yaml(v1_archive, "v1", rule_count=1)
+    v2_archive = archive_dir / "v2.yaml"
+    _write_grammar_yaml(v2_archive, "v2", rule_count=2)
+    _write_grammar_yaml(grammar_yaml, "v2", rule_count=2)
+
+    result = runner.invoke(
+        app,
+        [
+            "grammar", "revert",
+            "--to-version", "v1",
+            "--initials", "AJ",
+            "--forge-db", str(forge_db),
+            "--grammar-yaml", str(grammar_yaml),
+            "--archive-dir", str(archive_dir),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    # Current grammar.yaml now carries v3 label + v1's rule content
+    text = grammar_yaml.read_text(encoding="utf-8")
+    assert "grammar_version: v3" in text
+    assert "id: S1" in text
+    assert "id: S2" not in text  # v1 only had 1 rule; S2 was v2-only
+    # v3 archive entry exists with same content (sans the REVERT header)
+    v3_archive = archive_dir / "v3.yaml"
+    assert v3_archive.exists()
+    # v1 + v2 archives untouched
+    assert v1_archive.read_text(encoding="utf-8").startswith("grammar_version: v1")
+    assert v2_archive.read_text(encoding="utf-8").startswith("grammar_version: v2")
+    # forge_db has a 'revert' audit row
+    with db_connection(forge_db) as conn:
+        rows = conn.execute(
+            "SELECT change_type, change_description, operator_initials FROM grammar_versions "
+            "WHERE change_type = 'revert'",
+        ).fetchall()
+    assert len(rows) == 1
+    assert "reverted to v1" in rows[0][1]
+
+
+def test_revert_rejects_missing_version(tmp_path: Path) -> None:
+    forge_db = tmp_path / "forge.db"
+    grammar_yaml = tmp_path / "grammar.yaml"
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir()
+    _write_grammar_yaml(grammar_yaml, "v2")
+    _write_grammar_yaml(archive_dir / "v2.yaml", "v2")
+    result = runner.invoke(
+        app,
+        [
+            "grammar", "revert",
+            "--to-version", "v99",
+            "--initials", "AJ",
+            "--forge-db", str(forge_db),
+            "--grammar-yaml", str(grammar_yaml),
+            "--archive-dir", str(archive_dir),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "no archive entry" in result.output
+
+
+def test_revert_rejects_empty_initials(tmp_path: Path) -> None:
+    forge_db = tmp_path / "forge.db"
+    grammar_yaml = tmp_path / "grammar.yaml"
+    archive_dir = tmp_path / "archive"
+    archive_dir.mkdir()
+    _write_grammar_yaml(grammar_yaml, "v2")
+    _write_grammar_yaml(archive_dir / "v1.yaml", "v1")
+    _write_grammar_yaml(archive_dir / "v2.yaml", "v2")
+    result = runner.invoke(
+        app,
+        [
+            "grammar", "revert",
+            "--to-version", "v1",
+            "--initials", "   ",
+            "--forge-db", str(forge_db),
+            "--grammar-yaml", str(grammar_yaml),
+            "--archive-dir", str(archive_dir),
+        ],
+    )
+    assert result.exit_code == 2  # typer-style "bad input" exit

@@ -38,7 +38,26 @@ class ExpectedTradeCountCalibration:
 
 
 @dataclass(frozen=True, slots=True)
+class PredictedActivationsCalibration:
+    """T1.3 (PROMPT_5_FORGE_V1_1_REVISED) — floor on the directional x
+    regime intersection count before submission. Stricter than
+    ExpectedTradeCountCalibration because the intersection naturally
+    shrinks the firing count, so a lower threshold is correct."""
+
+    min_entries: int
+
+
+@dataclass(frozen=True, slots=True)
 class NoveltyCalibration:
+    max_jaccard_overlap: float
+
+
+@dataclass(frozen=True, slots=True)
+class SignalCorrelationCalibration:
+    """T2.6 (PROMPT_5_FORGE_V1_1_REVISED) — max pairwise Jaccard overlap
+    of activation dates between any two signals in a single config.
+    Lower = stricter (more distinct signals required)."""
+
     max_jaccard_overlap: float
 
 
@@ -66,7 +85,9 @@ class AutoTuneCalibration:
 class Calibration:
     signal_density: SignalDensityCalibration
     expected_trade_count: ExpectedTradeCountCalibration
+    predicted_activations: PredictedActivationsCalibration
     novelty: NoveltyCalibration
+    signal_correlation: SignalCorrelationCalibration
     regime_exposure: RegimeExposureCalibration
     permutation_test: PermutationTestCalibration
     auto_tune: AutoTuneCalibration
@@ -112,7 +133,9 @@ class AdjustmentProposal:
 _REQUIRED_TOP_KEYS = (
     "signal_density",
     "expected_trade_count",
+    "predicted_activations",
     "novelty",
+    "signal_correlation",
     "regime_exposure",
     "permutation_test",
     "auto_tune",
@@ -176,7 +199,9 @@ def load_calibration(path: Path) -> Calibration:
 
     sd = pf["signal_density"]
     etc = pf["expected_trade_count"]
+    pa = pf["predicted_activations"]
     no = pf["novelty"]
+    sc = pf["signal_correlation"]
     re_ = pf["regime_exposure"]
     pt = pf["permutation_test"]
     at = pf["auto_tune"]
@@ -198,10 +223,25 @@ def load_calibration(path: Path) -> Calibration:
                 minimum=1,
             ),
         ),
+        predicted_activations=PredictedActivationsCalibration(
+            min_entries=_validate_int(
+                _require(pa, "predicted_activations", "min_entries"),
+                "predicted_activations",
+                "min_entries",
+                minimum=1,
+            ),
+        ),
         novelty=NoveltyCalibration(
             max_jaccard_overlap=_validate_unit_float(
                 _require(no, "novelty", "max_jaccard_overlap"),
                 "novelty",
+                "max_jaccard_overlap",
+            ),
+        ),
+        signal_correlation=SignalCorrelationCalibration(
+            max_jaccard_overlap=_validate_unit_float(
+                _require(sc, "signal_correlation", "max_jaccard_overlap"),
+                "signal_correlation",
                 "max_jaccard_overlap",
             ),
         ),
@@ -298,9 +338,19 @@ def apply_tightening(
         calibration.expected_trade_count,
         min_trades=round(calibration.expected_trade_count.min_trades * (1.0 + step)),
     )
+    new_pa = replace(
+        calibration.predicted_activations,
+        min_entries=round(calibration.predicted_activations.min_entries * (1.0 + step)),
+    )
     new_no = replace(
         calibration.novelty,
         max_jaccard_overlap=calibration.novelty.max_jaccard_overlap * (1.0 - step),
+    )
+    new_sc = replace(
+        calibration.signal_correlation,
+        max_jaccard_overlap=(
+            calibration.signal_correlation.max_jaccard_overlap * (1.0 - step)
+        ),
     )
     new_re = replace(
         calibration.regime_exposure,
@@ -317,7 +367,9 @@ def apply_tightening(
         calibration,
         signal_density=new_sd,
         expected_trade_count=new_etc,
+        predicted_activations=new_pa,
         novelty=new_no,
+        signal_correlation=new_sc,
         regime_exposure=new_re,
         permutation_test=new_pt,
     )
@@ -351,7 +403,9 @@ __all__ = [
     "ExpectedTradeCountCalibration",
     "NoveltyCalibration",
     "PermutationTestCalibration",
+    "PredictedActivationsCalibration",
     "RegimeExposureCalibration",
+    "SignalCorrelationCalibration",
     "SignalDensityCalibration",
     "apply_tightening",
     "load_calibration",
