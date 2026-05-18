@@ -193,7 +193,7 @@ def _fetch_crucible_runs(
     return get_recent_gated_runs(crucible_db, limit=_DEFAULT_CRUCIBLE_LIMIT)
 
 
-def consume_batch_results(
+def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
     forge_db: duckdb.DuckDBPyConnection,
     crucible_db: Path,
     *,

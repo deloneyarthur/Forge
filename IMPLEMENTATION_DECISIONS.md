@@ -976,6 +976,59 @@ Mechanics:
 **Verification:** 1028 tests pass (3 new T2.4 tests: 3-occurrence threshold, below-threshold quiet, theme distinction). Ruff + mypy strict clean.
 
 
+## D046 — 2026-05-18 — Feedback loop multi-batch reconciler + oldest-unfinished rate-limit semantics
+
+**Spec section:** DESIGN.md §7.3 (rate limiter), §8.2 (feedback consumer); CLAUDE.md "Forge succeeds when, over time, its submissions become more likely to promote"; 2026-05-17 audit P0 finding "feedback writeback gap."
+
+**Context:** The 2026-05-17 audit found that the Forge → Crucible → Forge loop has been silently broken since 2026-05-14: 4,020 submissions ever, 308 gated (all from one batch on 2026-05-14), 2026-05-15 burst of 3,110 submissions never reconciled, 2026-05-16 produced zero batches, 2026-05-17 produced one batch (e2658f76) that has been rate-limit-blocked at 0/200 for 8+ hours. The diagnostic agent traced this to two coupled regressions:
+
+1. **Consumer is single-batch** (`forge.feedback.consumer.consume_batch_results` + the two CLI driver paths `cli/main.py:630` and `cli/feedback_cmd.py:104`). Each invocation reconciles exactly one batch (the just-submitted one by default). Once Crucible's per-run latency exceeded one Forge poll cycle, older batches accumulated stranded `status='submitted'` rows the latest-batch-only consumer never reached. By 2026-05-17 the system had 11 stranded batches and 3,712 un-reconciled candidates.
+2. **Rate-limiter picks the latest batch** (`forge.submission.rate_limiter.check_rate_limit` — `ORDER BY submitted_at DESC LIMIT 1`). With the latest batch always at the back of Crucible's queue (still 0% gated) and older batches stranded behind the consumer bug, the rate-limit check stayed permanently blocked.
+
+The contracts and Crucible publisher are correct; export schema parses cleanly through `crucible_contracts.queries.load_recent_gated_runs_from_export`. The bug is entirely in Forge's consumer-driver and rate-limit selection.
+
+**Decision:**
+
+1. **Multi-batch reconciler** — new `forge.feedback.consumer.reconcile_all_pending(forge_db, crucible_db, *, exports_dir=None) -> tuple[BatchFeedback, ...]`. Reads the gated-runs export once, then per-batch reconciles every `forge_batch_id` that still has `status='submitted'` rows. Each per-batch call is itself idempotent. `consume_batch_results` gained an optional `crucible_runs` argument so the reconciler can pass the pre-fetched snapshot to every per-batch invocation rather than refetching.
+2. **Oldest-unfinished rate-limit semantics** — `check_rate_limit` now finds the OLDEST batch with `status='submitted'` rows (not the latest). The oldest is the actual queue front; the latest is the back. Once the oldest drains, the next-oldest takes over. In steady state (no stranded batches) the oldest IS the latest and behavior matches the prior path. `RateLimitStatus` gained a `threshold` field so the CLI's "blocked" message can report the actual threshold value instead of a hardcoded `>=80%` string (which had been stale since D036's drop to 0.50).
+3. **Pre-rate-limit reconcile** — `_run_one_cycle` in `cli/main.py` now calls a new `_reconcile_pending_silently` helper before `check_rate_limit`, so the rate-limit check operates on fresh local-DB state. The reconcile call absorbs `QueryError` (Crucible offline) and logs a `reconciled: batches=N newly_gated_total=M` line when there's something to report.
+
+**Hard rules check:**
+- Hard rule #2 (no Crucible internals) — unchanged; reconciler still goes through `crucible_contracts.load_recent_gated_runs_from_export` / `get_recent_gated_runs`.
+- Hard rule #3 (Crucible gate untouched) — unchanged.
+- Hard rule #6 (determinism) — unchanged; the reconciler iterates batches in stable `MIN(submitted_at) ASC, forge_batch_id ASC` order.
+- Hard rule #10 (grammar archive) — N/A.
+
+**Alternatives considered:**
+- **Bump Crucible's gated-runs export limit (`_DEFAULT_LIMIT=1000`)** to ~10,000 so historical rows stay visible while Forge catches up. Cross-system change; rejected as the primary fix because the Forge-side single-batch consumer would still leave older `submitted` rows stranded even with a larger export window. Recommended as a complementary Crucible-side improvement.
+- **Track in-flight queue depth instead of per-batch percent gated.** Simpler in some ways ("don't submit if total `submitted` rows exceed 2× batch size") but loses §7.3's per-batch semantics; deferred.
+- **Skip reconcile when `--consume-feedback` is off.** Rejected: the reconcile is what makes the rate-limit accurate; coupling them to the same flag is the regression we just fixed.
+
+**Verification:**
+- 29 targeted tests pass: 12 in `test_rate_limiter.py` (including 3 D046-specific: `test_uses_oldest_unfinished_batch`, `test_oldest_batch_with_local_gated_rows_clears_to_next`, `test_no_submitted_rows_clears_completely`) and 17 in `test_consumer.py` (including 3 D046-specific: `test_reconcile_all_pending_processes_every_in_flight_batch`, `test_reconcile_all_pending_is_idempotent`, `test_reconcile_all_pending_returns_empty_when_no_submitted_rows`).
+- Full Forge suite: 1043/1043 passing. Ruff + mypy strict clean.
+- The `_insert_submission` test helper in `test_rate_limiter.py` was updated to default to `status='submitted'` (matches production submitter at `forge.submission.submitter.py:169`). Earlier tests had used `status='pending'`, which production never writes — fixing the helper alongside the rate-limit-semantic change preserves all pre-existing test intents.
+
+**Recovery for stranded data:**
+On forge.service restart, the new `_reconcile_pending_silently` call will sweep every `submitted` row in `forge.db.submissions` against the latest `gated_runs_*.json` export. Crucible's current export contains ~1,000 rows that ARE Forge-submitted hashes, spanning ~10 of the 11 stranded batches. Those will flip to `status='gated'` on the first iteration. The remaining ~2,712 candidates not yet in Crucible's export will continue to drain as Crucible processes them and the export window advances. No DB surgery required.
+
+**Operational sequence:**
+1. Tests green (Forge suite, this session).
+2. Operator restarts `forge.service`.
+3. First iteration: `_reconcile_pending_silently` flips ~1,000 rows; rate-limit oldest-batch logic now points at the oldest still-`submitted` batch (likely a 2026-05-15 batch with partial export overlap).
+4. Loop unblocks once that batch's local+export gated count reaches 50% (D036 threshold).
+5. `forge.service` resumes normal cadence.
+
+**Action:**
+- `src/forge/feedback/consumer.py` — `reconcile_all_pending` added; `consume_batch_results` gained optional `crucible_runs` param.
+- `src/forge/submission/rate_limiter.py` — oldest-batch SQL + `threshold` field on `RateLimitStatus`.
+- `src/forge/cli/main.py` — `_reconcile_pending_silently` helper + pre-rate-limit call; updated "blocked" message uses `rate.threshold`.
+- `tests/unit/test_submission/test_rate_limiter.py` — helper default → `'submitted'`; 3 new D046 tests; old `test_uses_most_recent_batch` rewritten as `test_uses_oldest_unfinished_batch`.
+- `tests/unit/test_feedback/test_consumer.py` — 3 new D046 reconciler tests.
+- `IMPLEMENTATION_DECISIONS.md` D046 (this entry).
+- Forge service restart required to pick up the fix.
+
+
 ## D047 — 2026-05-18 — T2.5 trade-concentration post-batch analyzer
 
 **Context:** `PROMPT_5_FORGE_V1_1_REVISED.md` §T2.5 / Draft Enhancement 1 originally specified a *pre-filter* rejecting configs whose top-3 trades constituted >40% of P&L. That required `context.simulated_trades` at pre-filter time — Forge's pre-filters operate on activation_dates from Crucible's feature cache and don't have per-trade ledgers (hard rule #2 bars accessing Crucible's runs DB directly).
@@ -1042,3 +1095,84 @@ uv run python scripts/requeue_high_value_configs.py \
 `--dry-run` prints what would be re-queued without writing. Operator can iterate on selection criteria before committing.
 
 **Verification:** ruff + mypy clean (no test for this script — operational tooling, exercised by manual runs in the recovery cycles).
+
+
+## D049 — 2026-05-18 — Grammar version audit row self-healing
+
+**Spec section:** CLAUDE.md hard rule #10 (grammar archive + decision-log audit on every yaml change); D035 (stuck-state floor reads `MAX(grammar_versions.changed_at)`); DESIGN.md §13.3 (no silent grammar changes); 2026-05-17 audit P1 finding "empty `grammar_versions` table despite v2 active."
+
+**Context:** Hard rule #10 requires version bumps + archive + decision-log entries on every `grammar.yaml` change, and the `grammar_versions` table exists as the structural audit-trail companion. Pre-D049 the table was written by only three code paths — `auto_tune.apply_tightening`, `grammar_cmd.cmd_apply_proposal`, and `grammar_cmd.cmd_revert`. Manual operator yaml bumps (e.g., D039's v1→v2 R3 expansion) had no code path that recorded an audit row, so the table was empty on the operator's `~/forge_data/forge.db` despite the active grammar being v2. D035's stuck-state grammar-floor logic depends on this table to reset on grammar changes; an empty table silently defeats that mechanism.
+
+**Decision:** Add `ensure_grammar_version_recorded(db, *, grammar, yaml_path, at)` to `forge.feedback.auto_tune`. Self-healing: when called, the helper checks whether a `grammar_versions` row exists for `grammar.grammar_version`; if missing, it inserts one with `change_type='manual_bump'`, the yaml's SHA-256, and the rule count, with `operator_initials=None` (manual edits don't carry initials the way `apply-proposal` does). Idempotent — the second call is a SELECT-only no-op.
+
+The CLI's `_run_one_iteration` calls a thin wrapper (`_ensure_grammar_version_recorded_silently`) once per iteration after `load_grammar` and before the rate-limit reconcile. The wrapper absorbs unexpected errors so the audit-row path can never crash the production loop. Diagnostic commands (`forge enumerate`, `forge prefilter`) intentionally don't call it — they have no DB and shouldn't write side effects.
+
+**Hard rules check:**
+- Hard rule #10 — this decision IS the structural piece hard rule #10 has been depending on. Decision-log audit (this file) + archive (`config/grammar_archive/`) + DB audit (`grammar_versions`) now all converge on every grammar change.
+- Hard rule #6 (determinism) — `changed_at` is `forge.core.clock.utc_now()` which is the blessed clock; not seed-dependent.
+- Not a §3.5 rule change.
+
+**Alternatives considered:**
+- **Pre-commit hook writes the row at commit time.** Rejected; the row needs to land in the operator's `~/forge_data/forge.db`, not the repo. Pre-commit can't reach there.
+- **`forge grammar record-bump` CLI command** (operator-explicit, parallel to `apply-proposal` / `revert`). Considered as complementary, deferred. Self-healing is the minimal-friction safety net; if/when the operator wants explicit initials on a manual bump, the CLI subcommand can be added in a follow-up.
+- **Side-effect inside `load_grammar`.** Rejected — the loader is called from tests and read-only diagnostics; coupling a DB write to a parsing function is bad layering.
+
+**Verification:**
+- 3 new unit tests in `tests/unit/test_feedback/test_auto_tune.py`: writes row when missing, idempotent on second call, never overwrites a pre-existing row from a different code path.
+- 2 new invariant tests in `tests/invariants/test_phase5_invariants.py`: end-to-end self-heal against the production grammar (`config/grammar.yaml`), and structural check that `_run_one_iteration` still calls the helper (so a future refactor can't silently un-wire it).
+- 12 auto_tune unit tests + 17 Phase 5 invariants all pass. Full Forge suite remains 1043+ green.
+
+**Recovery for the operator's existing DB:**
+The first post-restart iteration will write the missing `v2` row via the self-heal. The historical `v1` row is lost (it was never written; this fix is forward-looking, not retroactive). That is acceptable per the audit-row's intent — D035 reads `MAX(changed_at)` to floor the stuck-state counter, so the v2 row alone establishes the correct floor going forward.
+
+**Action:**
+- `src/forge/feedback/auto_tune.py` — `ensure_grammar_version_recorded` helper.
+- `src/forge/cli/main.py` — `_ensure_grammar_version_recorded_silently` wrapper + call from `_run_one_iteration`.
+- `tests/unit/test_feedback/test_auto_tune.py` — 3 new D049 unit tests.
+- `tests/invariants/test_phase5_invariants.py` — 2 new D049 invariant tests.
+- `IMPLEMENTATION_DECISIONS.md` D049 (this entry).
+- Forge service restart required to pick up the helper (rolls in with the D046 fix).
+
+
+## D049 — 2026-05-18 — T2.3/T2.4/T2.5/T2.7 framework wiring + re-queue execution
+
+**Context:** D041-D045 + D047 shipped the framework helpers for T2.3 (counterfactual), T2.4 (persistent detection), T2.5 (trade-concentration analyzer), and T2.7 (structural-fingerprint novelty) but didn't wire them into any production caller. D049 ships the wiring.
+
+**Change:**
+
+1. **T2.7 — structural-fingerprint dedup against history** (`src/forge/cli/main.py`):
+   - New `_load_prior_structural_fingerprints(forge_db_path)` helper: scans `submissions.config_json`, computes fingerprint per config, returns the union. Empty frozenset when DB is `:memory:` or missing.
+   - `_run_battery_for_seed` gains `forge_db_path: Path | None = None` kwarg; populates `FilterContext.prior_structural_fingerprints` from the loader. NoveltyFilter's D043 check now actually fires in production — rejects new candidates whose structural skeleton matches any historical submission.
+   - Production `forge run` call site at the bottom of `_run_loop_iteration` threads `forge_db_path` into `_run_battery_for_seed`.
+
+2. **T2.3 — counterfactual annotation on every proposal** (`src/forge/cli/main.py::_consume_feedback_after_submit`):
+   - After `propose(...)` returns, for each proposal compute `evaluate_counterfactual(proposal, recent_promoted_count=feedback.promoted_count)`.
+   - Inject `counterfactual_rejection_rate` and `counterfactual_promoted_count` into `evidence_json` and write the annotated proposal via `append_proposal`. Operator review (`forge grammar list-proposals` / dashboards) sees the safe/escalate signal alongside the rationale.
+   - Stops short of auto-application: today operator still runs `apply-proposal` manually. A future auto-apply path consumes `should_auto_apply_proposal` from the same module.
+
+3. **T2.5 — post-batch trade-concentration analyzer** (`src/forge/cli/main.py::_consume_feedback_after_submit`):
+   - After proposer runs, scan `feedback.outcomes` for concentration suspects via `analyze_promotion_concentration`.
+   - Each `ConcentrationFlag` is emitted as a tighten-grammar proposal with `trigger="promotion_concentration_suspect"` so D034's intent-dedup naturally handles repeats and D045's persistent-detection picks them up if they recur.
+   - rationale string is operator-readable ("Promoted run X has concentration proxy 0.42 > threshold 0.05 (PF=8, n=40, wr=0.2)").
+
+4. **T2.4 — persistent-theme tag in `forge grammar list-proposals`** (`src/forge/cli/grammar_cmd.py`):
+   - `cmd_list_proposals` now reconstructs minimal `GrammarProposal` objects from the DB rows, runs `detect_persistent_proposals` over the pending set, and prints a `[PERSISTENT]` tag next to any proposal whose theme has 3+ pending occurrences.
+   - Appends a "persistent themes" footer summarizing the recurring `(trigger, detail)` tuples.
+   - Operator sees: "this proposal keeps coming back — either fix the proposer's noise source or re-evaluate your prior rejections."
+
+**Re-queue execution:** `scripts/requeue_high_value_configs.py` invoked at 2026-05-18 (after the D048 ship). Selection: top-50-by-recency + all tail_hedge (1851) + all relative_value (1154). Total: **3047 configs re-queued** (with 8 cross-category duplicates correctly deduped). Inbox now holds 3047 JSONs; Crucible's inbox-watcher consumes them at the runner's pace.
+
+**Crucible coordination:** operator separately tasked the Crucible agent with identifying speed-up opportunities. Current runner pace (~17-27 min/run baseline, occasional 80-min spikes) implies the 3047 backlog at ~36-57 days; speedup work shrinks that meaningfully.
+
+**Hard rules check:**
+- Hard rule #2: T2.7 wiring reads only Forge's own DB; no Crucible internals imported.
+- Hard rule #4: T2.5 / T2.3 wirings write to `OPEN_PROPOSALS.md` for operator review; never auto-apply.
+- Hard rule #9: re-queue script bypasses Forge's submitter via `processed/ → inbox/` copy; `submissions` table unchanged; new run_ids on Crucible side.
+
+**Verification:** 1050 tests pass (2 list-proposals tests adjusted to handle tz-aware datetime on DB-roundtrip). Ruff + mypy strict clean on changed scope.
+
+**Action:**
+- `src/forge/cli/main.py` — `_load_prior_structural_fingerprints` + `_run_battery_for_seed` plumbing + T2.3/T2.5 wiring in `_consume_feedback_after_submit`.
+- `src/forge/cli/grammar_cmd.py` — T2.4 persistent-tag in `cmd_list_proposals`.
+- `IMPLEMENTATION_DECISIONS.md` D049 (this entry).
+- 3047 historical configs re-queued.

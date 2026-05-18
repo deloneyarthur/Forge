@@ -17,6 +17,21 @@ _DATETIME_NOW = re.compile(r"\bdatetime\.now\s*\(")
 _DATETIME_UTCNOW = re.compile(r"\bdatetime\.utcnow\s*\(")
 _RANDOM_SEED = re.compile(r"\brandom\.seed\s*\(")
 _NP_DEFAULT_RNG = re.compile(r"\bnp\.random\.default_rng\s*\(")
+# Hard rule #2: no Crucible-internal imports. Only `crucible_contracts`
+# (and its public subpackages like `crucible_contracts.exceptions`) may
+# be imported. Direct reaches into `optbt`/`crucible` are forbidden.
+_OPTBT_IMPORT = re.compile(r"^\s*(from\s+optbt|import\s+optbt)\b", re.MULTILINE)
+_CRUCIBLE_INTERNAL_IMPORT = re.compile(
+    r"^\s*(from\s+crucible(?!_contracts)|import\s+crucible(?!_contracts))\b", re.MULTILINE,
+)
+# Hard rule #5: no LLM SDK in the production loop. Claude-as-collaborator
+# happens outside the running system; the enumerator/pre-filters/ranker/
+# submitter/feedback are deterministic Python.
+_LLM_IMPORTS = re.compile(
+    r"^\s*(from\s+(anthropic|openai|google\.generativeai|cohere)|"
+    r"import\s+(anthropic|openai|google\.generativeai|cohere))\b",
+    re.MULTILINE,
+)
 
 
 def _src_files_excluding(blessed: set[Path]) -> list[Path]:
@@ -55,3 +70,49 @@ def test_required_top_level_files_exist() -> None:
 def test_grammar_archive_dir_exists() -> None:
     """§13.2: grammar.yaml changes must archive prior versions; dir must exist now."""
     assert (REPO_ROOT / "config" / "grammar_archive").is_dir()
+
+
+def test_no_crucible_internal_imports() -> None:
+    """Hard rule #2: all inter-system access goes via `crucible_contracts`.
+    Direct imports of `optbt` (Crucible's package root) or any `crucible.*`
+    submodule that isn't `crucible_contracts` violate the integration
+    boundary. A missing model is a contracts gap to surface, not a
+    workaround to ship.
+    """
+    offenders: list[tuple[str, str]] = []
+    for py in SRC_ROOT.rglob("*.py"):
+        text = py.read_text(encoding="utf-8")
+        if _OPTBT_IMPORT.search(text):
+            offenders.append((str(py.relative_to(REPO_ROOT)), "optbt import"))
+        if _CRUCIBLE_INTERNAL_IMPORT.search(text):
+            offenders.append(
+                (
+                    str(py.relative_to(REPO_ROOT)),
+                    "crucible-internal import (not crucible_contracts)",
+                )
+            )
+    assert not offenders, (
+        "Crucible-internal imports found (hard rule #2 — only crucible_contracts "
+        f"may bridge the two systems): {offenders}"
+    )
+
+
+def test_no_llm_sdk_in_production_loop() -> None:
+    """Hard rule #5: no LLM SDK (anthropic / openai / google.generativeai /
+    cohere) in the production loop. Claude-as-collaborator with the operator
+    happens outside the running system; enumerator / pre-filters / ranker /
+    submitter / feedback are deterministic Python.
+
+    `crucible_contracts` is the only inter-system surface; if a generative
+    model is ever needed, it lives behind the contracts boundary, not in a
+    Forge module.
+    """
+    offenders: list[tuple[str, str]] = []
+    for py in SRC_ROOT.rglob("*.py"):
+        text = py.read_text(encoding="utf-8")
+        if _LLM_IMPORTS.search(text):
+            offenders.append((str(py.relative_to(REPO_ROOT)), "LLM SDK import"))
+    assert not offenders, (
+        "LLM SDK imports found in src/forge (hard rule #5 — production loop "
+        f"is deterministic Python only): {offenders}"
+    )

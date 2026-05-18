@@ -486,5 +486,64 @@ def test_duckdb_constraint_exception_imports() -> None:
     assert hasattr(duckdb, "ConstraintException")
 
 
+# ---------------------------------------------------------------------------
+# D047 — grammar_versions audit row landed for the active grammar
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_grammar_version_recorded_lands_active_grammar(tmp_path: Path) -> None:
+    """D047 / hard rule #10: after one round of self-healing, the
+    `grammar_versions` table contains exactly one row for the active
+    `config/grammar.yaml`. The D035 stuck-state-floor mechanism depends
+    on this row existing; before D047 the table stayed empty under
+    manual operator yaml bumps and the floor never reset on a grammar
+    change."""
+    from pathlib import Path as _Path
+
+    from forge.feedback.auto_tune import ensure_grammar_version_recorded
+    from forge.grammar import load_grammar
+
+    yaml_path = _Path(__file__).resolve().parents[2] / "config" / "grammar.yaml"
+    archive_dir = yaml_path.parent / "grammar_archive"
+    grammar = load_grammar(yaml_path, archive_dir=archive_dir)
+    forge_db = tmp_path / "forge.db"
+    with db_connection(forge_db) as conn:
+        ensure_grammar_version_recorded(
+            conn,
+            grammar=grammar,
+            yaml_path=yaml_path,
+            at=datetime(2026, 5, 18, tzinfo=UTC),
+        )
+        rows = conn.execute(
+            "SELECT version, rule_count FROM grammar_versions"
+        ).fetchall()
+    assert len(rows) == 1
+    version, rule_count = rows[0]
+    assert str(version) == grammar.grammar_version
+    assert int(rule_count) == len(grammar.rules)
+
+
+def test_run_one_iteration_calls_audit_row_helper() -> None:
+    """D047: `_run_one_iteration` in `cli/main.py` must invoke the audit-row
+    self-healer so manual operator yaml bumps don't silently skip the
+    `grammar_versions` table. This is the structural assertion that the
+    contract is wired — pulling the call out without replacement would
+    re-introduce the regression that D047 fixed.
+
+    Hard rule #10 + D035: the stuck-state floor reads
+    `MAX(grammar_versions.changed_at)`; if the production loop stops
+    recording audit rows, the floor goes blind on the next manual bump.
+    """
+    import inspect
+
+    from forge.cli import main
+
+    source = inspect.getsource(main._run_one_iteration)
+    assert "_ensure_grammar_version_recorded_silently" in source, (
+        "_run_one_iteration no longer calls _ensure_grammar_version_recorded_silently"
+        "; the D047 audit-row self-heal has been silently removed."
+    )
+
+
 # Suppress unused-import lint
 _ = pytest

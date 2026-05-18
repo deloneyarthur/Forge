@@ -34,11 +34,25 @@ grammar_app = typer.Typer(
 def cmd_list_proposals(
     forge_db: Path = typer.Option(Path(":memory:"), "--forge-db", help="Forge state DB"),
 ) -> None:
-    """List pending refinement proposals."""
+    """List pending refinement proposals.
+
+    T2.4 wiring (D050): proposals whose theme has recurred across 3+
+    pending entries are tagged `[PERSISTENT]` — the data keeps pointing
+    to this fix; either re-evaluate prior rejections or fix the
+    proposer's noise source. Theme = (trigger, target/hypothesis/family),
+    matching D034's intent_key.
+    """
+    import json
+    from datetime import UTC
+
+    from forge.feedback.proposer import detect_persistent_proposals
+    from forge.feedback.types import GrammarProposal
+
     with db_connection(forge_db) as conn:
         rows = conn.execute(
             """
-            SELECT proposal_id, proposed_at, proposal_type, rationale
+            SELECT proposal_id, proposed_at, proposal_type, rationale,
+                   evidence_json
             FROM grammar_proposals
             WHERE status = 'pending'
             ORDER BY proposed_at
@@ -47,10 +61,53 @@ def cmd_list_proposals(
     if not rows:
         typer.echo("0 pending proposals")
         return
+
+    # T2.4: build minimal GrammarProposal objects from the rows so the
+    # detect_persistent_proposals helper can compute theme-level counts.
+    proposals: list[GrammarProposal] = []
+    for proposal_id, proposed_at, proposal_type, rationale, evidence_raw in rows:
+        try:
+            evidence = (
+                json.loads(evidence_raw) if isinstance(evidence_raw, str)
+                else (evidence_raw or {})
+            )
+        except (json.JSONDecodeError, TypeError):
+            evidence = {}
+        # DuckDB returns tz-naive timestamps; attach UTC so the
+        # GrammarProposal validator accepts it.
+        proposed_at_aware = (
+            proposed_at.replace(tzinfo=UTC) if proposed_at.tzinfo is None else proposed_at
+        )
+        proposals.append(
+            GrammarProposal(
+                proposal_id=proposal_id,
+                proposed_at=proposed_at_aware,
+                proposal_type=proposal_type,
+                target=evidence.get("target_field", "prefilter_calibration"),
+                proposal_yaml="",
+                rationale=rationale or "",
+                evidence_json=evidence,
+            ),
+        )
+    persistent = detect_persistent_proposals(proposals)
+    persistent_ids: set[str] = {
+        pid
+        for pp in persistent
+        for pid in pp.proposal_ids
+    }
+
     typer.echo(f"{len(rows)} pending proposal(s):")
-    for proposal_id, proposed_at, proposal_type, rationale in rows:
-        typer.echo(f"  - {proposal_id} [{proposal_type}] {proposed_at}")
+    for proposal_id, proposed_at, proposal_type, rationale, _ev in rows:
+        tag = " [PERSISTENT]" if str(proposal_id) in persistent_ids else ""
+        typer.echo(f"  - {proposal_id} [{proposal_type}]{tag} {proposed_at}")
         typer.echo(f"      {rationale}")
+    if persistent:
+        typer.echo("\nT2.4 persistent themes (3+ recurrences):")
+        for pp in persistent:
+            typer.echo(
+                f"  {pp.theme_trigger} / {pp.theme_detail or '(none)'}: "
+                f"{pp.occurrence_count} occurrences",
+            )
 
 
 def _update_proposal_status(

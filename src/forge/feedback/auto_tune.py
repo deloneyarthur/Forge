@@ -21,6 +21,7 @@ loosening always routes through `feedback.proposal_writer.append_proposal`.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import asdict
 from typing import TYPE_CHECKING
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import duckdb
+
+    from forge.grammar.models import Grammar
 
 
 def write_calibration_yaml(calibration: Calibration, path: Path) -> None:
@@ -130,6 +133,54 @@ def _write_grammar_versions_row(
             None,
         ],
     )
+
+
+def ensure_grammar_version_recorded(
+    db: duckdb.DuckDBPyConnection,
+    *,
+    grammar: Grammar,
+    yaml_path: Path,
+    at: datetime,
+) -> bool:
+    """Write a `grammar_versions` audit row for `grammar.grammar_version` if missing.
+
+    D047 (2026-05-18): bridges the hard-rule-#10 audit trail for MANUAL operator
+    yaml bumps, which don't pass through `apply-proposal` / `revert` / auto-tune
+    (the three pre-D047 write paths). The D035 stuck-state grammar-change floor
+    reads `MAX(grammar_versions.changed_at)`; without this self-healing helper,
+    a manual grammar bump (like D039's R3 v1→v2) never wrote a row, so the
+    stuck counter never reset on the bump.
+
+    Idempotent: if a row for `grammar.grammar_version` already exists, this is
+    a SELECT-only no-op. Returns True if a row was written, False if one was
+    already present.
+    """
+    rows = db.execute(
+        "SELECT 1 FROM grammar_versions WHERE version = ?",
+        [grammar.grammar_version],
+    ).fetchall()
+    if rows:
+        return False
+    yaml_bytes = yaml_path.read_bytes()
+    sha = hashlib.sha256(yaml_bytes).hexdigest()
+    db.execute(
+        """
+        INSERT INTO grammar_versions
+            (version, rule_count, yaml_sha256, changed_at, change_type,
+             change_description, operator_initials)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            grammar.grammar_version,
+            len(grammar.rules),
+            sha,
+            at,
+            "manual_bump",
+            f"auto-recorded on first load post-bump for {grammar.grammar_version}",
+            None,
+        ],
+    )
+    return True
 
 
 def _apply_tighten_and_persist(

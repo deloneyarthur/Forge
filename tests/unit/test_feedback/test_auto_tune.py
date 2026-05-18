@@ -16,7 +16,11 @@ from pathlib import Path
 
 import yaml
 
-from forge.feedback.auto_tune import auto_tune, write_calibration_yaml
+from forge.feedback.auto_tune import (
+    auto_tune,
+    ensure_grammar_version_recorded,
+    write_calibration_yaml,
+)
 from forge.persistence.db import db_connection
 from forge.prefilters.calibration import (
     AutoTuneCalibration,
@@ -302,3 +306,111 @@ def test_no_apply_loosening_function_in_module() -> None:
     names = {n for n, _ in members}
     assert "apply_loosening" not in names
     assert "apply_loosen" not in names
+
+
+# ---------------------------------------------------------------------------
+# D047 — ensure_grammar_version_recorded self-healing audit row
+# ---------------------------------------------------------------------------
+
+
+def _real_grammar() -> tuple[object, Path]:
+    """Load the project's actual `config/grammar.yaml` for D047 tests.
+
+    The helper needs a real `Grammar` object (with `grammar_version` +
+    `rules`) and the matching on-disk yaml file for the sha256 hash.
+    Using the production yaml keeps the test honest — if the grammar
+    archive becomes inconsistent, this test fails alongside the loader.
+    """
+    from forge.grammar import load_grammar
+
+    yaml_path = Path(__file__).resolve().parents[3] / "config" / "grammar.yaml"
+    archive_dir = yaml_path.parent / "grammar_archive"
+    grammar = load_grammar(yaml_path, archive_dir=archive_dir)
+    return grammar, yaml_path
+
+
+def test_ensure_grammar_version_writes_row_when_missing(tmp_path: Path) -> None:
+    """D047: an empty `grammar_versions` table gets a `manual_bump` row
+    matching the active grammar on first call."""
+    forge_db = tmp_path / "forge.db"
+    grammar, yaml_path = _real_grammar()
+    with db_connection(forge_db) as conn:
+        # Pre-condition: table is empty.
+        rows = conn.execute("SELECT COUNT(*) FROM grammar_versions").fetchone()
+        assert rows[0] == 0
+        wrote = ensure_grammar_version_recorded(
+            conn,
+            grammar=grammar,
+            yaml_path=yaml_path,
+            at=_AT,
+        )
+        assert wrote is True
+        # Post-condition: exactly one row, matching the active grammar.
+        result = conn.execute(
+            "SELECT version, change_type, rule_count, yaml_sha256 FROM grammar_versions"
+        ).fetchall()
+    assert len(result) == 1
+    version, change_type, rule_count, sha = result[0]
+    assert str(version) == grammar.grammar_version
+    assert str(change_type) == "manual_bump"
+    assert int(rule_count) == len(grammar.rules)
+    # sha256 is 64 lowercase hex chars and matches the on-disk yaml.
+    import hashlib
+
+    expected_sha = hashlib.sha256(yaml_path.read_bytes()).hexdigest()
+    assert str(sha) == expected_sha
+
+
+def test_ensure_grammar_version_is_idempotent(tmp_path: Path) -> None:
+    """D047: a second call after the row exists is a SELECT-only no-op."""
+    forge_db = tmp_path / "forge.db"
+    grammar, yaml_path = _real_grammar()
+    with db_connection(forge_db) as conn:
+        first = ensure_grammar_version_recorded(
+            conn, grammar=grammar, yaml_path=yaml_path, at=_AT
+        )
+        second = ensure_grammar_version_recorded(
+            conn, grammar=grammar, yaml_path=yaml_path, at=_AT
+        )
+        count = conn.execute("SELECT COUNT(*) FROM grammar_versions").fetchone()
+    assert first is True
+    assert second is False
+    assert count[0] == 1
+
+
+def test_ensure_grammar_version_skips_when_existing_row_present(tmp_path: Path) -> None:
+    """D047: an existing row for the active grammar (e.g. written by an earlier
+    apply-proposal) is left intact — the self-healing helper never overwrites."""
+    forge_db = tmp_path / "forge.db"
+    grammar, yaml_path = _real_grammar()
+    with db_connection(forge_db) as conn:
+        conn.execute(
+            """
+            INSERT INTO grammar_versions
+                (version, rule_count, yaml_sha256, changed_at, change_type,
+                 change_description, operator_initials)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                grammar.grammar_version,
+                42,
+                "f" * 64,
+                _AT,
+                "apply_proposal",
+                "explicit operator-driven entry",
+                "AJ",
+            ],
+        )
+        wrote = ensure_grammar_version_recorded(
+            conn, grammar=grammar, yaml_path=yaml_path, at=_AT
+        )
+        rows = conn.execute(
+            "SELECT change_type, rule_count, operator_initials FROM grammar_versions"
+        ).fetchall()
+    assert wrote is False
+    assert len(rows) == 1
+    change_type, rule_count, initials = rows[0]
+    # The pre-existing row is untouched — not overwritten with manual_bump.
+    assert str(change_type) == "apply_proposal"
+    assert int(rule_count) == 42
+    assert str(initials) == "AJ"
