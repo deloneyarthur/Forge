@@ -207,8 +207,112 @@ def test_scales_with_prior_count(n_priors: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_t27_structural_fingerprint_is_stable_across_param_changes() -> None:
-    """T2.7: same structural skeleton + different thresholds → same fingerprint."""
+def _make_param_cfg(
+    threshold: float,
+    *,
+    delta_target: float = 0.45,
+    risk_pct: float = 0.01,
+):  # type: ignore[no-untyped-def]  # ruff-friendly; return-type is StrategyConfig
+    from crucible_contracts import (
+        CombinerSpec,
+        ExitSpec,
+        SelectorSpec,
+        SignalSpec,
+        SizerSpec,
+        StrategyConfig,
+    )
+
+    return StrategyConfig(
+        name=f"cfg_{threshold}_{delta_target}_{risk_pct}",
+        hypothesis="mean_reversion",
+        dte_bucket="swing_short",
+        underlying="SPY",
+        tier=1,
+        signals=(
+            SignalSpec(id="sig_directional", type="threshold", role="directional",
+                       indicators=("rsi_2",), params={"threshold": threshold, "op": "<"}),
+            SignalSpec(id="sig_regime", type="threshold", role="regime_filter",
+                       indicators=("iv_rank",), params={"threshold": 50.0, "op": "<"}),
+        ),
+        combiner=CombinerSpec(),
+        selector=SelectorSpec(
+            delta_target=delta_target, delta_tolerance=0.05, dte_min=14, dte_max=21,
+        ),
+        sizer=SizerSpec(mode="fixed_risk_pct", per_trade_risk_pct=risk_pct),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+        ),
+    )
+
+
+def test_d069_structural_fingerprint_distinguishes_material_threshold_change() -> None:
+    """D069 (replaces pre-D069 T2.7 param-blind behavior): same structural
+    skeleton with materially different directional thresholds must now
+    produce DIFFERENT fingerprints. Pre-D069 they collapsed to the same
+    fingerprint, causing the iter 33-36 100% regime_arbitrage monoculture
+    (constrained hypotheses sampled ~1000 candidates each but only
+    differed in params, so the novelty filter killed 99% as intra-batch
+    duplicates)."""
+    from forge.prefilters.novelty import compute_structural_fingerprint
+
+    fp_a = compute_structural_fingerprint(_make_param_cfg(20.0))
+    fp_b = compute_structural_fingerprint(_make_param_cfg(30.0))
+    assert fp_a != fp_b
+    assert len(fp_a) == 16  # 16-hex-char short hash unchanged
+
+
+def test_d069_structural_fingerprint_collapses_within_bucket() -> None:
+    """D069: param differences SMALLER than the bucket precision still
+    collapse to the same fingerprint. With 2dp default precision,
+    threshold=30.001 and threshold=30.002 are the same bucket; with the
+    delta_target rounding at 2dp, 0.451 and 0.452 collapse too.
+
+    Catches over-fine bucketing that would defeat the dedup's purpose."""
+    from forge.prefilters.novelty import compute_structural_fingerprint
+
+    # Both round to 30.00 at 2dp.
+    fp_a = compute_structural_fingerprint(_make_param_cfg(30.001))
+    fp_b = compute_structural_fingerprint(_make_param_cfg(30.002))
+    assert fp_a == fp_b
+
+    # Both round to 0.45 at 2dp; same threshold.
+    fp_c = compute_structural_fingerprint(_make_param_cfg(30.0, delta_target=0.451))
+    fp_d = compute_structural_fingerprint(_make_param_cfg(30.0, delta_target=0.452))
+    assert fp_c == fp_d
+
+
+def test_d069_structural_fingerprint_distinguishes_delta_target() -> None:
+    """D069: same skeleton + threshold, different `delta_target` →
+    different fingerprints (each picks a different option contract on
+    the chain). Was previously elided as 'an Optuna knob' in the pre-
+    D069 fingerprint."""
+    from forge.prefilters.novelty import compute_structural_fingerprint
+
+    fp_low = compute_structural_fingerprint(_make_param_cfg(30.0, delta_target=0.30))
+    fp_high = compute_structural_fingerprint(_make_param_cfg(30.0, delta_target=0.55))
+    assert fp_low != fp_high
+
+
+def test_d069_structural_fingerprint_distinguishes_risk_pct() -> None:
+    """D069: `per_trade_risk_pct` uses 3dp precision since its native
+    range is 0.005-0.020 (2dp would collapse to only 4 buckets). A
+    factor-of-2 risk difference must produce different fingerprints."""
+    from forge.prefilters.novelty import compute_structural_fingerprint
+
+    fp_safe = compute_structural_fingerprint(_make_param_cfg(30.0, risk_pct=0.005))
+    fp_aggro = compute_structural_fingerprint(_make_param_cfg(30.0, risk_pct=0.020))
+    assert fp_safe != fp_aggro
+
+
+def test_d069_structural_fingerprint_distinguishes_d068_pairs_params() -> None:
+    """D069: D068's `signals[0].params.get("zscore_entry"|"halflife_min"|...)`
+    keys must enter the fingerprint so the sampler's pairs-template
+    variation isn't deduped away. Without this, every relative_value
+    config with the same (directional, regime) pair would re-collapse
+    to a single fingerprint despite the D068 widening."""
     from crucible_contracts import (
         CombinerSpec,
         ExitSpec,
@@ -220,34 +324,56 @@ def test_t27_structural_fingerprint_is_stable_across_param_changes() -> None:
 
     from forge.prefilters.novelty import compute_structural_fingerprint
 
-    def _make_cfg(threshold: float) -> StrategyConfig:
+    def _make_rv(zscore_entry: float, halflife_min: int) -> StrategyConfig:
         return StrategyConfig(
-            name=f"cfg_{threshold}",
-            hypothesis="mean_reversion",
-            dte_bucket="swing_short",
-            underlying="SPY",
-            tier=1,
+            name=f"rv_{zscore_entry}_{halflife_min}",
+            hypothesis="relative_value",
+            dte_bucket="swing_mid",
+            underlying=None,  # pairs picks its own
+            tier=2,
             signals=(
-                SignalSpec(id="sig_directional", type="threshold", role="directional",
-                           indicators=("rsi_2",), params={"threshold": threshold}),
-                SignalSpec(id="sig_regime", type="threshold", role="regime_filter",
-                           indicators=("iv_rank",), params={"threshold": 50.0}),
+                SignalSpec(
+                    id="sig_directional", type="threshold", role="directional",
+                    indicators=("pairs_zscore",),
+                    params={
+                        "threshold": -1.2, "op": "<",
+                        "lookback": 252, "pvalue_max": 0.10,
+                        "zscore_entry": zscore_entry,
+                        "halflife_min": halflife_min, "halflife_max": 30,
+                    },
+                ),
+                SignalSpec(
+                    id="sig_regime", type="threshold", role="regime_filter",
+                    indicators=("realized_vol",), params={"threshold": 0.15, "op": "<"},
+                ),
             ),
             combiner=CombinerSpec(),
-            selector=SelectorSpec(delta_target=0.45, delta_tolerance=0.05, dte_min=14, dte_max=21),
-            sizer=SizerSpec(mode="fixed_risk_pct"),
+            selector=SelectorSpec(
+                delta_target=0.40, delta_tolerance=0.05, dte_min=30, dte_max=45,
+            ),
+            sizer=SizerSpec(mode="fixed_risk_pct", per_trade_risk_pct=0.01),
             exits=(
                 ExitSpec(id="expiry_exit"),
                 ExitSpec(id="theta_cliff_exit"),
                 ExitSpec(id="earnings_exit"),
                 ExitSpec(id="liquidity_exit"),
+                ExitSpec(id="convergence_exit"),
             ),
         )
 
-    fp_a = compute_structural_fingerprint(_make_cfg(20.0))
-    fp_b = compute_structural_fingerprint(_make_cfg(30.0))
-    assert fp_a == fp_b  # parameter difference, identical structure
-    assert len(fp_a) == 16  # 16-hex-char short hash
+    fp_loose = compute_structural_fingerprint(_make_rv(1.0, 3))
+    fp_strict = compute_structural_fingerprint(_make_rv(2.0, 8))
+    assert fp_loose != fp_strict
+
+
+def test_d069_structural_fingerprint_is_deterministic() -> None:
+    """Same config built twice → same fingerprint. Required for
+    hard rule #6 and for the prior_structural_fingerprints lookup to
+    work across iterations."""
+    from forge.prefilters.novelty import compute_structural_fingerprint
+
+    cfg = _make_param_cfg(25.0, delta_target=0.40, risk_pct=0.012)
+    assert compute_structural_fingerprint(cfg) == compute_structural_fingerprint(cfg)
 
 
 def test_t27_structural_fingerprint_distinguishes_indicator_swap() -> None:

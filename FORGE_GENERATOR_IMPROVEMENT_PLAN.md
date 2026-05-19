@@ -111,7 +111,7 @@ The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `
 
 | Phase | Status | Decision Log |
 |---|---|---|
-| 1 | **Not started** — about to begin | D069 (TBD) |
+| 1 | ✅ Landed 2026-05-19 — pending live verification on next iter | D069 |
 | 2 | Pending | — |
 | 3 | Pending | — |
 | 4 | Pending | — |

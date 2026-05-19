@@ -1986,3 +1986,70 @@ halflife_max:  rng.choice((15, 30, 45, 60))
 - `src/forge/enumeration/sampler.py` — `_directional_signal_params` merges in `_sample_pairs_template_params(rng)` for `pairs_zscore`; new helper exposes the 5 sampled keys.
 - `tests/unit/test_enumeration/test_sampler.py` — 4 new D068 tests.
 - `IMPLEMENTATION_DECISIONS.md` D068 (this entry).
+
+---
+
+## D069 — Param-aware structural fingerprint (Phase 1 of FORGE_GENERATOR_IMPROVEMENT_PLAN)
+
+**Date:** 2026-05-19
+
+**Context.** After D066 + D067 + D068 shipped, four consecutive Forge iterations (33-36) produced **100% regime_arbitrage survivors** across different seeds: 31 / 20 / 14 / 19 of 5,000 candidates each. The other four sampling hypotheses (trend_continuation, mean_reversion, relative_value, volatility_event) got zero past the pre-filter battery. The dominant rejection bucket was `novelty` at ~41.8% across all four iterations.
+
+Per `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 1 analysis (Forge-side surface of Crucible 2026-05-19 3,829-cohort handoff), the structural cause is:
+
+1. D067 evenly distributed sampling across 5 active hypotheses, dropping ~1,000 candidates each into `mean_reversion`, `trend_continuation`, `volatility_event`, `relative_value`.
+2. The §3.5 grammar constrains these four hypotheses to narrow C2 family x R-rule combos: ~6 (directional, regime) pairs for `mean_reversion`, ~18 for `trend_continuation`, ~25 for `volatility_event`, ~50 for `relative_value`. The fifth (`regime_arbitrage`, any-family) has ~2,500 combos.
+3. The T2.7 structural fingerprint (D043 / D049 / D060) hashed `(hypothesis, indicator_ids, exit_ids, dte_bucket, sizer_mode)` and EXPLICITLY excluded numeric params (delta_target, threshold values, sizer params, D068 pairs keys). Original D043 rationale: "anything Optuna would tune within a fixed structural shape" — but Optuna is not in the production loop, and each different-param config produces a different Crucible backtest with different gated metrics.
+4. Result: a batch with 1,000 `mean_reversion` candidates collapsed to ~6 unique fingerprints. The novelty filter correctly killed 99.4% of them as intra-batch duplicates. `regime_arbitrage` survived because its any-family pool produced ~2,500 unique fingerprints, well above the batch size.
+
+**Decision.** Extend `compute_structural_fingerprint` to include bucketed numeric params.
+
+New hash inputs (additive to the pre-D069 structural skeleton):
+
+- **Per-signal params:** sorted by `signal.id`, each param keyed and bucketed.
+- **Per-exit params:** sorted by `exit.id`, each param keyed and bucketed.
+- **Selector:** `delta_target` (bucketed), `dte_min` (exact int), `dte_max` (exact int).
+- **Sizer params:** `per_trade_risk_pct` (bucketed), `kelly_fraction` (bucketed), `vol_target_annual` (bucketed).
+
+**Bucketing rule.** All floats round to a per-key decimal precision (default 2dp). `per_trade_risk_pct` overrides to 3dp because its native range is 0.005-0.020 — 2dp would collapse to ~4 buckets and erase Phase 5 variation. Ints / strs / None pass through unchanged.
+
+**Math after the change.** For `mean_reversion` with 6 (directional, regime) combos x ~36 delta_target buckets x ~16 risk_pct buckets x ~15 directional-threshold buckets x ~9 regime-threshold buckets x 3 dte_buckets = ~1.4M structural variants. A 1,000-candidate batch now hits a vastly larger discrimination space; intra-batch novelty collisions drop from 99.4% to a trivial fraction.
+
+**Backwards compatibility.** Existing `submissions` rows store the raw `config_json`; fingerprints are computed on demand by `_load_prior_structural_fingerprints`. Switching the algorithm re-derives the historical fingerprint set with the new richer schema — no DB migration. The set size grows (more unique fingerprints), but new candidates are also more likely to be unique, so the net effect is MORE configs admitted, not fewer.
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** untouched. Pure pre-filter dedup change. No §3.5 modification.
+- **#2 (no Crucible internals):** preserved. Pure Forge-side change in `forge.prefilters.novelty`.
+- **#3 (never lower Crucible's gate):** N/A. Affects which configs reach Crucible, not which Crucible promotes.
+- **#6 (deterministic enumeration):** preserved. The fingerprint is deterministic over the bucketed config — same (`grammar_version`, `registry_hash`, `seed`) still produces the same enumeration sequence, and the same config always hashes the same.
+
+**Alternatives considered:**
+
+- **Include raw (unbucketed) floats.** Considered. Rejected: would defeat the dedup almost entirely — `delta_target=0.394` and `delta_target=0.401` would have different fingerprints even though they pick the same option contract on most days. The dedup's purpose is to collapse truly-equivalent configs without enumerating their continuous param tail.
+- **Round to 4 decimal places.** Considered. Rejected: matches the sampler's native emission precision, so EVERY sampled config would have a unique fingerprint and the dedup becomes a no-op.
+- **Single-precision rule (round all floats to 2dp).** Considered. Rejected: per_trade_risk_pct's 0.005-0.020 range collapses to 4 buckets at 2dp — would erase Phase 5's planned sampler variation. Per-key precision avoids this without much complexity.
+- **Asymmetric novelty filter (looser threshold for under-sampled hypotheses).** Considered as Phase 1 alternative. Rejected: more complex, requires per-iteration state, and treats the symptom (hypothesis imbalance) rather than the cause (param-blind dedup).
+- **Shrink max_candidates from 5000 to 1000.** Considered. Rejected: surface-level mitigation that limits exploration of the regime_arbitrage tail and doesn't address the structural cause — the constrained hypotheses would still hit the same novelty wall at scale 1000.
+
+**Verification:**
+
+- 6 new tests in `tests/unit/test_prefilters/test_novelty.py`:
+  - `test_d069_structural_fingerprint_distinguishes_material_threshold_change` — replaces the pre-D069 `test_t27_structural_fingerprint_is_stable_across_param_changes`; threshold=20 vs threshold=30 now produces different fingerprints.
+  - `test_d069_structural_fingerprint_collapses_within_bucket` — threshold=30.001 / 30.002 still collapse to the same bucket; delta_target=0.451 / 0.452 collapse.
+  - `test_d069_structural_fingerprint_distinguishes_delta_target` — different delta picks different option contract → different fingerprints.
+  - `test_d069_structural_fingerprint_distinguishes_risk_pct` — 0.005 vs 0.020 risk produces different fingerprints (3dp precision).
+  - `test_d069_structural_fingerprint_distinguishes_d068_pairs_params` — D068 pairs-template variation (zscore_entry, halflife_min) enters the hash so D068's widening isn't deduped away.
+  - `test_d069_structural_fingerprint_is_deterministic` — same config twice → same fingerprint (hard rule #6).
+- Existing T2.7 tests (`test_t27_structural_fingerprint_distinguishes_indicator_swap`, `test_t27_novelty_rejects_matching_structural_fingerprint`) still pass — indicator-swap discrimination unchanged; fingerprint-match still rejected by NoveltyFilter.
+- Full pytest suite: 1,091 tests green (5 new D069 + 1086 baseline).
+- Ruff + mypy strict clean on changed scope.
+
+**Expected operator-observable behavior.** Next iteration (37+) should show non-zero `ranked_top_n_by_hypothesis` counts for the constrained hypotheses (`trend_continuation`, `mean_reversion`, `volatility_event`, `relative_value`) — not necessarily even, but the 100% regime_arbitrage monoculture should break. `prefilter_rejections.novelty` will likely drop from the ~41.8% it has been holding at across iters 33-36.
+
+**Action:**
+
+- `src/forge/prefilters/novelty.py` — `compute_structural_fingerprint` extended with `signal_params` / `exit_params` / `selector` / `sizer_params` bucketed contributions; new `_bucket_value` + `_canonical_params` helpers; `_FINGERPRINT_FLOAT_PRECISION_*` constants.
+- `tests/unit/test_prefilters/test_novelty.py` — 6 new D069 tests; existing T2.7 stability test replaced (was asserting param-blind behavior).
+- `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` — Phase 1 row marked complete with D069 reference (separate commit).
+- `IMPLEMENTATION_DECISIONS.md` D069 (this entry).
