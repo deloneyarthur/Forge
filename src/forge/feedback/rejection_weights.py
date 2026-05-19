@@ -28,7 +28,7 @@ import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
     import duckdb
     from crucible_contracts import GatedRun
@@ -95,9 +95,60 @@ def prior_mean(*, alpha: float = DEFAULT_ALPHA, beta: float = DEFAULT_BETA) -> f
     return alpha / (alpha + beta)
 
 
+# D067 — minimum exploration weight applied across all canonical
+# hypotheses to prevent the cold-start death spiral: a hypothesis with
+# zero gated history gets prior weight (~0.091), but once a single
+# unlucky batch lands it gets posterior ~0.005, then never gets sampled
+# again to accumulate corrective evidence. The floor breaks this. Sized
+# so that 5 active hypotheses all at floor would each receive ~20% of
+# the budget — enough exploration for each to accumulate ~50 gated
+# trials per ~250-candidate iteration before the floor releases them
+# back to natural posterior dominance. See IMPLEMENTATION_DECISIONS.md
+# D067 for full rationale (4039 submissions, 1 mean_reversion / 0
+# trend_continuation pre-floor).
+DEFAULT_EXPLORATION_FLOOR: float = 0.05
+
+
+def apply_exploration_floor(
+    weights: Mapping[str, float],
+    *,
+    hypotheses: Iterable[str],
+    floor: float = DEFAULT_EXPLORATION_FLOOR,
+    fallback: float | None = None,
+) -> dict[str, float]:
+    """Apply a minimum exploration floor across a canonical hypothesis set.
+
+    For each ``h`` in ``hypotheses``:
+      - Present in ``weights``: returns ``max(weights[h], floor)``.
+      - Absent from ``weights`` with ``fallback`` set:
+        ``max(fallback, floor)`` — used to keep unobserved hypotheses on
+        the Beta prior (typically higher than the floor anyway, so the
+        prior dominates for true cold-starts while the floor protects
+        observed-but-failing hypotheses).
+      - Absent with ``fallback=None``: returns ``floor`` directly.
+
+    The returned dict ALWAYS contains every name in ``hypotheses``, so
+    the sampler's `weights.get(h, prior_mean)` fallback no longer fires
+    for canonical hypotheses — every one is explicitly floored before
+    leaving this function. Callers that need the raw posterior should
+    call ``compute_hypothesis_weights`` directly.
+    """
+    result: dict[str, float] = {}
+    for h in hypotheses:
+        if h in weights:
+            result[h] = max(weights[h], floor)
+        elif fallback is not None:
+            result[h] = max(fallback, floor)
+        else:
+            result[h] = floor
+    return result
+
+
 __all__ = [
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
+    "DEFAULT_EXPLORATION_FLOOR",
+    "apply_exploration_floor",
     "compute_hypothesis_weights",
     "prior_mean",
 ]

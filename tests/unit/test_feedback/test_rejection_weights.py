@@ -25,6 +25,8 @@ from crucible_contracts import (
 from forge.feedback.rejection_weights import (
     DEFAULT_ALPHA,
     DEFAULT_BETA,
+    DEFAULT_EXPLORATION_FLOOR,
+    apply_exploration_floor,
     compute_hypothesis_weights,
     prior_mean,
 )
@@ -208,6 +210,82 @@ def test_alpha_beta_override(tmp_path: Path) -> None:
         # Strong prior: (1+1)/(1+9+1) = 2/11
         weights = compute_hypothesis_weights(conn, gated_runs, alpha=1.0, beta=9.0)
         assert weights["mean_reversion"] == pytest.approx(2 / 11, rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# D067 — exploration floor (cold-start death-spiral guard)
+# ---------------------------------------------------------------------------
+
+_CANONICAL = (
+    "trend_continuation",
+    "mean_reversion",
+    "regime_arbitrage",
+    "relative_value",
+    "volatility_event",
+)
+
+
+def test_d067_floor_bumps_observed_below_floor() -> None:
+    """Observed-but-low hypotheses get floored. The 0.003/0.004 weights
+    that starved relative_value + regime_arbitrage become 0.05 floor."""
+    raw = {
+        "regime_arbitrage": 0.004,
+        "relative_value": 0.003,
+        "volatility_event": 0.048,
+    }
+    out = apply_exploration_floor(raw, hypotheses=_CANONICAL)
+    assert out["regime_arbitrage"] == DEFAULT_EXPLORATION_FLOOR
+    assert out["relative_value"] == DEFAULT_EXPLORATION_FLOOR
+    assert out["volatility_event"] == DEFAULT_EXPLORATION_FLOOR
+
+
+def test_d067_floor_preserves_observed_above_floor() -> None:
+    """A hypothesis whose posterior is above the floor passes through."""
+    raw = {"trend_continuation": 0.123}
+    out = apply_exploration_floor(raw, hypotheses=_CANONICAL)
+    assert out["trend_continuation"] == pytest.approx(0.123)
+
+
+def test_d067_unobserved_uses_fallback_then_floor() -> None:
+    """Hypotheses missing from `weights` take the fallback (typically the
+    Beta prior ~0.091, which is above the floor). The floor still applies
+    if the fallback is below it."""
+    raw: dict[str, float] = {}
+    out_prior = apply_exploration_floor(
+        raw, hypotheses=_CANONICAL, fallback=prior_mean(),
+    )
+    # prior_mean() = 1/11 ≈ 0.0909 > floor 0.05, so the prior wins.
+    for h in _CANONICAL:
+        assert out_prior[h] == pytest.approx(prior_mean())
+
+    out_floor_only = apply_exploration_floor(raw, hypotheses=_CANONICAL)
+    for h in _CANONICAL:
+        assert out_floor_only[h] == DEFAULT_EXPLORATION_FLOOR
+
+
+def test_d067_all_canonical_hypotheses_always_present() -> None:
+    """Even when `weights` is sparse, the returned dict contains every
+    canonical hypothesis. This is the property the cold-start spiral
+    relied on being violated: with raw `compute_hypothesis_weights`,
+    unobserved hypotheses were silently absent — D063 surfaced this and
+    D067 ensures they're always represented in the sampler input."""
+    sparse = {"volatility_event": 0.05}
+    out = apply_exploration_floor(
+        sparse, hypotheses=_CANONICAL, fallback=prior_mean(),
+    )
+    assert set(out) == set(_CANONICAL)
+
+
+def test_d067_custom_floor_threshold() -> None:
+    """Floor is a tunable parameter; pin the math at non-default values."""
+    raw = {"regime_arbitrage": 0.001}
+    out = apply_exploration_floor(
+        raw, hypotheses=_CANONICAL, floor=0.10, fallback=prior_mean(),
+    )
+    # regime_arbitrage floored from 0.001 → 0.10
+    assert out["regime_arbitrage"] == pytest.approx(0.10)
+    # prior_mean ≈ 0.091 < 0.10, so unobserved gets the higher floor.
+    assert out["trend_continuation"] == pytest.approx(0.10)
 
 
 def test_handles_corrupt_config_json_gracefully(tmp_path: Path) -> None:

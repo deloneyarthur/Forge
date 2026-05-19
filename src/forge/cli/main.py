@@ -464,11 +464,25 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     from crucible_contracts import load_recent_gated_runs_from_export
     from crucible_contracts.exceptions import QueryError
 
-    from forge.feedback.rejection_weights import compute_hypothesis_weights
+    from forge.enumeration.search_space import _HYPOTHESES, OVERLAY_ONLY_HYPOTHESES
+    from forge.feedback.rejection_weights import (
+        apply_exploration_floor,
+        compute_hypothesis_weights,
+        prior_mean,
+    )
     from forge.persistence.db import db_connection
 
+    # D067 — sampling hypotheses: canonical minus overlay-only (D066).
+    sampling_hypotheses = tuple(
+        h for h in _HYPOTHESES if h not in OVERLAY_ONLY_HYPOTHESES
+    )
+
     if forge_db_path == Path(":memory:") or not forge_db_path.exists():
-        return {}
+        # D067: even on cold start, return floored weights so the journal
+        # shows the floor explicitly and the sampler distributes evenly.
+        return apply_exploration_floor(
+            {}, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+        )
     exports_dir = Path.home() / "optbt_data" / "exports"
     try:
         gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=1000)
@@ -482,11 +496,23 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
                 err=True,
             )
             _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED = True
-        return {}
+        return apply_exploration_floor(
+            {}, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+        )
     if not gated_runs:
-        return {}
+        return apply_exploration_floor(
+            {}, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+        )
     with db_connection(forge_db_path) as conn:
-        return compute_hypothesis_weights(conn, gated_runs)
+        raw = compute_hypothesis_weights(conn, gated_runs)
+    # D067: floor every canonical sampling hypothesis at
+    # DEFAULT_EXPLORATION_FLOOR so observed-but-low ones (regime_arbitrage
+    # at 0.004, relative_value at 0.003) still get measurable exploration
+    # budget. Unobserved hypotheses fall back to the Beta prior (~0.091),
+    # which is already above the floor.
+    return apply_exploration_floor(
+        raw, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+    )
 
 
 def _fetch_promoted_configs(

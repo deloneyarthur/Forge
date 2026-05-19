@@ -1834,3 +1834,80 @@ Concrete cost from this iteration of monitoring:
 - `tests/unit/test_submission/test_submitter.py` — 2 new D066 tests.
 - `tests/unit/test_enumeration/test_sampler.py` — `test_sampler_reaches_every_hypothesis` expected set updated.
 - `IMPLEMENTATION_DECISIONS.md` D066 (this entry).
+
+---
+
+## D067 — Exploration floor on hypothesis weights (cold-start death-spiral guard)
+
+**Date:** 2026-05-18
+
+**Context.** Forge's adaptive hypothesis weighter (`forge.feedback.rejection_weights.compute_hypothesis_weights`) produces a Beta-smoothed posterior promotion rate per hypothesis. Hypotheses with zero gated history return the Beta(1, 10) prior mean (~0.091); hypotheses with observed-but-failing history get a much lower posterior (e.g., 0.003-0.05). Over 4,039 submissions, two of the six v1 hypotheses had collapsed:
+
+- **trend_continuation:** 0 / 4,039 submissions (0.000%).
+- **mean_reversion:** 1 / 4,039 submissions (0.025%).
+
+This is the classic cold-start death spiral: a hypothesis with very-low posterior weight rarely gets sampled, so it never accumulates corrective evidence, so its weight stays low, so it's rarely sampled, ad infinitum. D037 (2% stratified floor on the iterator's forced rotation) was meant to backstop this, but the forced-failure cap (20 retries) means that hypotheses whose CSP keeps dead-ending get blacklisted for the rest of the batch and the Bayesian sampler takes back over for the remaining ~98% of the budget. D063 made the absent hypotheses visible in the journal (prior-filled with `*`), but didn't change their effective sampling weight.
+
+**Decision.** Apply a `DEFAULT_EXPLORATION_FLOOR = 0.05` across all canonical sampling hypotheses BEFORE the weights reach the sampler.
+
+A new helper `apply_exploration_floor(weights, *, hypotheses, floor, fallback)` in `forge.feedback.rejection_weights` returns a dict that ALWAYS contains every name in `hypotheses` with weight at least `floor`:
+
+- **Present in `weights`:** `max(weights[h], floor)`.
+- **Absent + `fallback` set:** `max(fallback, floor)` — used to keep cold-start hypotheses on the Beta prior (which is already above the floor at ~0.091).
+- **Absent + `fallback=None`:** the floor directly.
+
+The CLI's `_load_hypothesis_weights` chains this after `compute_hypothesis_weights`, passing `hypotheses=_HYPOTHESES \\ OVERLAY_ONLY_HYPOTHESES` (D066) and `fallback=prior_mean()`. Every cold-start / degraded-export / no-overlap path also returns floored weights, so the sampler never sees a sparse dict for canonical hypotheses again.
+
+**Math after the floor.** With 5 active sampling hypotheses (tail_hedge excluded by D066) and a floor of 0.05:
+
+```
+pre-D067 effective weights (from production journal iter 32):
+  trend_continuation = 0.091  (prior, missing from weights map)
+  mean_reversion     = 0.091  (prior, missing from weights map)
+  regime_arbitrage   = 0.004  (observed, posterior)
+  relative_value     = 0.003  (observed, posterior)
+  volatility_event   = 0.048  (observed, posterior)
+  → sample shares:    38.4% / 38.4% / 1.7% / 1.3% / 20.3%
+
+post-D067 effective weights:
+  trend_continuation = 0.091  (prior, unchanged — already above floor)
+  mean_reversion     = 0.091  (prior, unchanged — already above floor)
+  regime_arbitrage   = 0.050  (floored)
+  relative_value     = 0.050  (floored)
+  volatility_event   = 0.050  (floored — natural 0.048 just below floor)
+  → sample shares:    27.4% / 27.4% / 15.1% / 15.1% / 15.1%
+```
+
+Every hypothesis now gets at least 15% of the budget — enough for ~38 candidates per 250-candidate iteration to start accumulating corrective evidence. Once a hypothesis's posterior climbs above the floor on its own merit (~50 promoted runs), it dominates naturally.
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** untouched. The §3.5 hypothesis list is unchanged; this is a runtime sampling policy.
+- **#6 (deterministic enumeration):** preserved. The floor is a deterministic transform on the weight map. Same `(grammar_version, registry_hash, seed, gated_runs_snapshot)` still produces a byte-identical enumeration sequence.
+- **#4 (auto-loosening forbidden):** N/A — this is sampling-distribution policy, not grammar relaxation. The pre-filter battery and Crucible's gate are unchanged; this only changes which hypotheses get scored.
+
+**Alternatives considered:**
+
+- **Apply floor inside `compute_hypothesis_weights`.** Considered. Rejected: that function is also called by analytics paths and integration tests that expect the raw Beta posterior. Keeping the floor in a separate function preserves analytic clarity and lets the CLI explicitly opt in.
+- **Raise the Beta prior alpha (e.g., from 1 to 5).** Considered. Rejected: the prior controls how strongly the posterior shifts toward observed data; raising alpha would slow learning for hypotheses that genuinely deserve down-weighting. The floor is a sharper instrument — it's about exploration guarantees, not posterior shape.
+- **Adaptive floor (e.g., higher floor when sample count is small, decay as data accumulates).** Considered. Rejected for v1 simplicity: a fixed floor at 0.05 lets ~15% per hypothesis through; once any hypothesis stably clears 0.05 on natural posterior the floor is inactive for it. An adaptive schedule adds tuning surface without obvious benefit at current sample sizes.
+- **Stratified floor at the iterator (raise D037 from 2% to 10%).** Considered. Rejected: D037's `_FORCED_FAILURE_CAP=20` rate-limits the forced rotation when CSP dead-ends. Raising the floor wouldn't help if the actual blocker is the CSP. The weighted-sample path is the right surface.
+
+**Verification:**
+
+- 5 new tests in `tests/unit/test_feedback/test_rejection_weights.py`:
+  - `test_d067_floor_bumps_observed_below_floor` — observed-low hypotheses (0.003, 0.004, 0.048) get clamped to 0.05.
+  - `test_d067_floor_preserves_observed_above_floor` — natural high posterior passes through.
+  - `test_d067_unobserved_uses_fallback_then_floor` — `fallback=prior_mean()` keeps cold-start at prior (above floor); `fallback=None` uses floor directly.
+  - `test_d067_all_canonical_hypotheses_always_present` — sparse input → all 5 keys in output.
+  - `test_d067_custom_floor_threshold` — sensitivity at floor=0.10.
+- Ruff + mypy strict clean on `src/forge/feedback/rejection_weights.py` + `src/forge/cli/main.py`.
+
+**Action:**
+
+- `src/forge/feedback/rejection_weights.py` — new `DEFAULT_EXPLORATION_FLOOR=0.05` constant; new `apply_exploration_floor(...)` helper.
+- `src/forge/cli/main.py` — `_load_hypothesis_weights` chains `apply_exploration_floor` after every compute path (cold-start, degraded-export, no-overlap, normal). The journal `hypothesis_weights:` line now reflects floored values directly.
+- `tests/unit/test_feedback/test_rejection_weights.py` — 5 new D067 tests.
+- `IMPLEMENTATION_DECISIONS.md` D067 (this entry).
+
+**Expected operator-observable behavior.** After restart, the `hypothesis_weights:` line in the journal will show all 5 sampling hypotheses with weights at or above 0.05. `sampler_attempts:` should track ~15-27% per hypothesis within the first iteration. Within 5-10 iterations, both `mean_reversion` and `trend_continuation` should produce gated runs that move their posteriors off the prior.
