@@ -1911,3 +1911,78 @@ Every hypothesis now gets at least 15% of the budget — enough for ~38 candidat
 - `IMPLEMENTATION_DECISIONS.md` D067 (this entry).
 
 **Expected operator-observable behavior.** After restart, the `hypothesis_weights:` line in the journal will show all 5 sampling hypotheses with weights at or above 0.05. `sampler_attempts:` should track ~15-27% per hypothesis within the first iteration. Within 5-10 iterations, both `mean_reversion` and `trend_continuation` should produce gated runs that move their posteriors off the prior.
+
+---
+
+## D068 — Populate pairs_convergence template params (relative_value zero-trades fix)
+
+**Date:** 2026-05-19
+
+**Context.** Across 4,039 historical submissions, 1,154 (28.6%) were `relative_value` configs. Every single one produced n_trades=0 on Crucible's backtester — 345/345 gated runs had zero trades. This is the second-largest source of wasted compute behind the D066 tail_hedge issue.
+
+**Diagnosis.** Two compounding problems, surfaced by an instrumented funnel walk across 62 sessions x 15 pairs (930 (asof, pair) evaluations):
+
+1. **Contract mismatch.** Crucible's `pairs_convergence` template (`src/optbt/strategy/templates/pairs_convergence.py:84-96`) reads its CSP-style entry rule (`lookback`, `pvalue_max`, `zscore_entry`, `halflife_min`, `halflife_max`) from `signals[0].params.get(key, default)`. Forge's sampler currently emits `{"threshold": -1.18, "op": "<"}` — the *generic* threshold-predicate keys Crucible uses for activation-date detection. The template's keys are absent, so all 1,154 relative_value configs ran with template defaults: `lookback=252`, `pvalue<0.05`, `|z|>2.0`, `hl ∈ (5, 30)`.
+
+2. **Strict default thresholds.** With template defaults, only **3 of 930 (0.32%)** evaluations were entry-eligible across the 90-day window. Failure breakdown:
+   - 818/930 = 88.0% fail `pvalue<0.05` (median cointegration pvalue = 0.59).
+   - 96 of 112 pvalue-passers = 85.7% fail `|z|>2.0` (median |z| = 1.06).
+   - 13 of 16 zscore-passers = 81.3% fail `5<halflife<30` (median halflife = 3.32 — below the floor).
+
+   Two pairs carry essentially all the surviving signal (PG-CL and GOOG-GOOGL); the other 13 pairs of the 15-pair list fail cointegration on every sampled session. Even when an entry IS eligible, the dedup rule (one position per underlying per strategy_id) clusters all viable PG-CL entries into a single position — yielding 0-1 trades total per backtest.
+
+   Widening sensitivity (same 930 evaluations):
+   - default `pval<0.05, |z|>2.0, hl ∈ (5,30)`: **0.3% eligible** (baseline).
+   - widened-low `pval<0.10, |z|>1.5, hl ∈ (3,45)`: **3.9% eligible** (13x).
+   - widened-mid `pval<0.15, |z|>1.0, hl ∈ (2,45)`: **7.7% eligible** (26x).
+   - widened-aggressive `pval<0.20, |z|>0.8, hl ∈ (2,60)`: **9.1% eligible** (30x).
+
+**Decision.** Populate `signals[0].params` with the template-expected keys when the directional indicator is `pairs_zscore`. This is a Forge-side fix because (a) Crucible's template is already a `.get(key, default)` lookup — no Crucible change needed; (b) per CLAUDE.md hard rule #2, no Crucible internals modifications; (c) the contract that Forge's `signals[0].params` should carry strategy-template params is naturally Forge's side of the boundary.
+
+New helper `_sample_pairs_template_params(rng)` in `forge.enumeration.sampler`:
+
+```python
+lookback:      rng.choice((126, 189, 252, 378, 504))
+pvalue_max:    uniform(0.05, 0.20)
+zscore_entry:  uniform(0.8, 2.0)
+halflife_min:  rng.choice((2, 3, 5, 8))
+halflife_max:  rng.choice((15, 30, 45, 60))
+```
+
+`_directional_signal_params` merges these into the threshold-params dict ONLY when `indicator_id == "pairs_zscore"`. Other indicators are untouched. The disjoint discrete ranges for `halflife_min` (2..8) and `halflife_max` (15..60) guarantee `halflife_min < halflife_max` by construction.
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** untouched. Pairs-template params live in the sampler, not the grammar. If the operator decides to add a §3.5 P-rule constraining these ranges, the sampler will narrow inside the grammar-prescribed bounds — same pattern as P2/P3/P4 today.
+- **#2 (no Crucible internals):** preserved. We do not import from Crucible. We adapt to its public `signals[0].params` contract.
+- **#3 (never lower Crucible's gate):** N/A. This is enumeration variation, not gate strictness. Backtests with widened thresholds still pass through Crucible's full gate.
+- **#6 (deterministic enumeration):** preserved. `_sample_pairs_template_params(rng)` is a pure function of the RNG state at call time. Same `(grammar_version, registry_hash, seed)` still produces byte-identical configs.
+- **#7 (no equity):** N/A.
+
+**Alternatives considered:**
+
+- **Add §3.5 P-rules for the pairs params.** Considered. Rejected for now: hard rule #1 makes that a careful operator-review item; the urgent fix is to stop wasting 28.6% of inbox compute on identical no-trade backtests. The sampler ranges can later be tightened by a grammar P-rule without breaking this commit.
+- **Widen `pvalue_max` only.** Considered. Rejected: the funnel analysis shows pvalue is the dominant filter (88% failure rate), but |zscore| and halflife each also block ~80% of the remaining survivors. Widening just one knob leaves the other two as the bottleneck.
+- **Modify Crucible's template defaults.** Considered. Rejected per the operator's prompt boundary ("fix lands in the correct repo — Forge if it's grammar ranges"). The template's defaults are fine for a conservative single-config invocation; the variation belongs in the enumeration layer.
+- **Down-weight relative_value at the sampler.** Considered. Rejected: that masks the symptom without fixing the underlying contract mismatch. Eventually we want relative_value submissions to vary AND fire trades; mere down-weighting yields neither.
+- **Skip the pairs-strategy hypothesis until OverlaySpec / proper template variation lands.** Considered (same shape as D066). Rejected because, unlike `tail_hedge`, `relative_value` is a return-seeking strategy with a real Crucible gate — the variation knobs exist and are easy to populate. Better to enumerate properly than to defer.
+
+**Verification:**
+
+- Funnel-walk diagnostic at `/tmp/diag_relative_value.py` (kept for re-running on new pair lists).
+- Sensitivity diagnostic at `/tmp/diag_widen.py` (confirms 13-30x entry-rate improvement across the proposed ranges).
+- 4 new tests in `tests/unit/test_enumeration/test_sampler.py`:
+  - `test_d068_pairs_zscore_directional_emits_template_params` — keys present.
+  - `test_d068_pairs_template_params_ranges` — values in documented ranges across N=50 seeds; `halflife_min < halflife_max` invariant holds.
+  - `test_d068_pairs_template_params_deterministic_under_same_rng` — same seed → same params.
+  - `test_d068_non_pairs_indicator_does_not_get_template_params` — other directional indicators unaffected.
+- Full pytest suite (1,086 tests) green.
+- Ruff + mypy strict clean on changed scope.
+
+**Expected operator-observable behavior.** After restart, new `relative_value` submissions will carry `lookback`/`pvalue_max`/`zscore_entry`/`halflife_min`/`halflife_max` in `signals[0].params`. Within ~5 iterations, the `gated_runs` export should start showing relative_value runs with `n_trades > 0` — at least ~10% per sensitivity analysis. The adaptive weighter will then have real data to refine the posterior beyond the D067 exploration floor.
+
+**Action:**
+
+- `src/forge/enumeration/sampler.py` — `_directional_signal_params` merges in `_sample_pairs_template_params(rng)` for `pairs_zscore`; new helper exposes the 5 sampled keys.
+- `tests/unit/test_enumeration/test_sampler.py` — 4 new D068 tests.
+- `IMPLEMENTATION_DECISIONS.md` D068 (this entry).

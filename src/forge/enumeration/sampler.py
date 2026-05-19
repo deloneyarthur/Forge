@@ -474,8 +474,44 @@ def _directional_signal_params(
     emitted directional threshold signals with empty params; Crucible's
     predicate then returned False on every bar, producing 0 activations
     and 100% signal_density rejection under the real feature cache.
+
+    D068: Crucible's `pairs_convergence` template reads its CSP-style
+    entry rule (pvalue / |zscore| / halflife window / lookback) from
+    `signals[0].params`, NOT the generic threshold/op that drives
+    activation detection. Pre-D068, every `relative_value` config ran
+    with template defaults (pval<0.05, |z|>2.0, hl ∈ (5,30)) — diagnostic
+    across 62 sessions x 15 pairs showed only 0.3% (3 of 930) entry-
+    eligible (1,154 / 4,039 = 28.6% of submissions, all 0 trades).
+    Populating these knobs widens entry eligibility to 4-9% in sweeps,
+    restoring usable variation. See IMPLEMENTATION_DECISIONS.md D068.
     """
-    return sample_threshold_params(indicator_id, "directional", rng)
+    params = sample_threshold_params(indicator_id, "directional", rng)
+    if indicator_id == "pairs_zscore":
+        params.update(_sample_pairs_template_params(rng))
+    return params
+
+
+def _sample_pairs_template_params(rng: random.Random) -> dict[str, object]:
+    """D068 — extra keys for Crucible's pairs_convergence template.
+
+    The template reads these via `signals[0].params.get(key, default)`;
+    populating them lets the sampler vary the pairs strategy's entry
+    rule across submissions. Ranges chosen so the conservative end
+    matches the template defaults (zscore_entry≈2.0, pvalue_max=0.05,
+    hl≈(5,30)) and the aggressive end admits ~9% of (asof, pair)
+    opportunities on the v1 pair list (2025-Q1/Q2 SPY diagnostic).
+
+    `halflife_min` (2..8) and `halflife_max` (15..60) are sampled from
+    disjoint ranges so `halflife_min < halflife_max` holds by
+    construction without an explicit guard.
+    """
+    return {
+        "lookback": rng.choice((126, 189, 252, 378, 504)),
+        "pvalue_max": round(rng.uniform(0.05, 0.20), 3),
+        "zscore_entry": round(rng.uniform(0.8, 2.0), 3),
+        "halflife_min": rng.choice((2, 3, 5, 8)),
+        "halflife_max": rng.choice((15, 30, 45, 60)),
+    }
 
 
 def _regime_signal_params(

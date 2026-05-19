@@ -276,6 +276,66 @@ def test_fractional_kelly_chains_ev_estimator(grammar: Grammar, registry: Regist
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# D068 — pairs_convergence template params (relative_value zero-trades fix)
+# ---------------------------------------------------------------------------
+
+
+def test_d068_pairs_zscore_directional_emits_template_params() -> None:
+    """When the directional indicator is `pairs_zscore`, the sampler must
+    populate the template-expected keys (`lookback`, `pvalue_max`,
+    `zscore_entry`, `halflife_min`, `halflife_max`) in addition to the
+    generic threshold/op. Crucible's pairs_convergence template reads
+    these via `signals[0].params.get(...)`."""
+    from forge.enumeration.sampler import _directional_signal_params
+
+    params = _directional_signal_params("pairs_zscore", random.Random(0))
+    for key in (
+        "threshold", "op",  # generic threshold predicate (activation date)
+        "lookback", "pvalue_max", "zscore_entry", "halflife_min", "halflife_max",
+    ):
+        assert key in params, f"missing pairs template key {key!r} in {params}"
+
+
+def test_d068_pairs_template_params_ranges() -> None:
+    """Sampled values must fall in the documented sampling ranges across
+    a sweep of seeds. Catches accidental range tightening regressions."""
+    from forge.enumeration.sampler import _directional_signal_params
+
+    for seed in range(50):
+        params = _directional_signal_params("pairs_zscore", random.Random(seed))
+        assert params["lookback"] in (126, 189, 252, 378, 504)
+        assert 0.05 <= float(params["pvalue_max"]) <= 0.20
+        assert 0.8 <= float(params["zscore_entry"]) <= 2.0
+        assert params["halflife_min"] in (2, 3, 5, 8)
+        assert params["halflife_max"] in (15, 30, 45, 60)
+        # The disjoint-range design must hold by construction.
+        assert int(params["halflife_min"]) < int(params["halflife_max"])  # type: ignore[arg-type]
+
+
+def test_d068_pairs_template_params_deterministic_under_same_rng() -> None:
+    """Same seed → same params. Required by hard rule #6."""
+    from forge.enumeration.sampler import _directional_signal_params
+
+    a = _directional_signal_params("pairs_zscore", random.Random(2026))
+    b = _directional_signal_params("pairs_zscore", random.Random(2026))
+    assert a == b
+
+
+def test_d068_non_pairs_indicator_does_not_get_template_params() -> None:
+    """Only `pairs_zscore` gets the template-specific keys; other
+    directional indicators keep the generic threshold/op shape so
+    the dispatch doesn't accidentally pollute unrelated signals."""
+    from forge.enumeration.sampler import _directional_signal_params
+
+    for indicator_id in ("rsi_2", "ema_50", "momentum_252", "vix_level"):
+        params = _directional_signal_params(indicator_id, random.Random(42))
+        for forbidden_key in ("lookback", "pvalue_max", "zscore_entry"):
+            assert forbidden_key not in params, (
+                f"unexpected pairs key {forbidden_key!r} on {indicator_id!r}"
+            )
+
+
 def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySnapshot) -> None:
     """Across 300 seeds, every hypothesis with non-empty pools should appear
     at least once. Catches biased sampling that locks onto one hypothesis.
