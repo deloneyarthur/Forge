@@ -1,8 +1,8 @@
 # Forge generator improvement plan
 
-**Authored:** 2026-05-19 (post-D066/D067/D068 overnight cycle)
+**Authored:** 2026-05-19 (post-D066/D067/D068 overnight cycle; refreshed against Crucible's full 3,829-cohort analysis later same day)
 **Status:** Living document — update after each phase lands
-**Inputs:** Crucible-side analysis at `../Crucible/docs/handoffs/PROMPT_FORGE_GENERATOR_GAPS.md` (1,000-config gauntlet result) + Forge-side iter 33-35 monitoring (3 consecutive iterations with 100% regime_arbitrage survivors post-D066/D067)
+**Inputs:** Crucible-side analysis at `../Crucible/docs/handoffs/PROMPT_FORGE_GENERATOR_GAPS.md` (3,829-config full-cohort result + per-gate fail/pass breakdown) + Forge-side iter 33-36 monitoring (4 consecutive iterations with 100% regime_arbitrage survivors post-D066/D067)
 
 ---
 
@@ -10,10 +10,27 @@
 
 Two independent analyses converged on the same broad picture:
 
-- **Crucible's view (from the post-gauntlet evaluation):** 1,000 configs ran, 0 promoted, 706 (70.6%) produced 0 trades, mean Sharpe of traded configs -0.42. Two failure modes: (A) configs that never fire, (B) configs that fire but have no edge.
-- **Forge-side view (from iter 33-35 monitoring):** With D066 (no tail_hedge), D067 (0.05 exploration floor), D068 (pairs template params) all live, three consecutive iterations produced **100% regime_arbitrage survivors** (31 / 20 / 14 of 5,000 candidates each). The other 4 sampling hypotheses got zero past the pre-filter battery.
+- **Crucible's view (full 3,829-cohort):** 3,829 configs evaluated through the single-period decision path, 0 promoted, 3,411 (89.1%) produced 0 trades, only 2 of 3,820 decisions cleared `min_oos_trade_count>=30` (even at the v2-1 relaxed floor — production threshold is stricter). Mean Sharpe of traded configs -0.18 (median -0.10, range -4.9 to +4.8). Two failure modes: (A) configs that never fire, (B) configs that fire but have no edge.
+- **Forge-side view (iter 33-36 monitoring):** With D066 (no tail_hedge), D067 (0.05 exploration floor), D068 (pairs template params) all live, four consecutive iterations produced **100% regime_arbitrage survivors** (31 / 20 / 14 / 19 of 5,000 candidates each). The other 4 sampling hypotheses got zero past the pre-filter battery.
 
 The two diagnoses are complementary, not contradictory. Crucible sees what reaches its gauntlet; Forge sees what gets killed inside the pre-filter battery before reaching Crucible.
+
+### Per-gate fail/pass on Crucible's 3,820 decisions
+
+The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `min_oos_trade_count`** even at the v2-1 relaxed threshold of 30. Until configs reliably produce trades, the downstream Sharpe / PF / regime-stress gates are barely being exercised.
+
+| Gate | Fails | Passes |
+|---|---:|---:|
+| `min_oos_trade_count` (>=30) | **3,818** | 2 |
+| `walk_forward_sharpe_median` (>=2.0) | 3,805 | 15 |
+| `cpcv_sharpe_p25` (>=1.0) | 3,805 | 15 |
+| `regime_stress_p25_return` (>=0) | 3,701 | 119 |
+| `deflated_sharpe` (>=0.95) | 3,664 | 156 |
+| `profit_factor` (>=1.0) | 3,657 | 163 |
+| `sharpe_baseline` (>=0.5) | 3,629 | 191 |
+| `pbo` (<=0.5) | 2,535 | 1,285 |
+| `ablation_arm` (>0) | 2,535 | 1,285 |
+| `max_drawdown_ceiling` (<=0.3) | 0 | 3,820 |
 
 ---
 
@@ -43,13 +60,36 @@ The two diagnoses are complementary, not contradictory. Crucible sees what reach
 
 ## Answers to Crucible's asks
 
-1. **Both fixes scope-appropriate.** No roadmap conflict. Crucible's Fix 1 (multi-exit) sits alongside D068's template-knob work. Crucible's Fix 2 (threshold feedback loop) extends D067's weighter-feedback infrastructure cleanly.
+1. **Hypothesis-distribution audit (Crucible's highest-priority ask).** Verified against Forge's `submissions` table on 2026-05-19:
 
-2. **Order: Fix 2 first, then Fix 1.** Fix 2 is purely additive (no grammar bump, no contracts change, no Crucible-side validation work). Fix 1 needs a grammar version bump (v3), §3.5 §5 rewrite, and synced Crucible `StrategySpec.exits` arity check. Land Fix 2 quickly to harvest training signal from the 1,000 existing gated runs, then take Fix 1 more carefully.
+   ```
+   ALL submissions (n=4,123):
+     tail_hedge        1,851  (44.9%)   last submitted 2026-05-17
+     relative_value    1,154  (28.0%)   last submitted 2026-05-17
+     regime_arbitrage    961  (23.3%)   last submitted 2026-05-19 (current)
+     volatility_event    156  (3.8%)    last submitted 2026-05-17
+     mean_reversion        1  (0.02%)   last submitted 2026-05-13
+     trend_continuation    0  (0%)
 
-3. **Exit combinations fit existing `StrategySpec.exits: list[ExitSpec]`** — no new spec type needed. Contract already supports `len(exits) >= 1`. Crucible-side: the only check needed is "all listed exit_ids resolve to known ExitRules," which is already there.
+   Post-D066 submissions (since 2026-05-19 06:44 UTC, n=84):
+     regime_arbitrage     84  (100%)
+     tail_hedge            0
+     all other            0
+   ```
 
-4. **Auto-tightened table shadows D031, not replaces it.** Path: `config/auto_tightened_thresholds.yaml` written by the proposer; `indicator_thresholds.py` prefers it when present, falls back to D031. Two reasons: (a) D031 is operator-audited — we shouldn't silently overwrite operator-tuned values; (b) the shadow lets the operator diff "what auto-tuning wanted to do" against the audited baseline before approving.
+   **D066 IS firing.** Zero tail_hedge submissions since the filter shipped. Crucible's 47.6% tail_hedge in the gated cohort is the pre-D066 backlog (1,851 configs submitted 2026-05-14 to 2026-05-17) still draining through the gauntlet — those will age out over the next ~1-2 weeks of evaluation.
+
+   **D067 IS firing,** but is overwhelmed by the pre-filter monoculture. The exploration floor correctly distributes the *sampling* budget across all 5 active hypotheses (~1,000 candidates each per 5,000-batch), but 4 of 5 are then killed inside the pre-filter battery by the param-blind structural fingerprint dedup (T2.7) — leaving only `regime_arbitrage` reaching submission. The 84 post-D066 submissions are all regime_arbitrage for that reason, not because D067 is broken. This is the iter 33-36 monoculture pattern documented above; **Phase 1 of this plan is the fix.**
+
+   The 0/3,829 trend_continuation and 1/3,829 mean_reversion in Crucible's cohort = pre-D067-floor era when the Bayesian weighter starved them.
+
+2. **Both fixes scope-appropriate.** No roadmap conflict. Crucible's Fix 1 (multi-exit) sits alongside D068's template-knob work. Crucible's Fix 2 (threshold feedback loop) extends D067's weighter-feedback infrastructure cleanly.
+
+3. **Order: Fix 2 first, then Fix 1.** Fix 2 is purely additive (no grammar bump, no contracts change, no Crucible-side validation work). Fix 1 needs a grammar version bump (v3), §3.5 §5 rewrite, and synced Crucible `StrategySpec.exits` arity check. Land Fix 2 quickly to harvest training signal from the 3,829 existing gated runs, then take Fix 1 more carefully.
+
+4. **Exit combinations fit existing `StrategySpec.exits: list[ExitSpec]`** — no new spec type needed. Contract already supports `len(exits) >= 1`. Crucible-side: the only check needed is "all listed exit_ids resolve to known ExitRules," which is already there.
+
+5. **Auto-tightened table shadows D031, not replaces it.** Path: `config/auto_tightened_thresholds.yaml` written by the proposer; `indicator_thresholds.py` prefers it when present, falls back to D031. Two reasons: (a) D031 is operator-audited — we shouldn't silently overwrite operator-tuned values; (b) the shadow lets the operator diff "what auto-tuning wanted to do" against the audited baseline before approving.
 
 ---
 
@@ -79,13 +119,14 @@ The two diagnoses are complementary, not contradictory. Crucible sees what reach
 | 6 | Pending | — |
 | 7 | Pending | — |
 
-### Live context (as of 2026-05-19 ~07:30 PT)
+### Live context (as of 2026-05-19 ~13:35 PT)
 
-- **Recent commits:** D066 (`b75bc55`), D067 (`2aa96f0`), D068 (`f2290d4`) — all on origin/main.
-- **forge.service:** active, iter 36 mid-prefetch retry after a transient Crucible-restart-induced crash earlier this morning.
-- **Operator state:** Crucible-side speed-up and DB-writer restarts are done; no more anticipated restarts in this session.
-- **Latest gauntlet outcome:** 1,000 configs run, 0 promoted, 706 zero-trade. Mean Sharpe -0.42 for traded configs.
-- **Forge-side symptom:** 3 consecutive iters at 100% regime_arbitrage survivors (31 / 20 / 14 of 5,000); declining trend as the regime_arbitrage corpus eats its own novelty budget.
+- **Recent commits:** D066 (`b75bc55`), D067 (`2aa96f0`), D068 (`f2290d4`), plan doc (`b9016ff`) — all on origin/main.
+- **forge.service:** active, iter 37 mid-prefetch (Crucible's speed-up has cut iteration time from ~2h45m to ~1h05m).
+- **Operator state:** Crucible-side optimization complete; no more anticipated restarts in this session.
+- **Latest gauntlet outcome:** 3,829 configs gauntlet'd through single-period decision path. 0 promoted. 89.1% zero-trade. **99.9% (3,818/3,820) fail `min_oos_trade_count>=30`** — the trade-count floor is the dominant blocker; downstream Sharpe / PF / regime-stress gates are barely being exercised.
+- **Forge-side symptom:** 4 consecutive iters at 100% regime_arbitrage survivors (31 / 20 / 14 / 19 of 5,000).
+- **Submissions verification:** Post-D066 (84 submissions across iters 33-36) contains zero tail_hedge — D066/D067 are both firing as designed. Crucible's 47.6% tail_hedge in the gauntlet cohort is pre-D066 backlog draining through.
 
 ---
 
