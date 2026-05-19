@@ -1566,3 +1566,45 @@ Existing D052 unit test (`test_reconcile_all_pending_flushes_predates_export_win
 - `src/forge/feedback/consumer.py` — naive watermark in `_flush_aged_out_submissions`.
 - `tests/invariants/test_phase0_invariants.py` — new `test_db_connection_pins_session_timezone_to_utc` invariant.
 - Operator restart of `forge.service` required to pick up the change (no schema migration; existing data unaffected).
+
+
+## D062 — 2026-05-18 — Wire `dealer_positioning` family into C2 hypothesis allowlist + per-batch prefilter rejection counter
+
+**Spec section:** §3.5 C2 (directional family ↔ hypothesis pairing); §11 (file layout / observability).
+
+**Context, part 1 — dealer indicator wiring:** Crucible commit `5af63ad` (2026-05-18 20:17 PDT) added 6 dealer indicators (`gex`, `vex`, `cex`, `call_wall_distance_pct`, `put_wall_distance_pct`, `gamma_flip_distance_pct`) tagged with `family="dealer_positioning"` via `Crucible/src/optbt/data/exports.py:169` (module-path-to-family map). Forge's `_C2_HYPOTHESIS_FAMILIES` dispatch table in `src/forge/grammar/custom_predicates.py:91` did NOT include `dealer_positioning` under any hypothesis. Effect pre-D062: when Crucible re-exports the registry, dealer indicators are usable as regime-gate signals (no C2 constraint) but rejected as the *directional* thesis for every hypothesis — silently shrinking the strategy class available for enumeration.
+
+**Context, part 2 — observability gap:** Iteration 31 (the first complete iteration post-D061) logged `enumerated=5000 passed_prefilter=7` — a 0.14% survival rate. `pre_filter_logs` only records *survivors* (7 rows × 9 filters × passed=True only). `batch_summaries.common_failures` is reserved for Crucible-side gate failures (populated by `feedback/consumer.py:_common_failures` post-feedback). No surface in the DB recorded *which* pre-filter killed each candidate, so the operator could not diagnose the 99.86% attrition without re-running the battery.
+
+**Decision:**
+- **C2 mapping (Option A, operator-chosen):** Add `dealer_positioning` to both `volatility_event` (alongside `iv_structure`, `flow`) and `mean_reversion` (alongside the native `mean_reversion` family). Rationale: GEX/VEX/CEX/gamma-flip drive vol-regime intent; call/put walls and the gamma-flip line are documented mean-reversion magnets. Splitting across both buckets captures both intents without introducing a new hypothesis. A future `dealer_flow` hypothesis remains available if telemetry shows the buckets compete.
+- **Rejection counter:** New `prefilter_rejections JSON` column on `batch_summaries` (idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Populated by a new `record_prefilter_rejections` helper in `forge.submission.submitter` after each successful `submit_batch`. For every rejected `PreFilterReport`, increments the counter at the first-failing filter (matching the `forge prefilter --summary` semantics). Counter is also echoed to the journal as `prefilter_rejections: filter=N, ...` so operators can grep without DB access.
+- **Diagnostic flag:** New `--synthetic-cache` flag on `forge prefilter` to force `SyntheticFeatureCache`. Without this, high-`--max` diagnostic runs were unusable when Crucible's feature_cache was slow (one round-trip per config × 5000 configs). Documented in the help text that cache-dependent filters (`permutation_test`, `predicted_activations`) are over-represented under synthetic and the cache-independent filters (`structural_redundancy`, `signal_density`, etc.) are the load-bearing diagnostic.
+
+**Hard rules check:**
+- Hard rule #1 (21 v1 grammar rules operator-owned): grammar.yaml unchanged; only the Python dispatch table extended. The rule's *implementation* widens its allowlist; the rule itself (`directional_family_matches_hypothesis`) is untouched. Operator explicitly requested this in conversation.
+- Hard rule #2 (no Crucible internals): unaffected — we only consume `family="dealer_positioning"` as it appears in the contracts-tagged registry snapshot.
+- Hard rule #4 (auto-tightening only): this is operator-approved human loosening, not auto-loosening. The proposer auto-tune path is not involved.
+- Hard rule #10 (grammar.yaml version bump): grammar.yaml content unchanged, so no bump.
+
+**Alternatives considered:**
+- **New `dealer_flow` hypothesis bucket.** Cleanest separation but larger surface (grammar.yaml + sampler weights + analyzer thresholds + auto-tune state). Rejected for now; operator chose A and the buckets can be split later if signal warrants.
+- **Reuse `common_failures` for prefilter rejections with namespaced keys (`prefilter:structural_redundancy`).** Considered. Rejected because the column is overwritten in `feedback/consumer.py` when Crucible feedback arrives — Forge-side rejections would be clobbered. Separate column is the simpler correctness story.
+- **Log prefilter rejection breakdown to a sidecar JSON file under `~/forge_data/`.** Considered. Rejected — the DB is the canonical operator-visible state; a sidecar file would diverge from `batch_summaries` and require a second query surface.
+- **Add per-rejected-candidate rows to `pre_filter_logs`.** Considered. Rejected — would multiply storage by ~5000× per batch with mostly-redundant detail; an aggregate counter is the right granularity for the "why are we rejecting so much" question.
+
+**Verification:**
+- 3 new C2 tests in `tests/unit/test_grammar/test_custom_predicates.py`: dealer_positioning accepted under `volatility_event`, dealer_positioning accepted under `mean_reversion`, dealer_positioning rejected under `trend_continuation`.
+- 2 new submitter tests in `tests/unit/test_submission/test_submitter.py`: rejection counter writes JSON to `batch_summaries.prefilter_rejections`; no-op when all reports pass.
+- Test fixture `minimal_registry_snapshot()` extended with 2 dealer_positioning indicators (`gex`, `call_wall_distance_pct`) so existing tests can reference them.
+- `forge prefilter --seed 1350668565 --max 5000 --summary --synthetic-cache` reproduces the production-seed enumeration for diagnostic purposes (the production-side seed that produced `passed_prefilter=7`).
+
+**Action:**
+- `src/forge/grammar/custom_predicates.py` — `_C2_HYPOTHESIS_FAMILIES` extended for `volatility_event` and `mean_reversion`.
+- `src/forge/persistence/schemas.py` — `ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS prefilter_rejections JSON`.
+- `src/forge/submission/submitter.py` — `record_prefilter_rejections` helper.
+- `src/forge/cli/main.py` — wire `record_prefilter_rejections` into `_run_one_iteration` after `submit_batch`; add `--synthetic-cache` flag to `cmd_prefilter`.
+- `tests/fixtures/strategy_configs.py` — 2 dealer_positioning indicators added to fixture registry.
+- `tests/unit/test_grammar/test_custom_predicates.py` — 3 new D062 C2 tests.
+- `tests/unit/test_submission/test_submitter.py` — 2 new D062 rejection counter tests.
+- `IMPLEMENTATION_DECISIONS.md` D062 (this entry).

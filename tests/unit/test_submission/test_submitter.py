@@ -296,3 +296,76 @@ def test_inbox_files_land_flat_at_inbox_root(tmp_path: Path) -> None:
     # No per-batch subdirectory should exist.
     subdirs = [p for p in inbox.iterdir() if p.is_dir()]
     assert subdirs == []
+
+
+# ---------------------------------------------------------------------------
+# D062 — prefilter rejection counter
+# ---------------------------------------------------------------------------
+
+
+def _failing_report(name: str, failing_filter: str) -> PreFilterReport:
+    """Construct a rejected report with `failing_filter` as the only False."""
+    return PreFilterReport(
+        config=_named_config(name, f"dir_{name}"),
+        passed=False,
+        filter_results=MappingProxyType(
+            {failing_filter: FilterResult(passed=False, score=0.0)},
+        ),
+        diagnostic_notes=(),
+    )
+
+
+def test_d062_record_prefilter_rejections_writes_counter(tmp_path: Path) -> None:
+    """D062: rejection counter persists per-filter first-failing counts to
+    `batch_summaries.prefilter_rejections` and returns the dict for logging."""
+    from forge.submission.submitter import record_prefilter_rejections
+
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    batch = _ctx(seed=99)
+    survivor = _candidate("s1", "dir_s1")
+    rejected = (
+        _failing_report("r1", "signal_density"),
+        _failing_report("r2", "signal_density"),
+        _failing_report("r3", "structural_redundancy"),
+    )
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=batch, candidates=(survivor,), inbox_root=inbox)
+        out = record_prefilter_rejections(
+            conn,
+            batch_id=batch.batch_id,
+            reports=(*rejected, survivor.report),
+        )
+        row = conn.execute(
+            "SELECT prefilter_rejections FROM batch_summaries "
+            "WHERE forge_batch_id = ?",
+            [str(batch.batch_id)],
+        ).fetchone()
+    assert out == {"signal_density": 2, "structural_redundancy": 1}
+    assert row is not None
+    persisted = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+    assert persisted == {"signal_density": 2, "structural_redundancy": 1}
+
+
+def test_d062_record_prefilter_rejections_no_op_when_all_passed(tmp_path: Path) -> None:
+    """D062: when no reports failed, counter is empty and no UPDATE fires."""
+    from forge.submission.submitter import record_prefilter_rejections
+
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    batch = _ctx(seed=100)
+    survivors = (_candidate("a", "dir_a"), _candidate("b", "dir_b"))
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=batch, candidates=survivors, inbox_root=inbox)
+        out = record_prefilter_rejections(
+            conn,
+            batch_id=batch.batch_id,
+            reports=tuple(c.report for c in survivors),
+        )
+        row = conn.execute(
+            "SELECT prefilter_rejections FROM batch_summaries "
+            "WHERE forge_batch_id = ?",
+            [str(batch.batch_id)],
+        ).fetchone()
+    assert out == {}
+    assert row is not None and row[0] is None

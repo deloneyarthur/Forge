@@ -292,6 +292,91 @@ def test_c2_trend_with_mean_reversion_directional_fails() -> None:
     assert "mean_reversion" in result.detail
 
 
+def test_c2_volatility_event_accepts_dealer_positioning() -> None:
+    """D062: dealer-positioning indicators (gex/vex/cex/walls/gamma-flip)
+    are first-class drivers of vol-regime strategies; the C2 allowlist for
+    `volatility_event` includes `dealer_positioning` alongside iv_structure
+    and flow."""
+    cfg = grammar_valid_baseline(
+        hypothesis="volatility_event",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("gex",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("iv_rank",),
+                params={"threshold": 50},
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="regime_flip_exit"),
+        ),
+    )
+    result = evaluate(_predicate("directional_family_matches_hypothesis"), cfg, _registry())
+    assert result.passed
+
+
+def test_c2_mean_reversion_accepts_dealer_positioning() -> None:
+    """D062: call/put walls and the gamma-flip line are mean-reversion
+    magnets; the C2 allowlist for `mean_reversion` includes
+    `dealer_positioning` alongside the native `mean_reversion` family."""
+    cfg = grammar_valid_baseline(
+        hypothesis="mean_reversion",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("call_wall_distance_pct",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("iv_rank",),
+                params={"threshold": 50},
+            ),
+        ),
+    )
+    result = evaluate(_predicate("directional_family_matches_hypothesis"), cfg, _registry())
+    assert result.passed
+
+
+def test_c2_trend_continuation_rejects_dealer_positioning() -> None:
+    """D062: dealer_positioning is allowed for `volatility_event` and
+    `mean_reversion` only — `trend_continuation` still requires `trend`."""
+    cfg = grammar_valid_baseline(
+        hypothesis="trend_continuation",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("gex",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("adx",),
+            ),
+        ),
+    )
+    result = evaluate(_predicate("directional_family_matches_hypothesis"), cfg, _registry())
+    assert not result.passed
+    assert "dealer_positioning" in result.detail
+
+
 def test_c2_regime_arbitrage_accepts_any_family() -> None:
     cfg = grammar_valid_baseline(
         hypothesis="regime_arbitrage",

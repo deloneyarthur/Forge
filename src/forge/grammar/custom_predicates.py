@@ -90,10 +90,19 @@ _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
 # regime_arbitrage allows any family.
 _C2_HYPOTHESIS_FAMILIES: dict[str, tuple[str, ...] | None] = {
     "trend_continuation": ("trend",),
-    "mean_reversion": ("mean_reversion",),
+    # D062: dealer_positioning indicators (gex/vex/cex/walls/gamma-flip) double
+    # as mean-reversion drivers. Call/put walls and the gamma-flip line are
+    # well-documented MR magnets; positive-GEX regimes are dampening. Letting
+    # dealer indicators serve as the directional thesis for `mean_reversion`
+    # widens the enumeration into a class of strategies the operator wants
+    # explored. See IMPLEMENTATION_DECISIONS.md D062.
+    "mean_reversion": ("mean_reversion", "dealer_positioning"),
     "regime_arbitrage": None,
     "relative_value": ("pairs",),
-    "volatility_event": ("iv_structure", "flow"),
+    # D062: dealer-positioning exposures (GEX/VEX/CEX, gamma-flip distance)
+    # are first-class vol-regime drivers. Shipped alongside Crucible commit
+    # 5af63ad which adds the 6 dealer indicators. See D062.
+    "volatility_event": ("iv_structure", "flow", "dealer_positioning"),
     "tail_hedge": ("macro",),
 }
 

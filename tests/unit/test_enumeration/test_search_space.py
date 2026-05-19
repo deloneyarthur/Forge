@@ -142,7 +142,11 @@ def test_directional_pool_trend_continuation(space: SearchSpace) -> None:
 
 
 def test_directional_pool_mean_reversion(space: SearchSpace) -> None:
+    """D062 widened mean_reversion's C2 allowlist to include
+    `dealer_positioning` (call/put walls and gamma-flip are MR magnets)."""
     assert space.directional_indicators_by_hypothesis["mean_reversion"] == (
+        "call_wall_distance_pct",
+        "gex",
         "rsi_14",
         "rsi_2",
     )
@@ -155,8 +159,11 @@ def test_directional_pool_relative_value_is_pairs_only(space: SearchSpace) -> No
 def test_directional_pool_volatility_event_is_iv_plus_flow(
     space: SearchSpace,
 ) -> None:
-    """C2 allows iv_structure + flow for volatility_event."""
+    """C2 allows iv_structure + flow + dealer_positioning for volatility_event
+    (D062 added dealer_positioning alongside Crucible's 6 dealer indicators)."""
     assert space.directional_indicators_by_hypothesis["volatility_event"] == (
+        "call_wall_distance_pct",
+        "gex",
         "iv_rank",
         "put_call_flow",
     )

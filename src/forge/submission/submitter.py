@@ -18,8 +18,10 @@ same `batch_id` is a no-op for the summary (INSERT OR IGNORE).
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -218,9 +220,45 @@ def submit_batch(
     )
 
 
+def record_prefilter_rejections(
+    db: duckdb.DuckDBPyConnection,
+    *,
+    batch_id: uuid.UUID,
+    reports: Sequence[object],
+) -> dict[str, int]:
+    """D062: persist per-filter rejection counts to `batch_summaries`.
+
+    `reports` is the full enumeration output (passed + rejected). For each
+    rejected report, increments the counter at its first-failing filter.
+    Passed reports are skipped.
+
+    No-op when the batch_summaries row is absent (idempotent reruns or
+    dry-run paths). Returns the counter so callers can also log it.
+    """
+    counter: Counter[str] = Counter()
+    for r in reports:
+        if getattr(r, "passed", False):
+            continue
+        filter_results = getattr(r, "filter_results", {}) or {}
+        failing = next(
+            (name for name, fr in filter_results.items() if not getattr(fr, "passed", True)),
+            "unknown",
+        )
+        counter[failing] += 1
+    if not counter:
+        return {}
+    db.execute(
+        "UPDATE batch_summaries SET prefilter_rejections = ? "
+        "WHERE forge_batch_id = ?",
+        [json.dumps(dict(counter)), str(batch_id)],
+    )
+    return dict(counter)
+
+
 __all__ = [
     "BatchSubmissionResult",
     "SubmissionRecord",
     "SubmissionStatus",
+    "record_prefilter_rejections",
     "submit_batch",
 ]

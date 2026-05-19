@@ -37,6 +37,11 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
         registry_version    VARCHAR(20) NOT NULL
     )
     """,
+    # D062: per-batch pre-filter rejection counts (first-failing filter per
+    # rejected candidate). Distinct from `common_failures` which counts
+    # Crucible-side gate failures populated post-feedback. Idempotent ALTER
+    # so existing prod DBs pick up the column on next `db_connection` open.
+    "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS prefilter_rejections JSON",
     """
     CREATE TABLE IF NOT EXISTS pre_filter_logs (
         forge_candidate_id  UUID,

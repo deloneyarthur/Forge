@@ -186,6 +186,23 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
                 lookback=1,
                 params_schema={},
             ),
+            # D062: dealer-positioning family (gex/walls/gamma-flip). Used to
+            # exercise C2's `volatility_event` and `mean_reversion` allowlist
+            # extensions added alongside Crucible commit 5af63ad.
+            IndicatorMetadata(
+                id="gex",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={},
+            ),
+            IndicatorMetadata(
+                id="call_wall_distance_pct",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={},
+            ),
         ),
         signal_types=("threshold", "rule", "passthrough"),
         exit_ids=(
