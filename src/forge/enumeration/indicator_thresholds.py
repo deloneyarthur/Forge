@@ -202,6 +202,39 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         directional_range=(0.0001, 0.001),
         regime_range=(0.0001, 0.001),
     ),
+    # ----- Dealer positioning (§4.3.5) — wall / flip distances are bounded
+    # percentages, so honest threshold sampling is feasible. GEX/VEX/CEX are
+    # raw $-scale aggregates that vary by orders of magnitude across
+    # underlyings, so they ship as confluence-only for v1 — add empirical
+    # ranges after first sweep produces real distributions. -----
+    "call_wall_distance_pct": IndicatorThresholdSpec(
+        # Fires when call wall is sitting just above spot (resistance pin):
+        # typical SPY range during low-vol regimes is +1% to +5% above spot.
+        directional_range=(0.005, 0.025),
+        regime_range=(0.0, 0.05),
+        op_directional="<",
+        op_regime="<",
+    ),
+    "put_wall_distance_pct": IndicatorThresholdSpec(
+        # Negative-valued (wall below spot). Fires when support nearby:
+        # -3% to -0.5% — wall close above means stretched/stressed regime.
+        directional_range=(-0.03, -0.005),
+        regime_range=(-0.05, 0.0),
+        op_directional=">",  # fires when distance > -0.X (close to spot)
+        op_regime=">",
+    ),
+    "gamma_flip_distance_pct": IndicatorThresholdSpec(
+        # Positive = flip above spot → dealers short gamma → vol amplifying.
+        # Directional fires on transition into short-gamma regime; regime
+        # gates wide around the flip.
+        directional_range=(0.0, 0.03),
+        regime_range=(-0.05, 0.05),
+        op_directional=">",
+        op_regime=">",
+    ),
+    "gex": _SKIP_SPEC,  # raw $-scale; confluence-only until sampled distribution
+    "vex": _SKIP_SPEC,
+    "cex": _SKIP_SPEC,
     # ----- Price-scale: skip from threshold; passthrough/confluence only -----
     "ema": _SKIP_SPEC,
     "ema_50": _SKIP_SPEC,

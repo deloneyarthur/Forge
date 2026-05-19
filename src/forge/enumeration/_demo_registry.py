@@ -18,7 +18,7 @@ from crucible_contracts import IndicatorMetadata, RegistrySnapshot
 
 
 def demo_registry() -> RegistrySnapshot:
-    """Build a 14-indicator synthetic registry covering every §3.5 v1 family.
+    """Build a 20-indicator synthetic registry covering every §3.5 v1 family.
 
     Keep in sync with ``tests/fixtures/strategy_configs.minimal_registry_snapshot``;
     a regression test would catch drift if the fixture's shape mattered to
@@ -124,6 +124,54 @@ def demo_registry() -> RegistrySnapshot:
                 family="macro",
                 lookback=1,
                 params_schema={},
+            ),
+            # Dealer-positioning indicators (§4.3.5; wired 2026-05-18)
+            IndicatorMetadata(
+                id="gex",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={},
+            ),
+            IndicatorMetadata(
+                id="vex",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={"r": {"type": "number"}, "q": {"type": "number"}},
+            ),
+            IndicatorMetadata(
+                id="cex",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={"r": {"type": "number"}, "q": {"type": "number"}},
+            ),
+            IndicatorMetadata(
+                id="call_wall_distance_pct",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={},
+            ),
+            IndicatorMetadata(
+                id="put_wall_distance_pct",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={},
+            ),
+            IndicatorMetadata(
+                id="gamma_flip_distance_pct",
+                version=1,
+                family="dealer_positioning",
+                lookback=0,
+                params_schema={
+                    "r": {"type": "number"},
+                    "q": {"type": "number"},
+                    "search_pct": {"type": "number"},
+                    "n_steps": {"type": "integer"},
+                },
             ),
         ),
         signal_types=("threshold", "rule", "passthrough"),
