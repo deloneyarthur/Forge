@@ -1710,3 +1710,65 @@ prefilter_rejections_by_hypothesis: hyp[filter=N, ...]; ...      # D064 breakdow
 - `src/forge/cli/main.py` — new `_log_prefilter_rejections(summary)` helper; `_run_one_iteration` calls it instead of the inline join. Echoes both aggregate and per-hypothesis lines.
 - `tests/unit/test_submission/test_submitter.py` — new D064 test + D062 tests adapted for the summary return type.
 - `IMPLEMENTATION_DECISIONS.md` D064 (this entry).
+
+
+## D065 — 2026-05-18 — Per-iteration pipeline telemetry: timings + funnel distributions
+
+**Spec section:** §11 observability; follow-on to D062/D063/D064.
+
+**Context:** Through D052→D064, we built rejection-bucket visibility piece by piece. Three remaining gaps were load-bearing for understanding pipeline performance:
+
+1. **No timing data.** Iteration 31's 3h22m feature_cache prefetch was *invisible* — we only inferred it from the gap between `--- loop iteration X ---` and `enumerated=N`. The systemd-level "Consumed Xmin CPU time" line was the only timing signal, and it only fired on service stop. Any phase pathology required CPU-profile-and-deduce instead of grep-and-see.
+
+2. **No sampler attempt counts per hypothesis.** D064 partitioned the *rejection* bucket by hypothesis. But the funnel-top — *what the sampler actually produced* — was invisible. Couldn't distinguish "sampler proposed 1,900 mean_reversion configs, all died" from "sampler proposed 10, all died."
+
+3. **No ranked-survivor counts per hypothesis.** Symmetric gap at the funnel-bottom. `ranked_top_n=12` told us *how many* candidates we submitted but not *which hypotheses* they came from. With D064 in the middle showing per-hypothesis attrition, the missing endpoints made the funnel un-narratable.
+
+**Decision:** Three new journal lines per iteration, plus a `timings` plumbing parameter through `_run_battery_for_seed`:
+
+```
+phase_timings: reconcile=3.00s, enumeration=8.00s, prefetch=12345.00s, battery=8.00s, rank=0.20s, submit=0.05s
+sampler_attempts: trend_continuation=N, mean_reversion=N, regime_arbitrage=N, relative_value=N, volatility_event=N, tail_hedge=N
+ranked_top_n_by_hypothesis: trend_continuation=N, mean_reversion=N, regime_arbitrage=N, relative_value=N, volatility_event=N, tail_hedge=N
+```
+
+Together with D064's `prefilter_rejections_by_hypothesis: hyp[filter=N, ...]; ...` in the middle, the journal now carries a **complete per-hypothesis funnel** in three lines plus a timing breakdown:
+
+```
+sampler_attempts → prefilter_rejections_by_hypothesis → ranked_top_n_by_hypothesis
+        ↑                       ↑                              ↑
+    (D065 top)             (D064 middle)                  (D065 bottom)
+                  phase_timings (D065 timing axis)
+```
+
+**Implementation choices:**
+- `_run_battery_for_seed` accepts an optional `timings: dict | None` parameter; when provided, populates `enumeration`, `prefetch`, `battery` keys with monotonic deltas. Default `None` keeps existing callers (the demo `cmd_prefilter`, tests) signature-compatible.
+- `_format_phase_timings_line` renders in canonical pipeline order (reconcile → ... → submit), skipping absent keys so a `blocked`-short-circuit iteration produces an honest partial view.
+- `_format_hypothesis_distribution_line` renders in canonical `_HYPOTHESES` order with `=0` for absent hypotheses — D063's lesson: silent omission is misleading.
+- Both helpers extracted from `_run_one_iteration` to keep the function within reason. `_run_one_iteration` carries a single `# noqa: PLR0915` with a comment explaining the function is observability-heavy by design now.
+
+**Hard rules check:**
+- None impacted. Pure observability layer; no enumeration semantics, no Crucible-side coupling, no schema changes (this iteration stays in the journal — the DB-persisted breakdowns from D062/D064 cover the analytics axis).
+
+**Alternatives considered:**
+- **Add `phase_timings`/`sampler_attempts`/`ranked_by_hypothesis` columns to `batch_summaries`.** Considered. Rejected for now — the journal is the right surface for transient performance data (operator grep, dashboard tail); `batch_summaries` is the right surface for *outcome* analytics (promotion rates, rejection buckets). Adding more columns muddies that split. If a rolling-window timing view becomes valuable, a separate `iteration_timings` table is the cleaner home.
+- **Use a stdlib `time.perf_counter()` context manager helper for each phase.** Considered. The `_t_X = monotonic(); ...; timings[X] = monotonic() - _t_X` pattern is 3 lines vs a 4-line `with` block + helper definition; for 3 phases the savings don't pay back the helper.
+- **Surface `prefetch` progress mid-flight (chunks=X/Y).** Considered. Rejected — the long-term fix for slow-prefetch invisibility is the contracts-side recv timeout (proposed earlier), not more in-flight logging. Per-chunk progress would also be much more verbose.
+- **Add per-filter elapsed timing to `prefilter_rejections`.** Considered. Rejected — premature; we'd need a representative production batch first to see if the cost is actually filter-distributed or dominated by one phase (likely the feature-data-dependent ones).
+
+**Verification:**
+- 4 new tests in `tests/unit/test_cli/test_run_loop.py`:
+  - `test_d065_phase_timings_line_renders_in_pipeline_order` — canonical order + 2-decimal seconds format.
+  - `test_d065_phase_timings_line_skips_missing_phases` — partial view honesty.
+  - `test_d065_hypothesis_distribution_line_uses_canonical_order` — canonical `_HYPOTHESES` order + `=0` for absent.
+  - `test_d065_run_battery_for_seed_populates_timings` — opt-in dict populated with the three internal phases.
+- Ruff + mypy strict clean on `src/forge/cli/main.py`.
+
+**Action:**
+- `src/forge/cli/main.py`:
+  - `_run_battery_for_seed` — new `timings: dict | None = None` parameter; populates `enumeration`, `prefetch`, `battery`.
+  - `_run_one_iteration` — new `timings` local; wires outer phases (`reconcile`, `rank`, `submit`); emits new log lines.
+  - New helpers: `_format_phase_timings_line`, `_format_hypothesis_distribution_line`, `_log_hypothesis_distributions`, `_echo_dry_run_preview` (extracted from inline dry-run preview).
+  - `_run_one_iteration` carries a `# noqa: PLR0915` for the observability-heavy statement count.
+- `tests/unit/test_cli/test_run_loop.py` — 4 new D065 tests.
+- `IMPLEMENTATION_DECISIONS.md` D065 (this entry).

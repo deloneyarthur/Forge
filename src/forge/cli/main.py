@@ -35,13 +35,14 @@ from forge.core.logging import configure_logging
 from forge.version import __version__
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
     from forge.grammar import Grammar
     from forge.prefilters.calibration import Calibration
     from forge.prefilters.types import PreFilterReport
+    from forge.ranking.types import RankedCandidate
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -309,6 +310,86 @@ _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED: bool = False
 _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED: bool = False
 
 
+def _format_phase_timings_line(timings: Mapping[str, float]) -> str:
+    """D065: render per-phase elapsed seconds for the iteration.
+
+    Single-line, fixed key order so the line is greppable and the order
+    matches the actual pipeline flow (reconcile → enumeration → prefetch
+    → battery → rank → submit). Missing keys are skipped (an iteration
+    that short-circuits early won't have all phases populated).
+    """
+    order = (
+        "reconcile", "enumeration", "prefetch", "battery", "rank", "submit",
+    )
+    parts = [f"{k}={timings[k]:.2f}s" for k in order if k in timings]
+    return f"phase_timings: {', '.join(parts)}"
+
+
+def _format_hypothesis_distribution_line(
+    label: str,
+    distribution: Mapping[str, int],
+) -> str:
+    """D065: render a hypothesis-keyed count distribution in canonical order.
+
+    Used for both `sampler_attempts` (the input distribution to the
+    pre-filter battery) and `ranked_top_n_by_hypothesis` (the output
+    distribution after diversification). Stable ordering via the
+    canonical `_HYPOTHESES` tuple — missing hypotheses show `=0` so the
+    operator's eye-grep doesn't have to infer absence from omission.
+    """
+    from forge.enumeration.search_space import _HYPOTHESES
+
+    parts = [f"{h}={distribution.get(h, 0)}" for h in _HYPOTHESES]
+    return f"{label}: {', '.join(parts)}"
+
+
+def _echo_dry_run_preview(ranked: Sequence[RankedCandidate]) -> None:
+    """Print the ranked-survivor preview for `forge run --dry-run`.
+
+    Extracted from `_run_one_iteration` to keep that function under the
+    PLR0915 statement budget; behavior is unchanged (one header line +
+    one detail line per candidate).
+    """
+    typer.echo("dry-run: skipping inbox writes + DB persistence")
+    for index, candidate in enumerate(ranked, start=1):
+        typer.echo(
+            f"[{index:4d}] {candidate.report.config.hypothesis}/"
+            f"{candidate.report.config.dte_bucket} "
+            f"composite={candidate.composite_score:.4f} "
+            f"hash={candidate.report.config.config_hash}"
+        )
+
+
+def _log_hypothesis_distributions(
+    reports: object,
+    ranked: object,
+) -> None:
+    """D065: echo the per-hypothesis sampler→ranker funnel distributions.
+
+    Two lines:
+      `sampler_attempts: hyp=N, ...`              (input to prefilter)
+      `ranked_top_n_by_hypothesis: hyp=N, ...`    (output of ranker)
+
+    Together with D064's `prefilter_rejections_by_hypothesis` line in
+    the middle, the journal carries a complete per-hypothesis funnel
+    view in three lines per iteration.
+    """
+    from collections import Counter as _Counter
+
+    attempts: _Counter[str] = _Counter(
+        getattr(r, "config", None).hypothesis  # type: ignore[union-attr]
+        for r in reports  # type: ignore[attr-defined]
+        if getattr(r, "config", None) is not None
+    )
+    survivors: _Counter[str] = _Counter(
+        c.report.config.hypothesis for c in ranked  # type: ignore[attr-defined]
+    )
+    typer.echo(_format_hypothesis_distribution_line("sampler_attempts", attempts))
+    typer.echo(
+        _format_hypothesis_distribution_line("ranked_top_n_by_hypothesis", survivors),
+    )
+
+
 def _log_prefilter_rejections(
     summary: object,  # PrefilterRejectionSummary, typed in submitter
 ) -> None:
@@ -531,8 +612,15 @@ def _run_battery_for_seed(
     *,
     hypothesis_weights: Mapping[str, float] | None = None,
     forge_db_path: Path | None = None,
+    timings: dict[str, float] | None = None,
 ) -> list[PreFilterReport]:
-    """Enumerate and run the §5.2 battery; return one PreFilterReport per config."""
+    """Enumerate and run the §5.2 battery; return one PreFilterReport per config.
+
+    D065: when `timings` is provided, populates per-phase elapsed seconds
+    under keys ``enumeration``, ``prefetch``, ``battery``. Caller-owned
+    dict so the outer loop can aggregate with its own phases. Optional —
+    `None` keeps the old call signature working for tests that don't care.
+    """
     from forge.core.seed import SeedHierarchy
     from forge.enumeration import enumerate_candidates
     from forge.prefilters import default_filters, run_battery
@@ -566,8 +654,11 @@ def _run_battery_for_seed(
     # at least 2% of the budget (capped at 50%) to prevent the Bayesian
     # failure-bias sampler from collapsing onto 1-2 hypotheses. See
     # IMPLEMENTATION_DECISIONS.md D037.
+    import time as _time
+
     from forge.enumeration.iterator import _PRODUCTION_MIN_HYPOTHESIS_FRACTION
 
+    t0 = _time.monotonic()
     configs = list(
         enumerate_candidates(
             grammar,
@@ -578,6 +669,7 @@ def _run_battery_for_seed(
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
+    t1 = _time.monotonic()
     # Hoist the per-config socket round-trips into one batched prefetch when
     # the cache supports it. CrucibleFeatureCache collapses 5000 x 2 calls
     # into ~20 chunked calls; SyntheticFeatureCache has no batch hook and
@@ -585,7 +677,14 @@ def _run_battery_for_seed(
     batch_prefetch = getattr(ctx.feature_cache, "prefetch_for_batch", None)
     if callable(batch_prefetch):
         batch_prefetch(configs)
-    return [run_battery(cfg, ctx, filters) for cfg in configs]
+    t2 = _time.monotonic()
+    reports = [run_battery(cfg, ctx, filters) for cfg in configs]
+    t3 = _time.monotonic()
+    if timings is not None:
+        timings["enumeration"] = t1 - t0
+        timings["prefetch"] = t2 - t1
+        timings["battery"] = t3 - t2
+    return reports
 
 
 def _ensure_grammar_version_recorded_silently(
@@ -788,7 +887,7 @@ def _effective_seed(root_seed: int, iteration: int) -> int:
     return SeedHierarchy(root_seed).derive(f"batch_{iteration:08d}")
 
 
-def _run_one_iteration(
+def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     *,
     seed: int,
     batch_size: int,
@@ -801,7 +900,17 @@ def _run_one_iteration(
     open_proposals: Path,
     prefilter_yaml: Path,
 ) -> str:
-    """Run one cycle; return one of 'submitted', 'blocked', 'dry-run'."""
+    """Run one cycle; return one of 'submitted', 'blocked', 'dry-run'.
+
+    PLR0915 suppression: D062/D064/D065 progressively added per-iteration
+    telemetry (rejection counter, per-hypothesis breakdown, phase timings,
+    funnel distributions). Each adds 1-3 statements; the budget would
+    require fragmenting the linear iteration flow into helpers without
+    making it more readable. The function is still one straight-line
+    cycle: gate → enumerate → rank → submit → log → feedback.
+    """
+    import time as _time
+
     from forge.core.clock import utc_now
     from forge.core.contracts_check import check_contracts_version
     from forge.enumeration import registry_hash
@@ -812,6 +921,8 @@ def _run_one_iteration(
     from forge.ranking import Ranker, load_ranker_config, rank_batch
     from forge.submission import BatchContext, check_rate_limit, mint_batch_id, submit_batch
     from forge.submission.submitter import record_prefilter_rejections
+
+    timings: dict[str, float] = {}
 
     check_contracts_version()
     config_root = Path(__file__).resolve().parents[3] / "config"
@@ -844,7 +955,9 @@ def _run_one_iteration(
         # gated-runs export before checking the rate limit. Without this,
         # older batches stay in `submitted` indefinitely and the oldest-batch
         # rate limit logic blocks the loop forever.
+        _t_reconcile = _time.monotonic()
         _reconcile_pending_silently(forge_db_path, crucible_db)
+        timings["reconcile"] = _time.monotonic() - _t_reconcile
         rate = check_rate_limit(forge_db_path, crucible_db)
         if not rate.clear:
             typer.echo(
@@ -866,27 +979,28 @@ def _run_one_iteration(
         calibration,
         hypothesis_weights=hypothesis_weights,
         forge_db_path=forge_db_path,
+        timings=timings,
     )
     passed = sum(1 for r in reports if r.passed)
     typer.echo(f"enumerated={len(reports)} passed_prefilter={passed}")
 
+    _t_rank = _time.monotonic()
     ranked = rank_batch(
         ranker,
         reports,
         promoted_strategies=tuple(promoted),
         n=batch_size,
     )
+    timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
+    # D065: complete per-hypothesis funnel — sampler_attempts (input to
+    # prefilter) + ranked_top_n_by_hypothesis (output of ranker). With
+    # D064's prefilter_rejections_by_hypothesis line in the middle, the
+    # journal carries the full per-hypothesis funnel in three lines.
+    _log_hypothesis_distributions(reports, ranked)
 
     if dry_run:
-        typer.echo("dry-run: skipping inbox writes + DB persistence")
-        for index, candidate in enumerate(ranked, start=1):
-            typer.echo(
-                f"[{index:4d}] {candidate.report.config.hypothesis}/"
-                f"{candidate.report.config.dte_bucket} "
-                f"composite={candidate.composite_score:.4f} "
-                f"hash={candidate.report.config.config_hash}"
-            )
+        _echo_dry_run_preview(ranked)
         return "dry-run"
 
     assert inbox is not None  # CLI guard above
@@ -901,6 +1015,7 @@ def _run_one_iteration(
         submitted_at=utc_now(),
         seed=seed,
     )
+    _t_submit = _time.monotonic()
     with db_connection(forge_db_path) as conn:
         result = submit_batch(conn, batch=batch, candidates=ranked, inbox_root=inbox)
         # D062 + D064: persist per-filter rejection counts to batch_summaries
@@ -909,12 +1024,14 @@ def _run_one_iteration(
         rejections = record_prefilter_rejections(
             conn, batch_id=result.batch_id, reports=reports,
         )
+    timings["submit"] = _time.monotonic() - _t_submit
     typer.echo(
         f"batch_id={result.batch_id} submitted={result.submitted_count} "
         f"skipped_duplicate={result.skipped_duplicate_count} "
         f"failed={result.failed_count}"
     )
     _log_prefilter_rejections(rejections)
+    typer.echo(_format_phase_timings_line(timings))
 
     if consume_feedback:
         _consume_feedback_after_submit(

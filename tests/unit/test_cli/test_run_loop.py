@@ -316,3 +316,99 @@ def test_d063_hypothesis_weights_line_uses_canonical_order() -> None:
         "trend_continuation", "mean_reversion", "regime_arbitrage",
         "relative_value", "volatility_event", "tail_hedge",
     ]
+
+
+def test_d065_phase_timings_line_renders_in_pipeline_order() -> None:
+    """D065: timings render in canonical pipeline order (reconcile →
+    enumeration → prefetch → battery → rank → submit), not insertion
+    order. Missing keys are skipped so an iteration that short-circuits
+    (e.g., rate-limit blocked) still produces a coherent prefix line."""
+    from forge.cli.main import _format_phase_timings_line
+
+    out_of_order = {
+        "submit": 0.05,
+        "battery": 8.0,
+        "reconcile": 3.0,
+        "prefetch": 12345.0,
+        "rank": 0.20,
+        "enumeration": 8.0,
+    }
+    line = _format_phase_timings_line(out_of_order)
+    assert line.startswith("phase_timings: ")
+    body = line.removeprefix("phase_timings: ")
+    names = [seg.split("=")[0] for seg in body.split(", ")]
+    assert names == [
+        "reconcile", "enumeration", "prefetch", "battery", "rank", "submit",
+    ]
+    # Sanity: prefetch is rendered with two-decimal seconds.
+    assert "prefetch=12345.00s" in line
+
+
+def test_d065_phase_timings_line_skips_missing_phases() -> None:
+    """D065: an iteration that hits rate-limit `blocked` only populates
+    `reconcile`. The line should render just that phase, not pad with
+    zeros or `None`s — partial views are honest about what ran."""
+    from forge.cli.main import _format_phase_timings_line
+
+    line = _format_phase_timings_line({"reconcile": 2.5})
+    assert line == "phase_timings: reconcile=2.50s"
+
+
+def test_d065_hypothesis_distribution_line_uses_canonical_order() -> None:
+    """D065: hypothesis-keyed distribution lines render in the canonical
+    `_HYPOTHESES` order with `=0` for absent hypotheses (no silent
+    omission — that was D063's lesson)."""
+    from forge.cli.main import _format_hypothesis_distribution_line
+
+    line = _format_hypothesis_distribution_line(
+        "sampler_attempts",
+        {"volatility_event": 100, "tail_hedge": 50},
+    )
+    assert line.startswith("sampler_attempts: ")
+    body = line.removeprefix("sampler_attempts: ")
+    pairs = [seg.split("=") for seg in body.split(", ")]
+    names = [p[0] for p in pairs]
+    counts = {p[0]: int(p[1]) for p in pairs}
+    assert names == [
+        "trend_continuation", "mean_reversion", "regime_arbitrage",
+        "relative_value", "volatility_event", "tail_hedge",
+    ]
+    assert counts == {
+        "trend_continuation": 0,
+        "mean_reversion": 0,
+        "regime_arbitrage": 0,
+        "relative_value": 0,
+        "volatility_event": 100,
+        "tail_hedge": 50,
+    }
+
+
+def test_d065_run_battery_for_seed_populates_timings(tmp_path: Path) -> None:
+    """D065: `_run_battery_for_seed` populates the caller-owned timings
+    dict with `enumeration`, `prefetch`, `battery` keys. The caller is
+    responsible for the outer phases (reconcile, rank, submit)."""
+    from pathlib import Path as _P
+
+    from forge.cli.main import _run_battery_for_seed
+    from forge.grammar import load_grammar
+    from forge.persistence.registry_loader import load_registry
+    from forge.prefilters.calibration import load_calibration
+
+    config_root = _P(__file__).resolve().parents[3] / "config"
+    grammar = load_grammar(
+        config_root / "grammar.yaml",
+        archive_dir=config_root / "grammar_archive",
+    )
+    calibration = load_calibration(config_root / "prefilter.yaml")
+    registry = load_registry()
+
+    timings: dict[str, float] = {}
+    # Tiny max_candidates keeps the test fast; the cache will be
+    # synthetic (no socket present in test env) so prefetch is cheap.
+    _run_battery_for_seed(
+        grammar, registry, seed=42, max_candidates=2,
+        calibration=calibration, timings=timings,
+    )
+    assert set(timings) == {"enumeration", "prefetch", "battery"}
+    for k, v in timings.items():
+        assert v >= 0.0, f"{k} should be non-negative"
