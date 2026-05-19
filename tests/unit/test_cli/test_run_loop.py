@@ -271,3 +271,48 @@ def test_d060_novelty_dedup_disabled_warning_fires_when_db_is_none(
     assert second.err == ""
     # Reset for downstream tests.
     _main._NOVELTY_DEDUP_WARNED = False
+
+
+def test_d063_hypothesis_weights_line_fills_prior_for_missing_keys() -> None:
+    """D063: the journal `hypothesis_weights:` line now renders the
+    *effective* sampler weights — observed values for hypotheses present
+    in the dict, `prior_mean(*)` for those absent. The pre-D063 line just
+    dumped `dict.items()` and silently omitted no-data hypotheses, making
+    them look pruned when they actually get the prior (often higher than
+    observed failures)."""
+    from forge.cli.main import _format_hypothesis_weights_line
+    from forge.feedback.rejection_weights import prior_mean
+
+    weights = {
+        "volatility_event": 0.050,
+        "regime_arbitrage": 0.004,
+    }
+    line = _format_hypothesis_weights_line(weights)
+    assert "volatility_event=0.050" in line
+    assert "regime_arbitrage=0.004" in line
+    # Missing hypotheses get prior_mean with `*` marker, NOT dropped.
+    pm_str = f"{prior_mean():.3f}"
+    assert f"mean_reversion={pm_str}*" in line
+    assert f"trend_continuation={pm_str}*" in line
+    assert "(*=prior, no data)" in line
+
+
+def test_d063_hypothesis_weights_line_uses_canonical_order() -> None:
+    """D063: hypotheses render in the canonical `_HYPOTHESES` order
+    (trend_continuation, mean_reversion, regime_arbitrage, relative_value,
+    volatility_event, tail_hedge), not alphabetical or dict-insertion
+    order. Stable ordering keeps the line greppable and diff-friendly."""
+    from forge.cli.main import _format_hypothesis_weights_line
+
+    weights = {h: 0.1 for h in (
+        "trend_continuation", "mean_reversion", "regime_arbitrage",
+        "relative_value", "volatility_event", "tail_hedge",
+    )}
+    line = _format_hypothesis_weights_line(weights)
+    # Strip the prefix so we can check raw order.
+    body = line.removeprefix("hypothesis_weights: ").split(" (")[0]
+    names = [seg.split("=")[0] for seg in body.split(", ")]
+    assert names == [
+        "trend_continuation", "mean_reversion", "regime_arbitrage",
+        "relative_value", "volatility_event", "tail_hedge",
+    ]

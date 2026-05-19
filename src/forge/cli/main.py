@@ -309,6 +309,26 @@ _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED: bool = False
 _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED: bool = False
 
 
+def _format_hypothesis_weights_line(weights: Mapping[str, float]) -> str:
+    """D063: render the effective sampler weights, prior-filled for unobserved.
+
+    Pre-D063 the journal line silently omitted hypotheses with zero gated
+    rows, making it look like they were pruned. In reality the sampler
+    falls back to `prior_mean` for missing keys (rejection_weights.py),
+    so they actually get *higher* weight than observed-but-failing
+    hypotheses. The `*` marker calls out prior-filled entries.
+    """
+    from forge.enumeration.search_space import _HYPOTHESES
+    from forge.feedback.rejection_weights import prior_mean
+
+    pm = prior_mean()
+    parts = [
+        f"{h}={weights[h]:.3f}" if h in weights else f"{h}={pm:.3f}*"
+        for h in _HYPOTHESES
+    ]
+    return f"hypothesis_weights: {', '.join(parts)} (*=prior, no data)"
+
+
 def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     """Compute per-hypothesis posterior promotion rates for failure-biased sampling.
 
@@ -800,8 +820,7 @@ def _run_one_iteration(
     promoted = _fetch_promoted_configs(forge_db_path, crucible_db)
     hypothesis_weights = _load_hypothesis_weights(forge_db_path)
     if hypothesis_weights:
-        weights_str = ", ".join(f"{h}={w:.3f}" for h, w in sorted(hypothesis_weights.items()))
-        typer.echo(f"hypothesis_weights: {weights_str}")
+        typer.echo(_format_hypothesis_weights_line(hypothesis_weights))
     reports = _run_battery_for_seed(
         grammar,
         registry,

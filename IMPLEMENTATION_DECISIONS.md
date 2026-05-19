@@ -1608,3 +1608,52 @@ Existing D052 unit test (`test_reconcile_all_pending_flushes_predates_export_win
 - `tests/unit/test_grammar/test_custom_predicates.py` — 3 new D062 C2 tests.
 - `tests/unit/test_submission/test_submitter.py` — 2 new D062 rejection counter tests.
 - `IMPLEMENTATION_DECISIONS.md` D062 (this entry).
+
+
+## D063 — 2026-05-18 — Surface prior-filled hypotheses in the `hypothesis_weights:` journal line
+
+**Spec section:** §6.2 ranker / sampler observability; hard rule #6 (deterministic enumeration nuance).
+
+**Context:** Production journal at iteration 31/32 logged:
+```
+hypothesis_weights: regime_arbitrage=0.004, relative_value=0.003, tail_hedge=0.002, volatility_event=0.050
+```
+`mean_reversion` and `trend_continuation` were absent. Operator's read: "the adaptive weighter has pruned them." Actual behavior: `compute_hypothesis_weights` only returns dict entries for hypotheses with ≥1 row in the `submissions ⋈ gated_runs` join; the sampler then falls back to `prior_mean()` (Beta(1,10).mean = 0.0909) for missing keys via `hypothesis_weights.get(h, _HYPOTHESIS_WEIGHT_PRIOR_MEAN)` in `sampler.py:201`. Plus D037's stratified floor (`_PRODUCTION_MIN_HYPOTHESIS_FRACTION ≥ 2%`) hard-guarantees nothing is pruned.
+
+So the **sampler was fine** — `mean_reversion` and `trend_continuation` actually got ~38% probability each (prior 0.0909 normalized against the smaller observed weights 0.002–0.050). The **journal line was lying by omission**, making it look like a sampler bug when it wasn't. Live data confirmed:
+
+| Hypothesis | submitted | gated |
+|---|---:|---:|
+| mean_reversion | 1 | 1 |
+| trend_continuation | 0 | 0 |
+| regime_arbitrage | 865 | 835 |
+| relative_value | 1,154 | 1,134 |
+| tail_hedge | 1,851 | 1,824 |
+| volatility_event | 156 | 9 |
+
+Only one mean_reversion submission ever, zero trend_continuation — but the bottleneck is downstream of the sampler (pre-filter battery rejecting them at ~100%), not the weight selector. D062's `prefilter_rejections` counter will surface which filter does the killing on the next production batch.
+
+**Decision:** Replace the dict-dump log line with `_format_hypothesis_weights_line(weights)`, which renders all six canonical hypotheses in `_HYPOTHESES` order, fills `prior_mean()` for unobserved entries, and marks them with `*`. Suffix `(*=prior, no data)` makes the convention self-documenting.
+
+**Example new line:**
+```
+hypothesis_weights: trend_continuation=0.091*, mean_reversion=0.091*, regime_arbitrage=0.004, relative_value=0.003, volatility_event=0.050, tail_hedge=0.002 (*=prior, no data)
+```
+
+**Hard rules check:**
+- Hard rule #6 (deterministic enumeration): unaffected — this is an observability change to the journal line; sampler behavior is unchanged.
+- No other hard rules touched.
+
+**Alternatives considered:**
+- **Log only the dict, add a separate "missing:" line.** Two-line variant. Rejected — single line is greppable; one is more diff-friendly than two.
+- **Log raw weights without `*` marker.** Rejected — operator would still need to know `0.091` is the prior magic number to disambiguate; the marker is one character and self-explanatory.
+- **Fix `compute_hypothesis_weights` to always return all six keys with prior fallback.** Considered. Rejected — the function's contract is "posterior dict; empty means uniform"; padding it with priors would invert the "empty=uniform" semantics. The presentation layer (cli/main.py) is the right seam for this. The sampler keeps its `dict.get(h, prior_mean)` fallback as the source of truth for actual weights.
+
+**Verification:**
+- 2 new tests in `tests/unit/test_cli/test_run_loop.py`: prior-filled marker fires for absent keys; canonical hypothesis order is preserved.
+- Ruff + mypy strict clean on `src/forge/cli/main.py`.
+
+**Action:**
+- `src/forge/cli/main.py` — new `_format_hypothesis_weights_line(weights)` helper; `_run_one_iteration` calls it instead of the inline `", ".join(...)`. Inline removed (was 2 statements, helper is 1 call — also resolves a PLR0915 nudge on `_run_one_iteration`).
+- `tests/unit/test_cli/test_run_loop.py` — 2 new D063 tests.
+- `IMPLEMENTATION_DECISIONS.md` D063 (this entry).
