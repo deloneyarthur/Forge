@@ -227,3 +227,35 @@ Alternatives rejected:
 **Resolution 2026-05-14:** Logged + Forge-side thresholds fixed; awaiting Crucible stub-impl follow-up. See **D030**.
 
 **Tag:** `crucible-v4-prerequisite`, `threshold-semantics`
+
+---
+
+## 2026-05-19 — Q15 — `trend_continuation` blocked by registry family mismatch on `adx`/`hurst` — **HIGH SEVERITY**
+
+**Question:** Why does the `trend_continuation` hypothesis produce zero sampler attempts in production despite D067's 5% exploration floor and D037's 2% stratified rotation? Iter 36 telemetry (D064 `prefilter_rejections_by_hypothesis:`):
+
+```
+sampler_attempts: trend_continuation=0, mean_reversion=1520, regime_arbitrage=1102, relative_value=1142, volatility_event=1236, tail_hedge=0
+```
+
+**Diagnosis.** The production registry (`registry_snapshot_2026-05-18T033529Z.json`) assigns `family="trend"` to **both** `adx` and `hurst`, the §3.5 R2 regime indicators for `trend_continuation`. Forge's grammar requires:
+
+- §3.5 C2[`trend_continuation`] = `("trend",)` — directional must be `trend` family.
+- §3.5 R2 = literal IDs `("adx", "hurst")` — regime must be one of these.
+- §3.5 C1 — directional family ≠ regime family.
+
+When the sampler picks `trend_continuation`, it draws a directional from `trend` family (e.g., `momentum_252`). Then for the regime it picks `adx` or `hurst` — but both have `family="trend"` in the production registry. C1 fires → `SamplerError`. After 20 forced-rotation retries hit the `_FORCED_FAILURE_CAP`, `trend_continuation` is blacklisted for the batch. The weighted-sample path also fails on every pick, producing **zero successful samples** in the entire 5,000-candidate batch.
+
+Forge has historically expected `adx`/`hurst` to live in a separate `trend_strength` family. Evidence:
+
+- `tests/unit/test_enumeration/test_search_space.py:116-119` asserts `indicators_by_family["trend_strength"] == ("adx", "hurst")` and references the move as "post-contracts-v1.4.0, adx + hurst live in the `trend_strength` family rather than `volatility` (D019)."
+- `tests/fixtures/strategy_configs.py::minimal_registry_snapshot()` ships `adx` and `hurst` with `family="trend_strength"`.
+- D019 in `IMPLEMENTATION_DECISIONS.md` formalized the split.
+
+**The production registry has them as `family="trend"` — same family as the directional pool.** This is a regression from D019's contract.
+
+**What I did instead:** Logged this question. Did not modify the grammar (hard rule #1). Did not change `_R2_TREND_STRENGTH_INDICATORS` (Forge would silently break the cross-system contract and the test suite). Did draft `CRUCIBLE_TREND_STRENGTH_FAMILY_AGENT_PROMPT.md` at the repo root for the operator to hand off to a Crucible agent — it specifies moving `adx` and `hurst` from `family="trend"` to `family="trend_strength"` (with no other changes), citing this Q15 entry and D019.
+
+**Severity:** **high** — fully blocks the `trend_continuation` hypothesis from ever being sampled. Crucible's post-mortem cohort (3,829 configs) shows `trend_continuation` at 0/3,829 = 0.0%; consistent with this finding being persistent rather than transient.
+
+**Tag:** `crucible-registry-regression`, `trend-strength-family`, `cross-system-contract`
