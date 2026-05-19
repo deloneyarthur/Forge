@@ -168,6 +168,55 @@ def test_perf_100k_configs_under_five_minutes(grammar: Grammar) -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# D066 — overlay-only hypotheses (tail_hedge) must never be enumerated as
+# a StrategyConfig. Crucible's runner rejects them at dispatch as
+# RunnerError; pre-D066, 1851/4039 = 45.8% of inbox configs were wasted
+# tail_hedge round-trips.
+# ---------------------------------------------------------------------------
+
+
+def test_d066_no_overlay_only_hypothesis_in_any_yielded_config(
+    grammar: Grammar,
+) -> None:
+    """At N=500 across a small seed sweep, the iterator must never emit a
+    config whose ``hypothesis`` is in ``OVERLAY_ONLY_HYPOTHESES``."""
+    from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
+
+    registry = demo_registry()
+    seen_overlay: list[str] = []
+    for seed in (0, 1, 7, 137, 2026):
+        for cfg in enumerate_candidates(
+            grammar, registry, seed=seed, max_candidates=100,
+        ):
+            if cfg.hypothesis in OVERLAY_ONLY_HYPOTHESES:
+                seen_overlay.append(
+                    f"seed={seed} hash={cfg.config_hash} hyp={cfg.hypothesis}"
+                )
+    assert not seen_overlay, (
+        f"D066 violated: {len(seen_overlay)} overlay-only configs leaked: "
+        f"{seen_overlay[:5]}"
+    )
+
+
+def test_d066_overlay_only_hypothesis_blocked_when_forced(grammar: Grammar) -> None:
+    """The sampler must reject a ``forced_hypothesis`` in the overlay-only
+    set — the production iterator's D037 rotation should never select one,
+    but a direct sampler call must still surface SamplerError so test
+    callers don't accidentally bypass D066."""
+    import random
+
+    from forge.enumeration.sampler import SamplerError, sample_config
+    from forge.enumeration.search_space import build_search_space
+
+    registry = demo_registry()
+    space = build_search_space(grammar, registry)
+    with pytest.raises(SamplerError, match=r"forced_hypothesis='tail_hedge'"):
+        sample_config(
+            space, registry, random.Random(0), forced_hypothesis="tail_hedge",
+        )
+
+
 def test_capped_is_loud_for_unsatisfiable_registries(grammar: Grammar) -> None:
     from datetime import UTC, date, datetime
 

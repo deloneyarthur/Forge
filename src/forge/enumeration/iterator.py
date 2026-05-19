@@ -20,7 +20,7 @@ import structlog
 
 from forge.core.seed import SeedHierarchy
 from forge.enumeration.sampler import SamplerError, sample_config
-from forge.enumeration.search_space import build_search_space
+from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES, build_search_space
 from forge.grammar import validate
 
 if TYPE_CHECKING:
@@ -128,11 +128,13 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     rng = SeedHierarchy(seed).rng("enumeration")
 
     # D037 stratification setup: per-hypothesis quota, sorted name for
-    # deterministic rotation order.
+    # deterministic rotation order. D066: exclude overlay-only hypotheses
+    # so the forced-rotation floor never tries to enumerate them.
     samplable = sorted(
         h
         for h in space.hypotheses
-        if space.directional_indicators_by_hypothesis[h]
+        if h not in OVERLAY_ONLY_HYPOTHESES
+        and space.directional_indicators_by_hypothesis[h]
         and space.regime_indicators_by_hypothesis[h]
     )
     floor_per_hyp = _compute_stratification_floor(

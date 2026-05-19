@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Literal
 import duckdb
 from crucible_contracts import submit_candidate
 
+from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
 from forge.submission.pre_filter_logger import record_pre_filter_logs
 
 if TYPE_CHECKING:
@@ -40,7 +41,12 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
-SubmissionStatus = Literal["submitted", "skipped_duplicate", "submission_failed"]
+SubmissionStatus = Literal[
+    "submitted",
+    "skipped_duplicate",
+    "submission_failed",
+    "dropped_overlay_only",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +69,11 @@ class BatchSubmissionResult:
     skipped_duplicate_count: int
     failed_count: int
     records: tuple[SubmissionRecord, ...]
+    # D066: defense-in-depth counter for overlay-only hypotheses (e.g.,
+    # tail_hedge) dropped pre-submission. The sampler should never produce
+    # one; if it does, this surfaces the regression instead of round-
+    # tripping the config to Crucible only to be RunnerError'd.
+    dropped_overlay_count: int = 0
 
 
 def _insert_batch_summary(
@@ -108,6 +119,31 @@ def _submit_one(
     candidate_id = uuid.uuid4()
     config = candidate.report.config
     config_hash = config.config_hash
+
+    # D066: overlay-only hypotheses (tail_hedge) must not reach Crucible's
+    # inbox — Crucible's runner rejects them at dispatch as RunnerError.
+    # The sampler filter is the primary line of defense; this is the
+    # last-line guard that surfaces any regression. Skip the DB insert and
+    # the inbox write entirely; record the drop for batch aggregation.
+    if config.hypothesis in OVERLAY_ONLY_HYPOTHESES:
+        _log.warning(
+            "submit_batch: dropping overlay-only hypothesis %r "
+            "(config_hash=%s, name=%s) — sampler should not have produced this; "
+            "see IMPLEMENTATION_DECISIONS.md D066",
+            config.hypothesis,
+            config_hash,
+            config.name,
+        )
+        return SubmissionRecord(
+            candidate_id=candidate_id,
+            config_hash=config_hash,
+            status="dropped_overlay_only",
+            inbox_path=None,
+            error=(
+                f"hypothesis={config.hypothesis!r} is overlay-only "
+                f"(StrategySpec submission would RunnerError at Crucible)"
+            ),
+        )
     config_json = config.model_dump_json()
 
     try:
@@ -195,6 +231,7 @@ def submit_batch(
     submitted = 0
     skipped = 0
     failed = 0
+    dropped_overlay = 0
 
     for candidate in candidates:
         record = _submit_one(
@@ -208,8 +245,18 @@ def submit_batch(
             submitted += 1
         elif record.status == "skipped_duplicate":
             skipped += 1
+        elif record.status == "dropped_overlay_only":
+            dropped_overlay += 1
         else:
             failed += 1
+
+    if dropped_overlay:
+        _log.warning(
+            "submit_batch: dropped %d overlay-only candidate(s) "
+            "(batch_id=%s) — D066 defense fired; investigate sampler",
+            dropped_overlay,
+            batch.batch_id,
+        )
 
     return BatchSubmissionResult(
         batch_id=batch.batch_id,
@@ -217,6 +264,7 @@ def submit_batch(
         skipped_duplicate_count=skipped,
         failed_count=failed,
         records=tuple(records),
+        dropped_overlay_count=dropped_overlay,
     )
 
 

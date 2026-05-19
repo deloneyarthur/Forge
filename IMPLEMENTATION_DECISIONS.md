@@ -1772,3 +1772,65 @@ sampler_attempts → prefilter_rejections_by_hypothesis → ranked_top_n_by_hypo
   - `_run_one_iteration` carries a `# noqa: PLR0915` for the observability-heavy statement count.
 - `tests/unit/test_cli/test_run_loop.py` — 4 new D065 tests.
 - `IMPLEMENTATION_DECISIONS.md` D065 (this entry).
+
+---
+
+## D066 — Tail-hedge dropped from StrategySpec enumeration (overlay-only)
+
+**Date:** 2026-05-18
+
+**Context.** Forge has been emitting `hypothesis="tail_hedge"` configs as `StrategyConfig`s and submitting them via the inbox. Crucible's runner (`src/optbt/data/runner.py:397`) rejects every one at dispatch with `RunnerError` because `tail_hedge` belongs to `OverlaySpec` semantics, not `StrategySpec`. Every such submission is pure wasted compute: round-trip to Crucible's queue, picked up, errors immediately, run marked failed, no backtest work happens.
+
+Concrete cost from this iteration of monitoring:
+
+- **1,851 of 4,039 processed inbox configs (45.8%)** are `tail_hedge`.
+- **~422 of the latest 1,000 gated_runs** are `tail_hedge`, all `RunnerError`.
+- Forge's adaptive sampler at iteration 32 placed `tail_hedge` at ~50% of effective submissions despite all of them erroring at dispatch — the failure-bias weights are downstream of *Crucible-gate* outcomes, not of *Crucible-dispatch* outcomes, so they never registered the runner rejections as a signal to down-weight the hypothesis.
+
+**Root cause.** The grammar lists `tail_hedge` as a valid hypothesis (§3.5 — operator-owned), and Forge had no enumerator-side or submitter-side filter to keep tail_hedge configs out of the production loop. Crucible's runner-side defense was firing correctly but on the wrong side of an expensive boundary (post-queue, post-dispatch).
+
+**Decision.** Two-layer defense:
+
+1. **Sampler-side prevention.** A new module-level frozenset `OVERLAY_ONLY_HYPOTHESES = frozenset({"tail_hedge"})` in `forge.enumeration.search_space` is the single source of truth. The sampler (`sample_config`) and the iterator (`enumerate_candidates` D037 stratification) both filter `OVERLAY_ONLY_HYPOTHESES` out of the `samplable_hypotheses` pool BEFORE any other selection happens — no enumeration work is wasted on these hypotheses.
+2. **Submitter-side defense-in-depth.** `submitter._submit_one` checks `config.hypothesis in OVERLAY_ONLY_HYPOTHESES` and short-circuits: no DB insert, no inbox write, returns a `SubmissionRecord(status="dropped_overlay_only")`. `submit_batch` aggregates these into a new `BatchSubmissionResult.dropped_overlay_count` field and emits a `logger.warning` if any fire — so a future regression that bypasses the sampler filter surfaces loudly instead of silently round-tripping to Crucible.
+
+**Why not just delete `tail_hedge` from grammar.yaml?** Hard rule #1: the §3.5 grammar rules are operator-owned. Hard rule #10 also requires a version bump + archive + Decision-Log entry on any grammar change. The semantic claim — "tail_hedge is a valid *hypothesis*, but Forge should not enumerate it as a *standalone strategy*" — belongs in the enumeration-policy layer, not the grammar. When `crucible_contracts` grows an `OverlaySpec` model (currently a contracts gap, surfaced 2026-05-18), an overlay-aware enumeration path can re-admit `tail_hedge` as a portfolio overlay and the `OVERLAY_ONLY_HYPOTHESES` set can shrink — without re-bumping the grammar.
+
+**Why not silence Crucible's runner-side RunnerError?** Defense-in-depth. Crucible's authority over what is a `StrategyConfig` should not depend on Forge's producer discipline. The runner check stays; Forge's filter just stops feeding it work to reject.
+
+**Hard rules check:**
+
+- **#1 (21 v1 grammar rules operator-owned):** grammar.yaml unchanged. The §3.5 `tail_hedge` hypothesis stays listed. Filter lives in Forge runtime policy.
+- **#2 (no imports from Crucible internals):** no Crucible imports touched. The runner-side defense is acknowledged by reference only.
+- **#3 (never lower Crucible's gate):** N/A — this is enumeration scope, not gate strictness. Forge submits *less*, not Crucible gating *more loosely*.
+- **#6 (deterministic enumeration):** preserved. The filter is a deterministic predicate against a frozen set; `(grammar_version, registry_hash, seed)` still produces a byte-identical sequence within the now-smaller hypothesis pool. The Phase 2 determinism property test (`test_enumeration_byte_identical_for_same_triple`) still passes.
+- **#7 (no equity family):** N/A.
+
+**Alternatives considered:**
+
+- **Submitter-only filter (no sampler change).** Considered. Rejected: leaves the enumeration / scoring / ranking layers doing pointless work on candidates we know cannot ship, and the journal's `sampler_attempts` line would mislead.
+- **Sampler-only filter (no submitter defense).** Considered. Rejected: a future regression — e.g., a CLI path that constructs candidates outside the sampler, or a stale rerun script — could silently re-introduce tail_hedge submissions. The submitter-side guard is cheap and converts silent failure into a loud warning.
+- **Mark `tail_hedge` as `active: false` in grammar.yaml.** Considered. Rejected for now: it's a grammar edit (hard rule #10 audit cost) and conflates "Forge does not enumerate this" with "the operator disabled this hypothesis." The runtime filter is the more honest framing.
+- **Sample `tail_hedge` at low weight (e.g., 0.001) and accept the waste.** Considered. Rejected — 0.001 of 5000 candidates/iteration ≈ 5 wasted Crucible round-trips per iteration; at iteration cadence that's still 100s/day of compute on guaranteed failures.
+
+**Verification:**
+
+- 2 new tests in `tests/invariants/test_phase2_invariants.py`:
+  - `test_d066_no_overlay_only_hypothesis_in_any_yielded_config` — sweeps 5 seeds × 100 candidates = 500 configs; none has `hypothesis="tail_hedge"`.
+  - `test_d066_overlay_only_hypothesis_blocked_when_forced` — a direct `sample_config(..., forced_hypothesis="tail_hedge")` raises `SamplerError`.
+- 2 new tests in `tests/unit/test_submission/test_submitter.py`:
+  - `test_d066_submitter_drops_overlay_only_hypothesis` — a tail_hedge candidate is dropped: no `submissions` row, no inbox file, status `"dropped_overlay_only"`, `dropped_overlay_count == 1`.
+  - `test_d066_batch_submission_result_default_dropped_overlay_is_zero` — sanity that healthy batches report `0`.
+- 1 existing test updated:
+  - `tests/unit/test_enumeration/test_sampler.py::test_sampler_reaches_every_hypothesis` — expected set no longer includes `tail_hedge`.
+
+**Action:**
+
+- `src/forge/enumeration/search_space.py` — new `OVERLAY_ONLY_HYPOTHESES` frozenset.
+- `src/forge/enumeration/sampler.py` — import + filter in `sample_config`.
+- `src/forge/enumeration/iterator.py` — import + filter in `enumerate_candidates` D037 stratification path.
+- `src/forge/submission/submitter.py` — `SubmissionStatus` gains `"dropped_overlay_only"`; `BatchSubmissionResult` gains `dropped_overlay_count: int = 0`; `_submit_one` short-circuits on overlay-only hypothesis; `submit_batch` aggregates the counter and emits a `logger.warning` per batch with any drops.
+- `tests/invariants/test_phase2_invariants.py` — 2 new D066 tests.
+- `tests/unit/test_submission/test_submitter.py` — 2 new D066 tests.
+- `tests/unit/test_enumeration/test_sampler.py` — `test_sampler_reaches_every_hypothesis` expected set updated.
+- `IMPLEMENTATION_DECISIONS.md` D066 (this entry).

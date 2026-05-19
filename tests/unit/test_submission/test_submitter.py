@@ -299,6 +299,80 @@ def test_inbox_files_land_flat_at_inbox_root(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# D066 — overlay-only hypothesis defense (tail_hedge)
+# ---------------------------------------------------------------------------
+
+
+def test_d066_submitter_drops_overlay_only_hypothesis(tmp_path: Path) -> None:
+    """A candidate with hypothesis="tail_hedge" must be dropped before any
+    DB write or inbox write. Crucible's runner rejects these as
+    RunnerError; the sampler should never produce them, but the submitter
+    is the last line of defense if it does. The drop is counted on the
+    `dropped_overlay_count` field and surfaces as a "dropped_overlay_only"
+    record status."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+
+    overlay_cand = _candidate("th1", "dir_th1")
+    # Force the overlay-only hypothesis post-construction.
+    overlay_cand = RankedCandidate(
+        report=PreFilterReport(
+            config=overlay_cand.report.config.model_copy(
+                update={"hypothesis": "tail_hedge"},
+            ),
+            passed=overlay_cand.report.passed,
+            filter_results=overlay_cand.report.filter_results,
+            diagnostic_notes=overlay_cand.report.diagnostic_notes,
+        ),
+        prior_promotion_score=overlay_cand.prior_promotion_score,
+        composite_score=overlay_cand.composite_score,
+    )
+    healthy = _candidate("mr1", "dir_mr1")  # default hypothesis (mean_reversion)
+    with db_connection(forge_db) as conn:
+        result = submit_batch(
+            conn,
+            batch=_ctx(seed=66),
+            candidates=(overlay_cand, healthy),
+            inbox_root=inbox,
+        )
+        sub_rows = conn.execute(
+            "SELECT config_hash, status FROM submissions"
+        ).fetchall()
+
+    assert result.submitted_count == 1
+    assert result.dropped_overlay_count == 1
+    assert result.skipped_duplicate_count == 0
+    assert result.failed_count == 0
+
+    # Overlay record present, but no DB row for it.
+    statuses = [r.status for r in result.records]
+    assert "dropped_overlay_only" in statuses
+    assert "submitted" in statuses
+
+    sub_hashes = {row[0] for row in sub_rows}
+    assert overlay_cand.report.config.config_hash not in sub_hashes
+    assert healthy.report.config.config_hash in sub_hashes
+
+    # No inbox file for the dropped candidate.
+    inbox_files = {p.name for p in inbox.glob("*.json")}
+    assert f"{overlay_cand.report.config.config_hash}.json" not in inbox_files
+    assert f"{healthy.report.config.config_hash}.json" in inbox_files
+
+
+def test_d066_batch_submission_result_default_dropped_overlay_is_zero(
+    tmp_path: Path,
+) -> None:
+    """Sanity: a healthy batch (no tail_hedge) reports dropped_overlay_count
+    == 0. The field's default protects callers that pre-date D066."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    cands = (_candidate("a", "dir_a"), _candidate("b", "dir_b"))
+    with db_connection(forge_db) as conn:
+        result = submit_batch(conn, batch=_ctx(), candidates=cands, inbox_root=inbox)
+    assert result.dropped_overlay_count == 0
+
+
+# ---------------------------------------------------------------------------
 # D062 — prefilter rejection counter
 # ---------------------------------------------------------------------------
 
@@ -369,7 +443,8 @@ def test_d062_record_prefilter_rejections_no_op_when_all_passed(tmp_path: Path) 
         ).fetchone()
     assert out.total == {}
     assert out.by_hypothesis == {}
-    assert row is not None and row[0] is None
+    assert row is not None
+    assert row[0] is None
 
 
 def test_d064_record_prefilter_rejections_partitions_by_hypothesis(tmp_path: Path) -> None:

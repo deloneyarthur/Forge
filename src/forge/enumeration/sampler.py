@@ -42,6 +42,7 @@ from forge.enumeration.indicator_thresholds import (
     is_threshold_skippable,
     sample_threshold_params,
 )
+from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -175,10 +176,14 @@ def sample_config(
     """
     by_id: dict[str, IndicatorMetadata] = {ind.id: ind for ind in registry.indicators}
 
+    # D066: exclude overlay-only hypotheses (e.g., tail_hedge) — Crucible's
+    # runner rejects them at dispatch as RunnerError. See
+    # `OVERLAY_ONLY_HYPOTHESES` in search_space.py for rationale.
     samplable_hypotheses = tuple(
         h
         for h in space.hypotheses
-        if space.directional_indicators_by_hypothesis[h]
+        if h not in OVERLAY_ONLY_HYPOTHESES
+        and space.directional_indicators_by_hypothesis[h]
         and space.regime_indicators_by_hypothesis[h]
     )
     if not samplable_hypotheses:

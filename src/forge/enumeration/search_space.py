@@ -60,6 +60,19 @@ _HYPOTHESES: tuple[str, ...] = (
     "tail_hedge",
 )
 
+# D066 — hypotheses Forge must NOT enumerate as a standalone StrategyConfig.
+# Crucible's runner rejects these at dispatch (RunnerError, runner.py:397)
+# because they belong to OverlaySpec semantics, not StrategySpec. Prior to
+# this guard, 1851 / 4039 = 45.8% of inbox configs were tail_hedge round-
+# trips that errored at Crucible-side dispatch — pure wasted compute. The
+# sampler filters these out of `samplable_hypotheses`; the submitter drops
+# any that leak through. Grammar.yaml still lists `tail_hedge` (hard rule
+# #1 — operator-owned), so this set is Forge's runtime policy, not a
+# grammar edit. When OverlaySpec lands in `crucible_contracts`, the
+# overlay-aware enumeration path can re-admit tail_hedge as a portfolio
+# overlay (see OPEN_QUESTIONS.md contracts gap, 2026-05-18).
+OVERLAY_ONLY_HYPOTHESES: frozenset[str] = frozenset({"tail_hedge"})
+
 # Fallback if no §3.5 P4 numerical_range rule is present in the grammar
 # (won't happen with v1; defended in `build_search_space`).
 _P4_DEFAULT_RISK_PCT_RANGE: tuple[float, float] = (0.005, 0.02)

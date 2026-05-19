@@ -108,6 +108,11 @@ def test_property_submission_idempotency(
     forge_db = workspace / "forge.db"
     inbox = workspace / "inbox"
 
+    # D066: tail_hedge configs are dropped pre-submission as overlay-only.
+    # The idempotency property still holds for non-overlay configs; partition
+    # the input so the assertions track the right denominator.
+    from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
+
     cands = tuple(
         RankedCandidate(
             report=_report_from(
@@ -119,7 +124,12 @@ def test_property_submission_idempotency(
         )
         for cfg in configs
     )
-    unique_hashes = {c.report.config.config_hash for c in cands}
+    submittable = tuple(
+        c for c in cands
+        if c.report.config.hypothesis not in OVERLAY_ONLY_HYPOTHESES  # type: ignore[attr-defined]
+    )
+    overlay = tuple(c for c in cands if c not in submittable)
+    unique_hashes = {c.report.config.config_hash for c in submittable}
 
     with db_connection(forge_db) as conn:
         first = submit_batch(conn, batch=_batch_for(seed), candidates=cands, inbox_root=inbox)
@@ -129,8 +139,10 @@ def test_property_submission_idempotency(
         f"first submit: expected {len(unique_hashes)} unique rows, "
         f"wrote {first.submitted_count} (skipped {first.skipped_duplicate_count})"
     )
+    assert first.dropped_overlay_count == len(overlay)
     assert second.submitted_count == 0
-    assert second.skipped_duplicate_count == len(cands)
+    assert second.skipped_duplicate_count == len(submittable)
+    assert second.dropped_overlay_count == len(overlay)
 
 
 # ---------------------------------------------------------------------------

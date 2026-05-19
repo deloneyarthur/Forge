@@ -278,7 +278,11 @@ def test_fractional_kelly_chains_ev_estimator(grammar: Grammar, registry: Regist
 
 def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySnapshot) -> None:
     """Across 300 seeds, every hypothesis with non-empty pools should appear
-    at least once. Catches biased sampling that locks onto one hypothesis."""
+    at least once. Catches biased sampling that locks onto one hypothesis.
+
+    D066: ``tail_hedge`` is excluded — it's overlay-only and Forge's
+    sampler filters it out of ``samplable_hypotheses``. See
+    ``test_d066_no_overlay_only_hypothesis_*`` in invariants."""
     seen: set[str] = set()
     for seed in range(300):
         cfg = _sample(grammar, registry, seed=seed)
@@ -289,7 +293,6 @@ def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySn
         "regime_arbitrage",
         "relative_value",
         "volatility_event",
-        "tail_hedge",
     }
 
 
