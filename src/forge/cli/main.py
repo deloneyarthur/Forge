@@ -195,6 +195,17 @@ def cmd_prefilter(
     summary: bool = typer.Option(
         False, "--summary", help="print per-filter rejection counts at end"
     ),
+    synthetic_cache: bool = typer.Option(
+        False,
+        "--synthetic-cache",
+        help=(
+            "Force SyntheticFeatureCache instead of CrucibleFeatureCache. "
+            "Use for diagnostic runs at high --max when the real cache is "
+            "slow; rejection patterns for structural/grammar-shape filters "
+            "(structural_redundancy, signal_density, etc.) are cache-"
+            "independent and remain representative."
+        ),
+    ),
 ) -> None:
     """Run the §5.2 pre-filter battery against enumerated candidates.
 
@@ -211,6 +222,7 @@ def cmd_prefilter(
     from forge.grammar import load_grammar
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters import (
+        SyntheticFeatureCache,
         default_filters,
         load_calibration,
         run_battery,
@@ -226,9 +238,17 @@ def cmd_prefilter(
     registry = load_registry()
     calibration = load_calibration(prefilter_yaml)
     seed_hierarchy = SeedHierarchy(seed)
+    if synthetic_cache:
+        feature_cache: object = SyntheticFeatureCache(
+            root_seed=seed,
+            data_history_days=registry.data_history_days,
+            start_date=registry.data_start_date,
+        )
+    else:
+        feature_cache = _build_feature_cache(registry, seed)
     ctx = FilterContext(
         registry=registry,
-        feature_cache=_build_feature_cache(registry, seed),  # type: ignore[arg-type]
+        feature_cache=feature_cache,  # type: ignore[arg-type]
         prior_config_hashes=frozenset(),
         prior_firing_dates={},
         calibration=calibration,
@@ -332,48 +352,57 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
 
 
 def _fetch_promoted_configs(
-    forge_db_path: Path,
-    crucible_db_path: Path | None,
+    _forge_db_path: Path,
+    _crucible_db_path: Path | None,
 ) -> list[StrategyConfig]:
-    """Look up the StrategyConfigs Forge submitted that Crucible promoted.
+    """Look up the StrategyConfigs Crucible promoted, for the §6.2 prior-
+    promotion-proximity ranking factor.
 
-    Returns `[]` when Crucible is offline or the promotion query fails;
-    logs the degradation once per process so the operator can see the
-    prior-promotion-proximity ranking signal (§6.2) has gone blind.
+    Reads `EXPORT_LAYOUT.promoted_strategies_*.json` written by Crucible's
+    `crucible-promoted-strategies-publisher` (CRUCIBLE_CHANGES.md §6.3).
+    The publisher emits a fresh snapshot every poll interval (~60s); the
+    on-disk JSON carries the full `StrategyConfig` for each promoted run,
+    so Forge skips its prior submissions-table roundtrip entirely.
+
+    Why not query `runs.duckdb` directly (the prior path): Crucible's
+    `db_writer` holds an exclusive write lock for its entire lifetime, so
+    `duckdb.connect(..., read_only=True)` raises `IOException: Conflicting
+    lock`. The file-based export is the load-bearing cross-process read
+    path per CLAUDE.md §13.15. Mirrors `_fetch_hypothesis_weights` (which
+    already reads `gated_runs_*.json` via the symmetric export reader).
+
+    Returns `[]` when the export directory is missing, no snapshot exists
+    yet, or the file is malformed; logs the degradation once per process.
+
+    The `_forge_db_path` / `_crucible_db_path` kwargs are retained as
+    underscored no-op parameters for backwards-compatible call signatures;
+    the prior implementation used both for a Forge-side hash → config
+    lookup that the JSON export now supplies in one shot.
     """
     from datetime import timedelta
 
-    from crucible_contracts import StrategyConfig, get_promoted_strategies
+    from crucible_contracts import load_promoted_strategies_from_export
     from crucible_contracts.exceptions import QueryError
 
     from forge.core.clock import utc_now
-    from forge.persistence.db import db_connection
 
-    if crucible_db_path is None or not crucible_db_path.exists():
-        return []
+    exports_dir = Path.home() / "optbt_data" / "exports"
     try:
-        gated = get_promoted_strategies(crucible_db_path, since=utc_now() - timedelta(days=90))
-    except QueryError as exc:
+        promoted = load_promoted_strategies_from_export(
+            exports_dir, since=utc_now() - timedelta(days=90),
+        )
+    except (QueryError, OSError) as exc:
         global _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
         if not _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED:
             typer.echo(
                 "promoted_configs: prior-promotion-proximity ranking factor "
-                f"disabled — query failed ({type(exc).__name__}: {exc}). "
+                f"disabled — export read failed ({type(exc).__name__}: {exc}). "
                 "Subsequent failures will be silent this process.",
                 err=True,
             )
             _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED = True
         return []
-    promoted_hashes = {g.run.config_hash for g in gated}
-    if not promoted_hashes:
-        return []
-    with db_connection(forge_db_path) as look_conn:
-        placeholders = ", ".join("?" * len(promoted_hashes))
-        rows = look_conn.execute(
-            f"SELECT config_json FROM submissions WHERE config_hash IN ({placeholders})",  # noqa: S608
-            list(promoted_hashes),
-        ).fetchall()
-    return [StrategyConfig.model_validate_json(r[0]) for r in rows]
+    return [p.strategy_config for p in promoted]
 
 
 # D060 / P2-5 — warn-once flag for the no-DB code path. NoveltyFilter's
@@ -725,6 +754,7 @@ def _run_one_iteration(
     from forge.prefilters import load_calibration
     from forge.ranking import Ranker, load_ranker_config, rank_batch
     from forge.submission import BatchContext, check_rate_limit, mint_batch_id, submit_batch
+    from forge.submission.submitter import record_prefilter_rejections
 
     check_contracts_version()
     config_root = Path(__file__).resolve().parents[3] / "config"
@@ -817,11 +847,23 @@ def _run_one_iteration(
     )
     with db_connection(forge_db_path) as conn:
         result = submit_batch(conn, batch=batch, candidates=ranked, inbox_root=inbox)
+        # D062: persist per-filter rejection counts to batch_summaries.
+        # Same connection so the UPDATE sees the INSERT submit_batch just did.
+        rejections = record_prefilter_rejections(
+            conn, batch_id=result.batch_id, reports=reports,
+        )
     typer.echo(
         f"batch_id={result.batch_id} submitted={result.submitted_count} "
         f"skipped_duplicate={result.skipped_duplicate_count} "
         f"failed={result.failed_count}"
     )
+    if rejections:
+        breakdown = ", ".join(
+            f"{name}={n}" for name, n in sorted(
+                rejections.items(), key=lambda kv: -kv[1],
+            )
+        )
+        typer.echo(f"prefilter_rejections: {breakdown}")
 
     if consume_feedback:
         _consume_feedback_after_submit(
