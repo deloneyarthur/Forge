@@ -42,6 +42,15 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     # Crucible-side gate failures populated post-feedback. Idempotent ALTER
     # so existing prod DBs pick up the column on next `db_connection` open.
     "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS prefilter_rejections JSON",
+    # D064: per-hypothesis pre-filter rejection counts — same first-failing
+    # filter semantics as `prefilter_rejections` but keyed by hypothesis so
+    # we can see *which* filter kills *which* hypothesis. Surfaces the
+    # "mean_reversion / trend_continuation absent from submissions"
+    # diagnosis: D062's aggregate showed novelty=28% as a major bucket but
+    # mean_reversion has 1 historical submission and trend_continuation has
+    # 0, so neither hypothesis can be the source of novelty rejections —
+    # they're killed by an earlier filter before reaching novelty.
+    "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS prefilter_rejections_by_hypothesis JSON",
     """
     CREATE TABLE IF NOT EXISTS pre_filter_logs (
         forge_candidate_id  UUID,

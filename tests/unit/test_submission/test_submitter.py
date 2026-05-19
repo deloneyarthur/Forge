@@ -341,7 +341,7 @@ def test_d062_record_prefilter_rejections_writes_counter(tmp_path: Path) -> None
             "WHERE forge_batch_id = ?",
             [str(batch.batch_id)],
         ).fetchone()
-    assert out == {"signal_density": 2, "structural_redundancy": 1}
+    assert out.total == {"signal_density": 2, "structural_redundancy": 1}
     assert row is not None
     persisted = json.loads(row[0]) if isinstance(row[0], str) else row[0]
     assert persisted == {"signal_density": 2, "structural_redundancy": 1}
@@ -367,5 +367,57 @@ def test_d062_record_prefilter_rejections_no_op_when_all_passed(tmp_path: Path) 
             "WHERE forge_batch_id = ?",
             [str(batch.batch_id)],
         ).fetchone()
-    assert out == {}
+    assert out.total == {}
+    assert out.by_hypothesis == {}
     assert row is not None and row[0] is None
+
+
+def test_d064_record_prefilter_rejections_partitions_by_hypothesis(tmp_path: Path) -> None:
+    """D064: the per-hypothesis breakdown column splits rejections by
+    `config.hypothesis` so we can see which filter kills which hypothesis.
+    Matches the aggregate column for total counts."""
+    from forge.submission.submitter import record_prefilter_rejections
+
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    batch = _ctx(seed=222)
+    survivor = _candidate("s1", "dir_s1")  # baseline hypothesis = mean_reversion
+    rejected_mr = (
+        _failing_report("mr1", "signal_density"),
+        _failing_report("mr2", "signal_density"),
+    )
+    rejected_trend = PreFilterReport(
+        config=_named_config("tr1", "dir_tr1").model_copy(
+            update={"hypothesis": "trend_continuation"},
+        ),
+        passed=False,
+        filter_results=MappingProxyType(
+            {"predicted_activations": FilterResult(passed=False, score=0.0)},
+        ),
+        diagnostic_notes=(),
+    )
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=batch, candidates=(survivor,), inbox_root=inbox)
+        out = record_prefilter_rejections(
+            conn,
+            batch_id=batch.batch_id,
+            reports=(*rejected_mr, rejected_trend, survivor.report),
+        )
+        row = conn.execute(
+            "SELECT prefilter_rejections, prefilter_rejections_by_hypothesis "
+            "FROM batch_summaries WHERE forge_batch_id = ?",
+            [str(batch.batch_id)],
+        ).fetchone()
+    assert out.total == {"signal_density": 2, "predicted_activations": 1}
+    assert out.by_hypothesis == {
+        "mean_reversion": {"signal_density": 2},
+        "trend_continuation": {"predicted_activations": 1},
+    }
+    assert row is not None
+    persisted_total = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+    persisted_by_h = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+    assert persisted_total == {"signal_density": 2, "predicted_activations": 1}
+    assert persisted_by_h == {
+        "mean_reversion": {"signal_density": 2},
+        "trend_continuation": {"predicted_activations": 1},
+    }

@@ -1657,3 +1657,56 @@ hypothesis_weights: trend_continuation=0.091*, mean_reversion=0.091*, regime_arb
 - `src/forge/cli/main.py` — new `_format_hypothesis_weights_line(weights)` helper; `_run_one_iteration` calls it instead of the inline `", ".join(...)`. Inline removed (was 2 statements, helper is 1 call — also resolves a PLR0915 nudge on `_run_one_iteration`).
 - `tests/unit/test_cli/test_run_loop.py` — 2 new D063 tests.
 - `IMPLEMENTATION_DECISIONS.md` D063 (this entry).
+
+
+## D064 — 2026-05-18 — Per-hypothesis pre-filter rejection breakdown
+
+**Spec section:** §11 observability; follow-on to D062.
+
+**Context:** D062 surfaced production rejection breakdown for iteration 32:
+```
+prefilter_rejections: permutation_test=2085, novelty=1399, predicted_activations=1063,
+                     expected_trades=290, signal_density=145, signal_correlation=4,
+                     regime_exposure=2
+```
+
+Cross-referenced against per-hypothesis structural fingerprints in `submissions`:
+
+| Hypothesis | submitted | unique fingerprints |
+|---|---:|---:|
+| mean_reversion | 1 | 1 |
+| trend_continuation | 0 | 0 |
+| regime_arbitrage | 877 | 214 |
+| relative_value | 1,154 | 81 |
+| tail_hedge | 1,851 | 70 |
+| volatility_event | 156 | 6 |
+
+`mean_reversion` and `trend_continuation` aren't dying at `novelty` — they have effectively zero historical fingerprints, so they can't be the source of novelty rejections. They must be killed by an earlier filter in the §5.2 battery before reaching novelty. D062's aggregate column can't tell us *which* — we need the same counter partitioned by `config.hypothesis`.
+
+**Decision:** Add `prefilter_rejections_by_hypothesis JSON` column to `batch_summaries`. Extend `record_prefilter_rejections` to populate both columns in one pass. Return a `PrefilterRejectionSummary` dataclass (`total`, `by_hypothesis`) so callers can log either or both. CLI's `_run_one_iteration` echoes both lines to the journal:
+
+```
+prefilter_rejections: filter=N, ...                              # D062 aggregate
+prefilter_rejections_by_hypothesis: hyp[filter=N, ...]; ...      # D064 breakdown
+```
+
+**Hard rules check:**
+- None impacted. Observability layer only; no enumeration semantics change.
+- ALTER TABLE is `IF NOT EXISTS`-idempotent, so existing prod DBs pick up the column on next `db_connection` open without manual migration.
+
+**Alternatives considered:**
+- **Nest the per-hypothesis breakdown inside the existing `prefilter_rejections` column.** Considered. Rejected because the existing column already has analyzed history (one batch from iteration 32 just landed under the flat-dict schema). Adding a new column preserves backwards-compatibility — old analytic queries against `prefilter_rejections` keep working.
+- **One row per `(batch_id, hypothesis)` in a new normalized table.** Considered. Rejected — overkill for what's effectively a per-batch summary; the JSON column matches the granularity of the existing `common_failures` and `prefilter_rejections` columns.
+- **Skip the per-hypothesis breakdown and add per-hypothesis `forge prefilter --summary` instead.** Considered. Rejected because the autonomous loop is the only path that runs the production feature cache — the CLI runs synthetic by default (and synthetic was 100% permutation_test, useless for this question). Production telemetry has to come from production runs.
+
+**Verification:**
+- New unit test `test_d064_record_prefilter_rejections_partitions_by_hypothesis` in `tests/unit/test_submission/test_submitter.py` covers the partition logic and DB persistence.
+- Existing D062 tests updated for the new return type (`PrefilterRejectionSummary` instead of raw dict).
+- Ruff + mypy strict clean on changed files.
+
+**Action:**
+- `src/forge/persistence/schemas.py` — `ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS prefilter_rejections_by_hypothesis JSON`.
+- `src/forge/submission/submitter.py` — `PrefilterRejectionSummary` dataclass + extended `record_prefilter_rejections` populates both columns.
+- `src/forge/cli/main.py` — new `_log_prefilter_rejections(summary)` helper; `_run_one_iteration` calls it instead of the inline join. Echoes both aggregate and per-hypothesis lines.
+- `tests/unit/test_submission/test_submitter.py` — new D064 test + D062 tests adapted for the summary return type.
+- `IMPLEMENTATION_DECISIONS.md` D064 (this entry).

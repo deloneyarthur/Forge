@@ -220,22 +220,40 @@ def submit_batch(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class PrefilterRejectionSummary:
+    """D062 + D064 breakdown of a batch's pre-filter rejection counts.
+
+    `total` is the aggregate over all rejected reports (D062, persisted to
+    `batch_summaries.prefilter_rejections`). `by_hypothesis` partitions
+    the same data by `config.hypothesis` so we can see which filter kills
+    which hypothesis (D064, persisted to
+    `batch_summaries.prefilter_rejections_by_hypothesis`).
+    """
+
+    total: dict[str, int]
+    by_hypothesis: dict[str, dict[str, int]]
+
+
 def record_prefilter_rejections(
     db: duckdb.DuckDBPyConnection,
     *,
     batch_id: uuid.UUID,
     reports: Sequence[object],
-) -> dict[str, int]:
-    """D062: persist per-filter rejection counts to `batch_summaries`.
+) -> PrefilterRejectionSummary:
+    """D062 + D064: persist per-filter rejection counts to `batch_summaries`.
 
     `reports` is the full enumeration output (passed + rejected). For each
-    rejected report, increments the counter at its first-failing filter.
-    Passed reports are skipped.
+    rejected report, increments the counter at its first-failing filter,
+    and increments the same filter under the report's hypothesis bucket.
+    Passed reports are skipped. Reports without a recoverable hypothesis
+    contribute only to `total`.
 
     No-op when the batch_summaries row is absent (idempotent reruns or
-    dry-run paths). Returns the counter so callers can also log it.
+    dry-run paths). Returns the summary so callers can also log it.
     """
-    counter: Counter[str] = Counter()
+    total: Counter[str] = Counter()
+    by_hyp: dict[str, Counter[str]] = {}
     for r in reports:
         if getattr(r, "passed", False):
             continue
@@ -244,19 +262,33 @@ def record_prefilter_rejections(
             (name for name, fr in filter_results.items() if not getattr(fr, "passed", True)),
             "unknown",
         )
-        counter[failing] += 1
-    if not counter:
-        return {}
-    db.execute(
-        "UPDATE batch_summaries SET prefilter_rejections = ? "
-        "WHERE forge_batch_id = ?",
-        [json.dumps(dict(counter)), str(batch_id)],
+        total[failing] += 1
+        cfg = getattr(r, "config", None)
+        hyp = getattr(cfg, "hypothesis", None) if cfg is not None else None
+        if isinstance(hyp, str):
+            by_hyp.setdefault(hyp, Counter())[failing] += 1
+    summary = PrefilterRejectionSummary(
+        total=dict(total),
+        by_hypothesis={h: dict(c) for h, c in by_hyp.items()},
     )
-    return dict(counter)
+    if not summary.total:
+        return summary
+    db.execute(
+        "UPDATE batch_summaries SET prefilter_rejections = ?, "
+        "prefilter_rejections_by_hypothesis = ? "
+        "WHERE forge_batch_id = ?",
+        [
+            json.dumps(summary.total),
+            json.dumps(summary.by_hypothesis),
+            str(batch_id),
+        ],
+    )
+    return summary
 
 
 __all__ = [
     "BatchSubmissionResult",
+    "PrefilterRejectionSummary",
     "SubmissionRecord",
     "SubmissionStatus",
     "record_prefilter_rejections",

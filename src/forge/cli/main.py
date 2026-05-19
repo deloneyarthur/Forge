@@ -309,6 +309,43 @@ _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED: bool = False
 _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED: bool = False
 
 
+def _log_prefilter_rejections(
+    summary: object,  # PrefilterRejectionSummary, typed in submitter
+) -> None:
+    """D062 + D064: echo per-batch rejection breakdowns to the journal.
+
+    Two lines:
+      `prefilter_rejections: filter=N, ...`              (D062 aggregate)
+      `prefilter_rejections_by_hypothesis: hyp[filter=N, ...]; ...`
+                                                          (D064 partition)
+
+    The aggregate is the bottleneck overview; the per-hypothesis line
+    surfaces which filter kills which hypothesis (load-bearing for
+    diagnosing why some hypotheses never reach Crucible). Both omitted
+    when the summary is empty (no rejections this batch).
+    """
+    total = getattr(summary, "total", {}) or {}
+    by_hyp = getattr(summary, "by_hypothesis", {}) or {}
+    if not total:
+        return
+    aggregate = ", ".join(
+        f"{name}={n}" for name, n in sorted(total.items(), key=lambda kv: -kv[1])
+    )
+    typer.echo(f"prefilter_rejections: {aggregate}")
+    if not by_hyp:
+        return
+    parts: list[str] = []
+    for hyp in sorted(by_hyp, key=lambda h: -sum(by_hyp[h].values())):
+        per_filter = by_hyp[hyp]
+        inner = ", ".join(
+            f"{name}={n}" for name, n in sorted(
+                per_filter.items(), key=lambda kv: -kv[1],
+            )
+        )
+        parts.append(f"{hyp}[{inner}]")
+    typer.echo(f"prefilter_rejections_by_hypothesis: {'; '.join(parts)}")
+
+
 def _format_hypothesis_weights_line(weights: Mapping[str, float]) -> str:
     """D063: render the effective sampler weights, prior-filled for unobserved.
 
@@ -866,8 +903,9 @@ def _run_one_iteration(
     )
     with db_connection(forge_db_path) as conn:
         result = submit_batch(conn, batch=batch, candidates=ranked, inbox_root=inbox)
-        # D062: persist per-filter rejection counts to batch_summaries.
-        # Same connection so the UPDATE sees the INSERT submit_batch just did.
+        # D062 + D064: persist per-filter rejection counts to batch_summaries
+        # (aggregate + per-hypothesis breakdown). Same connection so the
+        # UPDATE sees the INSERT submit_batch just did.
         rejections = record_prefilter_rejections(
             conn, batch_id=result.batch_id, reports=reports,
         )
@@ -876,13 +914,7 @@ def _run_one_iteration(
         f"skipped_duplicate={result.skipped_duplicate_count} "
         f"failed={result.failed_count}"
     )
-    if rejections:
-        breakdown = ", ".join(
-            f"{name}={n}" for name, n in sorted(
-                rejections.items(), key=lambda kv: -kv[1],
-            )
-        )
-        typer.echo(f"prefilter_rejections: {breakdown}")
+    _log_prefilter_rejections(rejections)
 
     if consume_feedback:
         _consume_feedback_after_submit(
