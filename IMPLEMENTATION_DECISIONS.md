@@ -2317,3 +2317,67 @@ New schema per hypothesis (post-D071, pre-v3-bump — uses only existing KNOWN_E
 **Next steps (separate commits):**
 1. Crucible ships the 4 new ExitRule classes + adds them to `KNOWN_EXIT_IDS` + bumps `crucible_contracts` version (`CRUCIBLE_NEW_EXITS_AGENT_PROMPT.md`).
 2. Forge bumps `FORGE_EXPECTED_CONTRACT_VERSION`, adds the 4 new exit IDs to `_S5_HYPOTHESIS_EXITS` per the Phase 4 draft mapping, archives `grammar_archive/v2.yaml`, writes new `grammar.yaml` with `grammar_version: v3`, restarts forge.service. **That commit closes Phase 4 / D071-final.**
+
+---
+
+## D071-final — Phase 4 multi-exit grammar v3 bump (closes Phase 4)
+
+**Date:** 2026-05-19
+
+**Context.** D071 (`f79b27a`) shipped the Forge-side schema rewrite (required_always + required_from_set + optional_additions + forbidden) but held the grammar.yaml v3 bump until Crucible's `CRUCIBLE_NEW_EXITS_AGENT_PROMPT.md` shipped. Crucible delivered all four pieces:
+
+- `crucible_contracts efa2d17`: bumped to 1.11.0; KNOWN_EXIT_IDS adds 4 new IDs (total 18).
+- `Crucible e2d5869`: 4 new ExitRule classes (ChandelierExit, ParabolicSarExit, TargetExit, ZScoreReversionExit) in `src/optbt/strategy/exits/` + registry wire-up via `build_exit` dispatch.
+- ExitRule semantics per the prompt (Wilder SAR, N×ATR chandelier trail, ATR-multiple or pct target, z-score reversion threshold).
+
+This commit closes Phase 4.
+
+**Decision.** Three Forge-side changes:
+
+1. **`config/grammar.yaml` v2 → v3.** Header + `grammar_version` field bumped. The §3.5 rule TEXT is unchanged (S5 schema lives in `forge.grammar.custom_predicates._S5_HYPOTHESIS_EXITS` python-side). Archived `config/grammar_archive/v3.yaml` as a content-match snapshot of the live YAML (loader's `_verify_archive_consistency` validates this).
+2. **`FORGE_EXPECTED_CONTRACT_VERSION` 1.9.0 → 1.11.0** in `forge.core.contracts_check`. The CLI startup check (`check_contracts_version`) will now require the contracts package to be at exactly 1.11.x.
+3. **`_S5_HYPOTHESIS_EXITS` expanded** with the 4 new exit IDs per the Phase 4 draft mapping:
+   - `trend_continuation.required_from_set`: `(trailing_atr,)` → `(trailing_atr, chandelier_exit, parabolic_sar_exit)` — 3-way choice across trend exits.
+   - `mean_reversion.required_from_set`: `(time_stop,)` → `(time_stop, target_exit, zscore_reversion_exit)` — 3-way choice across MR exits.
+   - `mean_reversion.optional_additions`: `()` → `(iv_crush_exit,)` — MR strategies firing in high-IV regimes get an extra exit option.
+   - `relative_value.required_from_set`: `(convergence_exit,)` → `(convergence_exit, zscore_reversion_exit)` — RV configs can now use tunable z-score reversion instead of Crucible's internal convergence logic.
+   - regime_arbitrage / volatility_event / tail_hedge unchanged (no new exits applicable to those hypotheses per the Phase 4 design).
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** YES — grammar.yaml CHANGED. Operator approved Phase 4 + Option A in writing earlier this session. v2 → v3 bump is the documented change.
+- **#10 (grammar version bump):** preserved. `grammar_version: v2` → `v3` in YAML; v3.yaml archived; pre-commit hook will enforce on subsequent edits.
+- **#6 (deterministic enumeration):** preserved. Same triple still produces byte-identical sequence; the new sampler chooses from the wider required_from_set deterministically via rng.
+
+**Alternatives considered:**
+
+- **Postpone the v3 bump until a fresh production run validates the new exits.** Considered. Rejected: the schema rewrite is already live (D071 `f79b27a`), the new ExitRule classes are in Crucible's runner, the contracts package is bumped, the KNOWN_EXIT_IDS validation has the new IDs. Holding back the v3 bump would leave Phase 4 in a half-shipped state with no observable benefit while the operator is online.
+- **Reorder: add the optional iv_crush_exit to MR before bumping required_from_set.** Considered. Rejected: the schema design (Phase 4 draft Q3) already accommodates both with K_MAX_OPTIONAL=2; deferring the iv_crush addition wouldn't change the rollout sequence.
+
+**Verification:**
+
+- `crucible_contracts` version: confirmed `CONTRACT_VERSION = "1.11.0"` in `_version.py`.
+- `KNOWN_EXIT_IDS`: 18 entries; includes all 4 new IDs.
+- ExitRule registry: `chandelier_exit`, `parabolic_sar_exit`, `target_exit`, `zscore_reversion_exit` all imported + registered in `registry.py::build_exit` dispatch.
+- Forge: `tests/integration/test_v1_grammar.py::test_v1_grammar_loads` assertion updated v2 → v3.
+- Full pytest suite: **1,100 pass, 1 skipped (K_MAX_OPTIONAL cap test — still inactive, max optional_additions per hypothesis = 1 after D071-final, so the cap of 2 still isn't reached).** Ruff + mypy strict clean on all changed scope.
+- Grammar archive: `config/grammar_archive/v3.yaml` snapshot matches live `config/grammar.yaml`; `_verify_archive_consistency` will pass at startup.
+
+**Operator-observable behavior post-restart:**
+
+- Sampler outputs configs with **varied `exits` lists** across configs of the same hypothesis. Example trend_continuation distribution across N=1000 configs: ~33% pick `trailing_atr`, ~33% `chandelier_exit`, ~33% `parabolic_sar_exit`; each gets `time_stop` as an optional addition with p≈0.5.
+- Crucible gauntlet: configs flowing through pick `build_exit(spec.id, ...)` with new IDs that resolve to ChandelierExit / ParabolicSarExit / TargetExit / ZScoreReversionExit instances; no RunnerError.
+- Expected gauntlet effect: trade-count distribution should diversify within each hypothesis. Pre-D071, every trend strategy had the same exit timing; post-D071, three different exit philosophies produce different trade-count and edge profiles. Crucible's 3,829-cohort identified this as the #1 cause of the 89.1% zero-trade rate; we should see that ratio shift over the next 24 hours of gauntlet processing.
+
+**Phase 4 status:** ✅ **CLOSED.**
+
+**Action:**
+
+- `config/grammar.yaml`: header + `grammar_version: v2 → v3`; rule text unchanged.
+- `config/grammar_archive/v3.yaml`: snapshot of the live v3 yaml.
+- `src/forge/core/contracts_check.py::FORGE_EXPECTED_CONTRACT_VERSION`: `"1.9.0" → "1.11.0"`.
+- `src/forge/grammar/custom_predicates.py::_S5_HYPOTHESIS_EXITS`: 4 new exit IDs added to trend_continuation / mean_reversion / relative_value entries.
+- `tests/integration/test_v1_grammar.py::test_v1_grammar_loads`: assertion `v2 → v3` updated.
+- `IMPLEMENTATION_DECISIONS.md` D071-final (this entry).
+
+**Restart required:** `systemctl --user restart forge.service` to activate v3 grammar + new contract version + expanded sampler.

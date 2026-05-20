@@ -82,25 +82,40 @@ K_MAX_OPTIONAL: int = 2
 _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
     "trend_continuation": {
         "required_always": (),
-        "required_from_set": ("trailing_atr",),  # +chandelier_exit, parabolic_sar_exit on v3 bump
-        "optional_additions": ("time_stop",),  # +theta_cliff_exit covered by E1
+        # D071-final (v3 bump): 3-way choice among trend-style exits.
+        "required_from_set": (
+            "trailing_atr",
+            "chandelier_exit",
+            "parabolic_sar_exit",
+        ),
+        "optional_additions": ("time_stop",),
         "forbidden": ("hard_profit_target",),
     },
     "mean_reversion": {
         "required_always": (),
-        "required_from_set": ("time_stop",),  # +target_exit, zscore_reversion_exit on v3 bump
-        "optional_additions": (),  # +iv_crush_exit on v3 bump
+        # D071-final (v3 bump): 3-way choice among MR-style exits.
+        "required_from_set": (
+            "time_stop",
+            "target_exit",
+            "zscore_reversion_exit",
+        ),
+        # D071-final (v3 bump): iv_crush_exit as optional for MR strategies
+        # that happen to fire during high-IV regimes.
+        "optional_additions": ("iv_crush_exit",),
         "forbidden": (),
     },
     "regime_arbitrage": {
         "required_always": (),
         "required_from_set": ("regime_flip_exit",),
-        "optional_additions": ("time_stop",),  # +theta_cliff_exit covered by E1
+        "optional_additions": ("time_stop",),
         "forbidden": (),
     },
     "relative_value": {
         "required_always": (),
-        "required_from_set": ("convergence_exit",),  # +zscore_reversion_exit on v3 bump
+        # D071-final (v3 bump): convergence_exit OR zscore_reversion_exit.
+        # zscore_reversion_exit lets Forge tune the convergence threshold;
+        # convergence_exit uses internal Crucible logic.
+        "required_from_set": ("convergence_exit", "zscore_reversion_exit"),
         "optional_additions": ("time_stop",),
         "forbidden": (),
     },

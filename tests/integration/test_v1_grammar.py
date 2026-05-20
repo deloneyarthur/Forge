@@ -70,7 +70,10 @@ def grammar() -> object:
 def test_v1_grammar_loads(grammar: object) -> None:
     # D039 / T1.4 bumped grammar v1 -> v2 (R3 expanded with macro-event
     # indicators + ETF compatibility).
-    assert grammar.grammar_version == "v2"  # type: ignore[attr-defined]
+    # D071-final bumped v2 -> v3 (§3.5 S5 multi-exit schema; required_always
+    # + required_from_set + optional_additions per hypothesis; lives in
+    # `forge.grammar.custom_predicates._S5_HYPOTHESIS_EXITS` python-side).
+    assert grammar.grammar_version == "v3"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
