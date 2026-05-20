@@ -114,8 +114,8 @@ The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `
 |---|---|---|
 | 1 | ✅ Landed + verified live (iters 37-41 stable at 200 ranked / 3-5 hypotheses producing) | D069 |
 | 2 | Pending | — |
-| 3 | **In progress** — D073 implementation | D073 (TBD) |
-| 3.5 | **In progress** — D072 (Forge RV sampler bias) + Crucible prompt (pair-universe) | D072 (TBD) |
+| 3 | ✅ Landed 2026-05-19 (operator-driven; auto-fire in production loop is Phase 3.x follow-up) | D073 |
+| 3.5 | ✅ Forge-side landed (D072); Crucible prompt awaiting agent (pair-universe expansion) | D072 |
 | 4 | **Draft awaiting operator review** — see `PHASE_4_MULTI_EXIT_DRAFT.md` | D071 (TBD) |
 | 5 | Pending | — |
 | 6 | Pending | — |
