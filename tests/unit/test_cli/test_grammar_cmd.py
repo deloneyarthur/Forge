@@ -63,6 +63,7 @@ prefilter:
   permutation_test:
     n_permutations: 100
     p_value_threshold: 0.10
+    forward_horizon_days: 0
   auto_tune:
     enabled: true
     min_promotion_rate: 0.005

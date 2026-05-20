@@ -53,6 +53,8 @@ def test_calibration_nested_shape_matches_yaml() -> None:
     assert c.regime_exposure.max_single_regime_concentration == 0.80
     assert c.permutation_test.n_permutations == 100
     assert c.permutation_test.p_value_threshold == 0.10
+    # D075: forward-horizon parameter for the return comparison.
+    assert c.permutation_test.forward_horizon_days == 5
     assert c.auto_tune.enabled is True
     assert c.auto_tune.min_promotion_rate == 0.005
     assert c.auto_tune.max_promotion_rate == 0.05

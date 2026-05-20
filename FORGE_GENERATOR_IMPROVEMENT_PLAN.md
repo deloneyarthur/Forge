@@ -116,10 +116,11 @@ The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `
 | 2 | Pending | — |
 | 3 | ✅ Landed 2026-05-19 (operator-driven; auto-fire in production loop is Phase 3.x follow-up) | D073 |
 | 3.5 | ✅ Forge-side landed (D072); ✅ Crucible-side landed (pair-universe 15 → 37, commit `fef53b3`) | D072 |
-| 4 | **In progress** — Forge-side schema rewrite landed (D071); awaiting Crucible's `CRUCIBLE_NEW_EXITS_AGENT_PROMPT.md` (4 new ExitRule classes + contracts version bump) before the v3 grammar.yaml bump closes the phase | D071 (rewrite); D071-final pending |
+| 4 | ✅ Landed 2026-05-19 — grammar v3 bump + Crucible's 4 new ExitRule classes + contracts 1.11.0 | D071 / D071-final |
 | 5 | ✅ Landed 2026-05-19 — sampler-side DTE-within-bucket + sizer-mode knob sampling | D074 |
 | 6 | Pending | — |
 | 7 | Pending | — |
+| **D075 (out-of-band)** | ✅ Landed 2026-05-19 — `permutation_test` shifts to T+5 forward-horizon return comparison; closes Crucible's Ask #1 part b (trend_continuation 0/3,829 historical pass rate). Forge-side calibration + code change; no grammar bump. | D075 |
 
 **Ops-related decisions landed this session (separate from the 7-phase plan):**
 - **D070** — rate-limiter threshold restored 0.50 → 0.80 (D036's tactical drop reverted; submission rate now correctly matches gauntlet throughput).

@@ -52,7 +52,10 @@ class _ReturnsCache:
         return self._activations
 
     def returns(self, dates: Iterable[date]) -> Mapping[date, float]:
-        return {d: self._returns[d] for d in dates}
+        # Mirror CrucibleFeatureCache contract: silently drop missing
+        # dates (D075's forward-horizon shift can push some past the
+        # window boundary).
+        return {d: self._returns[d] for d in dates if d in self._returns}
 
     def regime_label(self, d: date) -> Regime:
         del d
@@ -208,3 +211,133 @@ def test_repeated_runs_with_same_seed_are_byte_identical(seed: int) -> None:
     b = f.apply(cfg, _ctx(cache, seed_root=seed))
     assert a.passed == b.passed
     assert a.details["p_value"] == b.details["p_value"]
+
+
+# ---------------------------------------------------------------------------
+# D075 — forward-horizon return comparison
+# ---------------------------------------------------------------------------
+
+
+def test_d075_details_record_horizon_and_effective_n() -> None:
+    """D075 added two new detail keys: `forward_horizon_days` (which value
+    was used) and `effective_n` (how many activation->target dates landed
+    in-window)."""
+    f = PermutationTestFilter()
+    cfg = minimal_strategy_config()
+    window = _trading_window(200)
+    returns_map = {d: 0.01 for d in window}
+    activations = frozenset(window[:50])
+    cache = _ReturnsCache(activations, returns_map)
+    result = f.apply(cfg, _ctx(cache))
+    assert "forward_horizon_days" in result.details
+    assert "effective_n" in result.details
+    assert result.details["forward_horizon_days"] == 5  # production default
+    # 50 activations, all near window start, all in-window after T+5 shift.
+    assert result.details["effective_n"] == 50
+
+
+def test_d075_leading_indicator_passes_only_with_horizon() -> None:
+    """A signal whose activations predict T+5 returns (but not T+0 returns)
+    is the canonical case D075 is designed to fix. Same data, two
+    calibrations: horizon=0 rejects, horizon=5 passes."""
+    from forge.prefilters.calibration import (
+        AutoTuneCalibration,
+        Calibration,
+        ExpectedTradeCountCalibration,
+        NoveltyCalibration,
+        PermutationTestCalibration,
+        PredictedActivationsCalibration,
+        RegimeExposureCalibration,
+        SignalCorrelationCalibration,
+        SignalDensityCalibration,
+    )
+
+    def _calib(horizon: int) -> Calibration:
+        return Calibration(
+            signal_density=SignalDensityCalibration(min_activations=30),
+            expected_trade_count=ExpectedTradeCountCalibration(min_trades=50),
+            predicted_activations=PredictedActivationsCalibration(min_entries=10),
+            novelty=NoveltyCalibration(max_jaccard_overlap=0.80),
+            signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=0.85),
+            regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=0.80),
+            permutation_test=PermutationTestCalibration(
+                n_permutations=100,
+                p_value_threshold=0.10,
+                forward_horizon_days=horizon,
+            ),
+            auto_tune=AutoTuneCalibration(
+                enabled=True,
+                min_promotion_rate=0.005,
+                max_promotion_rate=0.05,
+                adjustment_pct_per_step=0.10,
+                max_cumulative_adjustment=0.30,
+            ),
+        )
+
+    f = PermutationTestFilter()
+    cfg = minimal_strategy_config()
+    window = _trading_window(200)
+    # Activations on a 6-day grid (0, 6, 12, ..., 192) so the T+5 dates
+    # land on (5, 11, 17, ..., 197) — disjoint from the activation set.
+    # At horizon=0 the filter sees zero returns; at horizon=5 it sees the
+    # full +1.0 boost.
+    from datetime import timedelta as _td
+
+    returns_map: dict[date, float] = dict.fromkeys(window, 0.0)
+    activations_list = [window[i] for i in range(0, 200, 6)]  # 34 dates
+    for d in activations_list:
+        forward = d + _td(days=5)
+        if forward in returns_map:
+            returns_map[forward] = 1.0
+    activations = frozenset(activations_list)
+    cache = _ReturnsCache(activations, returns_map)
+
+    hierarchy0 = SeedHierarchy(0)
+    ctx_h0 = FilterContext(
+        registry=minimal_registry_snapshot(),
+        feature_cache=cache,  # type: ignore[arg-type]
+        prior_config_hashes=frozenset(),
+        prior_firing_dates={},
+        calibration=_calib(horizon=0),
+        rng_factory=hierarchy0.rng,
+    )
+    hierarchy5 = SeedHierarchy(0)
+    ctx_h5 = FilterContext(
+        registry=minimal_registry_snapshot(),
+        feature_cache=cache,  # type: ignore[arg-type]
+        prior_config_hashes=frozenset(),
+        prior_firing_dates={},
+        calibration=_calib(horizon=5),
+        rng_factory=hierarchy5.rng,
+    )
+
+    result_h0 = f.apply(cfg, ctx_h0)
+    result_h5 = f.apply(cfg, ctx_h5)
+
+    # horizon=0: signal sees only T+0 (zero) returns -> notional 0 vs
+    # permuted draws from a window with 40 isolated +1.0 days; p_value
+    # should be HIGH -> fail.
+    assert not result_h0.passed
+    # horizon=5: signal sees T+5 returns (40 of which are +1.0) -> notional
+    # = 40 vs permuted random subsets -> p_value should be near 0 -> pass.
+    assert result_h5.passed
+
+
+def test_d075_dates_past_window_drop_from_effective_n() -> None:
+    """Activations near the end of the window shift T+5 past the data
+    boundary; those drops are silent (matches CrucibleFeatureCache
+    contract) and effective_n reflects the in-window count."""
+    f = PermutationTestFilter()
+    cfg = minimal_strategy_config()
+    window = _trading_window(50)
+    returns_map = {d: 0.0 for d in window}
+    # 30 activations across the LAST 30 days of the window. After shifting
+    # +5, dates 46..49 stay in-window (4) but dates 50..78 (which would
+    # require window slots that don't exist) drop.
+    activations = frozenset(window[-30:])  # days 20..49
+    cache = _ReturnsCache(activations, returns_map)
+    result = f.apply(cfg, _ctx(cache))
+    # Original 30 activations; horizon=5 shifts to days 25..54; only
+    # days 25..49 are in the 50-day window. effective_n == 25.
+    assert result.details["n_activations"] == 30
+    assert result.details["effective_n"] == 25

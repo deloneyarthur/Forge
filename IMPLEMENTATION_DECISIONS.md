@@ -2443,3 +2443,76 @@ Result: configs with otherwise different structural shape collapsed to identical
 - `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 5 row marked ✅ (follow-up commit).
 
 **Restart required:** `systemctl --user restart forge.service` to activate.
+
+---
+
+## D075 — permutation_test forward-horizon return comparison
+
+**Date:** 2026-05-19
+
+**Context.** Overnight diagnostic (this session) cross-referenced `pre_filter_logs` × `submissions.config_json -> hypothesis` and found that across all 9,308 historical Forge submissions, **zero `trend_continuation` configs have ever passed `permutation_test`**. Per-iter pattern post-D074: 1,500 trend_cont configs enumerated, ~1,250 rejected by `permutation_test`, 0 reach ranked_top_n. Closes Crucible's `PROMPT_FORGE_GENERATOR_GAPS.md` Ask #1 part b (eb19fea).
+
+**Root cause.** The pre-D075 `permutation_test.apply()` summed underlying returns at **T+0** of the directional-signal activation dates and compared to the permuted distribution. The §3.5 C2 `trend` family contains 10 indicators (donchian, ema, ema_50, ema_cross, macd, momentum_252, returns_12m_skip1, rolling_sharpe, sma, supertrend) — all leading / regime-state indicators whose activation days don't correlate with unusually-high T+0 returns. The test gives them zero credit for the *forward drift* they actually predict.
+
+Mean_reversion's family (bb_pct, keltner_pct, rsi*, zscore_returns) is largely concurrent — fires *because* today's return was extreme — and therefore passes the legacy test naturally. The asymmetry is structural, not a calibration issue.
+
+**Decision.** Three changes:
+
+1. **New calibration field `forward_horizon_days: 5` in `config/prefilter.yaml`.** Loader requires it (no silent default); `_validate_int` enforces `minimum=0`. The 5-day default is one trading week — matches the typical swing_short trade thesis (DTE 14-21, follow-through over ~1 week). 0 preserves legacy behavior.
+
+2. **`PermutationTestCalibration` gains `forward_horizon_days: int`.** Frozen dataclass; `apply_tightening` doesn't touch this field (it's about *what* we test, not strictness).
+
+3. **`permutation_test.apply()` rewritten** to shift activation dates by `horizon` days before reading returns. Dates that land past the data window's end are silently dropped by `feature_cache.returns()` (CrucibleFeatureCache contract). `effective_n` (the in-window post-shift count) is used as the permutation sample size — preserves apples-to-apples comparison. Two new detail keys exposed: `effective_n` and `forward_horizon_days`.
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** untouched. `grammar.yaml` unchanged.
+- **#3 (never lower Crucible's gate):** preserved. Pre-filter behavior, not gauntlet gate.
+- **#4 (auto-tightening can ship; auto-loosening cannot):** N/A — calibration is neither a tightening nor a loosening in the grammar sense; it's a re-grounding of the test target. Operator-approved this change explicitly before ship (this session).
+- **#6 (deterministic enumeration):** preserved. No new RNG calls; date arithmetic is pure.
+- **#8 (blessed clock / RNG):** preserved.
+
+**Alternatives considered:**
+
+- **Use a single horizon vs. sweep multiple horizons.** Considered. Rejected for v1 implementation: a single horizon keeps the calibration surface narrow. If the trend pass-rate looks healthy at horizon=5 but mean_reversion regresses, can revisit with per-family horizons later.
+- **DTE-bucket-specific horizon (swing_short→5, swing_mid→10, swing_long→21).** Considered. Rejected for first ship: adds calibration complexity before we know the simpler version's effect. Worth a D076 follow-up if the trade-count distribution within trend_continuation skews to one DTE bucket.
+- **Compare aggregated [T+1..T+k] returns instead of just T+k.** Considered. The drift over a 5-day window is materially less noisy than a single T+5 return. Decided against for v1 — same-noise comparison is fine because the permutation pool would shift to T+k random samples too, preserving the relative comparison. Worth revisiting if pass-rate at horizon=5 is overly noisy.
+- **Replace permutation_test with a fully P&L-aware test (executes the strategy).** Considered. Rejected for v1: that's a substantial rewrite (selector + sizer + exits simulation) and changes the filter's cost from O(K×N) to O(N×trade_simulation). Forward-horizon return is the cheap, defensible compromise.
+
+**Verification:**
+
+- 3 new tests in `tests/unit/test_prefilters/test_permutation_test.py`:
+  - `test_d075_details_record_horizon_and_effective_n` — new detail keys present in result.details with expected values.
+  - `test_d075_leading_indicator_passes_only_with_horizon` — synthetic signal whose activations predict T+5 returns. With horizon=0 the filter rejects; with horizon=5 it passes. Same data, same seed, two calibrations.
+  - `test_d075_dates_past_window_drop_from_effective_n` — boundary handling: activations near window end shift past the data boundary; effective_n reflects the in-window count.
+- 1 new assertion in `tests/unit/test_prefilters/test_calibration.py::test_calibration_nested_shape_matches_yaml` — verifies `forward_horizon_days == 5` is loaded from production YAML.
+- 1 production code change to `_ReturnsCache.returns()` test stub — silently drops missing dates to mirror CrucibleFeatureCache contract.
+- 2 PermutationTestCalibration constructors updated in `tests/invariants/test_phase5_invariants.py` to include `forward_horizon_days=0` (preserves legacy semantics in those reproducibility tests).
+- 1 PermutationTestCalibration constructor in `tests/integration/test_batch_reproducibility.py` updated similarly.
+- Test sweep on changed scope: **316 pass** (tests/unit/test_prefilters + tests/integration/test_batch_reproducibility.py + tests/invariants). Ruff + mypy strict clean.
+
+**Expected operator-observable behavior post-restart:**
+
+- `prefilter_rejections_by_hypothesis[trend_continuation][permutation_test]` should drop materially below the current ~1,250-per-iter level.
+- `ranked_top_n_by_hypothesis[trend_continuation]` should become non-zero on first post-restart iter (likely modest — 10-50 candidates depending on signal quality, not the 100+ that volatility_event sees).
+- `passed_prefilter` may decline slightly because the new test is grounded on a more meaningful comparison (forward drift), so noisy-trend configs that happened to land on lucky T+0 days will now fail.
+- New telemetry: per-config `details["effective_n"]` and `details["forward_horizon_days"]` available in `pre_filter_logs` for configs that survive to submission.
+
+**Action:**
+
+- `config/prefilter.yaml` — add `permutation_test.forward_horizon_days: 5`.
+- `src/forge/prefilters/calibration.py::PermutationTestCalibration` — new int field + loader validation.
+- `src/forge/prefilters/permutation_test.py::PermutationTestFilter.apply` — shift target_dates by horizon; use effective_n for sample size; expose new detail keys.
+- `src/forge/cli/main.py::_run_one_iteration` — honor the `prefilter_yaml` parameter (was hardcoded to `config_root / "prefilter.yaml"`, silently ignoring `--prefilter-yaml`). Surfaced during D075 test diagnosis; the CLI flag now actually controls calibration.
+- `tests/unit/test_prefilters/test_permutation_test.py::_ReturnsCache.returns` — silent drop on missing dates (matches CrucibleFeatureCache contract).
+- `tests/unit/test_prefilters/test_permutation_test.py` — 3 new D075 tests.
+- `tests/unit/test_prefilters/test_calibration.py::test_calibration_nested_shape_matches_yaml` — assert forward_horizon_days == 5.
+- `tests/integration/test_batch_reproducibility.py` — PermutationTestCalibration constructor gains `forward_horizon_days=0`.
+- `tests/invariants/test_phase5_invariants.py` — same 2 constructor updates.
+- `tests/unit/test_feedback/test_auto_tune.py::_default_calibration` — same.
+- `tests/unit/test_cli/test_grammar_cmd.py` — inline YAML fixture gains `forward_horizon_days: 0`.
+- `tests/unit/test_submission/test_cli_run.py` — `_permissive_prefilter` fixture (p_value_threshold=1.0 + forward_horizon_days=0) for the one test that requires ≥1 config to flow end-to-end (synthetic feature cache produces ~uniform p-values around 0.5 so production threshold rarely admits anything).
+- `IMPLEMENTATION_DECISIONS.md` D075 (this entry).
+- `D075_PERMUTATION_TEST_FORWARD_RETURNS_DRAFT.md` — draft proposal that anchored this decision; retained as historical artifact.
+
+**Restart required:** `systemctl --user restart forge.service` to activate.

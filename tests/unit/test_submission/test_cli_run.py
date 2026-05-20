@@ -7,6 +7,7 @@ inbox + submissions + batch_summaries + pre_filter_logs.
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -15,6 +16,29 @@ from forge.cli.main import app
 from forge.persistence.db import db_connection
 
 runner = CliRunner()
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_PRODUCTION_PREFILTER = _REPO_ROOT / "config" / "prefilter.yaml"
+
+
+def _permissive_prefilter(tmp_path: Path) -> Path:
+    """Materialize a tmp prefilter.yaml that admits any config.
+
+    The end-to-end submission tests need at least one config to survive the
+    pre-filter battery and reach the submitter. The synthetic feature cache
+    produces uniform p-values under permutation_test (~50% mean), so the
+    production `p_value_threshold=0.10` rarely admits anything; whether
+    Crucible's real cache is reachable is also unstable when production
+    Forge is running. This fixture sets `p_value_threshold: 1.0` so the
+    test asserts the submission plumbing, not the filter calibration.
+    """
+    dst = tmp_path / "prefilter.yaml"
+    shutil.copy(_PRODUCTION_PREFILTER, dst)
+    text = dst.read_text(encoding="utf-8")
+    text = text.replace("p_value_threshold: 0.10", "p_value_threshold: 1.0")
+    text = text.replace("forward_horizon_days: 5", "forward_horizon_days: 0")
+    dst.write_text(text, encoding="utf-8")
+    return dst
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +105,7 @@ def test_missing_inbox_without_dry_run_exits_with_code_2(tmp_path: Path) -> None
 def test_full_submit_writes_inbox_and_db(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     inbox = tmp_path / "inbox"
+    prefilter_yaml = _permissive_prefilter(tmp_path)
     result = runner.invoke(
         app,
         [
@@ -96,6 +121,8 @@ def test_full_submit_writes_inbox_and_db(tmp_path: Path) -> None:
             str(forge_db),
             "--inbox",
             str(inbox),
+            "--prefilter-yaml",
+            str(prefilter_yaml),
         ],
     )
     assert result.exit_code == 0, result.stdout

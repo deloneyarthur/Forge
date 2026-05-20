@@ -74,7 +74,9 @@ def _permissive_calibration() -> Calibration:
         novelty=NoveltyCalibration(max_jaccard_overlap=1.0),
         signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=1.0),
         regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=1.0),
-        permutation_test=PermutationTestCalibration(n_permutations=20, p_value_threshold=1.0),
+        permutation_test=PermutationTestCalibration(
+            n_permutations=20, p_value_threshold=1.0, forward_horizon_days=0
+        ),
         auto_tune=AutoTuneCalibration(
             enabled=False,
             min_promotion_rate=0.005,

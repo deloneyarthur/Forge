@@ -955,7 +955,7 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     grammar = load_grammar(
         config_root / "grammar.yaml", archive_dir=config_root / "grammar_archive"
     )
-    calibration = load_calibration(config_root / "prefilter.yaml")
+    calibration = load_calibration(prefilter_yaml)
     ranker = Ranker(weights=load_ranker_config(config_root / "ranker.yaml").weights)
     registry = load_registry()
     reg_hash = registry_hash(registry)

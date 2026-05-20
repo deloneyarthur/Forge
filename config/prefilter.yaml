@@ -29,6 +29,11 @@ prefilter:
     # bottleneck. Threshold back to 0.10. The audit row in grammar_proposals
     # remains.
     p_value_threshold: 0.10
+    # D075 (2026-05-19): compare returns at T+forward_horizon_days instead of
+    # T+0. Trend / leading-indicator signals don't correlate with same-day
+    # returns but DO correlate with k-day-forward returns (one trading week
+    # typical for swing strategies). 0 preserves legacy same-day behavior.
+    forward_horizon_days: 5
   auto_tune:
     enabled: true
     min_promotion_rate: 0.005          # 0.5%

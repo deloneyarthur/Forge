@@ -70,6 +70,11 @@ class RegimeExposureCalibration:
 class PermutationTestCalibration:
     n_permutations: int
     p_value_threshold: float
+    # D075: k-day forward horizon for the return comparison. 0 = legacy
+    # same-day behavior. Positive values shift activation dates by k days
+    # before reading returns — addresses the systemic permutation_test
+    # rejection of leading / trend-family directional signals.
+    forward_horizon_days: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +268,12 @@ def load_calibration(path: Path) -> Calibration:
                 _require(pt, "permutation_test", "p_value_threshold"),
                 "permutation_test",
                 "p_value_threshold",
+            ),
+            forward_horizon_days=_validate_int(
+                _require(pt, "permutation_test", "forward_horizon_days"),
+                "permutation_test",
+                "forward_horizon_days",
+                minimum=0,
             ),
         ),
         auto_tune=AutoTuneCalibration(

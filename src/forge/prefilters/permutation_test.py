@@ -9,6 +9,13 @@ A signal that does no better than chance ends up in the middle of the
 permuted distribution (p-value ~ 0.5) and gets rejected. A genuine
 signal lands above most permutations and survives.
 
+D075 (2026-05-19): the comparison is now grounded on T+k forward returns
+rather than T+0 same-day returns. Trend / leading-indicator signals
+predict the *future* drift after activation, not the activation-day
+return — the legacy T+0 test systematically wiped trend_continuation
+(0 of 9,308 historical configs ever passed). The `forward_horizon_days`
+calibration field controls k; 0 preserves legacy behavior.
+
 All randomness flows through `ctx.rng_factory("permutation_test")`
 (hard rule #8). Cost_tier=9, the most expensive filter in the §5.2
 battery (post-T1.3 + T2.6 insertions) — runs last for short-circuit
@@ -44,19 +51,29 @@ class PermutationTestFilter:
     def apply(self, config: StrategyConfig, ctx: FilterContext) -> FilterResult:
         directional = _directional_signal(config)
         activations = ctx.feature_cache.activation_dates(directional.id)
-        n_activations = len(activations)
 
         n_permutations = ctx.calibration.permutation_test.n_permutations
         p_threshold = ctx.calibration.permutation_test.p_value_threshold
+        horizon = ctx.calibration.permutation_test.forward_horizon_days
 
-        # Real notional: sum of returns on the activation dates.
-        if activations:
-            real_returns = ctx.feature_cache.returns(activations)
+        # D075: shift activation dates by `horizon` days before reading
+        # returns. Dates that land past the data window's end are silently
+        # dropped by `feature_cache.returns()`; `effective_n` reflects the
+        # in-window count so the permutation sample size matches.
+        if horizon == 0:
+            target_dates: list[date] = list(activations)
+        else:
+            target_dates = [d + timedelta(days=horizon) for d in activations]
+
+        if target_dates:
+            real_returns = ctx.feature_cache.returns(target_dates)
             real_notional = sum(real_returns.values())
+            effective_n = len(real_returns)
         else:
             real_notional = 0.0
+            effective_n = 0
 
-        # Permuted distribution: random subsets of size n_activations
+        # Permuted distribution: random subsets of size `effective_n`
         # drawn from the full window's returns. The window is anchored at
         # `registry.data_start_date` (contracts v1.6.0) so the calendar
         # axis stays consistent with whatever cache implementation answers
@@ -68,15 +85,15 @@ class PermutationTestFilter:
 
         rng = ctx.rng_factory("permutation_test")
         ge_real = 0
-        if n_activations > 0 and len(all_returns) >= n_activations:
+        if effective_n > 0 and len(all_returns) >= effective_n:
             for _ in range(n_permutations):
-                sampled = rng.sample(all_returns, n_activations)
+                sampled = rng.sample(all_returns, effective_n)
                 if sum(sampled) >= real_notional:
                     ge_real += 1
             p_value = ge_real / n_permutations
         else:
-            # Empty activations: nothing to compare. Treat as null result;
-            # earlier filters would have rejected.
+            # Empty (or all-out-of-window) activations: nothing to compare.
+            # Earlier filters would have rejected the legitimately empty case.
             p_value = 1.0
 
         passed = p_value <= p_threshold
@@ -90,7 +107,9 @@ class PermutationTestFilter:
                     "p_value": p_value,
                     "n_permutations": n_permutations,
                     "real_notional": real_notional,
-                    "n_activations": n_activations,
+                    "n_activations": len(activations),
+                    "effective_n": effective_n,
+                    "forward_horizon_days": horizon,
                     "p_value_threshold": p_threshold,
                 }
             ),
