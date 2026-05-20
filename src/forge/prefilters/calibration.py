@@ -35,6 +35,14 @@ class SignalDensityCalibration:
 @dataclass(frozen=True, slots=True)
 class ExpectedTradeCountCalibration:
     min_trades: int
+    # D076 / Q16 — empirical-prior knobs. Reject a config when its
+    # `(hypothesis, dte_bucket, directional_family)` bucket has seen
+    # ≥ `min_bucket_samples` gated runs AND the Beta-smoothed posterior
+    # P(n_trades ≥ min_trades) is below `min_pass_probability`. Buckets
+    # under the sample floor fall back to the legacy activations heuristic
+    # so cold-start exploration is preserved. Defaults: 0.10 / 20.
+    min_pass_probability: float = 0.10
+    min_bucket_samples: int = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,6 +235,20 @@ def load_calibration(path: Path) -> Calibration:
                 "min_trades",
                 minimum=1,
             ),
+            # D076 / Q16 — optional with defaults so existing prefilter.yaml
+            # files (pre-D076) keep loading. New deploys can pin explicit
+            # values; the daemon picks them up on next reload.
+            min_pass_probability=_validate_unit_float(
+                etc.get("min_pass_probability", 0.10),
+                "expected_trade_count",
+                "min_pass_probability",
+            ),
+            min_bucket_samples=_validate_int(
+                etc.get("min_bucket_samples", 20),
+                "expected_trade_count",
+                "min_bucket_samples",
+                minimum=1,
+            ),
         ),
         predicted_activations=PredictedActivationsCalibration(
             min_entries=_validate_int(
@@ -359,9 +381,7 @@ def apply_tightening(
     )
     new_sc = replace(
         calibration.signal_correlation,
-        max_jaccard_overlap=(
-            calibration.signal_correlation.max_jaccard_overlap * (1.0 - step)
-        ),
+        max_jaccard_overlap=(calibration.signal_correlation.max_jaccard_overlap * (1.0 - step)),
     )
     new_re = replace(
         calibration.regime_exposure,

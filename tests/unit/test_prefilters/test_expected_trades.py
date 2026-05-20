@@ -12,9 +12,11 @@ import random
 from collections.abc import Iterable, Mapping
 from datetime import date
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
+from forge.feedback.trade_rate_priors import BucketKey, BucketStats
 from forge.prefilters.calibration import load_calibration
 from forge.prefilters.expected_trades import (
     _HOLD_DAYS_BY_BUCKET,
@@ -52,7 +54,11 @@ class _FixedActivationsCache:
         return REGIMES[0]
 
 
-def _ctx(n_activations: int) -> FilterContext:
+def _ctx(
+    n_activations: int,
+    *,
+    trade_rate_priors: dict[BucketKey, BucketStats] | None = None,
+) -> FilterContext:
     return FilterContext(
         registry=minimal_registry_snapshot(),
         feature_cache=_FixedActivationsCache(n_activations),  # type: ignore[arg-type]
@@ -60,6 +66,7 @@ def _ctx(n_activations: int) -> FilterContext:
         prior_firing_dates={},
         calibration=load_calibration(_PREFILTER_YAML),
         rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
+        trade_rate_priors=MappingProxyType(trade_rate_priors or {}),
     )
 
 
@@ -165,3 +172,156 @@ def test_hold_days_are_increasing_across_buckets() -> None:
     m = _HOLD_DAYS_BY_BUCKET["swing_mid"]
     long_h = _HOLD_DAYS_BY_BUCKET["swing_long"]
     assert s < m < long_h
+
+
+# ---------------------------------------------------------------------------
+# D076 / Q16 — empirical-prior path
+# ---------------------------------------------------------------------------
+
+
+# rsi_2 lives in `mean_reversion` family per `minimal_registry_snapshot`.
+_MR_BUCKET: BucketKey = ("mean_reversion", "swing_short", "mean_reversion")
+
+
+def _stats(*, n_total: int, n_pass: int, posterior: float, n_zero: int = 0) -> BucketStats:
+    return BucketStats(
+        n_total=n_total,
+        n_pass=n_pass,
+        n_zero_trade=n_zero,
+        posterior_p_pass=posterior,
+    )
+
+
+def test_empirical_prior_path_rejects_low_posterior() -> None:
+    """Bucket with 50 gated samples + posterior 0.02 < default 0.10 → reject."""
+    f = ExpectedTradesFilter()
+    cfg = minimal_strategy_config(dte_bucket="swing_short")
+    priors = {_MR_BUCKET: _stats(n_total=50, n_pass=1, posterior=0.02, n_zero=40)}
+    result = f.apply(cfg, _ctx(n_activations=100, trade_rate_priors=priors))
+    assert not result.passed
+    assert result.details["mode"] == "empirical_prior"
+    assert result.score == 0.0
+
+
+def test_empirical_prior_path_passes_high_posterior() -> None:
+    """Bucket with 50 gated samples + posterior 0.40 ≥ 0.10 → pass."""
+    f = ExpectedTradesFilter()
+    cfg = minimal_strategy_config(dte_bucket="swing_short")
+    priors = {_MR_BUCKET: _stats(n_total=50, n_pass=20, posterior=0.40)}
+    result = f.apply(cfg, _ctx(n_activations=100, trade_rate_priors=priors))
+    assert result.passed
+    assert result.details["mode"] == "empirical_prior"
+    assert result.score == pytest.approx(0.40)
+
+
+def test_below_sample_floor_falls_back_to_activations() -> None:
+    """A bucket with `n_total < min_bucket_samples` (default 20) is
+    ignored; the activations heuristic runs even with a low posterior."""
+    f = ExpectedTradesFilter()
+    cfg = minimal_strategy_config(dte_bucket="swing_short")
+    # Posterior says reject, but only 5 samples — below the floor.
+    priors = {_MR_BUCKET: _stats(n_total=5, n_pass=0, posterior=0.01, n_zero=5)}
+    # 100 activations clears the activations floor → pass via fallback.
+    result = f.apply(cfg, _ctx(n_activations=100, trade_rate_priors=priors))
+    assert result.passed
+    assert result.details["mode"] == "activations_heuristic"
+    assert result.details["fallback_reason"] == "below_sample_floor"
+
+
+def test_no_bucket_data_falls_back_to_activations() -> None:
+    """Config's bucket isn't in trade_rate_priors → activations heuristic."""
+    f = ExpectedTradesFilter()
+    cfg = minimal_strategy_config(dte_bucket="swing_short")
+    result = f.apply(cfg, _ctx(n_activations=100, trade_rate_priors={}))
+    assert result.passed
+    assert result.details["mode"] == "activations_heuristic"
+    assert result.details["fallback_reason"] == "no_bucket_data"
+
+
+def test_relative_value_pairs_bucket_q16_smoke() -> None:
+    """The Q16 motivating example: relative_value x swing_short x pairs
+    with 370/375 zero-trade. Smoothed posterior is ~0.003 → rejected
+    even with strong activation density."""
+    f = ExpectedTradesFilter()
+    # pairs_zscore family is `pairs` per the registry fixture.
+    from crucible_contracts import CombinerSpec, SelectorSpec, SignalSpec, SizerSpec
+
+    from tests.fixtures.strategy_configs import _MANDATORY_EXITS
+
+    cfg = minimal_strategy_config(
+        hypothesis="relative_value",
+        dte_bucket="swing_short",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("pairs_zscore",),
+                params={"threshold": -1.26, "op": "<"},
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("iv_rank",),
+                params={"threshold": 50},
+            ),
+        ),
+        combiner=CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1),
+        selector=SelectorSpec(
+            delta_target=0.45,
+            delta_tolerance=0.05,
+            dte_min=14,
+            dte_max=21,
+        ),
+        sizer=SizerSpec(mode="fixed_risk_pct"),
+        exits=_MANDATORY_EXITS,
+    )
+
+    # 596/616 zero-trade ≈ posterior (1+20) / (1+10+616) ≈ 0.033 < 0.10
+    pairs_bucket: BucketKey = ("relative_value", "swing_short", "pairs")
+    priors = {pairs_bucket: _stats(n_total=616, n_pass=20, posterior=21 / 627, n_zero=596)}
+    result = f.apply(cfg, _ctx(n_activations=1000, trade_rate_priors=priors))
+    assert not result.passed
+    assert result.details["mode"] == "empirical_prior"
+    assert result.details["bucket_n_zero_trade"] == 596
+
+
+def test_unknown_directional_indicator_falls_back_to_activations() -> None:
+    """Directional points at an indicator not in the registry → no bucket
+    key → activations heuristic, but `bucket_key` in details is None."""
+    f = ExpectedTradesFilter()
+    from crucible_contracts import CombinerSpec, SelectorSpec, SignalSpec, SizerSpec
+
+    from tests.fixtures.strategy_configs import _MANDATORY_EXITS
+
+    cfg = minimal_strategy_config(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("nonexistent_indicator",),
+                params={"threshold": 0.5, "op": "<"},
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("iv_rank",),
+                params={"threshold": 50},
+            ),
+        ),
+        combiner=CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1),
+        selector=SelectorSpec(
+            delta_target=0.45,
+            delta_tolerance=0.05,
+            dte_min=14,
+            dte_max=21,
+        ),
+        sizer=SizerSpec(mode="fixed_risk_pct"),
+        exits=_MANDATORY_EXITS,
+    )
+    result = f.apply(cfg, _ctx(n_activations=100))
+    assert result.details["mode"] == "activations_heuristic"
+    assert result.details["bucket_key"] is None

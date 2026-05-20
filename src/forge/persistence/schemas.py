@@ -62,6 +62,16 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
         PRIMARY KEY (forge_candidate_id, filter_name)
     )
     """,
+    # D076 / Q16 — pre_filter_logs historically only carried rows for
+    # configs that survived the battery AND submitted successfully (called
+    # from `submitter.py`). Rejected configs never got a row, so the
+    # table's per-filter pass-rate was a meaningless 100%. These two
+    # additive columns let the battery write one row per (config, filter)
+    # for rejected candidates too, keyed by `config_hash` since rejected
+    # configs never land in `submissions`. Idempotent ALTERs so existing
+    # prod DBs pick them up on the next `db_connection` open.
+    "ALTER TABLE pre_filter_logs ADD COLUMN IF NOT EXISTS config_hash VARCHAR(16)",
+    "ALTER TABLE pre_filter_logs ADD COLUMN IF NOT EXISTS forge_batch_id UUID",
     """
     CREATE TABLE IF NOT EXISTS grammar_versions (
         version             VARCHAR(20) PRIMARY KEY,

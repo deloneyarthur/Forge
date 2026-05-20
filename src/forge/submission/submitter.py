@@ -200,6 +200,7 @@ def _submit_one(
         candidate_id=candidate_id,
         report=candidate.report,
         evaluated_at=batch.submitted_at,
+        batch_id=batch.batch_id,
     )
     return SubmissionRecord(
         candidate_id=candidate_id,

@@ -261,3 +261,125 @@ Forge has historically expected `adx`/`hurst` to live in a separate `trend_stren
 **Tag:** `crucible-registry-regression`, `trend-strength-family`, `cross-system-contract`
 
 **Resolution 2026-05-19:** Crucible shipped `e298138 fix(exports): split adx + hurst into trend_strength family per D019`. Verified live in `registry_snapshot_2026-05-19T211742Z.json` — `adx` and `hurst` now have `family="trend_strength"`. Forge's first iter to load the new registry (iter 37, `registry_hash=fc0dd3bd55a35177`) immediately produced ~1,500 sampler attempts for `trend_continuation` per batch (was 0). Those configs now die at `permutation_test` (~85% of kills) — a separate signal-quality issue addressed by Phase 3 (D073) and not blocking. **Q15 closed.**
+
+---
+
+## 2026-05-20 — Q16 — `expected_trades` pre-filter measures indicator activations, not trades — **HIGH SEVERITY**
+
+**Question:** Why does the `expected_trades` filter (`src/forge/prefilters/expected_trades.py`) reject 0 / 16,253 configs while 77% of submitted configs produce 0 trades in Crucible? Diagnostic across 1,213 distinct gated runs (decided 2026-05-15 → 2026-05-20):
+
+```
+Trade count distribution (n=1213):
+       0:   934 (77.0%)
+     1-9:   211 (17.4%)
+   10-49:    39 (3.2%)
+   50-99:    19 (1.6%)
+    100+:    10 (0.8%)
+```
+
+`pre_filter_logs` (Forge DB) corroborates the filter is structurally a no-op for its intended purpose — **every one of 16,253 attempts passed**, with median `estimated_trades` well above the `min_trades=50` floor (samples show 60, 367, 367, 73, ...).
+
+**Root cause.** `ExpectedTradesFilter.apply()` computes:
+
+```python
+n_activations = len(ctx.feature_cache.activation_dates(directional.id))
+capacity = 5 * (ctx.registry.data_history_days / hold_days)   # ≈ 418 for swing_short
+estimated = min(n_activations, int(capacity))
+passed = estimated >= ctx.calibration.expected_trade_count.min_trades  # default 50
+```
+
+This counts how many times the directional signal's indicator crosses its threshold over the 5-year cache window. Under realistic thresholds (e.g., `pairs_zscore < -1.26`, `vix_level > 18`), threshold crossings happen many times per year so `n_activations >> 50` almost always — even when zero actual trades will open downstream.
+
+What the filter does NOT check:
+- Whether the **selector** can find a matching option contract on activation dates.
+- Whether the **sizer** would skip the trade (risk budget, position cap, fractional-Kelly EV miss).
+- Whether the **exit rules** would close at zero P&L.
+- Whether the **regime_filter** signals would veto the directional signal at runtime.
+
+The mental model conflates "indicator-would-fire times" with "trades the strategy would execute." Threshold-distribution medians for 0-trade vs trading configs are nearly identical (`pairs_zscore`: -1.26 vs -1.07; `expected_value_estimator`: 0.0046 vs 0.0046) — so threshold strictness isn't the lever; the filter cannot discriminate.
+
+**Possible directions (operator decision needed before any rewrite):**
+
+1. **Empirical-prior filter (recommended).** Replace activations-based estimate with a learned trade-rate prior per `(hypothesis, dte_bucket, directional_signal_family)`. Feedback consumer maintains rolling `gated_trade_count / submitted_config`; filter rejects if predicted < `min_trades`. Builds on Q10's deferred FeatureCache work. Self-corrects from real data; no Crucible API change required.
+2. **Crucible-side dry-run estimator.** Crucible exposes a fast no-execution endpoint returning "would-have-opened N trades" given a config (skip option-chain pricing, just signal-fire × selector-feasibility). Cleaner semantics; new `crucible_contracts` surface required.
+3. **Tighten activations threshold heuristically.** Raise `min_trades` from 50 toward `capacity` (~400). Catches lowest-activation 0-traders but won't catch most of them (96.75% zero-trade `pairs_zscore` configs already show plenty of activations).
+
+**What I did instead:** Logged. Did NOT modify the filter — the §5.3.4 motivation cites Crucible's 100-OOS-trade floor without prescribing the activations heuristic, so there is freedom to redesign, but the redesign needs operator review (likely a Decision Log entry).
+
+**Related observation (filed inline, not as separate Q):** As of 2026-05-20, **all 9 pre-filters pass every config — 0 rejections across the entire battery.** Q15's 2026-05-19 closure noted `permutation_test` was killing ~85% of `trend_continuation` configs. Either auto-tune (D053-era) has loosened `permutation_test` to pass everything, or another regression. If the pre-filter battery is universally pass-through, Forge is effectively submitting raw-grammar output to Crucible — the rate limiter (Q19-area / spec §7.3) is the only remaining flow control, and it isn't engaging either.
+
+**Severity:** **high** — `expected_trades` is the spec's intended structural mitigation against the 0-trade flood (§5.3.4). With it inert, every downstream computation (Crucible queue time, gauntlet compute, gated-runs storage) burns on configs that will never trade.
+
+**Tag:** `prefilter-semantic-gap`, `zero-trade-root-cause`, `phase-7-candidate`
+
+**Resolution 2026-05-20:** Closed by **D076** — empirical-prior `expected_trades` filter learns per-`(hypothesis, dte_bucket, directional_family)` posterior P(n_trades ≥ min_trades) from the gated_runs cohort, rejects buckets with ≥20 samples + posterior < 0.10, falls back to legacy activations heuristic for cold-start buckets. Bundled with the `pre_filter_logs` audit-gap fix (rejected configs now logged with `config_hash` + `forge_batch_id` columns). **Q16's sidenote correction:** the battery was NOT a no-op — `batch_summaries.prefilter_rejections` showed ~50% rejection per batch all along; `pre_filter_logs` only ever held survivor rows, the audit gap masked the truth. Real per-filter rejection telemetry: see D062 + D064. Restart required to activate.
+
+---
+
+## 2026-05-20 — Q17 — `pairs_zscore` and `expected_value_estimator` show >93% zero-trade rate — Q14 follow-up status — **HIGH SEVERITY**
+
+**Question:** Q14 (2026-05-14) flagged 5 Crucible-registered indicators as stubs returning NaN: `iv_rank`, `expected_value_estimator`, `vix_level`, `pairs_zscore`, `put_call_flow`. Resolution authored `CRUCIBLE_STUB_IMPLEMENTATIONS_AGENT_PROMPT.md` and adopted "long-term hold" — include stubs in enumeration honestly while waiting for upstream. Six days later, gated-runs evidence shows the stubs have not been replaced (or were replaced with implementations that produce ~zero trades):
+
+**Per-indicator 0-trade rate in 1,213-run gated cohort (2026-05-15 → 2026-05-20):**
+
+| indicator | 0-trade | trading | 0-rate |
+|---|---:|---:|---:|
+| `pairs_zscore` | 596 | 20 | **96.75%** |
+| `expected_value_estimator` | 378 | 26 | **93.56%** |
+| `rsi_14` | 66 | 12 | 84.62% |
+| `hurst` | 21 | 4 | 84.00% |
+| `rsi` | 31 | 6 | 83.78% |
+| `momentum_252` | 65 | 18 | 78.31% |
+| `rsi_2` | 66 | 19 | 77.65% |
+| `iv_rank` | 108 | 42 | 72.00% |
+| `realized_vol` | 200 | 111 | 64.31% |
+| `vix_level` | 170 | 167 | 50.45% |
+
+**Hypothesis × DTE 0-trade rate** (most affected — driven by `pairs_zscore`):
+
+```
+relative_value × swing_short:  370/375  (98.7%)
+relative_value × swing_mid:    202/205  (98.5%)
+volatility_event × swing_short: 105/147 (71.4%)
+regime_arbitrage × swing_long:  43/67   (64.2%)
+```
+
+`relative_value` is effectively non-functional. 580 of 596 zero-trade `pairs_zscore` configs come from `relative_value` × `swing_short`/`swing_mid`.
+
+**Severity:** **high** — Forge is filling Crucible's gauntlet queue with structurally hopeless candidates from the `relative_value` hypothesis, and to a lesser extent `volatility_event`/`regime_arbitrage` via the other stubs. Compounds Q16 (filter doesn't catch them) and the Crucible queue latency (separate, ~5d).
+
+**What I did instead:** Logged. Did NOT modify grammar or filter (hard rule #1; Q14 chose long-term hold). Did NOT verify whether the prompt file `CRUCIBLE_STUB_IMPLEMENTATIONS_AGENT_PROMPT.md` is still at repo root or in `e85f0d4`-history.
+
+**Open sub-questions:**
+1. Have the 5 stub indicators shipped real implementations? If yes, why does the cohort still show NaN-like behavior? If no, what's the ETA?
+2. Should Forge temporarily down-weight `relative_value` enumeration until `pairs_zscore` is real, to reduce queue contamination?
+3. Should Forge's sampler treat known-stub indicators with a per-indicator suppression weight derived from rolling gated trade-rate (auto-discovery rather than a hard-coded list)?
+
+**Tag:** `crucible-stub-followup`, `zero-trade-root-cause`, `relates-to-Q14`
+
+---
+
+## 2026-05-20 — Q18 — Grammar R3 (ETF + `days_to_earnings`) documented in `grammar.yaml` but inbox/errors shows it isn't fully enforced — **MEDIUM SEVERITY**
+
+**Question:** `config/grammar.yaml` R3 (v2, D039) documents that ETF underlyings paired with `days_to_earnings` must be rejected ("sentinel-value silent-failure case from translation corpus"). However, two pieces of evidence indicate the rule is not being enforced for at least some emitted configs:
+
+1. **`inbox/errors/` contains 10 Forge submissions** that failed Crucible's preflight. Sample rejection reason:
+
+> `queue_run failed: queue-time preflight: hypothesis='volatility_event' + underlying='SPY' (Tier-1 ETF) + regime indicator(s) ['days_to_earnings'] that require single-name earnings — days_to_earnings returns the 999 sentinel for ETFs so the gate never fires.`
+
+Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exactly the case R3 was authored to prevent — Crucible's preflight is acting as a downstream safety net for a Forge-side rule that should have caught it.
+
+2. **123 configs in the 1,213-run gated cohort use `days_to_earnings`** and produce 0 trades each (100% zero-rate). Some of these may be Tier-2/3 single-name configs where `days_to_earnings` is technically valid but never reaches a useful window — but at least the 10 ETF cases are clear R3 violations that shipped.
+
+**Possible explanations:**
+1. R3 exists in `grammar.yaml` only as documentation, not in the validator.
+2. R3 is wired but bypassed by a specific enumeration path (e.g., sampler emits before validator runs, or a tier check is off).
+3. R3 catches Tier-1 but not Tier-2 ETFs (or vice versa).
+
+**What I did NOT verify:** whether R3 is enforced in `src/forge/grammar/predicates.py` or `validator.py`. Defer that to whoever resolves this — the question itself is the deliverable.
+
+**Severity:** **medium** — 10 confirmed preflight rejects on the Forge side (we sent invalid configs Crucible caught) plus unknown share of the 123 zero-trade `days_to_earnings` cohort. The blast radius is small, but per hard rule #1 grammar rules are operator-owned and silent under-enforcement is a contract violation worth surfacing.
+
+**Next step:** grep `predicates.py` / `validator.py` for R3 / `days_to_earnings` enforcement; either confirm it works and the 10 errors are an unrelated edge case (e.g., universe/registry drift), or fix the validator.
+
+**Tag:** `grammar-enforcement-gap`, `zero-trade-root-cause`, `inbox-errors`

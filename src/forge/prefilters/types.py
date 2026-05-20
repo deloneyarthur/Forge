@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
+    from forge.feedback.trade_rate_priors import BucketKey, BucketStats
     from forge.prefilters.calibration import Calibration
     from forge.prefilters.feature_cache import FeatureCache
 
@@ -104,6 +105,14 @@ class FilterContext:
     calibration: Calibration
     rng_factory: Callable[[str], random.Random]
     prior_structural_fingerprints: frozenset[str] = field(default_factory=frozenset)
+    # D076 / Q16 — per-(hypothesis, dte_bucket, directional_family)
+    # gated-cohort posteriors consumed by `ExpectedTradesFilter`. Empty
+    # mapping (default) → filter falls back to legacy activations
+    # heuristic for every config. Populated by `cli/main.py` from the
+    # gated_runs export, mirroring `_load_hypothesis_weights`.
+    trade_rate_priors: Mapping[BucketKey, BucketStats] = field(
+        default_factory=lambda: MappingProxyType({}),
+    )
 
 
 @runtime_checkable

@@ -4,6 +4,17 @@ prefilter:
     min_activations: 30
   expected_trade_count:
     min_trades: 50
+    # D076 / Q16 — empirical-prior knobs. Reject configs whose
+    # (hypothesis, dte_bucket, directional_family) bucket has seen
+    # >= min_bucket_samples gated runs AND posterior P(n_trades >=
+    # min_trades) < min_pass_probability. Buckets under the sample
+    # floor fall back to the legacy activations heuristic so unseen
+    # buckets keep exploring. Defaults match Q16 analysis: 20-sample
+    # floor matches the smallest bucket size where Q17's diagnostic
+    # noticed >90% zero-trade rates; 0.10 threshold rejects buckets
+    # whose smoothed pass-rate is below ~10%.
+    min_pass_probability: 0.10
+    min_bucket_samples: 20
   predicted_activations:
     # T1.3 (PROMPT_5_FORGE_V1_1_REVISED): floor on the intersection of
     # directional x regime activations. Catches silently-inert configs

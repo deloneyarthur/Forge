@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
+    from forge.feedback.trade_rate_priors import BucketKey, BucketStats
     from forge.grammar import Grammar
     from forge.prefilters.calibration import Calibration
     from forge.prefilters.types import PreFilterReport
@@ -308,6 +309,7 @@ def cmd_prefilter(
 # don't spam the daemon journal every 60-second poll iteration.
 _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED: bool = False
 _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED: bool = False
+_TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED: bool = False
 
 
 def _format_phase_timings_line(timings: Mapping[str, float]) -> str:
@@ -319,7 +321,12 @@ def _format_phase_timings_line(timings: Mapping[str, float]) -> str:
     that short-circuits early won't have all phases populated).
     """
     order = (
-        "reconcile", "enumeration", "prefetch", "battery", "rank", "submit",
+        "reconcile",
+        "enumeration",
+        "prefetch",
+        "battery",
+        "rank",
+        "submit",
     )
     parts = [f"{k}={timings[k]:.2f}s" for k in order if k in timings]
     return f"phase_timings: {', '.join(parts)}"
@@ -382,7 +389,8 @@ def _log_hypothesis_distributions(
         if getattr(r, "config", None) is not None
     )
     survivors: _Counter[str] = _Counter(
-        c.report.config.hypothesis for c in ranked  # type: ignore[attr-defined]
+        c.report.config.hypothesis
+        for c in ranked  # type: ignore[attr-defined]
     )
     typer.echo(_format_hypothesis_distribution_line("sampler_attempts", attempts))
     typer.echo(
@@ -409,9 +417,7 @@ def _log_prefilter_rejections(
     by_hyp = getattr(summary, "by_hypothesis", {}) or {}
     if not total:
         return
-    aggregate = ", ".join(
-        f"{name}={n}" for name, n in sorted(total.items(), key=lambda kv: -kv[1])
-    )
+    aggregate = ", ".join(f"{name}={n}" for name, n in sorted(total.items(), key=lambda kv: -kv[1]))
     typer.echo(f"prefilter_rejections: {aggregate}")
     if not by_hyp:
         return
@@ -419,8 +425,10 @@ def _log_prefilter_rejections(
     for hyp in sorted(by_hyp, key=lambda h: -sum(by_hyp[h].values())):
         per_filter = by_hyp[hyp]
         inner = ", ".join(
-            f"{name}={n}" for name, n in sorted(
-                per_filter.items(), key=lambda kv: -kv[1],
+            f"{name}={n}"
+            for name, n in sorted(
+                per_filter.items(),
+                key=lambda kv: -kv[1],
             )
         )
         parts.append(f"{hyp}[{inner}]")
@@ -440,10 +448,7 @@ def _format_hypothesis_weights_line(weights: Mapping[str, float]) -> str:
     from forge.feedback.rejection_weights import prior_mean
 
     pm = prior_mean()
-    parts = [
-        f"{h}={weights[h]:.3f}" if h in weights else f"{h}={pm:.3f}*"
-        for h in _HYPOTHESES
-    ]
+    parts = [f"{h}={weights[h]:.3f}" if h in weights else f"{h}={pm:.3f}*" for h in _HYPOTHESES]
     return f"hypothesis_weights: {', '.join(parts)} (*=prior, no data)"
 
 
@@ -473,15 +478,15 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     from forge.persistence.db import db_connection
 
     # D067 — sampling hypotheses: canonical minus overlay-only (D066).
-    sampling_hypotheses = tuple(
-        h for h in _HYPOTHESES if h not in OVERLAY_ONLY_HYPOTHESES
-    )
+    sampling_hypotheses = tuple(h for h in _HYPOTHESES if h not in OVERLAY_ONLY_HYPOTHESES)
 
     if forge_db_path == Path(":memory:") or not forge_db_path.exists():
         # D067: even on cold start, return floored weights so the journal
         # shows the floor explicitly and the sampler distributes evenly.
         return apply_exploration_floor(
-            {}, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+            {},
+            hypotheses=sampling_hypotheses,
+            fallback=prior_mean(),
         )
     exports_dir = Path.home() / "optbt_data" / "exports"
     try:
@@ -497,11 +502,15 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
             )
             _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED = True
         return apply_exploration_floor(
-            {}, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+            {},
+            hypotheses=sampling_hypotheses,
+            fallback=prior_mean(),
         )
     if not gated_runs:
         return apply_exploration_floor(
-            {}, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+            {},
+            hypotheses=sampling_hypotheses,
+            fallback=prior_mean(),
         )
     with db_connection(forge_db_path) as conn:
         raw = compute_hypothesis_weights(conn, gated_runs)
@@ -511,8 +520,58 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     # budget. Unobserved hypotheses fall back to the Beta prior (~0.091),
     # which is already above the floor.
     return apply_exploration_floor(
-        raw, hypotheses=sampling_hypotheses, fallback=prior_mean(),
+        raw,
+        hypotheses=sampling_hypotheses,
+        fallback=prior_mean(),
     )
+
+
+def _load_trade_rate_priors(
+    forge_db_path: Path,
+    registry: RegistrySnapshot,
+    *,
+    min_trades: int,
+) -> dict[BucketKey, BucketStats]:
+    """D076 / Q16 — compute per-bucket trade-rate posteriors for the empirical
+    `expected_trades` filter.
+
+    Mirrors `_load_hypothesis_weights` (gated_runs read via the file-based
+    export to dodge the writer's exclusive DuckDB lock; QueryError /
+    OSError catches degrade to empty dict; warn-once on first failure).
+    Empty dict → filter falls back to the activations heuristic for every
+    config, matching pre-D076 behaviour.
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.trade_rate_priors import compute_trade_rate_priors
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=10_000)
+    except (QueryError, OSError) as exc:
+        global _TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
+        if not _TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED:
+            typer.echo(
+                "trade_rate_priors: degraded to activations heuristic — "
+                f"export read failed ({type(exc).__name__}: {exc}). "
+                "Subsequent failures will be silent this process.",
+                err=True,
+            )
+            _TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED = True
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_trade_rate_priors(
+            conn,
+            gated_runs,
+            registry,
+            min_trades=min_trades,
+        )
 
 
 def _fetch_promoted_configs(
@@ -553,7 +612,8 @@ def _fetch_promoted_configs(
     exports_dir = Path.home() / "optbt_data" / "exports"
     try:
         promoted = load_promoted_strategies_from_export(
-            exports_dir, since=utc_now() - timedelta(days=90),
+            exports_dir,
+            since=utc_now() - timedelta(days=90),
         )
     except (QueryError, OSError) as exc:
         global _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
@@ -637,6 +697,7 @@ def _run_battery_for_seed(
     calibration: Calibration,
     *,
     hypothesis_weights: Mapping[str, float] | None = None,
+    trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
 ) -> list[PreFilterReport]:
@@ -666,6 +727,8 @@ def _run_battery_for_seed(
         prior_fingerprints: frozenset[str] = frozenset()
     else:
         prior_fingerprints = _load_prior_structural_fingerprints(forge_db_path)
+    from types import MappingProxyType as _MappingProxyType
+
     ctx = FilterContext(
         registry=registry,
         feature_cache=_build_feature_cache(registry, seed),  # type: ignore[arg-type]
@@ -674,6 +737,9 @@ def _run_battery_for_seed(
         calibration=calibration,
         rng_factory=seed_hierarchy.rng,
         prior_structural_fingerprints=prior_fingerprints,
+        trade_rate_priors=_MappingProxyType(
+            dict(trade_rate_priors) if trade_rate_priors is not None else {},
+        ),
     )
     filters = default_filters()
     # D037 — stratified sampling floor: every samplable hypothesis gets
@@ -779,9 +845,7 @@ def _reconcile_pending_silently(
     flipped = sum(fb.gated_count for fb in feedbacks)
     if flipped == 0:
         return
-    typer.echo(
-        f"reconciled: batches={len(feedbacks)} newly_gated_total={flipped}"
-    )
+    typer.echo(f"reconciled: batches={len(feedbacks)} newly_gated_total={flipped}")
 
 
 def _consume_feedback_after_submit(
@@ -945,7 +1009,13 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters import load_calibration
     from forge.ranking import Ranker, load_ranker_config, rank_batch
-    from forge.submission import BatchContext, check_rate_limit, mint_batch_id, submit_batch
+    from forge.submission import (
+        BatchContext,
+        check_rate_limit,
+        mint_batch_id,
+        record_pre_filter_logs_for_rejected,
+        submit_batch,
+    )
     from forge.submission.submitter import record_prefilter_rejections
 
     timings: dict[str, float] = {}
@@ -997,6 +1067,27 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     hypothesis_weights = _load_hypothesis_weights(forge_db_path)
     if hypothesis_weights:
         typer.echo(_format_hypothesis_weights_line(hypothesis_weights))
+    # D076 / Q16 — empirical-prior bucket stats for `expected_trades`.
+    # Cold start (no exports / no overlap with submissions) returns {};
+    # filter falls back to the activations heuristic for every config.
+    trade_rate_priors = _load_trade_rate_priors(
+        forge_db_path,
+        registry,
+        min_trades=calibration.expected_trade_count.min_trades,
+    )
+    if trade_rate_priors:
+        n_buckets = len(trade_rate_priors)
+        n_below_floor = sum(
+            1
+            for s in trade_rate_priors.values()
+            if getattr(s, "n_total", 0) < calibration.expected_trade_count.min_bucket_samples
+        )
+        typer.echo(
+            f"trade_rate_priors: buckets={n_buckets} "
+            f"below_sample_floor={n_below_floor} "
+            f"min_pass_p={calibration.expected_trade_count.min_pass_probability} "
+            f"min_samples={calibration.expected_trade_count.min_bucket_samples}"
+        )
     reports = _run_battery_for_seed(
         grammar,
         registry,
@@ -1004,6 +1095,7 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
         max_candidates,
         calibration,
         hypothesis_weights=hypothesis_weights,
+        trade_rate_priors=trade_rate_priors,
         forge_db_path=forge_db_path,
         timings=timings,
     )
@@ -1048,7 +1140,21 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
         # (aggregate + per-hypothesis breakdown). Same connection so the
         # UPDATE sees the INSERT submit_batch just did.
         rejections = record_prefilter_rejections(
-            conn, batch_id=result.batch_id, reports=reports,
+            conn,
+            batch_id=result.batch_id,
+            reports=reports,
+        )
+        # D076 / Q16: write pre_filter_logs rows for rejected configs too.
+        # Pre-D076 the table only held survivor rows (called from
+        # submitter), so every filter showed a misleading 100% pass rate.
+        # Rejected rows are joinable back to the batch via the new
+        # forge_batch_id column; the config_hash column distinguishes
+        # them from survivor rows (which now also carry both columns).
+        record_pre_filter_logs_for_rejected(
+            conn,
+            reports=reports,
+            batch_id=result.batch_id,
+            evaluated_at=batch.submitted_at,
         )
     timings["submit"] = _time.monotonic() - _t_submit
     typer.echo(

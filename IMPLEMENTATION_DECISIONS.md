@@ -2516,3 +2516,69 @@ Mean_reversion's family (bb_pct, keltner_pct, rsi*, zscore_returns) is largely c
 - `D075_PERMUTATION_TEST_FORWARD_RETURNS_DRAFT.md` — draft proposal that anchored this decision; retained as historical artifact.
 
 **Restart required:** `systemctl --user restart forge.service` to activate.
+
+---
+
+## D076 — 2026-05-20 — Empirical-prior `expected_trades` filter + `pre_filter_logs` audit-gap fix
+
+**Closes Q16. Adjacent to Q17 (does not fully resolve it).**
+
+**Problem.** Q16 diagnostic across 1,213 gated runs (decided 2026-05-15 → 2026-05-20): 77% of submitted configs produce 0 trades in Crucible. The `expected_trades` pre-filter — the §5.3.4 mitigation against the 0-trade flood — rejected only 0 / 16,253 in `pre_filter_logs` (Q16's original headline) and 126-164 / 5000 per batch in `batch_summaries.prefilter_rejections` (corrected during recon). Either reading, the filter caught <3% per batch while ~77% of survivors went on to produce zero trades. Root cause: it measured *indicator activation counts* over the cached window, not actual trades. Threshold-distribution medians for 0-trade vs trading configs were nearly identical (Q16), so threshold strictness wasn't the lever — the filter structurally could not discriminate. Per-hypothesis bias made it worse: it caught 9% of `mean_reversion` (healthy) but 0% of `relative_value` (96.75% zero-trade per Q17).
+
+**Adjacent finding (corrected during recon).** Q16's sidenote claimed "all 9 pre-filters pass every config" based on `pre_filter_logs`. That table only contained survivor rows — `record_pre_filter_logs` was called from `submitter.py` AFTER a successful submission, never from the battery for rejected configs. Real rejection counts have always lived in `batch_summaries.prefilter_rejections` (D062) and `prefilter_rejections_by_hypothesis` (D064). The audit gap is real; the sidenote interpretation was wrong. Closed in this commit alongside the filter rewrite per operator decision (single-PR bundle).
+
+**Decision.** Replace the activations-based estimate with a learned per-`(hypothesis, dte_bucket, directional_family)` posterior P(n_trades ≥ min_trades), Beta-smoothed via the same Beta(1, 10) prior `rejection_weights` uses. Reject when the bucket has ≥ `min_bucket_samples` gated observations AND the posterior is below `min_pass_probability`. Buckets under the sample floor fall back to the legacy activations heuristic so cold-start exploration is preserved. Additionally: extend `pre_filter_logs` with `config_hash` + `forge_batch_id` columns and add a `record_pre_filter_logs_for_rejected` writer so the table truly reflects every config the battery sees.
+
+**Defaults:** `min_pass_probability=0.10`, `min_bucket_samples=20`. The 20-sample floor matches the smallest bucket size where Q17 noticed >90% zero-trade rates; 0.10 rejects buckets whose smoothed pass-rate is below ~10%.
+
+**Why this and not the other Q16 paths:**
+- **Q16 path 2 (Crucible-side dry-run endpoint).** Cleaner semantics, but requires a new contracts surface + Crucible-side work + Forge wait. The empirical prior reuses data we already have (gated_runs via `EXPORT_LAYOUT`) and ships entirely in Forge. Path 2 stays viable as a follow-up if the empirical prior misses edge cases the dry-run would catch.
+- **Q16 path 3 (heuristic threshold tightening).** Operator-rejected during the closure question — Q16's own analysis showed threshold strictness isn't the discriminant.
+
+**CLAUDE.md hard-rule impact:**
+- **#1 (grammar operator-owned):** untouched. `grammar.yaml` unchanged.
+- **#3 (never lower Crucible's gate):** preserved. Pre-filter behavior, not gauntlet gate.
+- **#4 (auto-tightening can ship; auto-loosening cannot):** the new filter is strictly *more* selective for observed buckets and preserves the old behavior for cold-start, so the worst-case effect on observed buckets is stricter rejection. Auto-tune does NOT yet tighten the new knobs — they're config-only. Auto-tune extension is a follow-up if observed in practice.
+- **#6 (deterministic enumeration):** preserved. `compute_trade_rate_priors` is a pure function over `(gated_runs, submissions, registry, min_trades)`.
+- **#8 (blessed clock / RNG):** preserved. No new RNG calls; no clock reads.
+- **#9 (submission idempotency):** preserved. `pre_filter_logs` PK `(forge_candidate_id, filter_name)` unchanged; rejected-row UUIDs are minted fresh per write so no collision.
+
+**Alternatives considered:**
+- **Bucket key `(hypothesis, dte_bucket)`.** Coarser; reaches min_samples faster but blends doomed `relative_value × pairs` with healthy `relative_value × pairs` (none today, but a hypothetical pair-template improvement would be invisible). Rejected.
+- **Bucket key `(hypothesis, dte_bucket, directional_indicator_id)`.** Finest; sparse → many cold-start fallbacks. Rejected for v1; revisit if family-level posteriors are too coarse in practice.
+- **Reuse `forge.feedback.threshold_proposer` directly.** Different output shape (per-indicator threshold ranges vs per-bucket pass-rate). Same gated-runs source, different consumer. Documented as such.
+- **Skip the audit-gap fix in this PR.** Operator chose to bundle so post-deploy Q16 validation has per-config visibility (was the recommended option).
+
+**Verification:**
+- 9 new tests in `tests/unit/test_feedback/test_trade_rate_priors.py` — empty cohort, bucket key shape, posterior arithmetic, unknown indicator, corrupt JSON, orphan gated_run, bucket isolation, determinism, frozen dataclass.
+- 6 new tests in `tests/unit/test_prefilters/test_expected_trades.py` — empirical-prior rejection, empirical-prior pass, below-sample-floor fallback, no-bucket-data fallback, `relative_value × pairs` Q16 smoke, unknown indicator fallback. Existing 15 tests retained — they exercise the cold-start activations path and pass unmodified.
+- 8 new tests in `tests/unit/test_submission/test_pre_filter_logger.py` — survivor populates new columns, survivor back-compat without batch_id, rejected writer skips passed, rejected writer mints unique UUIDs per report, rejected writer populates new columns, empty iterable no-op, all-pass no-op, naive datetime raises.
+- Full suite: 1144 passed, 1 pre-existing skip. Ruff + format + mypy --strict clean on changed scope.
+
+**Predicted operator-observable behavior post-restart:**
+- New journal line per iteration: `trade_rate_priors: buckets=N below_sample_floor=M min_pass_p=0.10 min_samples=20`.
+- `pre_filter_logs` row counts increase materially (rejected configs now logged); existing audits keyed on `forge_candidate_id JOIN submissions` continue to work because survivor rows are unchanged. New audits can use `config_hash` + `forge_batch_id` to slice rejected vs surviving.
+- `prefilter_rejections_by_hypothesis[relative_value][expected_trades]` should rise from ~0 / batch to a material fraction (the empirical prior identifies relative_value × swing_short × pairs as a 96.75% zero-trade bucket).
+- `expected_trades` rejection counts for `mean_reversion` and `regime_arbitrage` may *fall* (those buckets have healthy posteriors); the filter stops mis-targeting them.
+- Downstream: gauntlet queue pressure on `relative_value` configs drops; Crucible's compute and gated-runs storage on hopeless configs both decline. Q17's zero-trade pollution mitigated structurally (does NOT replace Q14's stub-indicator follow-up, which is upstream of this).
+
+**Action:**
+- `src/forge/feedback/trade_rate_priors.py` — new module: `BucketKey`, `BucketStats`, `compute_trade_rate_priors`.
+- `src/forge/prefilters/calibration.py::ExpectedTradeCountCalibration` — new optional fields `min_pass_probability` + `min_bucket_samples` (defaults 0.10 / 20); loader uses `.get()` so pre-D076 yamls keep loading.
+- `src/forge/prefilters/types.py::FilterContext` — new `trade_rate_priors` field with empty default for back-compat.
+- `src/forge/prefilters/expected_trades.py` — empirical-prior + activations-fallback `apply()`; new `_bucket_key_for_config` + `_apply_activations_heuristic` helpers; new `mode` / `bucket_key` / `fallback_reason` / `posterior_p_pass` keys in `result.details`.
+- `src/forge/cli/main.py` — new `_load_trade_rate_priors` mirroring `_load_hypothesis_weights`; `_run_battery_for_seed` and `_run_one_iteration` thread the priors through; new journal line + `record_pre_filter_logs_for_rejected` call inside the submitter transaction.
+- `src/forge/submission/pre_filter_logger.py` — new `record_pre_filter_logs_for_rejected`; survivor-path `record_pre_filter_logs` gains optional `batch_id` kwarg and writes `config_hash` + `forge_batch_id`.
+- `src/forge/submission/submitter.py` — survivor call passes `batch_id`.
+- `src/forge/submission/__init__.py` — re-export new symbol.
+- `src/forge/persistence/schemas.py` — idempotent ALTERs add `config_hash` + `forge_batch_id` to `pre_filter_logs`.
+- `config/prefilter.yaml` — `expected_trade_count.min_pass_probability: 0.10` + `min_bucket_samples: 20`.
+- `tests/unit/test_feedback/test_trade_rate_priors.py` — new test file (9 tests).
+- `tests/unit/test_prefilters/test_expected_trades.py` — 6 new tests for empirical-prior path; `_ctx` gains `trade_rate_priors` kwarg.
+- `tests/unit/test_submission/test_pre_filter_logger.py` — 8 new tests for survivor + rejected paths.
+- `IMPLEMENTATION_DECISIONS.md` D076 (this entry).
+- `OPEN_QUESTIONS.md` Q16 — appended `**Resolution 2026-05-20:** Closed by D076.`
+- `STATUS.md` — appended session log entry.
+
+**Restart required:** `systemctl --user restart forge.service` to activate. Forge picks up the new prefilter.yaml + the new module on next iteration; the priors take effect on the next gated_runs-bearing iteration (~1 cycle once exports are read).
+
