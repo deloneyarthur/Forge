@@ -413,15 +413,29 @@ def _build_selector(
     bucket: str,
     rng: random.Random,
 ) -> SelectorSpec:
-    """§3.5 P2 entry-side DTE + §3.5 P3 delta band, with the rest of the
-    ``SelectorSpec`` fields fixed from ``forge.enumeration.defaults``."""
+    """§3.5 P2 entry-side DTE + §3.5 P3 delta band.
+
+    D074 (Phase 5): pre-D074 dte_min and dte_max were pinned to the §3.5
+    P2 window's exact bounds (e.g., swing_short always emitted dte_min=14
+    and dte_max=21). Now `dte_min` is sampled uniformly from the low half
+    of the window and `dte_max` from the high half, guaranteeing
+    `dte_min < dte_max` by construction (disjoint halves around the
+    midpoint). This widens the option-selection space and produces
+    distinct fingerprints (D069) for what were previously identical
+    selector configs.
+
+    Hard rule check: the §3.5 P2 validator only requires
+    `window_low <= dte_min AND dte_max <= window_high`; sampling within
+    the window stays valid by construction.
+    """
     dte_low, dte_high = space.dte_entry_window_by_bucket[bucket]
     delta_low, delta_high = space.delta_band_by_bucket[bucket]
+    mid = (dte_low + dte_high) // 2
     return SelectorSpec(
         delta_target=round(rng.uniform(delta_low, delta_high), 3),
         delta_tolerance=defaults.DELTA_TOLERANCE,
-        dte_min=dte_low,
-        dte_max=dte_high,
+        dte_min=rng.randint(dte_low, mid),
+        dte_max=rng.randint(mid + 1, dte_high),
         prefer_monthly_expiry=defaults.PREFER_MONTHLY_EXPIRY,
         min_open_interest=defaults.MIN_OPEN_INTEREST,
         min_volume=defaults.MIN_VOLUME,
@@ -434,14 +448,41 @@ def _build_sizer(
     mode: str,
     rng: random.Random,
 ) -> SizerSpec:
-    """§3.5 P4 ``per_trade_risk_pct`` sampling; mode-specific knobs come
-    from ``defaults`` since v1 grammar doesn't constrain them."""
+    """§3.5 P4 ``per_trade_risk_pct`` sampling; D074 (Phase 5) adds
+    mode-specific knob sampling for `fractional_kelly` and `vol_target`.
+
+    Pre-D074, `kelly_fraction` and `vol_target_annual` were hardcoded to
+    their defaults (0.25 and 0.20 respectively), so every fractional_kelly
+    config used identical Kelly sizing and every vol_target config used
+    identical vol targeting. D074 samples both within ranges:
+
+      - `fractional_kelly`: kelly_fraction in [0.10, 0.50] (quarter to
+        half Kelly typical). Conservative half-Kelly (0.50) at the upper
+        end; quarter-Kelly (0.25) is the legacy default; 0.10 captures
+        "fractional Kelly with strong conservatism."
+      - `vol_target`: vol_target_annual in [0.10, 0.30] (10-30%
+        annualized target). 20% is the legacy default; the range covers
+        risk-on / risk-off variants without changing the sizer math.
+
+    `fixed_risk_pct` mode keeps both at defaults (the mode doesn't read
+    them).
+
+    The grammar doesn't constrain these knobs; they're sampler-side
+    variation. Hard rule #6 (determinism) preserved — rng-driven from
+    the SeedHierarchy.
+    """
     risk_low, risk_high = space.risk_pct_range
+    kelly_fraction: float = defaults.KELLY_FRACTION
+    vol_target_annual: float = defaults.VOL_TARGET_ANNUAL
+    if mode == "fractional_kelly":
+        kelly_fraction = round(rng.uniform(0.10, 0.50), 3)
+    elif mode == "vol_target":
+        vol_target_annual = round(rng.uniform(0.10, 0.30), 3)
     return SizerSpec(
         mode=mode,  # type: ignore[arg-type]
         per_trade_risk_pct=round(rng.uniform(risk_low, risk_high), 4),
-        kelly_fraction=defaults.KELLY_FRACTION,
-        vol_target_annual=defaults.VOL_TARGET_ANNUAL,
+        kelly_fraction=kelly_fraction,
+        vol_target_annual=vol_target_annual,
     )
 
 

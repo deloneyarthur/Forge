@@ -248,6 +248,97 @@ def test_p4_risk_pct_in_range(grammar: Grammar, registry: RegistrySnapshot) -> N
 
 
 # ---------------------------------------------------------------------------
+# D074 (Phase 5) — sizer-mode-specific knob sampling + DTE-within-bucket
+# ---------------------------------------------------------------------------
+
+
+def test_d074_dte_min_strictly_less_than_dte_max(
+    grammar: Grammar, registry: RegistrySnapshot,
+) -> None:
+    """D074: dte_min sampled from the low half, dte_max from the high
+    half — disjoint, so dte_min < dte_max by construction across seeds."""
+    for seed in range(100):
+        cfg = _sample(grammar, registry, seed=seed)
+        assert cfg.selector.dte_min < cfg.selector.dte_max, (
+            f"seed={seed}: dte_min={cfg.selector.dte_min} >= "
+            f"dte_max={cfg.selector.dte_max}"
+        )
+
+
+def test_d074_dte_window_uses_both_halves(
+    grammar: Grammar, registry: RegistrySnapshot,
+) -> None:
+    """D074: across 100 seeds for swing_short configs, the sampler should
+    produce dte_min values that span the low half of the window and
+    dte_max values that span the high half. Catches a regression where
+    sampling collapses to the window's extremes only."""
+    dte_min_seen: set[int] = set()
+    dte_max_seen: set[int] = set()
+    for seed in range(300):
+        cfg = _sample(grammar, registry, seed=seed)
+        if cfg.dte_bucket != "swing_short":
+            continue
+        dte_min_seen.add(cfg.selector.dte_min)
+        dte_max_seen.add(cfg.selector.dte_max)
+    # swing_short (14, 21) → mid=17 → dte_min ∈ {14..17}, dte_max ∈ {18..21}
+    assert dte_min_seen.issubset({14, 15, 16, 17}), f"dte_min outside low half: {dte_min_seen}"
+    assert dte_max_seen.issubset({18, 19, 20, 21}), f"dte_max outside high half: {dte_max_seen}"
+    # At least 3 distinct values seen across the 300 seeds.
+    assert len(dte_min_seen) >= 3, f"dte_min collapsed to {dte_min_seen}"
+    assert len(dte_max_seen) >= 3, f"dte_max collapsed to {dte_max_seen}"
+
+
+def test_d074_kelly_fraction_sampled_for_fractional_kelly_mode(
+    grammar: Grammar, registry: RegistrySnapshot,
+) -> None:
+    """fractional_kelly configs sample kelly_fraction in [0.10, 0.50]."""
+    seen: set[float] = set()
+    for seed in range(300):
+        cfg = _sample(grammar, registry, seed=seed)
+        if cfg.sizer.mode != "fractional_kelly":
+            continue
+        assert 0.10 <= cfg.sizer.kelly_fraction <= 0.50, (
+            f"seed={seed}: kelly_fraction={cfg.sizer.kelly_fraction} out of range"
+        )
+        seen.add(cfg.sizer.kelly_fraction)
+    # Across enough seeds we should see >= 5 distinct kelly values.
+    if seen:
+        assert len(seen) >= 5, f"kelly_fraction collapsed to {sorted(seen)}"
+
+
+def test_d074_vol_target_sampled_for_vol_target_mode(
+    grammar: Grammar, registry: RegistrySnapshot,
+) -> None:
+    """vol_target configs sample vol_target_annual in [0.10, 0.30]."""
+    seen: set[float] = set()
+    for seed in range(300):
+        cfg = _sample(grammar, registry, seed=seed)
+        if cfg.sizer.mode != "vol_target":
+            continue
+        assert 0.10 <= cfg.sizer.vol_target_annual <= 0.30, (
+            f"seed={seed}: vol_target_annual={cfg.sizer.vol_target_annual} out of range"
+        )
+        seen.add(cfg.sizer.vol_target_annual)
+    if seen:
+        assert len(seen) >= 5, f"vol_target_annual collapsed to {sorted(seen)}"
+
+
+def test_d074_fixed_risk_pct_keeps_default_kelly_and_vol_target(
+    grammar: Grammar, registry: RegistrySnapshot,
+) -> None:
+    """fixed_risk_pct mode doesn't read kelly_fraction or vol_target_annual;
+    they stay at defaults (0.25 / 0.20) for those configs."""
+    from forge.enumeration import defaults
+
+    for seed in range(150):
+        cfg = _sample(grammar, registry, seed=seed)
+        if cfg.sizer.mode != "fixed_risk_pct":
+            continue
+        assert cfg.sizer.kelly_fraction == defaults.KELLY_FRACTION
+        assert cfg.sizer.vol_target_annual == defaults.VOL_TARGET_ANNUAL
+
+
+# ---------------------------------------------------------------------------
 # §3.5 X1 / X2 — sizer-mode → required chain indicator
 # ---------------------------------------------------------------------------
 

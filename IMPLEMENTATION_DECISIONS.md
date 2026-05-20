@@ -2381,3 +2381,65 @@ This commit closes Phase 4.
 - `IMPLEMENTATION_DECISIONS.md` D071-final (this entry).
 
 **Restart required:** `systemctl --user restart forge.service` to activate v3 grammar + new contract version + expanded sampler.
+
+---
+
+## D074 — Phase 5: sample sizer-mode params + DTE within bucket
+
+**Date:** 2026-05-19
+
+**Context.** Per `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 5 + Crucible's gap analysis #2 (sizer-mode parameter vacuum). Pre-D074:
+
+- `dte_min` always pinned to the §3.5 P2 window's `window_low`; `dte_max` always to `window_high`. Every swing_short config emitted `dte_min=14, dte_max=21` regardless of how many such configs went out per batch.
+- `kelly_fraction` and `vol_target_annual` hardcoded to defaults (0.25 and 0.20) in `forge.enumeration.defaults`. Every fractional_kelly config used identical Kelly sizing; every vol_target config used identical vol-target sizing.
+
+Result: configs with otherwise different structural shape collapsed to identical selector / sizer params, defeating D069's param-aware fingerprint when the only varying parameter was the threshold.
+
+**Decision.** Sampler-side variation, no grammar bump:
+
+1. **DTE within bucket** — `_build_selector` samples `dte_min` uniformly from the low half of the §3.5 P2 window and `dte_max` from the high half. The disjoint halves (split at the midpoint) guarantee `dte_min < dte_max` by construction. For swing_short (14, 21), midpoint=17 → dte_min ∈ [14, 17], dte_max ∈ [18, 21]; analogous for swing_mid and swing_long.
+
+2. **Sizer-mode params** — `_build_sizer` conditionally samples mode-specific knobs:
+   - `fractional_kelly` mode: `kelly_fraction ~ uniform(0.10, 0.50)` (quarter to half Kelly typical; 0.25 was the legacy default).
+   - `vol_target` mode: `vol_target_annual ~ uniform(0.10, 0.30)` (10-30% annualized target; 0.20 was the legacy default).
+   - `fixed_risk_pct` mode: both stay at defaults (mode doesn't read them).
+
+`per_trade_risk_pct` already sampled per §3.5 P4 — unchanged.
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** untouched. `grammar.yaml` unchanged. Sampler-side variation only.
+- **#3 (never lower Crucible's gate):** N/A — gauntlet gates unchanged; widening sampler diversity, not gate strictness.
+- **#6 (deterministic enumeration):** preserved. All new rng calls flow through `SeedHierarchy`. Same triple still produces byte-identical sequence including the new selector / sizer variation.
+
+**Alternatives considered:**
+
+- **Sample dte_min and dte_max independently from the full window with a `dte_min < dte_max` guard + retry.** Considered. Rejected: the disjoint-halves design is cheaper (no retry) and produces a more even distribution across the window.
+- **Use the full Kelly range (0.0, 1.0).** Considered. Rejected: full Kelly is widely understood to be over-aggressive on real returns; the [0.10, 0.50] range covers conventional fractional-Kelly variants used in practice.
+- **Tie kelly_fraction / vol_target_annual to grammar P-rules.** Considered. Rejected for v3: these are sampler-side knobs that don't need grammar enforcement; the grammar v3 bump (D071-final) is the right moment to add P-rules constraining them if the operator decides to later. Punt to v4 / Phase 7 follow-up.
+
+**Verification:**
+
+- 5 new tests in `tests/unit/test_enumeration/test_sampler.py`:
+  - `test_d074_dte_min_strictly_less_than_dte_max` — 100 seeds, the disjoint-halves design holds.
+  - `test_d074_dte_window_uses_both_halves` — across 300 seeds with swing_short, dte_min covers ≥3 distinct values in [14, 17] and dte_max covers ≥3 in [18, 21].
+  - `test_d074_kelly_fraction_sampled_for_fractional_kelly_mode` — 300 seeds; values within [0.10, 0.50]; ≥5 distinct values.
+  - `test_d074_vol_target_sampled_for_vol_target_mode` — 300 seeds; values within [0.10, 0.30]; ≥5 distinct values.
+  - `test_d074_fixed_risk_pct_keeps_default_kelly_and_vol_target` — fixed_risk_pct configs unchanged (defaults preserved).
+- Full pytest suite: **1,105 pass, 1 skipped, 13 deselected**. Ruff + mypy strict clean on changed scope.
+
+**Expected operator-observable behavior post-restart:**
+
+- Configs of the same hypothesis × dte_bucket × required_from_set choice will now differ in their `dte_min` / `dte_max` (was identical) AND in their mode-specific sizer knobs. Combined with D071 multi-exit, the structural fingerprint (D069) sees significantly more variation per batch.
+- `passed_prefilter` should rise modestly as fewer configs hit intra-batch novelty collisions on selector / sizer params.
+- Gauntlet `n_trades` distribution should diversify within hypothesis bins — different DTE windows pick different option contracts; different Kelly fractions size differently; different vol_target annualizations vary position size.
+
+**Action:**
+
+- `src/forge/enumeration/sampler.py::_build_selector` — disjoint-halves DTE sampling.
+- `src/forge/enumeration/sampler.py::_build_sizer` — mode-conditional kelly_fraction / vol_target_annual sampling.
+- `tests/unit/test_enumeration/test_sampler.py` — 5 new D074 tests.
+- `IMPLEMENTATION_DECISIONS.md` D074 (this entry).
+- `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 5 row marked ✅ (follow-up commit).
+
+**Restart required:** `systemctl --user restart forge.service` to activate.
