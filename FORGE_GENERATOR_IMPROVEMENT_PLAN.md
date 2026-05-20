@@ -117,7 +117,7 @@ The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `
 | 3 | ✅ Landed 2026-05-19 (operator-driven; auto-fire in production loop is Phase 3.x follow-up) | D073 |
 | 3.5 | ✅ Forge-side landed (D072); ✅ Crucible-side landed (pair-universe 15 → 37, commit `fef53b3`) | D072 |
 | 4 | **In progress** — Forge-side schema rewrite landed (D071); awaiting Crucible's `CRUCIBLE_NEW_EXITS_AGENT_PROMPT.md` (4 new ExitRule classes + contracts version bump) before the v3 grammar.yaml bump closes the phase | D071 (rewrite); D071-final pending |
-| 5 | Pending | — |
+| 5 | ✅ Landed 2026-05-19 — sampler-side DTE-within-bucket + sizer-mode knob sampling | D074 |
 | 6 | Pending | — |
 | 7 | Pending | — |
 
