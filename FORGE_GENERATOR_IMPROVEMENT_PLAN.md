@@ -99,8 +99,9 @@ The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `
 |---|---|---|---|---|
 | **1** | Param-aware structural fingerprint (or widen constrained-hypothesis sampling) | `forge/feedback/` + `forge/enumeration/sampler.py` | Small | Immediate unblocker for iter 33-35 starvation; obscures all other diagnostics until fixed |
 | **2** | Multi-class feedback: weighter consumes submission outcomes (gated / runner_failed / 0-trades / prefilter_killed) | `forge/feedback/rejection_weights.py` + CLI loader | Medium | Closes the silent-failure dynamic that produced tail_hedge AND relative_value starvation |
-| **3** | Threshold auto-tightening (Crucible Fix 2): walk `gated_runs`, propose tightened per-(indicator, hypothesis) ranges; shadow D031 via `config/auto_tightened_thresholds.yaml` | `forge/feedback/proposer.py` extension | Medium | Crucible's strongest recommendation; harvests training signal from 1,000 existing gated runs |
-| **4** | Multi-exit per hypothesis (Crucible Fix 1): grammar v3 §3.5 S5 rewrite — required-from-set + optional combination | `config/grammar.yaml` + `forge/grammar/custom_predicates.py` + sampler | Larger (grammar bump, archive, audit) | Highest expected impact on trade count; biggest blast radius; do AFTER feedback loops so we can measure |
+| **3** | Threshold auto-tightening (Crucible Fix 2): walk `gated_runs`, propose tightened per-(indicator, hypothesis) ranges; shadow D031 via `config/auto_tightened_thresholds.yaml` | `forge/feedback/proposer.py` extension | Medium | Crucible's strongest recommendation; harvests training signal from 3,829 existing gated runs. Directly attacks the `permutation_test` starvation of `trend_continuation` + `mean_reversion` (the dominant blocker now that registry + D069 unlocked them). |
+| **3.5** | `relative_value` template + universe fix: bias `_sample_pairs_template_params` toward the aggressive end of D068's ranges (Forge-side, D072) AND draft Crucible prompt to expand `config/pair_candidates.yaml` (currently 15 pairs, only 2 viable on 2025-Q2 data per D068 diagnostic) | `forge/enumeration/sampler.py` + Crucible-side coordination doc | Small (Forge) + Crucible coordination | Cohort analysis: 309/317 = **97.5% of relative_value configs produce zero trades** — Phase 4 multi-exit cannot help configs that never open positions. Separate lever needed. |
+| **4** | Multi-exit per hypothesis (Crucible Fix 1): grammar v3 §3.5 S5 rewrite — required-from-set + optional combination | `config/grammar.yaml` + `forge/grammar/custom_predicates.py` + sampler | Larger (grammar bump, archive, audit) | Highest expected impact on trade count for `volatility_event` (22+8 = 30/127 already trade) and `regime_arbitrage` (80/201 trade). Does NOT help `relative_value` (entry-side problem — Phase 3.5). |
 | **5** | Sample sizer-mode params + DTE within bucket | `forge/enumeration/defaults.py` + sampler | Small | Quick win once Phase 4's grammar bump is in play |
 | **6** | Trade-count-floor pre-filter: estimate "would this fire ≥100 OOS trades in 14 folds?" | `forge/prefilters/` | Larger (needs heuristic model) | Best as closing move once exit/sizer variation produces more diverse trade profiles to calibrate against |
 | **7** | Resolve GEX/VEX/CEX dead-weight: either calibrate $-scale ranges or document as confluence-only | `indicator_thresholds.py` | Small | Cleanup; small expected impact |
@@ -111,22 +112,48 @@ The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `
 
 | Phase | Status | Decision Log |
 |---|---|---|
-| 1 | ✅ Landed 2026-05-19 — pending live verification on next iter | D069 |
+| 1 | ✅ Landed + verified live (iters 37-41 stable at 200 ranked / 3-5 hypotheses producing) | D069 |
 | 2 | Pending | — |
-| 3 | Pending | — |
-| 4 | Pending | — |
+| 3 | **In progress** — D073 implementation | D073 (TBD) |
+| 3.5 | **In progress** — D072 (Forge RV sampler bias) + Crucible prompt (pair-universe) | D072 (TBD) |
+| 4 | **Draft awaiting operator review** — see `PHASE_4_MULTI_EXIT_DRAFT.md` | D071 (TBD) |
 | 5 | Pending | — |
 | 6 | Pending | — |
 | 7 | Pending | — |
 
-### Live context (as of 2026-05-19 ~13:35 PT)
+**Ops-related decisions landed this session (separate from the 7-phase plan):**
+- **D070** — rate-limiter threshold restored 0.50 → 0.80 (D036's tactical drop reverted; submission rate now correctly matches gauntlet throughput).
 
-- **Recent commits:** D066 (`b75bc55`), D067 (`2aa96f0`), D068 (`f2290d4`), plan doc (`b9016ff`) — all on origin/main.
-- **forge.service:** active, iter 37 mid-prefetch (Crucible's speed-up has cut iteration time from ~2h45m to ~1h05m).
-- **Operator state:** Crucible-side optimization complete; no more anticipated restarts in this session.
-- **Latest gauntlet outcome:** 3,829 configs gauntlet'd through single-period decision path. 0 promoted. 89.1% zero-trade. **99.9% (3,818/3,820) fail `min_oos_trade_count>=30`** — the trade-count floor is the dominant blocker; downstream Sharpe / PF / regime-stress gates are barely being exercised.
-- **Forge-side symptom:** 4 consecutive iters at 100% regime_arbitrage survivors (31 / 20 / 14 / 19 of 5,000).
-- **Submissions verification:** Post-D066 (84 submissions across iters 33-36) contains zero tail_hedge — D066/D067 are both firing as designed. Crucible's 47.6% tail_hedge in the gauntlet cohort is pre-D066 backlog draining through.
+### Live context (as of 2026-05-19 ~19:37 PT)
+
+- **Recent commits:** D066-D070 + Phase 4 draft + multiple Crucible coordination prompts — all on origin/main.
+- **forge.service:** active. Iter 42 in progress at the new ~7-8 min cadence (post-vectorization + warm cache). 5 iters of stable telemetry at `ranked_top_n=200`.
+- **Crucible-side fixes shipped:** iv_rank vectorized (`compute_per_bar` for dealer family + put_call_flow), telemetry payload completed, registry-family fix (adx/hurst → `trend_strength`), pair-candidates already include cross-sector pairs.
+- **Forge-side fixes shipped:** D066 (tail_hedge overlay-only), D067 (exploration floor 0.05), D068 (pairs template params), D069 (param-aware structural fingerprint), D070 (rate-limit 0.80).
+- **Per-hypothesis sampler attempts (iter 41 D064 line):**
+
+  | Hypothesis | Attempts | Killed by `permutation_test` | Other rejections | Survivors |
+  |---|---:|---:|---:|---:|
+  | trend_continuation | 1,534 | 1,313 (85.6%) | 221 | 0 |
+  | mean_reversion | 978 | 838 (85.7%) | 140 | 0 |
+  | volatility_event | 903 | 163 | 719 | 21 |
+  | regime_arbitrage | 747 | 379 | 280 | 88 |
+  | relative_value | 740 | 559 | 90 | 91 |
+
+  Two hypotheses now sampling but blocked at `permutation_test` (Phase 3's target).
+
+- **Gauntlet n_trades distribution from latest 1,000-cohort (cross-referenced with submissions):**
+
+  | Hypothesis | 0 trades | 1-9 | 10-99 | 100+ | Total | % zero |
+  |---|---:|---:|---:|---:|---:|---:|
+  | `volatility_event` | 93 | 4 | 22 | 8 | 127 | 73.2% |
+  | `regime_arbitrage` | 121 | 60 | 19 | 1 | 201 | 60.2% |
+  | `tail_hedge` (pre-D066) | 175 | 169 | 11 | 0 | 355 | 49.3% |
+  | `relative_value` | 309 | 8 | 0 | 0 | 317 | **97.5%** |
+
+  `relative_value` 97.5% zero-trade — the case for Phase 3.5 (separate from Phase 4).
+
+- **Throughput:** ~1,600 configs/hour submission (200 per ~7-min iter) vs ~24 configs/hour gauntlet. D070 (rate-limit 0.80) is the design-time response to this mismatch.
 
 ---
 

@@ -23,6 +23,26 @@ Every config in a hypothesis gets the same exit logic. Crucible's 3,829-config g
 
 D069 widened the structural-fingerprint space (param-aware), unlocking three hypotheses past the novelty filter. But the new diversity ships configs that **still all use the same exit per hypothesis**. The exit-monoculture survives Phase 1.
 
+### Expected impact per hypothesis (from the 2026-05-19 cohort analysis)
+
+Cross-referenced 1,000 gated_runs against Forge's submissions table:
+
+| Hypothesis | 0 trades | 1-9 | 10-99 | 100+ | % zero | Phase 4 leverage |
+|---|---:|---:|---:|---:|---:|---|
+| `volatility_event` | 93 | 4 | 22 | 8 | 73.2% | **High** — varied exits could lift 1-9 → 10+ and 10-99 → 100+ |
+| `regime_arbitrage` | 121 | 60 | 19 | 1 | 60.2% | **High** — 80 configs already trade; exits to convert them to evaluable |
+| `tail_hedge` (pre-D066) | 175 | 169 | 11 | 0 | 49.3% | N/A — D066 already filters tail_hedge from new submissions |
+| `relative_value` | 309 | 8 | 0 | 0 | **97.5%** | **None** — exits can't help configs that never open positions |
+| `trend_continuation` | — | — | — | — | (no historical submissions; just unlocked by registry fix) | N/A until permutation_test gate cleared (Phase 3) |
+| `mean_reversion` | — | — | — | — | (1 historical submission; same permutation_test blocker) | N/A until Phase 3 |
+
+**Phase 4 directly helps `volatility_event` and `regime_arbitrage`** — the two hypotheses with non-trivial trade counts. It does NOT help:
+
+- `relative_value` (97.5% zero-trade) — entry-side problem; needs **Phase 3.5** (template params widening + Crucible pair-universe expansion).
+- `trend_continuation` and `mean_reversion` (0 ranked survivors due to `permutation_test` kills) — signal-quality problem; needs **Phase 3** (threshold auto-tightening).
+
+So Phase 4 unlocks 2 of 5 hypotheses' trade-count ceiling; Phases 3 and 3.5 handle the other three.
+
 ---
 
 ## Design
