@@ -492,25 +492,52 @@ def _directional_signal_params(
 
 
 def _sample_pairs_template_params(rng: random.Random) -> dict[str, object]:
-    """D068 — extra keys for Crucible's pairs_convergence template.
+    """D068 + D072 — extra keys for Crucible's pairs_convergence template.
 
     The template reads these via `signals[0].params.get(key, default)`;
     populating them lets the sampler vary the pairs strategy's entry
-    rule across submissions. Ranges chosen so the conservative end
-    matches the template defaults (zscore_entry≈2.0, pvalue_max=0.05,
-    hl≈(5,30)) and the aggressive end admits ~9% of (asof, pair)
-    opportunities on the v1 pair list (2025-Q1/Q2 SPY diagnostic).
+    rule across submissions.
 
-    `halflife_min` (2..8) and `halflife_max` (15..60) are sampled from
-    disjoint ranges so `halflife_min < halflife_max` holds by
-    construction without an explicit guard.
+    **D068 (2026-05-19)** shipped initial ranges that bridged template
+    defaults to the "widened-aggressive" end of the sensitivity sweep
+    (pvalue 0.05-0.20, zscore 0.8-2.0). Even at the aggressive end the
+    diagnostic showed ~9% (asof, pair) eligibility — but the gauntlet
+    cohort revealed `relative_value` configs are still **97.5% zero-
+    trade** (309 / 317 in the 1,000-cohort, with ZERO configs in the
+    10+ trade bucket). The wider end of D068's range still isn't fully
+    sampled because uniform random splits midpoint-centered.
+
+    **D072 (2026-05-19)** shifts the ranges toward the more permissive
+    end while preserving the conservative tail:
+      - `pvalue_max` 0.05-0.20 → **0.10-0.25** (the diagnostic's
+        widened-aggressive setting was pval<0.20; pushing to 0.25
+        admits weaker cointegration evidence).
+      - `zscore_entry` 0.8-2.0 → **0.5-1.5** (template default 2.0 was
+        too strict; median |z| among pvalue-passers in the diagnostic
+        was 1.06, so 0.5-1.5 puts most picks BELOW that median).
+      - `halflife_min` (2, 3, 5, 8) → **(1, 2, 3, 5)** (allow faster
+        mean-reverters; median observed halflife was 3.32).
+      - `halflife_max` (15, 30, 45, 60) → **(20, 45, 60, 90)** (allow
+        slower mean-reverters; many pairs have longer halflives that
+        the prior cap excluded).
+      - `lookback` (126, 189, 252, 378, 504) → **(126, 189, 252, 378)**
+        (drop the 504 option; longer lookback means fewer recompute
+        windows in a 90-day backtest, lower effective signal turnover).
+
+    `halflife_min` (1..5) and `halflife_max` (20..90) remain disjoint
+    so `halflife_min < halflife_max` holds by construction.
+
+    Hard rule #3 check (never lower Crucible's gate): unaffected.
+    Crucible's gauntlet (Sharpe, profit_factor, etc.) is the same;
+    we're just letting Forge submit configs that more often produce
+    SOMETHING for the gauntlet to evaluate.
     """
     return {
-        "lookback": rng.choice((126, 189, 252, 378, 504)),
-        "pvalue_max": round(rng.uniform(0.05, 0.20), 3),
-        "zscore_entry": round(rng.uniform(0.8, 2.0), 3),
-        "halflife_min": rng.choice((2, 3, 5, 8)),
-        "halflife_max": rng.choice((15, 30, 45, 60)),
+        "lookback": rng.choice((126, 189, 252, 378)),
+        "pvalue_max": round(rng.uniform(0.10, 0.25), 3),
+        "zscore_entry": round(rng.uniform(0.5, 1.5), 3),
+        "halflife_min": rng.choice((1, 2, 3, 5)),
+        "halflife_max": rng.choice((20, 45, 60, 90)),
     }
 
 

@@ -304,11 +304,12 @@ def test_d068_pairs_template_params_ranges() -> None:
 
     for seed in range(50):
         params = _directional_signal_params("pairs_zscore", random.Random(seed))
-        assert params["lookback"] in (126, 189, 252, 378, 504)
-        assert 0.05 <= float(params["pvalue_max"]) <= 0.20
-        assert 0.8 <= float(params["zscore_entry"]) <= 2.0
-        assert params["halflife_min"] in (2, 3, 5, 8)
-        assert params["halflife_max"] in (15, 30, 45, 60)
+        # D072 shifted ranges toward the permissive end of D068's sweep.
+        assert params["lookback"] in (126, 189, 252, 378)
+        assert 0.10 <= float(params["pvalue_max"]) <= 0.25
+        assert 0.5 <= float(params["zscore_entry"]) <= 1.5
+        assert params["halflife_min"] in (1, 2, 3, 5)
+        assert params["halflife_max"] in (20, 45, 60, 90)
         # The disjoint-range design must hold by construction.
         assert int(params["halflife_min"]) < int(params["halflife_max"])  # type: ignore[arg-type]
 

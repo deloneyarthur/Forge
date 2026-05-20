@@ -2096,3 +2096,74 @@ That's a **67x mismatch**. The 0.50 threshold lets Forge keep iterating before C
 
 - `src/forge/submission/rate_limiter.py:51` — `_DEFAULT_THRESHOLD: 0.50 → 0.80`. Old D036 comment retained for history; new D070 block explains the restoration.
 - `IMPLEMENTATION_DECISIONS.md` D070 (this entry).
+
+---
+
+## D072 — More aggressive `_sample_pairs_template_params` ranges (Phase 3.5 Forge-side)
+
+**Date:** 2026-05-19
+
+**Context.** D068 (2026-05-18) populated the pairs_convergence template's expected keys in `signals[0].params` and chose initial ranges that bridged template defaults to the "widened-aggressive" end of the sensitivity sweep:
+
+```
+# D068
+lookback:      choice(126, 189, 252, 378, 504)
+pvalue_max:    uniform(0.05, 0.20)
+zscore_entry:  uniform(0.8, 2.0)
+halflife_min:  choice(2, 3, 5, 8)
+halflife_max:  choice(15, 30, 45, 60)
+```
+
+The 2026-05-19 cohort cross-tab (1,000 gated_runs × Forge submissions) revealed `relative_value` is still **97.5% zero-trade**:
+
+| Hypothesis | 0 trades | 1-9 | 10-99 | 100+ | Total | % zero |
+|---|---:|---:|---:|---:|---:|---:|
+| `relative_value` | **309** | 8 | 0 | 0 | 317 | **97.5%** |
+
+**Zero configs reach the 10-trade bucket.** The D068 widening helped — pre-D068 it was ~99% zero-trade — but uniform random sampling within (0.05, 0.20) concentrates picks around the midpoint (0.125), well below the diagnostic's "widened-aggressive" pvalue<0.20 setting that yielded 9.1% (asof, pair) eligibility.
+
+**Decision.** Shift the ranges toward the more permissive end while preserving the conservative tail. New ranges:
+
+```
+# D072
+lookback:      choice(126, 189, 252, 378)         # dropped 504 (longest)
+pvalue_max:    uniform(0.10, 0.25)                  # shifted up
+zscore_entry:  uniform(0.5, 1.5)                    # shifted down
+halflife_min:  choice(1, 2, 3, 5)                   # admits fastest reverters
+halflife_max:  choice(20, 45, 60, 90)               # admits slowest reverters
+```
+
+Reasoning by knob:
+- **`pvalue_max` 0.05-0.20 → 0.10-0.25.** D068's diagnostic showed `pvalue<0.20` yields 9.1% eligibility. Sampling 0.10-0.25 puts most picks in the "moderately permissive" band that should yield 5-10% per-day eligibility.
+- **`zscore_entry` 0.8-2.0 → 0.5-1.5.** The diagnostic's median |z| among pvalue-passers was 1.06, so 0.5-1.5 puts most picks BELOW that median — strategies fire on the visible portion of the distribution, not just the extreme tail.
+- **`halflife_min` (2, 3, 5, 8) → (1, 2, 3, 5).** Median observed halflife was 3.32; previous floor of 2 was already permissive but the 8 option excluded too many fast reverters. New floor of 1 admits intraday-fast mean reversion.
+- **`halflife_max` (15, 30, 45, 60) → (20, 45, 60, 90).** Original cap of 60 excluded slow reverters; some pairs have halflives in the 60-90 range.
+- **`lookback` (126, 189, 252, 378, 504) → (126, 189, 252, 378).** Dropped 504 because in a 90-day backtest a 504-day lookback means the cointegration recompute window slides very slowly; fewer effective recomputes → fewer entry opportunities.
+
+**Hard rules check:**
+- **#1 (grammar operator-owned):** untouched. Sampler-side parameter ranges, not §3.5 rules.
+- **#3 (never lower Crucible's gate):** preserved. Crucible's gauntlet (Sharpe, profit_factor, etc.) is the same. We just submit configs that more often produce SOMETHING for the gauntlet to evaluate.
+- **#6 (deterministic enumeration):** preserved. Pure rng-state function.
+
+**Alternatives considered:**
+
+- **Even more aggressive (pvalue<0.30, zscore<0.4, etc.).** Considered. Rejected: at extreme permissiveness, cointegration-test pvalue stops being informative and zscore < 0.5 means we're trading on near-mean-spread. Both produce trades but with deteriorating signal-to-noise. The new ranges sit at the "shoulder" of the diagnostic's sensitivity curve.
+- **Bias the existing D068 ranges via non-uniform sampling (e.g., beta distribution concentrated at the permissive end).** Considered. Rejected: simpler to shift the range than introduce a new sampling distribution.
+- **Keep D068 and rely on Phase 3 (threshold auto-tightening) to learn.** Considered. Rejected: Phase 3 needs gated outcomes with non-zero trade counts to learn from; the current 97.5% zero-trade rate gives Phase 3 nothing to bias toward. D072 buys Phase 3 actual training signal.
+
+**Companion work:**
+- **Crucible-side pair-universe expansion** — separate hand-off prompt `CRUCIBLE_PAIR_CANDIDATES_EXPANSION_AGENT_PROMPT.md`. The 15-pair list is still narrow (only 2 viable per D068 diagnostic on 2025-Q2 data); even with D072's aggressive sampling, configs are bounded by what pairs exist. Pair-universe expansion is the second lever.
+
+**Verification:**
+- `tests/unit/test_enumeration/test_sampler.py::test_d068_pairs_template_params_ranges` updated to assert the new D072 ranges across 50 seeds.
+- `halflife_min < halflife_max` invariant preserved by disjoint discrete sets (max(halflife_min)=5 < min(halflife_max)=20).
+- Ruff + mypy strict clean on `src/forge/enumeration/sampler.py`.
+- Full `test_sampler` + `test_phase2_invariants` (140 tests) pass.
+
+**Expected operator-observable behavior.** Next iter's submissions will carry the new ranges. Within ~3-5 iters, gauntlet outcomes for `relative_value` should start showing configs in the 1-9 trade bucket (currently 8/317 = 2.5%) and possibly the 10-99 bucket for the first time. If still ≥90% zero-trade after 1,000 new submissions, the issue is the pair-universe (Crucible-side), not Forge's param ranges.
+
+**Action:**
+- `src/forge/enumeration/sampler.py::_sample_pairs_template_params` — 5 sampling ranges shifted/widened per the table above.
+- `tests/unit/test_enumeration/test_sampler.py::test_d068_pairs_template_params_ranges` — assertions updated for new ranges.
+- `IMPLEMENTATION_DECISIONS.md` D072 (this entry).
+- `CRUCIBLE_PAIR_CANDIDATES_EXPANSION_AGENT_PROMPT.md` (separate commit) — Crucible-side coordination.
