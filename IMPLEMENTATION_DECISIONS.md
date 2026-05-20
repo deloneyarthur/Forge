@@ -2167,3 +2167,73 @@ Reasoning by knob:
 - `tests/unit/test_enumeration/test_sampler.py::test_d068_pairs_template_params_ranges` — assertions updated for new ranges.
 - `IMPLEMENTATION_DECISIONS.md` D072 (this entry).
 - `CRUCIBLE_PAIR_CANDIDATES_EXPANSION_AGENT_PROMPT.md` (separate commit) — Crucible-side coordination.
+
+---
+
+## D073 — Phase 3: per-(indicator, role) threshold-tightening proposer from gated_runs
+
+**Date:** 2026-05-19
+
+**Context.** Crucible's 3,829-cohort gap analysis (`../Crucible/docs/handoffs/PROMPT_FORGE_GENERATOR_GAPS.md` Fix #2) flagged the D031 audited threshold table (`forge.enumeration.indicator_thresholds._INDICATOR_THRESHOLD_TABLE`, 2026-05-14) as never re-trained on actual gated outcomes. The 3,411 zero-trade configs in that cohort encode "this threshold range produces nothing on real data"; the 64 high-trade configs (≥10 trades) encode "this range fires usefully." That signal was being discarded.
+
+Forge's own observation reinforced the case: per-iter `prefilter_rejections_by_hypothesis` (D064) shows ~85% of `trend_continuation` and `mean_reversion` candidates are killed by `permutation_test` — a signal-quality filter that tighter thresholds could let pass.
+
+**Decision.** Ship a Phase 3 proposer that:
+
+1. Cross-references the latest `gated_runs` export with Forge's `submissions` table to extract, per (indicator_id, role), the threshold values used by configs with `n_trades ≥ high_trade_floor` (default 10).
+2. For each (indicator, role) with ≥ `min_high_trade_samples` (default 5) high-trade configs, proposes a tightened range as the [5th, 95th] percentile envelope of those thresholds.
+3. Compares the proposed range to the D031 baseline. If the proposed range FITS inside the baseline → `direction="tighten"` (auto-applicable). If it extends OUTSIDE → `direction="loosen"` (requires operator review, hard rule #4).
+4. Writes tightenings to `config/auto_tightened_thresholds.yaml` (shadows D031). Appends loosenings to `OPEN_PROPOSALS.md`.
+5. The sampler (`forge.enumeration.indicator_thresholds.sample_threshold_params`) loads the YAML on first call (lru_cache), validates each entry is strictly tighter than D031 (defensive guard against malformed YAML), and prefers the tightened range when present.
+
+**First pass = operator-driven, not in the production loop.** The operator runs `scripts/propose_threshold_tightenings.py` manually after a meaningful gated cohort accumulates, then restarts forge.service. Auto-firing on every iter is a Phase 3.x follow-up — first need to validate the proposer's output quality against the audited D031 baseline.
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** untouched. D031's table is sampler-side calibration, not §3.5 grammar. The YAML shadow is also sampler-side.
+- **#3 (never lower Crucible's gate):** N/A — sampler tightening can only restrict the candidate space, not relax Crucible's gauntlet.
+- **#4 (auto-tightening can ship; auto-loosening cannot):** preserved BY DESIGN. Proposer writes ONLY tightenings to the auto-apply YAML; loosenings go to `OPEN_PROPOSALS.md` and wait. The sampler-side loader is also defensive — silently skips any YAML entry that would loosen the D031 baseline.
+- **#6 (deterministic enumeration):** preserved. Same `(grammar_version, registry_hash, seed, auto_tightenings_yaml_hash)` produces the same enumeration. The YAML enters the determinism contract — operators need to know that running the proposer changes future enumeration, which is the whole point.
+
+**Alternatives considered:**
+
+- **Auto-fire in the production loop on every iter.** Considered. Rejected for first pass: the cohort needs time to accumulate trade-rich samples; running every iter on the same 24-config gauntlet rate would propose noise. Operator-driven is the right cadence until the system is producing dozens of high-trade configs per day.
+- **Bayesian shrinkage toward D031 instead of raw percentile.** Considered. Rejected for simplicity in v1 — the 5th/95th-percentile-of-high-trade is conservative enough that we don't need a formal prior. Worth revisiting if D073 produces noisy tightenings.
+- **Mutate `_INDICATOR_THRESHOLD_TABLE` in-place at import.** Considered. Rejected: the D031 dict is an operator-audited artifact. Touching it would obscure which ranges came from where. The shadow-file approach (loader prefers shadow when present, falls back to D031) keeps the audit trail clean.
+- **Per-hypothesis tightenings as well as per-(indicator, role).** Considered. Rejected for v1: per-(indicator, role) is already coarser than the gauntlet outcomes (the same indicator may have different optimal ranges for different hypotheses). Worth revisiting once v1 produces enough high-trade samples per hypothesis to support the cross-cut.
+
+**Verification:**
+
+- 6 new tests in `tests/unit/test_feedback/test_threshold_proposer.py`:
+  - `test_proposes_tightening_when_high_trade_configs_cluster` — 6 high-trade rsi_2 configs at thresholds 8-12 produce a tightening fit inside D031's (5.0, 15.0); zero-trade configs at extreme thresholds (5.5, 14.5) DON't bias the proposal.
+  - `test_min_samples_floor_skips_low_evidence` — fewer than min_samples high-trade configs → no proposal (avoids noise).
+  - `test_loosening_detected_when_high_trade_outside_baseline` — high-trade configs cluster OUTSIDE the baseline → `direction="loosen"`.
+  - `test_yaml_writer_only_includes_tightenings` — tightenings in YAML, loosenings excluded.
+  - `test_loosening_writer_appends_to_open_proposals` — loosenings appended to OPEN_PROPOSALS.md with cohort context.
+  - `test_empty_gated_runs_returns_no_proposals` — cold-start safety.
+- Full pytest suite: **1,097 tests pass** (6 new D073 + 1091 baseline).
+- Ruff + mypy strict clean on changed scope.
+
+**Expected operator workflow:**
+
+```
+scripts/propose_threshold_tightenings.py
+# review the printed tightenings + any loosening proposals in OPEN_PROPOSALS.md
+systemctl --user restart forge.service
+# next iter uses the new tightened ranges
+```
+
+After ≥1 high-trade-rich cohort runs through the gauntlet, expected impact:
+- `trend_continuation` + `mean_reversion`: the dominant `permutation_test` killer (~85% of their rejections) should drop as tighter sampling produces more statistically-significant signals.
+- `volatility_event` + `regime_arbitrage`: marginal — they already produce most of the high-trade configs, so the percentile envelope shouldn't shift much.
+- `relative_value`: minimal — its threshold sampling is overridden by D068/D072 template params, which are separately tracked.
+
+**Action:**
+
+- `src/forge/feedback/threshold_proposer.py` — new module: `ThresholdProposal`, `propose_threshold_tightenings`, `write_tightenings_to_yaml`, `write_loosening_proposals_to_open_proposals`.
+- `src/forge/enumeration/indicator_thresholds.py` — `_auto_tightenings` lru_cached loader + `_effective_range` helper; `sample_threshold_params` prefers auto-tightened range when present.
+- `scripts/propose_threshold_tightenings.py` — CLI entrypoint (operator-driven first pass).
+- `tests/unit/test_feedback/test_threshold_proposer.py` — 6 new D073 tests.
+- `pyproject.toml` — `scripts/**` ruff per-file-ignore widened to include `PLC0415` (lazy imports for sys.path patterns).
+- `IMPLEMENTATION_DECISIONS.md` D073 (this entry).
+- `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 3 row will be marked completed in a follow-up commit.

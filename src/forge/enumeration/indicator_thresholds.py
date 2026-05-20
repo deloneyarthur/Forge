@@ -29,8 +29,12 @@ the predicate is `value != 0`, not a threshold compare.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 if TYPE_CHECKING:
     import random
@@ -247,6 +251,76 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
 }
 
 
+# D073 / Phase 3 — auto-tightened threshold overrides.
+#
+# `config/auto_tightened_thresholds.yaml` (written by
+# `scripts/propose_threshold_tightenings.py` from gated_runs outcomes)
+# carries per-(indicator, role) range overrides derived from configs
+# that produced ≥10 trades. The sampler prefers these ranges over the
+# D031 audited defaults ONLY WHEN the proposed range is strictly
+# tighter than D031 (hard rule #4: no auto-loosening).
+#
+# Loaded lazily on first sampler call, cached for the rest of the
+# process lifetime. Restart forge.service to pick up a new YAML.
+_AUTO_TIGHTENINGS_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "config"
+    / "auto_tightened_thresholds.yaml"
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _auto_tightenings() -> dict[tuple[str, str], tuple[float, float]]:
+    """Return per-(indicator_id, role) → (low, high) auto-tightened ranges.
+
+    Empty dict when the YAML is absent (cold-start, or proposer not yet
+    run). Each entry is validated against the D031 baseline:
+    proposed_low >= baseline_low AND proposed_high <= baseline_high.
+    Loosening entries are silently skipped (the proposer is supposed to
+    route loosening to OPEN_PROPOSALS.md, but this loader is defensive).
+    """
+    if not _AUTO_TIGHTENINGS_PATH.exists():
+        return {}
+    try:
+        raw = yaml.safe_load(_AUTO_TIGHTENINGS_PATH.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    out: dict[tuple[str, str], tuple[float, float]] = {}
+    for entry in raw.get("tightenings", []):
+        ind_id = entry.get("indicator_id")
+        role = entry.get("role")
+        proposed = entry.get("proposed_range")
+        if not (isinstance(ind_id, str) and isinstance(role, str)
+                and isinstance(proposed, list) and len(proposed) == 2):
+            continue
+        p_low, p_high = float(proposed[0]), float(proposed[1])
+        # Validate against D031 baseline (defensive — proposer should already
+        # have done this).
+        spec = _INDICATOR_THRESHOLD_TABLE.get(ind_id)
+        if spec is None or spec.is_skip:
+            continue
+        if role == "directional":
+            base = spec.directional_range
+        elif role == "regime_filter":
+            base = spec.regime_range
+        else:
+            continue
+        if base is None:
+            continue
+        b_low, b_high = base
+        if not (p_low >= b_low and p_high <= b_high and p_low <= p_high):
+            continue  # loosening or degenerate — skip
+        out[(ind_id, role)] = (p_low, p_high)
+    return out
+
+
+def _effective_range(
+    indicator_id: str, role: str, baseline: tuple[float, float],
+) -> tuple[float, float]:
+    """Return the auto-tightened range if present, else the D031 baseline."""
+    return _auto_tightenings().get((indicator_id, role), baseline)
+
+
 def is_threshold_skippable(indicator_id: str) -> bool:
     """True if the indicator should not be used in threshold-style signals.
 
@@ -287,13 +361,14 @@ def sample_threshold_params(
     if role == "directional":
         if spec.directional_range is None:
             return {}
-        low, high = spec.directional_range
+        # D073: prefer auto-tightened range over D031 baseline when present.
+        low, high = _effective_range(indicator_id, role, spec.directional_range)
         threshold = round(rng.uniform(low, high), 4) if low != high else low
         return {"threshold": threshold, "op": spec.op_directional}
     if role == "regime_filter":
         if spec.regime_range is None:
             return {}
-        low, high = spec.regime_range
+        low, high = _effective_range(indicator_id, role, spec.regime_range)
         threshold = round(rng.uniform(low, high), 4) if low != high else low
         return {"threshold": threshold, "op": spec.op_regime}
     # confluence / unrecognised role — no threshold (passthrough doesn't need one)
