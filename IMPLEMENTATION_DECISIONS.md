@@ -2237,3 +2237,83 @@ After ≥1 high-trade-rich cohort runs through the gauntlet, expected impact:
 - `pyproject.toml` — `scripts/**` ruff per-file-ignore widened to include `PLC0415` (lazy imports for sys.path patterns).
 - `IMPLEMENTATION_DECISIONS.md` D073 (this entry).
 - `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 3 row will be marked completed in a follow-up commit.
+
+---
+
+## D071 — Phase 4 multi-exit schema rewrite (Forge-side code, pre-v3-bump)
+
+**Date:** 2026-05-19
+
+**Context.** Per `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 4 and Crucible's 3,829-cohort recommendation (Fix #1), §3.5 S5 is rewritten from "exactly one required exit per hypothesis" to "required-from-set + optional-additions". Operator approved **Option A** (PHASE_4_MULTI_EXIT_DRAFT.md): ship 4 new ExitRule implementations Crucible-side AND the grammar rewrite Forge-side.
+
+This commit is the **Forge-side schema rewrite**, landing AHEAD of the grammar.yaml v2 → v3 bump. The new schema is in place and active; the v3-only exit IDs (`chandelier_exit`, `parabolic_sar_exit`, `target_exit`, `zscore_reversion_exit`) are NOT yet referenced — they'll be added once `crucible_contracts` ships the contracts version bump (`CRUCIBLE_NEW_EXITS_AGENT_PROMPT.md` 9871745).
+
+**Decision.** Restructure `_S5_HYPOTHESIS_EXITS` from `{"required": (...), "forbidden": (...)}` to `{"required_always": (...), "required_from_set": (...), "optional_additions": (...), "forbidden": (...)}`, and update sampler + validator + SearchSpace to match.
+
+New schema per hypothesis (post-D071, pre-v3-bump — uses only existing KNOWN_EXIT_IDS):
+
+| Hypothesis | required_always | required_from_set (sampler picks 1) | optional_additions (0..K) | forbidden |
+|---|---|---|---|---|
+| trend_continuation | () | (trailing_atr,) [+chandelier, parabolic_sar on v3 bump] | (time_stop,) [+theta_cliff via E1] | (hard_profit_target,) |
+| mean_reversion | () | (time_stop,) [+target_exit, zscore_reversion on v3 bump] | () [+iv_crush_exit on v3 bump] | () |
+| regime_arbitrage | () | (regime_flip_exit,) | (time_stop,) | () |
+| relative_value | () | (convergence_exit,) [+zscore_reversion on v3 bump] | (time_stop,) | () |
+| volatility_event | (iv_crush_exit, event_passed_exit) | () | (time_stop,) | () |
+| tail_hedge (D066 filtered) | (roll_on_schedule_exit,) | () | () | (hard_profit_target,) |
+
+`K_MAX_OPTIONAL = 2` — sampler picks each optional independently with p=0.5, truncated to 2.
+
+**Sampler `_build_exits` (new):**
+1. E1 mandatory (always).
+2. `required_always` (always).
+3. Exactly one rng pick from `required_from_set` (if non-empty).
+4. Bernoulli p=0.5 per optional addition, truncated to K_MAX_OPTIONAL.
+5. Dedup (E1 / required_always / optional may overlap).
+
+**Validator `_s5_exits_match_hypothesis` (new):**
+1. All `required_always` present.
+2. Exactly one of `required_from_set` (or required_from_set is empty).
+3. Any exits beyond E1 + required_always + chosen_required must be in `optional_additions`.
+4. Optional-additions count ≤ K_MAX_OPTIONAL.
+5. No `forbidden`.
+
+**SearchSpace exposes the new derived fields** plus a `s5_required_by_hypothesis` legacy convenience (= required_always + first element of required_from_set) so existing callers / tests during the transition don't break.
+
+**Hard rules check:**
+
+- **#1 (grammar operator-owned):** `config/grammar.yaml` UNCHANGED in this commit. The grammar.yaml bump v2 → v3 (D071 final) waits for Crucible's contracts. The python dict `_S5_HYPOTHESIS_EXITS` IS the cross-hypothesis exit table; it's sampler+validator-side code, not the §3.5 textual grammar.
+- **#3 (never lower Crucible's gate):** N/A.
+- **#6 (deterministic enumeration):** preserved. Sampler's new random choices (`rng.choice(required_from_set)` + Bernoulli for optional) flow through the same SeedHierarchy. Same `(grammar_version, registry_hash, seed)` produces byte-identical exits.
+- **#10 (grammar version bump):** N/A in this commit — `grammar.yaml` is untouched. The version bump v2 → v3 ships in a separate commit alongside `_S5_HYPOTHESIS_EXITS` additions for new exit IDs once Crucible's contracts ship.
+
+**Alternatives considered:**
+
+- **Wait for Crucible's contracts to ship before any Forge-side change.** Considered. Rejected: the schema rewrite + sampler + validator + tests are substantial; landing them in isolation gives a clean rollback boundary if anything goes wrong. The pre-bump schema only references existing exits, so behavior is unchanged from v2 except for the cleaner internal shape.
+- **Land the v3 grammar.yaml bump now AND reference the new exit IDs.** Considered. Rejected: configs would attempt to submit `chandelier_exit` etc. which `KNOWN_EXIT_IDS` rejects → Forge validator failures.
+- **Mixed-type `required_from_set` (tuples for AND-bundles).** Considered (option discussed in Phase 4 draft Q4). Rejected: operator chose explicit `required_always` field for cleaner schema.
+
+**Verification:**
+
+- 4 new D071 tests in `tests/unit/test_grammar/test_custom_predicates.py`:
+  - `test_d071_volatility_event_missing_required_always_fails` — both elements of the 2-element AND must be present.
+  - `test_d071_foreign_exit_fails` — exits outside E1+required+optional are rejected.
+  - `test_d071_too_many_optional_additions_fails` — K cap (currently skipped — activates once v3 grammar adds wider optional pools).
+  - `test_d071_sampler_optional_additions_can_fire_over_seeds` — Bernoulli p=0.5 picks aren't accidentally pinned to never-fire (120 seeds).
+- Existing S5 tests updated:
+  - `test_s5_mean_reversion_without_time_stop_fails` — assertion updated to match the new `required_from_set: none of [time_stop] present` detail string.
+  - `test_s5_required_exits_present_and_forbidden_absent` — sampler-side assertion updated to walk `required_always` + `required_from_set` separately.
+- Full pytest suite: **1,100 pass, 1 skipped (intentional, awaits v3 bump)**, 13 deselected (env-broken hook scripts unrelated).
+- Ruff + mypy strict clean on all changed scope.
+
+**Action:**
+
+- `src/forge/grammar/custom_predicates.py` — `_S5_HYPOTHESIS_EXITS` schema rewrite + `K_MAX_OPTIONAL=2` constant + `_s5_exits_match_hypothesis` predicate updated.
+- `src/forge/enumeration/search_space.py` — `SearchSpace` gains `s5_required_always_by_hypothesis` / `s5_required_from_set_by_hypothesis` / `s5_optional_additions_by_hypothesis`; legacy `s5_required_by_hypothesis` retained for transition.
+- `src/forge/enumeration/sampler.py` — `_build_exits` does the rng-driven pick from `required_from_set` + Bernoulli optional additions.
+- `tests/unit/test_grammar/test_custom_predicates.py` — 4 new D071 tests + 1 existing S5 assertion updated.
+- `tests/unit/test_enumeration/test_sampler.py` — 1 existing S5 assertion updated to walk the new schema.
+- `IMPLEMENTATION_DECISIONS.md` D071 (this entry).
+
+**Next steps (separate commits):**
+1. Crucible ships the 4 new ExitRule classes + adds them to `KNOWN_EXIT_IDS` + bumps `crucible_contracts` version (`CRUCIBLE_NEW_EXITS_AGENT_PROMPT.md`).
+2. Forge bumps `FORGE_EXPECTED_CONTRACT_VERSION`, adds the 4 new exit IDs to `_S5_HYPOTHESIS_EXITS` per the Phase 4 draft mapping, archives `grammar_archive/v2.yaml`, writes new `grammar.yaml` with `grammar_version: v3`, restarts forge.service. **That commit closes Phase 4 / D071-final.**

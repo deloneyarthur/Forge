@@ -450,14 +450,40 @@ def _build_exits(
     hypothesis: str,
     rng: random.Random,
 ) -> tuple[ExitSpec, ...]:
-    """§3.5 E1 mandatory + §3.5 S5 required for the hypothesis. Forbidden
-    exits per S5 are simply omitted — there's no need to materialize a
+    """§3.5 E1 mandatory + §3.5 S5 multi-exit composition (D071).
+
+    v3 schema:
+      - E1 mandatory exits (always included).
+      - `required_always` per hypothesis (always included).
+      - Exactly one from `required_from_set` (rng pick), if non-empty.
+      - 0..K_MAX_OPTIONAL from `optional_additions` (each picked with p=0.5,
+        truncated to K).
+
+    Forbidden exits per S5 are simply omitted; no need to materialize the
     forbidden set. §3.5 E3 demands ``activate_after_gain_pct ≥ 0.30`` on
-    any ``trailing_atr`` exit; the sampler sets it here so trend
-    configs are valid by construction."""
+    any ``trailing_atr`` exit; `_exit_params` sets it here so trend
+    configs are valid by construction.
+
+    Determinism: every rng-driven decision (required-from-set pick,
+    optional-additions Bernoulli) follows the seed hierarchy. Same
+    (grammar_version, registry_hash, seed) produces byte-identical exits.
+    """
+    # D071 / Phase 4 — K_MAX_OPTIONAL is the cap on optional_additions
+    # picked per config. Mirrors `K_MAX_OPTIONAL` in
+    # `forge.grammar.custom_predicates`. Kept local to avoid an
+    # enumeration→grammar import chain.
+    _K_MAX_OPTIONAL = 2
+
     ids: list[str] = list(space.e1_mandatory)
-    ids.extend(space.s5_required_by_hypothesis[hypothesis])
-    # Preserve order, deduplicate (E1 vs S5 overlap is possible).
+    ids.extend(space.s5_required_always_by_hypothesis[hypothesis])
+    required_set = space.s5_required_from_set_by_hypothesis[hypothesis]
+    if required_set:
+        ids.append(rng.choice(required_set))
+    optional_pool = space.s5_optional_additions_by_hypothesis[hypothesis]
+    # Each optional independently picked with p=0.5, then truncated to K.
+    picked_optional = [opt for opt in optional_pool if rng.random() < 0.5]
+    ids.extend(picked_optional[:_K_MAX_OPTIONAL])
+    # Preserve order, deduplicate (E1 / required_always / optional may overlap).
     deduped = list(dict.fromkeys(ids))
     return tuple(ExitSpec(id=eid, params=_exit_params(eid, rng)) for eid in deduped)
 

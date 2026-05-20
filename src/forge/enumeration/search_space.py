@@ -109,6 +109,17 @@ class SearchSpace:
     delta_band_by_bucket: Mapping[str, tuple[float, float]]
     risk_pct_range: tuple[float, float]
 
+    # D071 (Phase 4 multi-exit): pre-D071 schema was s5_required_by_hypothesis
+    # (single tuple). Post-D071 the sampler reads `required_always` (must-all-
+    # appear) + `required_from_set` (sampler picks 1) + `optional_additions`
+    # (sampler picks 0..K_MAX_OPTIONAL). `s5_required_by_hypothesis` is
+    # retained as a derived convenience = required_always + first element of
+    # required_from_set (deterministic; used by callers that need ONE required
+    # tuple, e.g., legacy tests during the v2→v3 transition). The forbidden
+    # set is unchanged.
+    s5_required_always_by_hypothesis: Mapping[str, tuple[str, ...]]
+    s5_required_from_set_by_hypothesis: Mapping[str, tuple[str, ...]]
+    s5_optional_additions_by_hypothesis: Mapping[str, tuple[str, ...]]
     s5_required_by_hypothesis: Mapping[str, tuple[str, ...]]
     s5_forbidden_by_hypothesis: Mapping[str, tuple[str, ...]]
     e1_mandatory: tuple[str, ...]
@@ -130,8 +141,28 @@ def build_search_space(
     samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
     risk_pct_range = _resolve_p4_risk_pct_range(grammar)
 
-    s5_required = MappingProxyType({h: _S5_HYPOTHESIS_EXITS[h]["required"] for h in _HYPOTHESES})
-    s5_forbidden = MappingProxyType({h: _S5_HYPOTHESIS_EXITS[h]["forbidden"] for h in _HYPOTHESES})
+    # D071: derive new schema fields from _S5_HYPOTHESIS_EXITS.
+    s5_required_always = MappingProxyType(
+        {h: _S5_HYPOTHESIS_EXITS[h]["required_always"] for h in _HYPOTHESES},
+    )
+    s5_required_from_set = MappingProxyType(
+        {h: _S5_HYPOTHESIS_EXITS[h]["required_from_set"] for h in _HYPOTHESES},
+    )
+    s5_optional_additions = MappingProxyType(
+        {h: _S5_HYPOTHESIS_EXITS[h]["optional_additions"] for h in _HYPOTHESES},
+    )
+    s5_forbidden = MappingProxyType(
+        {h: _S5_HYPOTHESIS_EXITS[h]["forbidden"] for h in _HYPOTHESES},
+    )
+    # Legacy convenience: required_always + the first (canonical) element of
+    # required_from_set, for callers / tests that need a single tuple.
+    s5_required_legacy = MappingProxyType({
+        h: (
+            *_S5_HYPOTHESIS_EXITS[h]["required_always"],
+            *(_S5_HYPOTHESIS_EXITS[h]["required_from_set"][:1]),
+        )
+        for h in _HYPOTHESES
+    })
 
     return SearchSpace(
         hypotheses=_HYPOTHESES,
@@ -145,7 +176,10 @@ def build_search_space(
         dte_entry_window_by_bucket=MappingProxyType(dict(_P2_ENTRY_DTE)),
         delta_band_by_bucket=MappingProxyType(dict(_P3_DELTA_BAND)),
         risk_pct_range=risk_pct_range,
-        s5_required_by_hypothesis=s5_required,
+        s5_required_always_by_hypothesis=s5_required_always,
+        s5_required_from_set_by_hypothesis=s5_required_from_set,
+        s5_optional_additions_by_hypothesis=s5_optional_additions,
+        s5_required_by_hypothesis=s5_required_legacy,
         s5_forbidden_by_hypothesis=s5_forbidden,
         e1_mandatory=tuple(sorted(MANDATORY_EXIT_IDS)),
     )

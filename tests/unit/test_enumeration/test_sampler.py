@@ -195,13 +195,24 @@ def test_e1_mandatory_exits_present(grammar: Grammar, registry: RegistrySnapshot
 def test_s5_required_exits_present_and_forbidden_absent(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
+    """D071 (v3 schema): every config has all required_always exits;
+    exactly one from required_from_set (when non-empty); no forbidden."""
     for seed in range(30):
         cfg = _sample(grammar, registry, seed=seed)
         exit_ids = {e.id for e in cfg.exits}
         rules = _S5_HYPOTHESIS_EXITS[cfg.hypothesis]
-        for required_exit in rules["required"]:
+        for required_exit in rules["required_always"]:
             assert required_exit in exit_ids, (
-                f"S5 required {required_exit!r} missing at seed={seed} hypothesis={cfg.hypothesis}"
+                f"S5 required_always {required_exit!r} missing at "
+                f"seed={seed} hypothesis={cfg.hypothesis}"
+            )
+        required_set = set(rules["required_from_set"])
+        if required_set:
+            chosen = exit_ids & required_set
+            assert len(chosen) == 1, (
+                f"S5 required_from_set: expected exactly 1 of "
+                f"{sorted(required_set)} at seed={seed} "
+                f"hypothesis={cfg.hypothesis}, got {sorted(chosen)}"
             )
         for forbidden_exit in rules["forbidden"]:
             assert forbidden_exit not in exit_ids, (

@@ -55,30 +55,67 @@ _LOOKBACK_DTE_TABLE: dict[str, tuple[str, ...]] = {
     "long_lookback": ("swing_mid", "swing_long"),
 }
 
-# §3.5 S5 hypothesis → required + forbidden exits.
+# §3.5 S5 hypothesis → exit composition (D071 / Phase 4 multi-exit schema).
+#
+# Schema (grammar v3 design — code lands ahead of grammar.yaml bump):
+#   required_always:   exits that MUST appear in every config of this hypothesis.
+#                      (Empty for most; volatility_event keeps its 2-element AND.)
+#   required_from_set: sampler picks EXACTLY ONE from this set per config.
+#                      (Empty for hypotheses where the choice is already in
+#                      required_always.)
+#   optional_additions: 0..K_MAX_OPTIONAL exits added uniformly at random.
+#   forbidden:         exits that may NOT appear under this hypothesis.
+#
+# Pre-D071 the schema was {"required": (...), "forbidden": (...)}; the v2
+# `required` tuple is now equivalent to `required_always` (when the hypothesis
+# has no exit choice) OR a one-element `required_from_set` (when there's
+# implicit choice expressed by the operator's intent).
+#
+# New exits — chandelier_exit, parabolic_sar_exit, target_exit,
+# zscore_reversion_exit — are NOT in this table yet. They'll be added when
+# (a) crucible_contracts ships the contracts bump that adds them to
+# KNOWN_EXIT_IDS, and (b) Forge bumps grammar.yaml v2 → v3. Until then the
+# schema is "multi-exit with the existing 13 exit IDs" — structural change
+# only; full diversity comes with the v3 bump.
+K_MAX_OPTIONAL: int = 2
+
 _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
     "trend_continuation": {
-        "required": ("trailing_atr",),
+        "required_always": (),
+        "required_from_set": ("trailing_atr",),  # +chandelier_exit, parabolic_sar_exit on v3 bump
+        "optional_additions": ("time_stop",),  # +theta_cliff_exit covered by E1
         "forbidden": ("hard_profit_target",),
     },
     "mean_reversion": {
-        "required": ("time_stop",),
+        "required_always": (),
+        "required_from_set": ("time_stop",),  # +target_exit, zscore_reversion_exit on v3 bump
+        "optional_additions": (),  # +iv_crush_exit on v3 bump
         "forbidden": (),
     },
     "regime_arbitrage": {
-        "required": ("regime_flip_exit",),
+        "required_always": (),
+        "required_from_set": ("regime_flip_exit",),
+        "optional_additions": ("time_stop",),  # +theta_cliff_exit covered by E1
         "forbidden": (),
     },
     "relative_value": {
-        "required": ("convergence_exit",),
+        "required_always": (),
+        "required_from_set": ("convergence_exit",),  # +zscore_reversion_exit on v3 bump
+        "optional_additions": ("time_stop",),
         "forbidden": (),
     },
     "volatility_event": {
-        "required": ("iv_crush_exit", "event_passed_exit"),
+        "required_always": ("iv_crush_exit", "event_passed_exit"),
+        "required_from_set": (),  # 2-element AND already exhausted by required_always
+        "optional_additions": ("time_stop",),
         "forbidden": (),
     },
     "tail_hedge": {
-        "required": ("roll_on_schedule_exit",),
+        # tail_hedge is filtered at the sampler via D066's OVERLAY_ONLY_HYPOTHESES;
+        # schema retained for parity / future overlay-spec lift.
+        "required_always": ("roll_on_schedule_exit",),
+        "required_from_set": (),
+        "optional_additions": (),
         # §3.5 says "profit-taking forbidden" — read narrowly as
         # `hard_profit_target` (the only profit-taking exit in
         # KNOWN_EXIT_IDS).
@@ -276,6 +313,17 @@ def _s5_exits_match_hypothesis(
     config: StrategyConfig,
     registry: RegistrySnapshot,
 ) -> PredicateResult:
+    """D071 — validate the v3 multi-exit composition:
+
+    1. All `required_always` exits are present.
+    2. Exactly one of `required_from_set` is present (or required_from_set
+       is empty, meaning the choice is already exhausted via
+       required_always — e.g., volatility_event's 2-element AND).
+    3. Any exits beyond E1 mandatory + required_always + chosen_required
+       must come from `optional_additions`.
+    4. Optional-additions count <= K_MAX_OPTIONAL (i.e., 2).
+    5. No `forbidden` exit is present.
+    """
     del registry
     table = _S5_HYPOTHESIS_EXITS.get(config.hypothesis)
     if table is None:
@@ -287,14 +335,52 @@ def _s5_exits_match_hypothesis(
             ),
         )
     exit_ids = {e.id for e in config.exits}
-    missing = [eid for eid in table["required"] if eid not in exit_ids]
-    present_forbidden = [eid for eid in table["forbidden"] if eid in exit_ids]
-    if missing or present_forbidden:
-        parts: list[str] = []
-        if missing:
-            parts.append(f"missing required exits {missing}")
-        if present_forbidden:
-            parts.append(f"forbidden exits present {present_forbidden}")
+    required_always = set(table["required_always"])
+    required_set = set(table["required_from_set"])
+    optional_pool = set(table["optional_additions"])
+    forbidden = set(table["forbidden"])
+
+    parts: list[str] = []
+
+    # (1) required_always: all must be present
+    missing_always = sorted(required_always - exit_ids)
+    if missing_always:
+        parts.append(f"missing required_always {missing_always}")
+
+    # (2) required_from_set: exactly 1 if non-empty
+    chosen_from_set = exit_ids & required_set
+    if required_set and len(chosen_from_set) != 1:
+        if not chosen_from_set:
+            parts.append(
+                f"required_from_set: none of {sorted(required_set)} present "
+                f"(must pick exactly 1)",
+            )
+        else:
+            parts.append(
+                f"required_from_set: {sorted(chosen_from_set)} present "
+                f"(must pick exactly 1)",
+            )
+
+    # (3) any exits beyond E1 + required_always + chosen_required must be optional_additions
+    from crucible_contracts import MANDATORY_EXIT_IDS  # noqa: PLC0415
+    allowed_set = MANDATORY_EXIT_IDS | required_always | chosen_from_set | optional_pool
+    foreign = sorted(exit_ids - allowed_set)
+    if foreign:
+        parts.append(f"foreign exits not in any allow-set {foreign}")
+
+    # (4) optional-additions count cap
+    n_optional = len(exit_ids & optional_pool)
+    if n_optional > K_MAX_OPTIONAL:
+        parts.append(
+            f"too many optional_additions: {n_optional} > K_MAX_OPTIONAL={K_MAX_OPTIONAL}",
+        )
+
+    # (5) forbidden
+    present_forbidden = sorted(forbidden & exit_ids)
+    if present_forbidden:
+        parts.append(f"forbidden exits present {present_forbidden}")
+
+    if parts:
         return PredicateResult(
             passed=False,
             detail=f"S5: under hypothesis={config.hypothesis!r}, {'; '.join(parts)}",
