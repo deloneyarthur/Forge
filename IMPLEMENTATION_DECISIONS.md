@@ -2053,3 +2053,46 @@ New hash inputs (additive to the pre-D069 structural skeleton):
 - `tests/unit/test_prefilters/test_novelty.py` — 6 new D069 tests; existing T2.7 stability test replaced (was asserting param-blind behavior).
 - `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` — Phase 1 row marked complete with D069 reference (separate commit).
 - `IMPLEMENTATION_DECISIONS.md` D069 (this entry).
+
+---
+
+## D070 — Rate-limit threshold restored to 0.80 (D036 was tactical)
+
+**Date:** 2026-05-19
+
+**Context.** D036 dropped the §7.3 rate-limiter threshold from 0.80 → 0.50 on 2026-05-17 to unblock Forge while D033 Tier-2 throughput was bedding in. That tactical drop has now outlived its purpose:
+
+- D033 Tier-2 batches are flowing.
+- Crucible-side iv_rank + dealer/flow vectorization (Crucible-prompt-driven, shipped 2026-05-19) have collapsed the per-chunk feature_cache compute from hours to seconds.
+- Forge's D069 param-aware fingerprint has unlocked the constrained hypotheses, taking ranked_top_n from 14-31 (iters 33-36) to 200 (iters 37-40).
+
+The post-D069 throughput numbers from iters 37-40:
+
+- Forge submission rate: ~200 configs/iter at ~7 min/iter = **~1,600 configs/hour**.
+- Crucible gauntlet rate (one config in flight at a time, parallelized 4-way across CPCV folds internally, ~150-160s/config): **~24 configs/hour**.
+
+That's a **67x mismatch**. The 0.50 threshold lets Forge keep iterating before Crucible has gated even half of the prior batch, so the inbox grows unboundedly. The §7.3 design-time choice of 0.80 ("wait until ≥80% of prev batch is gated") is the exact safeguard for this situation: it forces Forge to pause when the gauntlet falls behind, matching its submission cadence to gauntlet throughput.
+
+**Decision.** Restore `_DEFAULT_THRESHOLD = 0.80` in `forge.submission.rate_limiter`. D036 stays as a historical comment; the new comment block explains the restoration with the throughput numbers above.
+
+**Hard rules check:**
+
+- **#1 / #4 (grammar / auto-loosening):** N/A. This is operational tuning of a rate-limit knob, not a grammar change.
+- **#6 (deterministic enumeration):** preserved. The rate limiter does not enter the seed/sample paths.
+
+**Alternatives considered:**
+
+- **Leave at 0.50.** Considered. Rejected: lets the inbox grow ~1,576 configs/hour faster than the gauntlet can drain. Eventually overwhelms Crucible's queue or hits memory pressure.
+- **Set to 1.0.** Considered. Rejected: pathological — would require EVERY config of the prior batch to gate before the next can start, eliminating overlap entirely. 0.80 is the spec value (§7.3) and was extensively reasoned about pre-v1.
+- **Make it dynamic / adaptive.** Considered. Rejected for now: the 0.80 spec value is well-grounded; a dynamic schedule would need its own tuning surface without obvious benefit at current scale. Revisit if gauntlet throughput materially changes.
+
+**Verification:**
+
+- `tests/unit/test_submission/test_rate_limiter.py` — 12 tests pass; fixtures use explicit thresholds and are unaffected by the default change.
+- Ruff clean on the changed file.
+- Operator-observable: forge.service journal should now show occasional rate-limit pauses ("waiting" messages) once the next iter's ≥80% threshold isn't met. That's the design.
+
+**Action:**
+
+- `src/forge/submission/rate_limiter.py:51` — `_DEFAULT_THRESHOLD: 0.50 → 0.80`. Old D036 comment retained for history; new D070 block explains the restoration.
+- `IMPLEMENTATION_DECISIONS.md` D070 (this entry).

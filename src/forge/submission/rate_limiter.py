@@ -48,7 +48,15 @@ from forge.persistence.db import db_connection
 # so dropping to 0.5 unblocks immediately and lets D033 actually exercise.
 # Revisit once D033 ships its first batch and we see real Tier 2 throughput —
 # the 0.80 default was sized for v1 / SPY-only, may or may not still fit.
-_DEFAULT_THRESHOLD = 0.50
+#
+# D070 (2026-05-19) — restored to 0.80. Post-D069 (param-aware fingerprint)
+# Forge is producing 200 ranked submissions per ~7-min iter = ~1,600
+# configs/hour, while Crucible's gauntlet (post-vectorization, with 4
+# parallel CPCV workers per config) processes ~24 configs/hour. The 67x
+# submission-vs-gauntlet mismatch fills Crucible's inbox faster than it
+# can drain; the 0.80 threshold is the §7.3 design-time safeguard for
+# exactly this situation. See IMPLEMENTATION_DECISIONS.md D070.
+_DEFAULT_THRESHOLD = 0.80
 # Pull a generous slice of recent gated runs; the cross-reference is
 # bounded by `submitted_count`, so the limit only needs to exceed the
 # typical batch size (200 per §6.4) with headroom for parallelism.
