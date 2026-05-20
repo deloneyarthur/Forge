@@ -259,3 +259,5 @@ Forge has historically expected `adx`/`hurst` to live in a separate `trend_stren
 **Severity:** **high** — fully blocks the `trend_continuation` hypothesis from ever being sampled. Crucible's post-mortem cohort (3,829 configs) shows `trend_continuation` at 0/3,829 = 0.0%; consistent with this finding being persistent rather than transient.
 
 **Tag:** `crucible-registry-regression`, `trend-strength-family`, `cross-system-contract`
+
+**Resolution 2026-05-19:** Crucible shipped `e298138 fix(exports): split adx + hurst into trend_strength family per D019`. Verified live in `registry_snapshot_2026-05-19T211742Z.json` — `adx` and `hurst` now have `family="trend_strength"`. Forge's first iter to load the new registry (iter 37, `registry_hash=fc0dd3bd55a35177`) immediately produced ~1,500 sampler attempts for `trend_continuation` per batch (was 0). Those configs now die at `permutation_test` (~85% of kills) — a separate signal-quality issue addressed by Phase 3 (D073) and not blocking. **Q15 closed.**
