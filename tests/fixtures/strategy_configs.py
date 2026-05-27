@@ -186,6 +186,18 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
                 lookback=1,
                 params_schema={},
             ),
+            # rv_rank — realized-vol percentile rank regime gate (R2, D077).
+            # `volatility` family: C1 satisfied against `trend`-family directionals.
+            IndicatorMetadata(
+                id="rv_rank",
+                version=1,
+                family="volatility",
+                lookback=252,
+                params_schema={
+                    "rv_window": {"type": "integer"},
+                    "window": {"type": "integer"},
+                },
+            ),
             # D062: dealer-positioning family (gex/walls/gamma-flip). Used to
             # exercise C2's `volatility_event` and `mean_reversion` allowlist
             # extensions added alongside Crucible commit 5af63ad.

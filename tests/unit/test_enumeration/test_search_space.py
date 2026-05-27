@@ -189,10 +189,11 @@ def test_directional_pool_regime_arbitrage_is_any_family(
 
 
 def test_regime_pool_trend_continuation_is_r2(space: SearchSpace) -> None:
-    """R2: trend_continuation regime gate is adx or hurst."""
+    """R2: trend_continuation regime gate is adx, hurst, or rv_rank (D077)."""
     assert space.regime_indicators_by_hypothesis["trend_continuation"] == (
         "adx",
         "hurst",
+        "rv_rank",
     )
 
 

@@ -201,6 +201,14 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         op_directional=">",  # fire when EV > threshold
         op_regime=">",
     ),
+    # ----- Realized-vol percentile rank (D077, Crucible rv_rank.py) -----
+    # 0 = vol at trailing min (cheap), 100 = vol at trailing max (expensive).
+    # PTS thesis: enter when vol is LOW → op_regime = "<".
+    "rv_rank": IndicatorThresholdSpec(
+        directional_range=None,  # rv_rank is regime-only; not a directional signal
+        regime_range=(25.0, 75.0),  # [25, 50, 75] per PTS calibration
+        op_regime="<",  # fire when rv_rank < threshold (vol is cheap)
+    ),
     # ----- Microstructure (low signal on SPY) -----
     "amihud": IndicatorThresholdSpec(
         directional_range=(0.0001, 0.001),
@@ -321,10 +329,10 @@ def _effective_range(
     return _auto_tightenings().get((indicator_id, role), baseline)
 
 
-def is_threshold_skippable(indicator_id: str) -> bool:
+def is_threshold_skippable(indicator_id: str, role: str = "directional") -> bool:
     """True if the indicator should not be used in threshold-style signals.
 
-    Returns True in two cases:
+    Returns True in three cases:
       1. Explicit `is_skip=True` in the table (price-scale ema/sma/atr).
       2. Indicator is NOT in the table at all — defensive: if the registry
          adds an indicator that lacks an audited threshold range, we don't
@@ -333,6 +341,8 @@ def is_threshold_skippable(indicator_id: str) -> bool:
          → gate-reject on min_oos_trade_count). The audit-test in
          `tests/unit/test_enumeration/test_no_empty_threshold_leak.py`
          enforces this invariant.
+      3. The indicator has no range for the requested role (D077: rv_rank
+         has a regime_range but no directional_range).
 
     Such indicators are still valid in `passthrough` / `confluence`
     signals; this only excludes them from directional / regime_filter
@@ -341,7 +351,11 @@ def is_threshold_skippable(indicator_id: str) -> bool:
     spec = _INDICATOR_THRESHOLD_TABLE.get(indicator_id)
     if spec is None:
         return True
-    return spec.is_skip
+    if spec.is_skip:
+        return True
+    if role == "directional" and spec.directional_range is None:
+        return True
+    return role == "regime_filter" and spec.regime_range is None
 
 
 def sample_threshold_params(

@@ -2582,3 +2582,71 @@ Mean_reversion's family (bb_pct, keltner_pct, rsi*, zscore_returns) is largely c
 
 **Restart required:** `systemctl --user restart forge.service` to activate. Forge picks up the new prefilter.yaml + the new module on next iteration; the priors take effect on the next gated_runs-bearing iteration (~1 cycle once exports are read).
 
+---
+
+## D077 — 2026-05-27 — Wire `rv_rank` as regime_filter for `trend_continuation`
+
+**Spec section:** §3.5 R2 (regime gate for trend_continuation)
+**Decision:** Expand R2 from `(adx, hurst)` to `(adx, hurst, rv_rank)`. Bump grammar v3 → v4.
+**Rationale:** PTS thesis import — "enter trend-following long calls when realized vol is cheap relative to history." Crucible registered `rv_rank` (percentile rank of 21-day realized vol within trailing 252-day window, [0, 100] scale, `volatility` family). The handoff (`Crucible/docs/handoffs/PROMPT_FORGE_RV_RANK_WIRING.md`, 2026-05-27) directs wiring as regime_filter only, not directional.
+**Alternatives considered:** (a) Keep R2 restricted to trend_strength indicators only — rejected; operator directive to expand. (b) Create a separate R2b rule for rv_rank — rejected; adds rule count without benefit since R2's predicate function already accepts an extensible set.
+**Action:**
+- `_R2_TREND_STRENGTH_INDICATORS` renamed to `_R2_TREND_CONTINUATION_REGIME_INDICATORS`, expanded with `rv_rank`.
+- `_INDICATOR_THRESHOLD_TABLE` gains `rv_rank` entry: `regime_range=(25.0, 75.0)`, `op_regime="<"` (fire when vol is LOW/cheap), `directional_range=None` (regime-only per handoff §5).
+- `is_threshold_skippable` made role-aware: indicators with `directional_range=None` are skipped for directional signals but remain valid for regime_filter. Prevents rv_rank leaking into directional pools for unrestricted hypotheses.
+- `_pick_directional_regime_pair` and `_viable_buckets` now exclude regime indicators whose family matches the sizer chain indicator's family (prevents rv_rank + realized_vol C1 collision when vol_target sizer is active).
+- `_regime_signal_params` adds `rv_window` and `window` sampling for rv_rank per PTS calibration: `rv_window ∈ {10, 21}`, `window ∈ {126, 252}`.
+- Demo registry and test fixture registry gain rv_rank IndicatorMetadata (`family="volatility"`, `lookback=252`).
+- Grammar v3 → v4, R2 rule version 1 → 2, v4 archived.
+
+**Files modified:**
+- `src/forge/grammar/custom_predicates.py` — constant rename + expansion.
+- `src/forge/enumeration/indicator_thresholds.py` — rv_rank threshold entry + role-aware `is_threshold_skippable`.
+- `src/forge/enumeration/sampler.py` — role-aware threshold skip, chain-family C1 guard, rv_rank params sampling.
+- `src/forge/enumeration/search_space.py` — constant rename import.
+- `src/forge/enumeration/_demo_registry.py` — rv_rank IndicatorMetadata.
+- `tests/fixtures/strategy_configs.py` — rv_rank in test registry.
+- `tests/unit/test_grammar/test_custom_predicates.py` — `test_r2_trend_with_rv_rank_passes`.
+- `tests/unit/test_enumeration/test_search_space.py` — updated R2 pool assertion.
+- `tests/unit/test_enumeration/test_no_empty_threshold_leak.py` — rv_rank role-skip test + lambda fix.
+- `tests/unit/test_enumeration/test_sampler.py` — constant rename import.
+- `tests/integration/test_v1_grammar.py` — version assertion v3 → v4.
+- `config/grammar.yaml` — v4 header + version + R2 update.
+- `config/grammar_archive/v4.yaml` — archive.
+
+---
+
+## D078 — 2026-05-27 — Dynamic universe loader + threshold feedback activation
+
+**Spec section:** sampler `_pick_underlying` (ticker pool); D073 threshold feedback loop
+**Decision:** (a) Replace hardcoded 24-ticker `_TIER_1_2_UNDERLYINGS` with `_load_underlyings()` that reads Crucible's `universe_tickers.json` export, falling back to the D033 list when absent. (b) Run `scripts/propose_threshold_tightenings.py` against the latest 1000-run gated cohort.
+**Rationale:** (a) Handoff `PROMPT_FORGE_TICKER_EXPANSION.md` — Crucible has bar+chain data for 152 tickers; Forge limits to 24 via hardcoded list. Dynamic loading eliminates drift risk and enables expansion via Crucible's `universe.yaml`. (b) Handoff `PROMPT_FORGE_ACTIVATE_THRESHOLD_FEEDBACK.md` — all D073 preconditions met (round-robin scheduler live 7+ days, gated runs export publishing, export limit raised to 5000).
+**Alternatives considered:** (a) Expand hardcoded list to 40+ tickers manually — rejected; creates ongoing maintenance. Read data directory listing — rejected; universe definition should be canonical. (b) Wait for larger export (5000 runs) — unnecessary; 1000 runs sufficient for initial tightening.
+**Action:**
+- `_load_underlyings()`: reads `~/optbt_data/exports/universe_tickers.json` (Tier 1 + Tier 2), cached for process lifetime, falls back to D033 hardcoded list. Restart to pick up changes.
+- `_pick_underlying()` calls `_load_underlyings()` instead of the constant.
+- Threshold proposer run: 14 tighten proposals (0 loosen) written to `config/auto_tightened_thresholds.yaml` from a 1000-run cohort.
+- 2 new tests for universe loader (fallback + export reading).
+
+**Files modified:**
+- `src/forge/enumeration/sampler.py` — `_load_underlyings()`, updated `_pick_underlying()`, imports.
+- `tests/unit/test_enumeration/test_sampler.py` — 2 universe loader tests.
+- `config/auto_tightened_thresholds.yaml` — 14 tightening entries from proposer run.
+
+**Restart required:** `systemctl --user restart forge.service` to activate both changes.
+
+---
+
+## D079 — 2026-05-27 — Fix `relative_value` zero-trade structural bug (underlying=None)
+
+**Spec section:** sampler `_pick_underlying`
+**Decision:** Remove the `if hypothesis == "relative_value": return None` early return. All hypotheses now get a concrete ticker from the Tier 1+2 pool.
+**Rationale:** Handoff `PROMPT_FORGE_ZERO_TRADE_STRUCTURAL_BUGS.md` — analysis of 6,407 gated runs shows 8,069 `relative_value` submissions all had `underlying=None`, producing 99% zero-trade. Crucible's `pairs_convergence` template needs a concrete primary ticker to search for pair partners. The original None return was based on the assumption that the template ignores `config.underlying` — the data disproves this.
+**Other bugs from the handoff:**
+- Bug 1 (tail_hedge): D066 overlay guard already prevents new submissions. The 1,833 legacy configs are historical. No code change needed.
+- Bug 3 (regime_arbitrage): D033 `_pick_underlying` already assigns real tickers. The 850 `underlying=None` configs are pre-D033 legacy. No code change needed.
+**Action:** Removed `relative_value` early return from `_pick_underlying()`. Updated docstring and construction comment.
+
+**Files modified:**
+- `src/forge/enumeration/sampler.py` — removed `relative_value` early return + comment updates.
+

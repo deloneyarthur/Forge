@@ -174,8 +174,10 @@ _P3_DELTA_BAND: dict[str, tuple[float, float]] = {
     "swing_long": (0.20, 0.35),
 }
 
-# §3.5 R2/R3 regime-gate indicator requirements.
-_R2_TREND_STRENGTH_INDICATORS = ("adx", "hurst")
+# §3.5 R2 regime-gate indicator requirements.
+# D077: expanded from (adx, hurst) to include rv_rank — PTS thesis
+# "enter trend-following when realized vol is cheap" (Crucible rv_rank.py).
+_R2_TREND_CONTINUATION_REGIME_INDICATORS = ("adx", "hurst", "rv_rank")
 # T1.4 (PROMPT_5_FORGE_V1_1_REVISED, grammar v2): expanded from
 # (days_to_earnings, days_to_fomc) to include macro-event indicators
 # (days_to_cpi, days_to_nfp, days_to_opex) that Crucible Prompt 6 added
@@ -746,7 +748,7 @@ def _r2_trend_requires_trend_strength_gate(
         return PredicateResult(passed=True)
     for regime in _regime_filter_signals(config):
         if any(
-            ind in _R2_TREND_STRENGTH_INDICATORS
+            ind in _R2_TREND_CONTINUATION_REGIME_INDICATORS
             for ind in regime.indicators  # type: ignore[attr-defined]
         ):
             return PredicateResult(passed=True)
@@ -754,7 +756,7 @@ def _r2_trend_requires_trend_strength_gate(
         passed=False,
         detail=(
             f"R2: hypothesis=trend_continuation requires a regime_filter "
-            f"signal using one of {list(_R2_TREND_STRENGTH_INDICATORS)}"
+            f"signal using one of {list(_R2_TREND_CONTINUATION_REGIME_INDICATORS)}"
         ),
     )
 

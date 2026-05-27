@@ -930,6 +930,37 @@ def test_r2_trend_with_adx_passes() -> None:
     assert result.passed
 
 
+def test_r2_trend_with_rv_rank_passes() -> None:
+    """D077: rv_rank is an accepted regime_filter for trend_continuation."""
+    cfg = grammar_valid_baseline(
+        hypothesis="trend_continuation",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("ema_50",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("rv_rank",),
+                params={"threshold": 50, "op": "<", "rv_window": 21, "window": 252},
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="trailing_atr", params={"activate_after_gain_pct": 0.30}),
+        ),
+    )
+    result = evaluate(_predicate("trend_requires_trend_strength_gate"), cfg, _registry())
+    assert result.passed
+
+
 def test_r2_trend_without_adx_or_hurst_fails() -> None:
     cfg = grammar_valid_baseline(
         hypothesis="trend_continuation",

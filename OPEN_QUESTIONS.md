@@ -383,3 +383,37 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 **Next step:** grep `predicates.py` / `validator.py` for R3 / `days_to_earnings` enforcement; either confirm it works and the 10 errors are an unrelated edge case (e.g., universe/registry drift), or fix the validator.
 
 **Tag:** `grammar-enforcement-gap`, `zero-trade-root-cause`, `inbox-errors`
+
+---
+
+## 2026-05-20 — Q19 — `RegistrySnapshot` exposes `data_start_date` but not `universe_min_asof` — contracts gap — **MEDIUM SEVERITY**
+
+**Question:** On 2026-05-15, 125 Crucible runs failed with `No universe snapshot at or before 2021-01-04` after D031 widened backtest windows to 5y/7y. The universe table only covered 2024–2025 at the time. Forge had no defensive clip because the only date floor `RegistrySnapshot` exposes today is `crucible_contracts.RegistrySnapshot.data_start_date` — the feature-cache anchor, not the universe-coverage floor. The fix that actually landed was Crucible-side: `scripts/ingest_universe.py` back-extended snapshots to 2019-01-02 (Forge commit `a4e5d2f` documents the recovery). The two floors are independent and can drift again whenever Crucible's feature cache and universe table are widened on different cadences.
+
+**What I did instead:** wrote up the diagnosis in the reply to Crucible's `PROMPT_FORGE_POST_D066_FINDINGS.md` (see `/home/aj/proj/Crucible/docs/handoffs/REPLY_FORGE_POST_D066_FINDINGS.md`). No code change Forge-side yet — per hard rule #2, Forge cannot read universe coverage by importing Crucible internals; the surface has to come through `crucible_contracts`.
+
+**Severity:** **medium** — wasted ~20 min runner throughput last time it fired (125 slots × ~10s reject). Self-healed when Crucible's universe backfill landed, no recurrence in the 5 days since. But the structural gap is durable: any future widening of cache vs universe on different cadences re-opens the bug.
+
+**Options:**
+
+1. **Extend `crucible_contracts`** — add `universe_min_asof: date | None` to `RegistrySnapshot` (next to `data_start_date`). Forge then clips submissions against `max(data_start_date, universe_min_asof)` at submitter or pre-filter time. Minor version bump (additive). This is the option that matches the precedent set by Q7/Q8/Q12 contracts-gap resolutions.
+2. **Treat as operational** — accept "Crucible's universe coverage is the source of truth; if it's behind, runs fail and Crucible patches the universe table." No Forge-side guard. Cheaper but the same bug will recur whenever cache and universe drift.
+3. **Forge-side `OPTBT_HOME/universe/` peek** — Forge could read the universe table directly via DuckDB. Violates hard rule #2 (Crucible internals).
+
+**Recommendation:** option 1. Same precedent as Q7 / Q8 / Q12 — contracts gap surfaced from Forge, fixed by additive contracts bump. Waiting on operator agreement to file the contracts ticket.
+
+**Tag:** `contracts-gap`, `universe-coverage`, `defensive-clip`
+
+---
+
+## 2026-05-20 — Q20 — `volatility_event` is the edge-density leader at 2.1% cohort share — re-weight under D067 / re-tune under D073 once round-robin is live — **LOW SEVERITY**
+
+**Question:** Crucible's 2026-05-20 post-D066 analysis (see `PROMPT_FORGE_POST_D066_FINDINGS.md` §"Forward-looking observation") shows 9 of the top 10 traded configs by n_trades are `volatility_event` (max 171 trades, Sharpe 0.91) while the hypothesis is only 2.1% of post-D066 cohort. Forge is sampling under its empirical edge density. Three downstream levers exist: (i) D067 stratification weights can bias toward higher-density hypotheses; (ii) D073 per-(indicator, role) priors can tighten `volatility_event` thresholds more aggressively now that the bucket has signal; (iii) the signal-poverty diagnosis from `PROMPT_FORGE_GENERATOR_GAPS.md` §1 can be revisited per-hypothesis (maybe `volatility_event`'s exit set is fine; the gap is concentrated in `relative_value` / `regime_arbitrage`).
+
+**What I did instead:** flagged as a future action; no code change. Gated on the Crucible round-robin scheduler being live ~24h so the gated-runs cohort is hypothesis-representative — otherwise rebalancing now just amplifies sampling noise from the current `relative_value`-flooded queue. To be clear (and per the handoff), this is not a "raise weight to promote" ask — Crucible's gate doesn't move (hard rule #3). It's a "your strongest edge-density hypothesis is your second-rarest" observation worth acting on once the feedback signal is clean.
+
+**Severity:** **low** — observational. No production breakage. Pure enumeration-shape question.
+
+**Next step:** revisit when (a) Crucible round-robin commit lands and gated_runs shows 5%+ floor per hypothesis, AND (b) ≥24h of gated runs have accumulated under the new scheduler. At that point: re-run the per-hypothesis trade-density analysis Forge-side, propose a D067 weight update (auto-tightening goes through `OPEN_PROPOSALS.md` per hard rule #4 if it relaxes anything; pure re-weighting toward higher-density hypotheses is the auto-tighten side).
+
+**Tag:** `edge-density`, `enumeration-weights`, `D067`, `D073`, `awaiting-crucible-roundrobin`

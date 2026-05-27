@@ -223,15 +223,15 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 **Evidence to relax.** Promoted mean-reversion strategies that use a non-`iv_rank` IV-percentile proxy (e.g., `iv_zscore`, custom realized-vs-implied ratio).
 
-### R2: Trend strategies require trend-strength gate
+### R2: Trend strategies require regime gate (v2, D077)
 
-**What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx` or `hurst`.
+**What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx`, `hurst`, or `rv_rank`.
 
-**Why.** Trend-continuation strategies presume there *is* a trend to continue. Firing in range-bound markets is dead-weight risk. The named indicators (`adx` for trend strength, `hurst` for trend persistence) are the canonical Phase-1 proxies; the gate forces the strategy to declare a trend-strength condition.
+**Why.** Trend-continuation strategies presume there *is* a trend to continue. Firing in range-bound markets is dead-weight risk. `adx` gates on trend strength, `hurst` on trend persistence. `rv_rank` (v2, D077) gates on realized-vol regime — PTS thesis: "enter trend-following long calls when realized vol is cheap" (`rv_rank < threshold`, `op: "<"`).
 
-**Cost.** Medium. Excludes trend strategies without an explicit trend-strength filter.
+**Cost.** Medium. Excludes trend strategies without an explicit regime filter from the accepted set.
 
-**Evidence to relax.** Promoted trend strategies that use a non-`adx`/`hurst` trend-strength proxy.
+**Evidence to relax.** Promoted trend strategies that use a regime gate outside `{adx, hurst, rv_rank}`.
 
 ### R3: Volatility-event strategies require event-proximity gate
 

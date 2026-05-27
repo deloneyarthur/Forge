@@ -35,7 +35,7 @@ from forge.grammar.custom_predicates import (
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
     _R1_IV_RANK_INDICATOR,
-    _R2_TREND_STRENGTH_INDICATORS,
+    _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
     _S5_HYPOTHESIS_EXITS,
     _X1_VOL_TARGET_INDICATOR,
@@ -225,7 +225,7 @@ def _build_regime_pool(
     pool: dict[str, tuple[str, ...]] = {}
     for hyp in _HYPOTHESES:
         if hyp == "trend_continuation":
-            pool[hyp] = tuple(sorted(set(_R2_TREND_STRENGTH_INDICATORS) & registry_ids))
+            pool[hyp] = tuple(sorted(set(_R2_TREND_CONTINUATION_REGIME_INDICATORS) & registry_ids))
         elif hyp == "mean_reversion":
             pool[hyp] = (_R1_IV_RANK_INDICATOR,) if _R1_IV_RANK_INDICATOR in registry_ids else ()
         elif hyp == "volatility_event":

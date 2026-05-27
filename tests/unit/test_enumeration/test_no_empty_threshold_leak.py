@@ -53,6 +53,12 @@ def test_known_threshold_indicators_are_not_skippable() -> None:
         assert not is_threshold_skippable(ind), f"{ind} should be samplable"
 
 
+def test_rv_rank_skippable_as_directional_but_not_regime() -> None:
+    """D077: rv_rank is regime-only — no directional_range."""
+    assert is_threshold_skippable("rv_rank", "directional")
+    assert not is_threshold_skippable("rv_rank", "regime_filter")
+
+
 def test_no_empty_threshold_leak_across_500_samples() -> None:
     """End-to-end: 500 sampled configs, zero empty-threshold leaks.
 
@@ -110,7 +116,7 @@ def test_sampler_raises_on_synthetic_threshold_leak() -> None:
     # must still catch any threshold signal with empty params if the
     # indicator falls through sample_threshold_params's unknown branch.
     original = sampler_mod.is_threshold_skippable
-    sampler_mod.is_threshold_skippable = lambda _id: False  # type: ignore[assignment]
+    sampler_mod.is_threshold_skippable = lambda _id, _role="directional": False  # type: ignore[assignment]
     try:
         # Don't bet on the seed hitting atr; just verify the path exists. If
         # the assert is structurally correct, deletion of the atr entry from

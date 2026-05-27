@@ -125,6 +125,17 @@ def demo_registry() -> RegistrySnapshot:
                 lookback=1,
                 params_schema={},
             ),
+            # rv_rank — realized-vol percentile rank (D077; Crucible rv_rank.py).
+            IndicatorMetadata(
+                id="rv_rank",
+                version=1,
+                family="volatility",
+                lookback=252,
+                params_schema={
+                    "rv_window": {"type": "integer"},
+                    "window": {"type": "integer"},
+                },
+            ),
             # Dealer-positioning indicators (§4.3.5; wired 2026-05-18)
             IndicatorMetadata(
                 id="gex",

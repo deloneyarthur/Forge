@@ -25,7 +25,10 @@ runs ``validate()`` as a safety net and logs any residual rejections.
 
 from __future__ import annotations
 
+import functools
+import json
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from crucible_contracts import (
@@ -88,21 +91,33 @@ _LOOKBACK_SHORT_MAX = 6
 _LOOKBACK_MEDIUM_MAX = 89
 
 
-# D033 — Tier 1 + Tier 2 underlyings, mirroring
-# ``/home/aj/proj/Crucible/config/universe.yaml`` (tier_1.tickers + tier_2.tickers).
-# Hardcoded here as a v1 expedient; drift risk if Crucible's universe.yaml
-# changes without updating this list. Future: expose via `crucible_contracts`
-# (e.g., `crucible_contracts.universe.tier_tickers(tier=2)`) to remove the
-# drift hazard. For now, the post-D033 batch summary should surface any
-# trade-count-zero pattern that points at a missing ticker.
-_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
-    # Tier 1 — index ETFs
+# D033 fallback — used when the Crucible universe export is absent.
+_FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
     "SPY", "QQQ", "IWM", "DIA",
-    # Tier 2 — top-liquidity single names
     "AAPL", "MSFT", "NVDA", "TSLA", "AMD", "META", "AMZN", "GOOGL",
     "NFLX", "AVGO", "BAC", "JPM", "XOM", "CVX", "BA", "GE",
     "GS", "MS", "COIN", "MSTR",
 )
+
+_UNIVERSE_EXPORT_PATH = Path("~/optbt_data/exports/universe_tickers.json").expanduser()
+
+
+@functools.lru_cache(maxsize=1)
+def _load_underlyings() -> tuple[str, ...]:
+    """D078: load Tier 1+2 tickers from Crucible's universe export.
+
+    Falls back to the D033 hardcoded list when the export is absent.
+    Cached for the process lifetime — restart to pick up changes.
+    """
+    if _UNIVERSE_EXPORT_PATH.exists():
+        try:
+            data = json.loads(_UNIVERSE_EXPORT_PATH.read_text())
+            tickers = sorted(set(data.get("tier_1", []) + data.get("tier_2", [])))
+            if tickers:
+                return tuple(tickers)
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+    return _FALLBACK_TIER_1_2_UNDERLYINGS
 
 
 _TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"})
@@ -115,14 +130,13 @@ def _pick_underlying(
 ) -> str | None:
     """Per-config underlying selection from the Tier 1+2 pool.
 
-    Returns None for `relative_value` — that hypothesis routes to Crucible's
-    pairs_convergence template (`runner.py:_HYPOTHESIS_TO_TEMPLATE`) which
-    selects its own pair; setting `config.underlying` would either be
-    ignored or confuse the pairs picker.
+    D078: reads from Crucible's universe export when available, falls back
+    to the D033 hardcoded list. Determinism preserved via shared rng.
 
-    Single-underlying hypotheses (trend_continuation, mean_reversion,
-    regime_arbitrage, volatility_event, tail_hedge) get a uniform pick
-    from the 24-ticker pool. Determinism is preserved via the shared rng.
+    D079: `relative_value` now gets a real ticker. Previously returned None
+    (99% zero-trade — pairs_convergence template needs a concrete primary
+    ticker). Crucible's template uses `config.underlying` as the primary
+    pair leg and finds partners from `pair_candidates.yaml`.
 
     T1.4 (grammar v2 / D039): when the regime indicators include any
     ETF-incompatible indicator (e.g., `days_to_earnings`), the pool is
@@ -130,15 +144,13 @@ def _pick_underlying(
     compatibility constraint at sample time so the validator doesn't have
     to reject the config downstream.
     """
-    if hypothesis == "relative_value":
-        return None
-    # ETF-incompatible regime indicators force the underlying to be a single name.
+    underlyings = _load_underlyings()
     if any(ind == "days_to_earnings" for ind in regime_indicators):
         single_names = tuple(
-            u for u in _TIER_1_2_UNDERLYINGS if u not in _TIER_1_ETF_UNDERLYINGS
+            u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS
         )
         return rng.choice(single_names)
-    return rng.choice(_TIER_1_2_UNDERLYINGS)
+    return rng.choice(underlyings)
 
 
 def _lookback_class(lookback: int) -> str:
@@ -225,7 +237,9 @@ def sample_config(
     # pick can in principle land on an indicator family that blocks every
     # regime via C1; in that case we fall back to the deterministic-by-rng
     # `_pair_for_bucket` search to keep path (a) intact.
-    directional_id, regime_id = _pick_directional_regime_pair(space, by_id, hypothesis, bucket, rng)
+    directional_id, regime_id = _pick_directional_regime_pair(
+        space, by_id, hypothesis, bucket, rng, chain_id=chain_id,
+    )
 
     signals = [
         SignalSpec(
@@ -277,12 +291,9 @@ def sample_config(
         name=config_name,
         hypothesis=hypothesis,  # type: ignore[arg-type]
         dte_bucket=bucket,  # type: ignore[arg-type]
-        # D033 — per-config underlying from Tier 1+2 pool. Pre-D033 the
-        # sampler emitted None, which Crucible falls back to SPY at
-        # `inbox.py:_FALLBACK_UNDERLYING`. That made D032's `tier=2` flip
-        # a no-op for single-underlying hypotheses. Setting per-config
-        # underlying makes Tier 2 actually trade Tier 2 tickers.
-        # `relative_value` returns None (pairs template picks its own pair).
+        # D033 — per-config underlying from Tier 1+2 pool.
+        # D079 — relative_value now also gets a real ticker (was None → 99%
+        # zero-trade because pairs_convergence needs a concrete primary).
         # T1.4: pass regime indicator IDs so the picker can constrain to
         # single-names when the regime contains an ETF-incompatible
         # indicator (e.g., days_to_earnings — sentinel 999 on ETFs).
@@ -335,14 +346,16 @@ def _viable_buckets(
             for i in directional_pool
             if i in by_id
             and _lookback_class(by_id[i].lookback) in allowed_cls
-            and not is_threshold_skippable(i)
+            and not is_threshold_skippable(i, "directional")
         ]
+        chain_family = by_id[chain_id].family if chain_id is not None else None
         compat_regimes = [
             i
             for i in regime_pool
             if i in by_id
             and _lookback_class(by_id[i].lookback) in allowed_cls
-            and not is_threshold_skippable(i)
+            and not is_threshold_skippable(i, "regime_filter")
+            and (chain_family is None or by_id[i].family != chain_family)
         ]
         if _has_valid_pair(compat_directionals, compat_regimes, by_id):
             viable.append(bucket)
@@ -365,26 +378,35 @@ def _pick_directional_regime_pair(
     hypothesis: str,
     bucket: str,
     rng: random.Random,
+    *,
+    chain_id: str | None = None,
 ) -> tuple[str, str]:
     """Pick a (directional, regime) pair satisfying §3.5 S4 + C1 + C4 for
     the given bucket. Precondition: ``bucket`` is in ``_viable_buckets``,
     so at least one valid pair exists. The pick is rng-driven; if the
     rng-chosen directional has no compatible regime, fall back to the
-    first valid pair by canonical id order (still deterministic)."""
+    first valid pair by canonical id order (still deterministic).
+
+    D077: when a sizer-required chain indicator is present, regime
+    indicators whose family matches the chain's family are excluded to
+    prevent C1 violations (e.g., rv_rank + realized_vol both volatility).
+    """
     allowed_cls = _LOOKBACK_CLASSES_FOR_BUCKET[bucket]
+    chain_family = by_id[chain_id].family if chain_id is not None else None
     compat_directionals = tuple(
         i
         for i in space.directional_indicators_by_hypothesis[hypothesis]
         if i in by_id
         and _lookback_class(by_id[i].lookback) in allowed_cls
-        and not is_threshold_skippable(i)
+        and not is_threshold_skippable(i, "directional")
     )
     compat_regimes = tuple(
         i
         for i in space.regime_indicators_by_hypothesis[hypothesis]
         if i in by_id
         and _lookback_class(by_id[i].lookback) in allowed_cls
-        and not is_threshold_skippable(i)
+        and not is_threshold_skippable(i, "regime_filter")
+        and (chain_family is None or by_id[i].family != chain_family)
     )
 
     directional_id = rng.choice(compat_directionals)
@@ -620,7 +642,22 @@ def _regime_signal_params(
     constraint on iv_rank is honored by the table's `regime_range=(10, 50)`
     entry for that indicator; no special-case logic needed here.
     """
-    return sample_threshold_params(regime_id, "regime_filter", rng)
+    params = sample_threshold_params(regime_id, "regime_filter", rng)
+    if regime_id == "rv_rank":
+        params.update(_sample_rv_rank_params(rng))
+    return params
+
+
+def _sample_rv_rank_params(rng: random.Random) -> dict[str, object]:
+    """D077 — Crucible rv_rank indicator params.
+
+    Crucible defaults: rv_window=21, window=252. Sampling range per
+    the PTS calibration handoff (PROMPT_FORGE_RV_RANK_WIRING.md).
+    """
+    return {
+        "rv_window": rng.choice((10, 21)),
+        "window": rng.choice((126, 252)),
+    }
 
 
 def _exit_params(exit_id: str, rng: random.Random) -> dict[str, object]:

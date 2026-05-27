@@ -28,7 +28,7 @@ from forge.grammar.custom_predicates import (
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
     _R1_IV_RANK_INDICATOR,
-    _R2_TREND_STRENGTH_INDICATORS,
+    _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
     _S5_HYPOTHESIS_EXITS,
 )
@@ -171,7 +171,7 @@ def test_r1_r2_r3_regime_indicator_when_applicable(
         regime = next(s for s in cfg.signals if s.role == "regime_filter")
         regime_id = regime.indicators[0]
         if cfg.hypothesis == "trend_continuation":
-            assert regime_id in _R2_TREND_STRENGTH_INDICATORS, (
+            assert regime_id in _R2_TREND_CONTINUATION_REGIME_INDICATORS, (
                 f"R2 violated at seed={seed}: regime={regime_id}"
             )
         elif cfg.hypothesis == "mean_reversion":
@@ -512,3 +512,58 @@ def test_sampler_raises_when_no_sizer_mode_is_samplable(grammar: Grammar) -> Non
     space = build_search_space(grammar, registry)
     with pytest.raises(SamplerError, match="no sizer mode"):
         sample_config(space, registry, random.Random(1))
+
+
+# ---------------------------------------------------------------------------
+# D078 — universe loader
+# ---------------------------------------------------------------------------
+
+
+def test_load_underlyings_returns_fallback_when_no_export(tmp_path: Path) -> None:
+    """D078: when universe export is absent, fallback list is used."""
+    from forge.enumeration.sampler import (
+        _FALLBACK_TIER_1_2_UNDERLYINGS,
+        _load_underlyings,
+    )
+
+    _load_underlyings.cache_clear()
+    import forge.enumeration.sampler as sampler_mod
+
+    original_path = sampler_mod._UNIVERSE_EXPORT_PATH
+    sampler_mod._UNIVERSE_EXPORT_PATH = tmp_path / "nonexistent.json"
+    try:
+        _load_underlyings.cache_clear()
+        result = _load_underlyings()
+        assert result == _FALLBACK_TIER_1_2_UNDERLYINGS
+    finally:
+        sampler_mod._UNIVERSE_EXPORT_PATH = original_path
+        _load_underlyings.cache_clear()
+
+
+def test_load_underlyings_reads_export(tmp_path: Path) -> None:
+    """D078: when universe export exists, tickers are loaded from it."""
+    import json as json_mod
+
+    from forge.enumeration.sampler import _load_underlyings
+
+    export = tmp_path / "universe_tickers.json"
+    export.write_text(
+        json_mod.dumps(
+            {
+                "schema_version": "1.0",
+                "tier_1": ["SPY", "QQQ"],
+                "tier_2": ["AAPL", "MSFT"],
+            }
+        )
+    )
+    import forge.enumeration.sampler as sampler_mod
+
+    original_path = sampler_mod._UNIVERSE_EXPORT_PATH
+    sampler_mod._UNIVERSE_EXPORT_PATH = export
+    try:
+        _load_underlyings.cache_clear()
+        result = _load_underlyings()
+        assert result == ("AAPL", "MSFT", "QQQ", "SPY")
+    finally:
+        sampler_mod._UNIVERSE_EXPORT_PATH = original_path
+        _load_underlyings.cache_clear()
