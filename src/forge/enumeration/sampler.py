@@ -46,6 +46,10 @@ from forge.enumeration.indicator_thresholds import (
     sample_threshold_params,
 )
 from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
+from forge.grammar.custom_predicates import (
+    _LOOKBACK_MEDIUM_MAX,
+    _LOOKBACK_SHORT_MAX,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -84,12 +88,6 @@ _BUCKETS_FOR_LOOKBACK_CLASS: dict[str, tuple[str, ...]] = {
     "medium_lookback": ("swing_short", "swing_mid"),
     "long_lookback": ("swing_mid", "swing_long"),
 }
-
-# D010 lookback-class thresholds — must match
-# ``forge.grammar.custom_predicates._lookback_class``.
-_LOOKBACK_SHORT_MAX = 6
-_LOOKBACK_MEDIUM_MAX = 89
-
 
 # D033 fallback — used when the Crucible universe export is absent.
 _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
