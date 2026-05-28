@@ -5,106 +5,120 @@
 # than D031. Loosening proposals are written to OPEN_PROPOSALS.md
 # (hard rule #4 — auto-tightening only).
 #
-# cohort_size: 1000
-# generated_at: 2026-05-27T20:38:34.312254+00:00
-# n_tightenings: 14
+# cohort_size: 5000
+# generated_at: 2026-05-28T06:45:49.083670+00:00
+# n_tightenings: 16
 
 tightenings:
   - indicator_id: adx
     role: regime_filter
     baseline_range: [15.0, 25.0]
-    proposed_range: [15.3756, 24.2251]
-    n_high_trade_samples: 126
+    proposed_range: [15.3721, 24.3269]
+    n_high_trade_samples: 243
     high_trade_floor: 10
 
   - indicator_id: call_wall_distance_pct
     role: directional
     baseline_range: [0.005, 0.025]
-    proposed_range: [0.0097, 0.019]
-    n_high_trade_samples: 8
+    proposed_range: [0.0087, 0.0235]
+    n_high_trade_samples: 17
     high_trade_floor: 10
 
   - indicator_id: days_to_fomc
     role: regime_filter
     baseline_range: [7.0, 60.0]
-    proposed_range: [10.5925, 58.0089]
-    n_high_trade_samples: 136
+    proposed_range: [10.4454, 56.4676]
+    n_high_trade_samples: 265
     high_trade_floor: 10
 
   - indicator_id: donchian
     role: directional
     baseline_range: [0.05, 0.2]
-    proposed_range: [0.147, 0.1974]
-    n_high_trade_samples: 11
+    proposed_range: [0.0961, 0.197]
+    n_high_trade_samples: 40
     high_trade_floor: 10
 
   - indicator_id: ema_cross
     role: directional
     baseline_range: [0.0, 0.0]
     proposed_range: [0.0, 0.0]
-    n_high_trade_samples: 5
+    n_high_trade_samples: 12
     high_trade_floor: 10
 
   - indicator_id: gamma_flip_distance_pct
     role: directional
     baseline_range: [0.0, 0.03]
-    proposed_range: [0.001, 0.0268]
-    n_high_trade_samples: 37
+    proposed_range: [0.0008, 0.0268]
+    n_high_trade_samples: 58
     high_trade_floor: 10
 
   - indicator_id: hurst
     role: regime_filter
     baseline_range: [0.4, 0.6]
-    proposed_range: [0.4821, 0.5964]
-    n_high_trade_samples: 39
+    proposed_range: [0.4853, 0.5968]
+    n_high_trade_samples: 94
+    high_trade_floor: 10
+
+  - indicator_id: iv_rank
+    role: directional
+    baseline_range: [20.0, 40.0]
+    proposed_range: [27.8603, 34.1671]
+    n_high_trade_samples: 6
     high_trade_floor: 10
 
   - indicator_id: iv_rank
     role: regime_filter
     baseline_range: [10.0, 50.0]
-    proposed_range: [13.9009, 47.9795]
-    n_high_trade_samples: 127
+    proposed_range: [13.4084, 48.6833]
+    n_high_trade_samples: 263
     high_trade_floor: 10
 
   - indicator_id: macd
     role: directional
     baseline_range: [-1.0, 0.0]
-    proposed_range: [-0.6987, -0.0997]
-    n_high_trade_samples: 51
+    proposed_range: [-0.8085, -0.0547]
+    n_high_trade_samples: 114
     high_trade_floor: 10
 
   - indicator_id: put_call_flow
     role: directional
     baseline_range: [-0.5, 0.0]
-    proposed_range: [-0.2623, -0.1567]
-    n_high_trade_samples: 91
+    proposed_range: [-0.2653, -0.1552]
+    n_high_trade_samples: 188
     high_trade_floor: 10
 
   - indicator_id: rolling_sharpe
     role: directional
     baseline_range: [-0.5, 0.5]
-    proposed_range: [-0.4356, 0.4664]
-    n_high_trade_samples: 93
+    proposed_range: [-0.4265, 0.4552]
+    n_high_trade_samples: 163
     high_trade_floor: 10
 
   - indicator_id: rsi_14
     role: directional
     baseline_range: [20.0, 35.0]
-    proposed_range: [30.8703, 34.7334]
-    n_high_trade_samples: 17
+    proposed_range: [29.8718, 34.7456]
+    n_high_trade_samples: 30
     high_trade_floor: 10
 
   - indicator_id: rsi_2
     role: directional
     baseline_range: [5.0, 15.0]
-    proposed_range: [6.6729, 14.5748]
-    n_high_trade_samples: 110
+    proposed_range: [6.8326, 14.6373]
+    n_high_trade_samples: 229
     high_trade_floor: 10
 
   - indicator_id: supertrend
     role: directional
     baseline_range: [0.0, 0.0]
     proposed_range: [0.0, 0.0]
-    n_high_trade_samples: 5
+    n_high_trade_samples: 7
+    high_trade_floor: 10
+
+  - indicator_id: vix_level
+    role: directional
+    baseline_range: [18.0, 25.0]
+    proposed_range: [18.2296, 19.7469]
+    n_high_trade_samples: 15
     high_trade_floor: 10
 
