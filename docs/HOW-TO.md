@@ -1,0 +1,153 @@
+# HOW-TO: Running the Pipeline
+
+Operator guide for the **Forge → Crucible → QuantIQ** pipeline. For per-command
+details see `MANPAGE.md`.
+
+## The pipeline in one breath
+
+Forge generates candidate option strategies → writes them to Crucible's inbox →
+Crucible backtests + gates them → publishes results → Forge learns and refines.
+Promoted strategies flow to QuantIQ for live/paper trading.
+
+```
+Forge ──inbox/*.json──► Crucible ──exports/gated_runs──► Forge (feedback)
+                            │
+                            └──exports/promoted_strategies──► QuantIQ
+```
+
+All inter-system communication is **files under `~/optbt_data/`** — no direct DB
+sharing. Everything runs as **systemd user services**.
+
+## Start everything
+
+Order matters: the DB writer holds the exclusive lock and must come up first.
+
+```bash
+# 1. Crucible foundation (writer first, then everything else)
+systemctl --user start crucible-db-writer.service
+systemctl --user start crucible-registry-publisher.service   # oneshot
+systemctl --user start crucible-inbox-watcher.service
+systemctl --user start crucible-runner.service
+systemctl --user start crucible-gated-runs-publisher.service
+systemctl --user start crucible-promoted-strategies-publisher.service
+systemctl --user start crucible-refit-watcher.service
+
+# 2. Forge (safe to start last; retries if inbox not ready)
+systemctl --user start forge.service
+```
+
+Check it all came up:
+
+```bash
+systemctl --user list-units 'crucible*' 'forge*'
+```
+
+## Stop everything
+
+Reverse order — stop readers/publishers first so the writer drains cleanly.
+
+```bash
+systemctl --user stop forge.service
+systemctl --user stop crucible-runner.service crucible-inbox-watcher.service crucible-refit-watcher.service
+systemctl --user stop crucible-gated-runs-publisher.service crucible-promoted-strategies-publisher.service
+systemctl --user stop crucible-db-writer.service
+```
+
+## Daily health check
+
+```bash
+# Are all services alive?
+systemctl --user list-units 'crucible*' 'forge*' --state=failed
+
+# Is Forge submitting / rate-limited?
+journalctl --user -u forge.service -n 20 --no-pager
+
+# Is Crucible processing?
+journalctl --user -u crucible-runner.service -n 10 --no-pager
+
+# Are exports fresh? (should be < 2 min old)
+ls -lt ~/optbt_data/exports/gated_runs_*.json | head -1
+```
+
+## Common situations
+
+### Forge says "blocked: ... 0% gated, waiting for >=80%"
+
+Forge won't submit a new batch until 80% of the previous batch has been gated by
+Crucible. This is the rate limiter (correct behavior). If it's stuck for hours:
+
+1. **Check the publisher is alive** — Forge reads gated state from exports, not
+   the DB. A dead publisher = stale exports = permanent block.
+   ```bash
+   systemctl --user status crucible-gated-runs-publisher.service
+   systemctl --user restart crucible-gated-runs-publisher.service   # if failed
+   ```
+2. **Check the runner is making progress** — if Crucible has a deep backlog the
+   batch may simply not be reached yet.
+   ```bash
+   journalctl --user -u crucible-runner.service -n 5 --no-pager
+   ```
+3. **Skip a stale batch** if it predates a code change and you don't need its
+   results (stop Forge, mark its rows `skipped`, restart):
+   ```bash
+   systemctl --user stop forge.service
+   python -c "
+   import duckdb; from pathlib import Path
+   db = duckdb.connect(str(Path.home()/'forge_data/forge.db'))
+   db.execute(\"UPDATE submissions SET status='skipped' WHERE forge_batch_id='<UUID>' AND status='submitted'\")
+   db.close()"
+   systemctl --user start forge.service
+   ```
+
+### Exports are stale / Forge can't see results
+
+The DB is single-writer. Forge never reads `runs.duckdb` directly — it reads the
+file exports. If exports are old, restart the relevant publisher (see above).
+
+### Tune the generator from real results
+
+After a few hundred new gated runs accumulate, retrain the threshold ranges:
+
+```bash
+cd ~/proj/Forge
+.venv/bin/python scripts/propose_threshold_tightenings.py   # writes config/auto_tightened_thresholds.yaml
+systemctl --user restart forge.service                       # pick up new ranges
+```
+
+Review any **loosening** proposals (these need operator sign-off) in
+`OPEN_PROPOSALS.md`.
+
+### Changing the grammar
+
+The grammar (`config/grammar.yaml`) is operator-owned. Auto-tightenings apply
+themselves; loosenings never do. To approve a refinement proposal:
+
+```bash
+forge grammar list-proposals --forge-db ~/forge_data/forge.db
+forge grammar approve-proposal --id <UUID> --initials AJ --forge-db ~/forge_data/forge.db
+# then edit config/grammar.yaml by hand, bump grammar_version, archive the prior
+# version to config/grammar_archive/, and commit (pre-commit hook enforces this).
+```
+
+## Where things live
+
+| Path | Contents |
+|---|---|
+| `~/optbt_data/inbox/` | Forge's submitted configs (`*.json`); `processed/` + `errors/` subdirs |
+| `~/optbt_data/exports/` | Crucible snapshots: `gated_runs_*`, `promoted_strategies_*`, `registry_snapshot_*` |
+| `~/optbt_data/refit_inbox/` | QuantIQ's quarterly re-validation requests |
+| `~/optbt_data/runs.duckdb` | Crucible's results DB (writer-locked; never read directly) |
+| `~/forge_data/forge.db` | Forge's own state (submissions, batches, proposals) |
+
+## Manual runs (without the daemon)
+
+```bash
+cd ~/proj/Forge
+
+forge check                      # sanity: contracts + DB schema
+forge enumerate --max 20 --summary    # preview generated configs (no submission)
+forge run --dry-run --max 100         # full cycle, no inbox writes
+forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db   # one real batch
+```
+
+See `MANPAGE.md` for every command and flag.
