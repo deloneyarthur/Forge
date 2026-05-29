@@ -55,8 +55,9 @@ def test_universe_fingerprint_reflects_pool(
 ) -> None:
     from forge.enumeration import sampler as s
 
-    f = tmp_path / "universe.json"
-    monkeypatch.setattr(s, "_UNIVERSE_EXPORT_PATH", f)
+    # contracts 1.13.0: the loader globs `universe_tickers*.json` in the dir.
+    f = tmp_path / "universe_tickers.json"
+    monkeypatch.setattr(s, "_UNIVERSE_EXPORT_DIR", tmp_path)
 
     f.write_text(json.dumps({"tier_1": ["AAA"], "tier_2": ["BBB"]}))
     s._load_underlyings.cache_clear()

@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import functools
 import hashlib
-import json
 import random
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -40,7 +39,9 @@ from crucible_contracts import (
     SignalSpec,
     SizerSpec,
     StrategyConfig,
+    load_universe_tickers_from_export,
 )
+from crucible_contracts.exceptions import QueryError
 
 from forge.enumeration import defaults
 from forge.enumeration.indicator_thresholds import (
@@ -101,59 +102,39 @@ _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
     "GS", "MS", "COIN", "MSTR",
 )
 
-_UNIVERSE_EXPORT_PATH = Path("~/optbt_data/exports/universe_tickers.json").expanduser()
+# Exports directory Crucible publishes to. `load_universe_tickers_from_export`
+# globs `universe_tickers*.json` within it (contracts 1.13.0).
+_UNIVERSE_EXPORT_DIR = Path("~/optbt_data/exports").expanduser()
 
 
 @functools.lru_cache(maxsize=1)
 def _load_underlyings() -> tuple[str, ...]:
-    """D078: load Tier 1+2 tickers from Crucible's universe export.
+    """D078 / Q23: load Tier 1+2 tickers from Crucible's universe export via the
+    blessed `crucible_contracts.load_universe_tickers_from_export` helper.
 
-    Falls back to the D033 hardcoded list when the export is absent.
-    Cached for the process lifetime — restart to pick up changes.
+    Q23 (audit H-5) closed by contracts 1.13.0: the universe read is now on the
+    `EXPORT_LAYOUT` surface, so this is no longer an uncontracted hard-rule-#2
+    deviation — the prior raw `json.loads` + `universe_uncontracted_read` warning
+    are gone. Falls back to the D033 hardcoded list when the export is absent or
+    empty; a present-but-unparseable export raises `QueryError` (M-13 drift
+    signal), which we log loudly before falling back. Cached for the process
+    lifetime — restart to pick up changes.
     """
-    if _UNIVERSE_EXPORT_PATH.exists():
-        try:
-            data = json.loads(_UNIVERSE_EXPORT_PATH.read_text())
-            tickers = sorted(set(data.get("tier_1", []) + data.get("tier_2", [])))
-        except (OSError, json.JSONDecodeError, TypeError) as err:
-            # M-13 (audit 2026-05-29): present-but-unparseable is a DRIFT signal
-            # distinct from "file absent" (expected offline). Pre-fix this `pass`
-            # was silent, so a malformed export degraded the pool from ~152 to 24
-            # tickers with zero observability — and the lru_cache froze that stale
-            # pool for the whole process. Log loudly (mirrors registry_demo_fallback
-            # / D080's loud-fallback stance) before falling back.
-            _logger.warning(
-                "universe_export_unreadable",
-                path=str(_UNIVERSE_EXPORT_PATH),
-                error=str(err),
-                hard_rule="2",
-                open_question="Q23",
-            )
-        else:
-            if tickers:
-                # H-5 (audit 2026-05-29): this reads a Crucible export that is NOT
-                # on the `crucible_contracts.EXPORT_LAYOUT` surface — a hard-rule-#2
-                # deviation (all inter-system access should go through a contracts
-                # helper, like `registry_snapshot_*.json`). Tracked in OPEN_QUESTIONS
-                # Q23; proper fix is a `load_universe_tickers_from_export` contracts
-                # helper (PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md). Logged loudly (once
-                # per process, lru_cached) so the uncontracted read stays visible.
-                _logger.warning(
-                    "universe_uncontracted_read",
-                    path=str(_UNIVERSE_EXPORT_PATH),
-                    n_tickers=len(tickers),
-                    hard_rule="2",
-                    open_question="Q23",
-                )
-                return tuple(tickers)
-            # M-13: file present + parses but yields no tickers — also a soft
-            # drift signal (schema change / empty publish), not the offline case.
-            _logger.warning(
-                "universe_export_empty",
-                path=str(_UNIVERSE_EXPORT_PATH),
-                hard_rule="2",
-                open_question="Q23",
-            )
+    try:
+        tickers = load_universe_tickers_from_export(_UNIVERSE_EXPORT_DIR)
+    except QueryError as err:
+        # M-13: present-but-unparseable export is a DRIFT signal distinct from
+        # the expected "absent" offline case. The helper raises loudly; we log
+        # and fall back rather than silently narrowing the pool ~152 -> 24.
+        _logger.warning(
+            "universe_export_unreadable",
+            path=str(_UNIVERSE_EXPORT_DIR),
+            error=str(err),
+            open_question="Q23",
+        )
+        tickers = ()
+    if tickers:
+        return tuple(tickers)
     _logger.info(
         "universe_fallback_hardcoded", n_tickers=len(_FALLBACK_TIER_1_2_UNDERLYINGS)
     )

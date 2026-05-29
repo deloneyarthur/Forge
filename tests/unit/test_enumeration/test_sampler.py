@@ -529,25 +529,25 @@ def test_load_underlyings_returns_fallback_when_no_export(tmp_path: Path) -> Non
     _load_underlyings.cache_clear()
     import forge.enumeration.sampler as sampler_mod
 
-    original_path = sampler_mod._UNIVERSE_EXPORT_PATH
-    sampler_mod._UNIVERSE_EXPORT_PATH = tmp_path / "nonexistent.json"
+    original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
+    sampler_mod._UNIVERSE_EXPORT_DIR = tmp_path / "nonexistent_dir"
     try:
         _load_underlyings.cache_clear()
         result = _load_underlyings()
         assert result == _FALLBACK_TIER_1_2_UNDERLYINGS
     finally:
-        sampler_mod._UNIVERSE_EXPORT_PATH = original_path
+        sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
         _load_underlyings.cache_clear()
 
 
 def test_load_underlyings_reads_export(tmp_path: Path) -> None:
-    """D078: when universe export exists, tickers are loaded from it."""
+    """D078 / Q23 (contracts 1.13.0): tickers load from `universe_tickers.json`
+    in the export dir via the blessed contracts helper."""
     import json as json_mod
 
     from forge.enumeration.sampler import _load_underlyings
 
-    export = tmp_path / "universe_tickers.json"
-    export.write_text(
+    (tmp_path / "universe_tickers.json").write_text(
         json_mod.dumps(
             {
                 "schema_version": "1.0",
@@ -558,14 +558,14 @@ def test_load_underlyings_reads_export(tmp_path: Path) -> None:
     )
     import forge.enumeration.sampler as sampler_mod
 
-    original_path = sampler_mod._UNIVERSE_EXPORT_PATH
-    sampler_mod._UNIVERSE_EXPORT_PATH = export
+    original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
+    sampler_mod._UNIVERSE_EXPORT_DIR = tmp_path
     try:
         _load_underlyings.cache_clear()
         result = _load_underlyings()
         assert result == ("AAPL", "MSFT", "QQQ", "SPY")
     finally:
-        sampler_mod._UNIVERSE_EXPORT_PATH = original_path
+        sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
         _load_underlyings.cache_clear()
 
 
@@ -574,7 +574,8 @@ def test_m13_unreadable_export_logs_drift_warning(
 ) -> None:
     """M-13: a present-but-unparseable universe export logs a distinct drift
     WARNING (not silent) before falling back — separate from the expected
-    'file absent' offline case.
+    'file absent' offline case. Post-contracts-1.13.0 the helper raises
+    QueryError on the malformed file and `_load_underlyings` logs + falls back.
 
     Asserts via capsys rather than structlog.testing.capture_logs(): the
     module-level logger caches its bound logger once another test configures
@@ -587,11 +588,10 @@ def test_m13_unreadable_export_logs_drift_warning(
         _load_underlyings,
     )
 
-    bad = tmp_path / "universe_tickers.json"
-    bad.write_text("{ this is not valid json ")  # malformed -> JSONDecodeError
+    (tmp_path / "universe_tickers.json").write_text("{ this is not valid json ")
 
-    original_path = sampler_mod._UNIVERSE_EXPORT_PATH
-    sampler_mod._UNIVERSE_EXPORT_PATH = bad
+    original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
+    sampler_mod._UNIVERSE_EXPORT_DIR = tmp_path
     try:
         _load_underlyings.cache_clear()
         result = _load_underlyings()
@@ -600,5 +600,5 @@ def test_m13_unreadable_export_logs_drift_warning(
         # Drift WARNING emitted (distinct from the silent pre-fix `pass`).
         assert "universe_export_unreadable" in (captured.out + captured.err)
     finally:
-        sampler_mod._UNIVERSE_EXPORT_PATH = original_path
+        sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
         _load_underlyings.cache_clear()

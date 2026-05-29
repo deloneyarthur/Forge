@@ -2865,3 +2865,16 @@ Fixes:
 **Files modified:** `src/forge/enumeration/indicator_thresholds.py`, `src/forge/cli/main.py`, `src/forge/core/__init__.py`, `docs/GRAMMAR.md`, `docs/DESIGN.md`; deleted `src/forge/core/config.py`; + the four test files.
 
 **Deferred:** L-10 (explicit retry/reset of caught `submission_failed`), L-4..L-8/L-11..L-14/L-17..L-19, I-2/I-3 — lower-value latent/optional items left in `AUDIT.md` for a future pass.
+
+---
+
+## D093 — 2026-05-29 — Batch F: route the universe read through a blessed contracts helper (audit H-5 / Q23 close; contracts 1.13.0)
+
+**Spec section:** hard rule #2 (all inter-system access via `crucible_contracts`); §13; D078
+**Decision:** closed the last uncontracted inter-system read. Forge's enumerator picked every candidate's underlying from `~/optbt_data/exports/universe_tickers.json` via raw `json.loads` — a file not on the `EXPORT_LAYOUT` surface (H-5). D087 made the deviation observable (`universe_uncontracted_read`) and surfaced the gap (`PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md`); this batch lands the fix on both sides.
+- **Contracts 1.13.0 (`crucible_contracts` commit `45f2ea0`):** added `load_universe_tickers_from_export(exports_dir) -> tuple[str, ...]` (unions/sorts/dedupes `tier_1`+`tier_2`; `()` when absent; `QueryError` on malformed JSON / non-object payload / malformed tiers — mirrors `load_recent_gated_runs_from_export`) and `universe_tickers*.json` on `EXPORT_LAYOUT.files`. Minor bump (additive, backward-compatible). 7 new loader tests; 100% coverage retained. (Drive-by in that commit: fixed the pre-existing-stale `test_known_exit_ids_size` 14→18 and two ruff lints in `feature_cache.py` so the contracts suite + `ruff check src/` are green.)
+- **Forge:** `_load_underlyings` now calls the helper against `_UNIVERSE_EXPORT_DIR` (was `_UNIVERSE_EXPORT_PATH`); dropped the raw `json` read + the `universe_uncontracted_read`/`universe_export_empty` warnings (the read is contracted now). M-13 drift logging is preserved via the helper's `QueryError` → `universe_export_unreadable` + fallback. `FORGE_EXPECTED_CONTRACT_VERSION` 1.12.0→1.13.0; `uv.lock` regenerated. `universe_fingerprint()` (D085) retained (Option A keeps Forge's separate identity fold).
+
+**Tested:** sampler + determinism-inputs (133) green with the 3 universe tests reworked to the dir-based loader; contracts-integration + feedback_cmd (10) green; `forge enumerate` end-to-end smoke passes the 1.13.0 startup check and falls back cleanly with the export absent. ruff + mypy clean. Q23 **CLOSED**.
+
+**Files modified:** `src/forge/enumeration/sampler.py`, `src/forge/core/contracts_check.py`, `uv.lock`, `OPEN_QUESTIONS.md`, + `tests/unit/test_enumeration/{test_sampler,test_determinism_inputs}.py`. Contracts side committed separately in `../crucible_contracts` (`45f2ea0`).
