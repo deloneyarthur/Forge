@@ -24,6 +24,7 @@ efficiency.
 
 from __future__ import annotations
 
+import math
 from datetime import date, timedelta
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -37,8 +38,19 @@ if TYPE_CHECKING:
     from forge.prefilters.types import FilterContext
 
 
-def _full_window(start: date, n_days: int) -> list[date]:
-    return [start + timedelta(days=i) for i in range(n_days)]
+# `data_history_days` counts TRADING sessions (~252/yr); the permutation null
+# pool must span the equivalent CALENDAR range. 366/252 over-covers (holidays +
+# leap years) and `feature_cache.returns()` silently drops the surplus dateless
+# days — so over-coverage is free, whereas under-coverage (the pre-Q21
+# calendar-as-trading-days bug) truncated the pool by ~40% on the 2018 window
+# (2118 sessions reached only 2023-10 instead of ~2026), biasing every p-value.
+_CALENDAR_DAYS_PER_TRADING_DAY = 366 / 252
+
+
+def _full_window(start: date, n_trading_days: int) -> list[date]:
+    """Calendar dates spanning `n_trading_days` trading sessions from `start`."""
+    n_calendar = math.ceil(n_trading_days * _CALENDAR_DAYS_PER_TRADING_DAY)
+    return [start + timedelta(days=i) for i in range(n_calendar)]
 
 
 class PermutationTestFilter:

@@ -2692,3 +2692,20 @@ Mean_reversion's family (bb_pct, keltner_pct, rsi*, zscore_returns) is largely c
 
 **Not done (deliberately):** `prior_version_weight` is a function default, not yet a `prefilter.yaml` calibration field — promote it to calibration only if the operator wants to tune it. The effect is small until the v4 cohort fills out (most buckets are still cold-start); its value compounds as throughput improves (Q22).
 
+---
+
+## D082 — 2026-05-28 — Fix `permutation_test._full_window` calendar/trading-day truncation (Q21)
+
+**Spec section:** §5.3.7; `prefilters/permutation_test.py`
+**Decision:** `_full_window(start, n_trading_days)` now spans `ceil(n_trading_days * 366/252)` CALENDAR days instead of `n_trading_days` calendar days. `data_history_days` is a trading-session count (~252/yr); treating it as calendar days truncated the permutation null pool. On the 2018 window exposed 2026-05-28 (`data_start_date=2018-01-02`, `data_history_days=2118`) the pool reached only 2023-10-20 — ~2.5 years short — so every config's p-value was computed against a null sampled only from 2018-2023, missing recent regimes. 366/252 over-covers (holidays + leap years); `feature_cache.returns()` drops the surplus dateless days, so over-coverage is free and the fix is a pure function of the registry (deterministic, hard rule #6 — no clock dependency).
+
+**Behaviour change:** production `permutation_test` now samples its null from the full data calendar range, which will shift some p-values (the intended correction). No effect on the existing unit tests: their `_ReturnsCache` sizes returns over N calendar days and the longer window is a superset that `returns()` filters back to the same N.
+
+**Tested (TDD, red->green):** `test_q21_full_window_spans_calendar_extent_of_trading_days` (window reaches >=2026 for a 2118-session span; red showed the 2023-10-20 truncation) + `test_q21_window_unchanged_for_pure_calendar_caller_dates` (superset regression guard). Full permutation suite 19/19, all 230 prefilter unit tests green; ruff + mypy clean.
+
+**Files modified:**
+- `src/forge/prefilters/permutation_test.py` — `_CALENDAR_DAYS_PER_TRADING_DAY`; `_full_window` calendar conversion.
+- `tests/unit/test_prefilters/test_permutation_test.py` — +2 tests.
+
+**Deploy:** committed; takes effect on the next `forge.service` restart (low severity — not worth interrupting an in-flight prefetch to force).
+

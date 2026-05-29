@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Iterable, Mapping
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -341,3 +341,41 @@ def test_d075_dates_past_window_drop_from_effective_n() -> None:
     # days 25..49 are in the 50-day window. effective_n == 25.
     assert result.details["n_activations"] == 30
     assert result.details["effective_n"] == 25
+
+
+# ---------------------------------------------------------------------------
+# Q21 — `data_history_days` is a TRADING-day count; the null-pool window must
+# span the equivalent CALENDAR range or it silently truncates.
+# ---------------------------------------------------------------------------
+
+
+def test_q21_full_window_spans_calendar_extent_of_trading_days() -> None:
+    """`data_history_days` counts trading days (~252/yr). Treating it as
+    calendar days (pre-fix) truncated the permutation null pool: a 2118-
+    trading-day / ~8.4-year window reached only 2023-10, dropping ~2.5y of
+    recent returns and biasing every p-value. The window must cover the
+    equivalent calendar span. Over-coverage is harmless — `returns()` drops
+    dates with no data."""
+    from forge.prefilters.permutation_test import _full_window
+
+    start = date(2018, 1, 2)
+    n_trading = 2118  # ~8.4 trading years
+    window = _full_window(start, n_trading)
+    # Must reach into ~2026 to cover 2118 trading days of calendar time
+    # (pre-fix it stopped at 2023-10-20, i.e. start + 2118 calendar days).
+    assert window[-1] >= date(2026, 1, 1), f"null-pool window truncated at {window[-1]}"
+    # Sanity: doesn't wildly overshoot the real calendar extent.
+    assert (window[-1] - start).days < n_trading * 2
+
+
+def test_q21_window_unchanged_for_pure_calendar_caller_dates() -> None:
+    """Regression guard: the existing `_ReturnsCache` tests size returns over
+    N consecutive calendar days and set data_history_days=N. The longer window
+    still covers those N dates (the rest are dropped by `returns()`), so the
+    matched return pool — and every existing test's verdict — is unchanged."""
+    from forge.prefilters.permutation_test import _full_window
+
+    start = date(2022, 1, 1)
+    window = set(_full_window(start, 200))
+    original_200 = {start + timedelta(days=i) for i in range(200)}
+    assert original_200 <= window  # the longer window is a superset

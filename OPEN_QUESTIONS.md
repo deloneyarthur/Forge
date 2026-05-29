@@ -430,6 +430,8 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 
 **Tag:** `permutation-test`, `calendar-vs-trading-day`, `latent`, `relates-to-D080`
 
+**Resolution 2026-05-28 — D082:** Fixed. `_full_window` now spans `ceil(n_trading_days × 366/252)` calendar days. Chose the calendar-conversion approach over the `utc_now()` anchor floated above — it keeps the window a pure function of the registry (deterministic per hard rule #6, no clock dependency) and over-covers safely (`returns()` drops surplus dateless days). TDD: +2 tests; full prefilter suite (230) green. Deploys on next `forge.service` restart.
+
 ## 2026-05-28 — Q22 — prefetch is 17-38 min/batch — dominated by unique-spec count + writer load, not window size — **MEDIUM SEVERITY**
 
 **Question:** `phase_timings` shows `prefetch` (the `CrucibleFeatureCache.prefetch_for_batch` socket round-trips) costs 17-38 min/batch, dwarfing every other phase (battery 5-30s, submit 2-4min). At 1 batch / ~25-40 min plus the §7.3 ≥80%-gated wait, Forge throughput is heavily bottlenecked. Can Forge mitigate?
