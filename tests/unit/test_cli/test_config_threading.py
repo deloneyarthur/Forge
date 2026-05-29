@@ -43,7 +43,7 @@ forge:
     seed: 99
   submission:
     batch_size: 55
-    inflight_threshold: 0.80
+    inflight_threshold: 0.55
     poll_interval_seconds: 777
   feedback:
     light_consumption_after_every: 1
@@ -79,6 +79,8 @@ def test_no_config_uses_hardcoded_defaults(tmp_path: Path) -> None:
     assert resolved["inbox"] is None
     assert resolved["crucible_db"] is None
     assert resolved["forge_db"] is None
+    # H-4: §7.3 threshold resolves to the rate-limiter default when no config.
+    assert resolved["inflight_threshold"] == 0.80
 
 
 def test_missing_config_file_falls_back_to_hardcoded_defaults(tmp_path: Path) -> None:
@@ -120,6 +122,8 @@ def test_yaml_values_seed_defaults_when_present(tmp_path: Path) -> None:
     assert resolved["inbox"] == inbox_p
     assert resolved["crucible_db"] == crucible_p
     assert resolved["forge_db"] == db_p
+    # H-4: the §7.3 threshold from forge.yaml flows through (was a dead knob).
+    assert resolved["inflight_threshold"] == 0.55
 
 
 def test_cli_flags_override_yaml(tmp_path: Path) -> None:

@@ -2709,3 +2709,19 @@ Mean_reversion's family (bb_pct, keltner_pct, rsi*, zscore_returns) is largely c
 
 **Deploy:** committed; takes effect on the next `forge.service` restart (low severity — not worth interrupting an in-flight prefetch to force).
 
+---
+
+## D083 — 2026-05-29 — Restore §7.3 flow control: exclude D052 sentinels from the rate limit + wire the `inflight_threshold` knob (audit H-1, H-4)
+
+**Spec section:** DESIGN §7.3; CLAUDE.md per-batch step 8
+**Decision (operator-authorized via "do the recommended order"):** The 2026-05-29 audit found the §7.3 rate limiter structurally inert: (H-1) `check_rate_limit`'s local gated count included D052 sentinel-flushed rows (`status='gated'` + nil-UUID `crucible_run_id`), so the aging-out of stuck rows silently satisfied the ≥80% throttle — live, 91.6% of `gated` rows were sentinels and the loop never paused while submitting ~26× faster than Crucible decided; (H-4) `forge.yaml`'s `submission.inflight_threshold` parsed into `ForgeConfig` but was never passed to `check_rate_limit`, so the knob was dead and the threshold was only ever the hardcoded default.
+
+This **changes the behaviour of a spec mechanism** (per the audit's instruction not to silently re-fix it). Fixes:
+- `rate_limiter.py`: the oldest-batch query now also selects `crucible_run_id`; `local_gated_count` counts a `gated` row only when `crucible_run_id` is non-null AND != the nil sentinel `_SENTINEL_RUN_ID`. Real gates (normal reconcile, `consumer.py:131`, writes the real run id) count; sentinel flushes (`consumer.py:355`) do not. The export-overlap path was already real-only (Crucible's export contains only real decisions). D052's flush is unchanged — it still rolls genuinely-aged rows out of `submitted`; it just no longer masquerades as completion to the throttle.
+- `cli/main.py`: `_resolve_run_defaults` now reads `cfg.submission.inflight_threshold` into `_ResolvedRunDefaults` (default `_RUN_DEFAULT_INFLIGHT_THRESHOLD=0.80` when no config); `cmd_run` threads it through `_run_one_iteration` into `check_rate_limit(threshold=...)`.
+
+**Tested (TDD, red->green):** `test_rate_limiter.py` — sentinel-flushed gated rows excluded from `pct_gated` (5 rows, 1 real gate + 3 sentinels + 1 submitted -> pct 0.2, blocked, not 0.8/clear); drift guard asserting `rate_limiter._SENTINEL_RUN_ID == consumer._AGED_OUT_SENTINEL_RUN_ID`. `test_config_threading.py` — `inflight_threshold` resolves from forge.yaml (0.55) and to 0.80 with no config. 21 tests green; ruff + mypy clean.
+
+**Files modified:** `src/forge/submission/rate_limiter.py`, `src/forge/cli/main.py`, `tests/unit/test_submission/test_rate_limiter.py`, `tests/unit/test_cli/test_config_threading.py`.
+
+**Not addressed here (audit follow-ups):** M-7 (sentinel flush also dilutes `promotion_rate`, biasing auto-tune LOOSEN) and the option (b) rolling submission-vs-real-gate ratio remain open; this fix re-couples the throttle to real gates, which is the load-bearing change.

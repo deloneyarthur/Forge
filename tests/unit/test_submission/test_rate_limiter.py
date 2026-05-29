@@ -31,6 +31,7 @@ def _insert_submission(
     config_hash: str,
     submitted_at: datetime,
     status: str = "submitted",
+    crucible_run_id: str | None = None,
 ) -> None:
     """Test fixture: insert a submission row directly.
 
@@ -38,15 +39,16 @@ def _insert_submission(
     'submitted' after the inbox write succeeds (or to 'submission_failed').
     Tests skip the inbox-write step, so we go straight to 'submitted' —
     that's the steady state for an in-flight candidate the rate-limiter
-    expects to see.
+    expects to see. `crucible_run_id` lets a test mark a 'gated' row as a
+    real Crucible decision (a real UUID) vs a D052 sentinel flush (nil UUID).
     """
     with db_connection(forge_db_path) as conn:
         conn.execute(
             """
             INSERT INTO submissions
                 (forge_candidate_id, forge_batch_id, config_hash, config_json,
-                 submitted_at, status)
-            VALUES (?, ?, ?, ?, ?, ?)
+                 submitted_at, status, crucible_run_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 str(uuid.uuid4()),
@@ -55,6 +57,7 @@ def _insert_submission(
                 "{}",
                 submitted_at,
                 status,
+                crucible_run_id,
             ],
         )
 
@@ -378,3 +381,49 @@ def test_status_is_frozen(tmp_path: Path) -> None:
     status = check_rate_limit(forge_db, crucible_db, exports_dir=tmp_path / "noexports")
     with pytest.raises(Exception, match=r"cannot assign|frozen"):
         status.clear = False  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# H-1 (audit 2026-05-29) — D052 sentinel-flushed rows must NOT satisfy §7.3
+# ---------------------------------------------------------------------------
+
+_SENTINEL = "00000000-0000-0000-0000-000000000000"
+
+
+def test_sentinel_flushed_gated_rows_do_not_count_toward_pct(tmp_path: Path) -> None:
+    """A row aged-out by D052 (`status='gated'`, nil-UUID `crucible_run_id`) is
+    NOT a real Crucible decision. §7.3 throttles on real completion, so the
+    rate limiter must exclude sentinels from `pct_gated` — otherwise the
+    sentinel flush silently opens the throttle (the live 91.6%-sentinel state)."""
+    forge_db = tmp_path / "forge.db"
+    crucible_db = tmp_path / "crucible.duckdb"
+    build_synthetic_crucible_db(crucible_db).close()
+    batch = uuid.uuid4()
+    at = datetime(2026, 5, 13, tzinfo=UTC)
+    # 1 still in flight, 1 genuinely gated (real run_id), 3 sentinel-flushed.
+    _insert_submission(forge_db, forge_batch_id=batch, config_hash="sub_0", submitted_at=at)
+    _insert_submission(
+        forge_db, forge_batch_id=batch, config_hash="real_0", submitted_at=at,
+        status="gated", crucible_run_id=str(uuid.uuid4()),
+    )
+    for i in range(3):
+        _insert_submission(
+            forge_db, forge_batch_id=batch, config_hash=f"sent_{i}", submitted_at=at,
+            status="gated", crucible_run_id=_SENTINEL,
+        )
+    status = check_rate_limit(
+        forge_db, crucible_db, threshold=0.8, exports_dir=tmp_path / "noexports"
+    )
+    # 5 rows; only the 1 real gate counts (NOT 4) -> pct 0.2 -> blocked.
+    assert status.gated_count == 1
+    assert status.pct_gated == pytest.approx(0.2)
+    assert status.clear is False
+
+
+def test_rate_limiter_sentinel_constant_matches_consumer() -> None:
+    """Drift guard: the rate limiter's sentinel must equal the one the
+    consumer writes (D052), or the exclusion silently stops working."""
+    from forge.feedback.consumer import _AGED_OUT_SENTINEL_RUN_ID
+    from forge.submission.rate_limiter import _SENTINEL_RUN_ID
+
+    assert _SENTINEL_RUN_ID == _AGED_OUT_SENTINEL_RUN_ID

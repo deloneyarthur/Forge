@@ -1026,6 +1026,8 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     open_proposals: Path,
     prefilter_yaml: Path,
     require_real_cache: bool = False,
+    # H-4: §7.3 throttle; mirrors rate_limiter._DEFAULT_THRESHOLD (0.80).
+    inflight_threshold: float = 0.80,
 ) -> str:
     """Run one cycle; return one of 'submitted', 'blocked', 'dry-run', 'skipped'.
 
@@ -1093,7 +1095,7 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
         _t_reconcile = _time.monotonic()
         _reconcile_pending_silently(forge_db_path, crucible_db)
         timings["reconcile"] = _time.monotonic() - _t_reconcile
-        rate = check_rate_limit(forge_db_path, crucible_db)
+        rate = check_rate_limit(forge_db_path, crucible_db, threshold=inflight_threshold)
         if not rate.clear:
             typer.echo(
                 f"blocked: oldest in-flight batch {rate.blocking_batch_id} is "
@@ -1234,6 +1236,10 @@ _RUN_DEFAULT_SEED: int = 0
 _RUN_DEFAULT_BATCH_SIZE: int = 10
 _RUN_DEFAULT_MAX_CANDIDATES: int = 1000
 _RUN_DEFAULT_POLL_INTERVAL_SECONDS: int = 600
+# H-4 (audit 2026-05-29): no-config fallback for the §7.3 rate-limit threshold.
+# Mirrors rate_limiter._DEFAULT_THRESHOLD; forge.yaml's submission.inflight_threshold
+# overrides it (previously parsed but never wired to check_rate_limit).
+_RUN_DEFAULT_INFLIGHT_THRESHOLD: float = 0.80
 
 
 class _ResolvedRunDefaults(TypedDict):
@@ -1251,6 +1257,7 @@ class _ResolvedRunDefaults(TypedDict):
     crucible_db: Path | None
     forge_db: Path | None
     poll_interval_seconds: int
+    inflight_threshold: float
 
 
 def _resolve_run_defaults(
@@ -1278,6 +1285,7 @@ def _resolve_run_defaults(
     yaml_crucible_db: Path | None = None
     yaml_forge_db: Path | None = None
     yaml_poll_interval: int | None = None
+    yaml_inflight_threshold: float | None = None
     if not no_config and config.exists():
         from forge.config import load_forge_config
 
@@ -1289,6 +1297,7 @@ def _resolve_run_defaults(
         yaml_crucible_db = cfg.crucible.db_path
         yaml_forge_db = cfg.db_path
         yaml_poll_interval = cfg.submission.poll_interval_seconds
+        yaml_inflight_threshold = cfg.submission.inflight_threshold
 
     return _ResolvedRunDefaults(
         seed=seed
@@ -1312,6 +1321,9 @@ def _resolve_run_defaults(
             if yaml_poll_interval is not None
             else _RUN_DEFAULT_POLL_INTERVAL_SECONDS
         ),
+        inflight_threshold=yaml_inflight_threshold
+        if yaml_inflight_threshold is not None
+        else _RUN_DEFAULT_INFLIGHT_THRESHOLD,
     )
 
 
@@ -1424,6 +1436,7 @@ def cmd_run(
     crucible_db = resolved["crucible_db"]
     forge_db = resolved["forge_db"]
     poll_interval_seconds = resolved["poll_interval_seconds"]
+    inflight_threshold = resolved["inflight_threshold"]
 
     if not dry_run and inbox is None:
         typer.echo("error: --inbox is required unless --dry-run", err=True)
@@ -1447,6 +1460,7 @@ def cmd_run(
             open_proposals=open_proposals,
             prefilter_yaml=prefilter_yaml,
             require_real_cache=require_real_cache,
+            inflight_threshold=inflight_threshold,
         )
         return
 
@@ -1475,6 +1489,7 @@ def cmd_run(
                 open_proposals=open_proposals,
                 prefilter_yaml=prefilter_yaml,
                 require_real_cache=require_real_cache,
+                inflight_threshold=inflight_threshold,
             )
             if max_iterations is not None and local_iter >= max_iterations:
                 break

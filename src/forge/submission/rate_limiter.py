@@ -57,6 +57,12 @@ from forge.persistence.db import db_connection
 # can drain; the 0.80 threshold is the §7.3 design-time safeguard for
 # exactly this situation. See IMPLEMENTATION_DECISIONS.md D070.
 _DEFAULT_THRESHOLD = 0.80
+# H-1 (audit 2026-05-29): rows aged-out by D052 carry status='gated' with this
+# nil-UUID sentinel `crucible_run_id` — they are NOT real Crucible decisions and
+# must be excluded from the §7.3 completion count, or the sentinel flush silently
+# voids the throttle (live: 91.6% of `gated` rows were sentinels). Must stay
+# equal to consumer._AGED_OUT_SENTINEL_RUN_ID (guarded by a drift test).
+_SENTINEL_RUN_ID = "00000000-0000-0000-0000-000000000000"
 # Pull a generous slice of recent gated runs; the cross-reference is
 # bounded by `submitted_count`, so the limit only needs to exceed the
 # typical batch size (200 per §6.4) with headroom for parallelism.
@@ -139,7 +145,7 @@ def check_rate_limit(
         oldest_batch_id = uuid.UUID(str(oldest[0]))
         rows = conn.execute(
             """
-            SELECT config_hash, status
+            SELECT config_hash, status, crucible_run_id
             FROM submissions
             WHERE forge_batch_id = ?
             """,
@@ -147,8 +153,16 @@ def check_rate_limit(
         ).fetchall()
 
     submitted_count = len(rows)
-    still_submitted_hashes = {str(h) for h, s in rows if str(s) == "submitted"}
-    local_gated_count = sum(1 for _h, s in rows if str(s) == "gated")
+    still_submitted_hashes = {str(h) for h, s, _r in rows if str(s) == "submitted"}
+    # H-1: count only REAL gates. Normal reconcile (consumer.py:131) writes the
+    # Crucible run id; the D052 sentinel flush (consumer.py:355) writes the nil
+    # UUID. A null/sentinel run_id on a 'gated' row means "no real decision yet"
+    # and must not satisfy §7.3.
+    local_gated_count = sum(
+        1
+        for _h, s, r in rows
+        if str(s) == "gated" and r is not None and str(r) != _SENTINEL_RUN_ID
+    )
 
     if submitted_count == 0:
         # The batch row exists but has no candidates. Treat as clear.
