@@ -53,6 +53,25 @@ def _full_window(start: date, n_trading_days: int) -> list[date]:
     return [start + timedelta(days=i) for i in range(n_calendar)]
 
 
+def _significance_score(p_value: float, p_threshold: float) -> float:
+    """Ranker (§6.2) sub-score: map the *passing* p-value range [0, threshold]
+    onto the full [0, 1] so statistical significance has real resolution among
+    survivors.
+
+    D095: the legacy `1 - p_value` squashed every passer into
+    `[1 - threshold, 1]` (e.g. [0.90, 1.0] at threshold 0.10), so the §6.2
+    permutation weight (0.15) carried almost no variance among submitted
+    candidates — the ranker-flatness finding. Here a highly-significant passer
+    (p≈0) scores ~1.0 and a barely-significant one (p≈threshold) scores ~0.0,
+    while pass/fail (`p_value <= p_threshold`) is unchanged. Failing candidates
+    clamp to 0.0 (they never reach the ranker per the `Ranker.score`
+    precondition). A non-positive threshold (degenerate) yields 0.0.
+    """
+    if p_threshold <= 0:
+        return 0.0
+    return max(0.0, min(1.0, 1.0 - p_value / p_threshold))
+
+
 class PermutationTestFilter:
     """§5.3.7 — reject configs whose real notional sits within the
     permuted bulk."""
@@ -109,7 +128,7 @@ class PermutationTestFilter:
             p_value = 1.0
 
         passed = p_value <= p_threshold
-        score = max(0.0, min(1.0, 1.0 - p_value))
+        score = _significance_score(p_value, p_threshold)
 
         return FilterResult(
             passed=passed,

@@ -19,7 +19,7 @@ import pytest
 from forge.core.seed import SeedHierarchy
 from forge.prefilters.calibration import load_calibration
 from forge.prefilters.feature_cache import REGIMES, Regime
-from forge.prefilters.permutation_test import PermutationTestFilter
+from forge.prefilters.permutation_test import PermutationTestFilter, _significance_score
 from forge.prefilters.types import Filter, FilterContext
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
@@ -158,7 +158,10 @@ def test_different_seeds_produce_different_p_values() -> None:
     assert a != b
 
 
-def test_score_is_one_minus_p_value() -> None:
+def test_score_is_threshold_relative() -> None:
+    """D095: the ranker score maps the passing p-value range onto full [0, 1]
+    (`1 - p/threshold`), not the legacy `1 - p` that squashed passers into
+    [0.90, 1.0]. Integration check: the filter's score matches the helper."""
     f = PermutationTestFilter()
     cfg = minimal_strategy_config()
     window = _trading_window(50)
@@ -167,7 +170,19 @@ def test_score_is_one_minus_p_value() -> None:
     cache = _ReturnsCache(activations, returns_map)
     result = f.apply(cfg, _ctx(cache))
     p = result.details["p_value"]
-    assert abs(result.score - (1.0 - p)) < 1e-9
+    thr = result.details["p_value_threshold"]
+    assert result.score == pytest.approx(_significance_score(p, thr))
+
+
+def test_significance_score_uses_full_passing_range() -> None:
+    """D095: the re-grade gives statistical significance real resolution among
+    survivors. A barely-passing p (≈threshold) → ~0; a strongly-significant p
+    (≈0) → ~1; the legacy `1 - p` would have rated both ~0.9-1.0."""
+    assert _significance_score(0.0, 0.10) == pytest.approx(1.0)  # most significant
+    assert _significance_score(0.10, 0.10) == pytest.approx(0.0)  # barely passing
+    assert _significance_score(0.05, 0.10) == pytest.approx(0.5)  # mid-range resolution
+    assert _significance_score(0.5, 0.10) == pytest.approx(0.0)  # failing → clamped
+    assert _significance_score(0.0, 0.0) == 0.0  # degenerate threshold → 0
 
 
 def test_details_record_p_value_n_permutations_real_notional() -> None:
