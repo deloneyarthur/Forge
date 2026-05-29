@@ -26,19 +26,30 @@ def mint_batch_id(
     seed: int,
     grammar_version: str,
     registry_hash: str,
+    extra_inputs: str = "",
 ) -> uuid.UUID:
-    """Derive a deterministic UUID from the §13.1 triple.
+    """Derive a deterministic UUID from the §13.1 enumeration identity.
 
-    The same `(seed, grammar_version, registry_hash)` always produces
-    the same UUID. The submitter relies on this so a re-run with
+    The same identity always produces the same UUID, so a re-run with
     identical inputs is a structural no-op: the unique-indexed
     `submissions.config_hash` rejects every duplicate insertion.
 
-    The output is a UUID4-shape (version 4 set); the bytes are derived
-    from SHA-256 of the triple, then truncated to 16 bytes and tagged.
+    H-7 (audit 2026-05-29): `(seed, grammar_version, registry_hash)` is NOT
+    the full enumeration identity — `auto_tightened_thresholds.yaml` (D073)
+    and the universe pool (D078) also shadow the sampler's draws. The proposer
+    rewriting the tightenings YAML (the whole point of D073) changed the config
+    population WITHOUT bumping grammar_version, so the old triple minted the
+    same UUID for a different batch, corrupting `batch_summaries`/`promotion_rate`.
+    `extra_inputs` (a fingerprint of those shadow inputs) closes that. Empty
+    `extra_inputs` reproduces the pre-fix UUID exactly (back-compat).
+
+    The output is a UUID4-shape (version 4 set); the bytes are SHA-256 of the
+    identity, truncated to 16 and tagged.
     """
-    payload = f"forge|{grammar_version}|{registry_hash}|{seed}".encode()
-    digest = hashlib.sha256(payload).digest()[:16]
+    payload = f"forge|{grammar_version}|{registry_hash}|{seed}"
+    if extra_inputs:
+        payload += f"|{extra_inputs}"
+    digest = hashlib.sha256(payload.encode()).digest()[:16]
     return uuid.UUID(bytes=digest, version=4)
 
 
@@ -56,6 +67,10 @@ class BatchContext:
     registry_hash: str
     submitted_at: datetime
     seed: int
+    # H-3/M-14: fingerprint of the enumeration-shadowing inputs (auto-tightenings
+    # YAML + universe pool) that registry_hash/grammar_version don't capture.
+    # Persisted to batch_summaries so a batch is reproducible from recorded state.
+    enumeration_inputs_hash: str = ""
 
     def __post_init__(self) -> None:
         if self.submitted_at.tzinfo is None:

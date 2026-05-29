@@ -2743,3 +2743,21 @@ This **changes the behaviour of a spec mechanism** (per the audit's instruction 
 **Files modified:** `src/forge/cli/main.py`, `tests/unit/test_cli/test_run_loop.py`.
 
 **Scope note:** the chain still only runs on non-blocked iterations (after a successful submit), matching the pre-fix call site; running feedback on blocked polls too is a separate enhancement, not required by H-2. Target selection uses most-gated as the proxy for "most-recently-completed" (richest signal); exact completion-recency ordering is a future refinement.
+
+---
+
+## D085 — 2026-05-29 — Close cross-restart determinism gaps: fold auto-tightenings + universe into the batch identity (audit H-3, H-7, M-14)
+
+**Spec section:** DESIGN §13.1; **hard rule #6** (deterministic enumeration)
+**Decision:** Hard rule #6 requires `(grammar_version, registry_snapshot, seed)` to reproduce the same config sequence, but two external files also steer the sampler and were excluded from the recorded identity: `config/auto_tightened_thresholds.yaml` (D073, feeds `rng.uniform` ranges) and the universe export (D078, feeds `rng.choice` over the underlying pool). The audit proved divergence empirically (49/80 and 60/60 config-hash differences for the same triple). Because `mint_batch_id` hashed only the triple, a proposer rewriting the tightenings YAML (the point of D073) minted the SAME `batch_id` for a genuinely different population — and the SELECT-guarded `_insert_batch_summary` then no-op'd, leaving stale `batch_size`/`submitted_at` and blending two populations' `promotion_rate` (H-7). `batch_summaries` also recorded no `seed` and no input hashes, so batches weren't reproducible from state (M-14).
+
+Fixes:
+- `enumeration.auto_tightenings_fingerprint()` (hashes the *validated* tightenings, so YAML comment/formatting churn doesn't move it) + `enumeration.universe_fingerprint()` (hashes the resolved sorted pool) + combiner `enumeration.enumeration_inputs_hash()`.
+- `mint_batch_id(..., extra_inputs="")` folds the combined fingerprint into the UUID payload; empty `extra_inputs` reproduces the pre-fix UUID exactly (back-compat — no batch_id churn for callers that don't supply it).
+- `BatchContext.enumeration_inputs_hash` (default "") carries it; `batch_summaries` gains `seed BIGINT` + `enumeration_inputs_hash VARCHAR(16)` (idempotent ALTERs) and `_insert_batch_summary` persists both. `_run_one_iteration` computes the fingerprint once and threads it to both `mint_batch_id` and the context.
+
+**Tested (TDD, red->green):** `test_batch.py` — `mint_batch_id` changes with `extra_inputs`, empty is back-compat, `BatchContext` records/defaults the hash. `test_determinism_inputs.py` (new) — toggling the auto-tightenings YAML and the universe export (each with `cache_clear`, simulating a fresh process) changes the respective fingerprint; combiner is deterministic. ruff + mypy clean.
+
+**Files modified:** `src/forge/submission/batch.py`, `src/forge/enumeration/{indicator_thresholds,sampler,__init__}.py`, `src/forge/persistence/schemas.py`, `src/forge/submission/submitter.py`, `src/forge/cli/main.py`, `tests/unit/test_submission/test_batch.py`, `tests/unit/test_enumeration/test_determinism_inputs.py`.
+
+**Note:** the `lru_cache` on both loaders still means a mid-run YAML/export change is only picked up on restart — but the fingerprint is now computed per batch from the cached value, so the recorded identity is correct for whatever the process actually used. Sourcing the universe from `RegistrySnapshot` (which would also resolve H-5 and let it ride `registry_hash`) remains the cleaner long-term path.

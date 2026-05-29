@@ -1076,7 +1076,7 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
 
     from forge.core.clock import utc_now
     from forge.core.contracts_check import check_contracts_version
-    from forge.enumeration import registry_hash
+    from forge.enumeration import enumeration_inputs_hash, registry_hash
     from forge.grammar import load_grammar
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
@@ -1213,16 +1213,22 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
         return "dry-run"
 
     assert inbox is not None  # CLI guard above
+    # H-3/H-7: fold the enumeration-shadowing inputs (auto-tightenings YAML +
+    # universe pool) into the batch_id and the recorded identity, so distinct
+    # inputs mint distinct batch_ids and a batch is reproducible from state.
+    enum_inputs = enumeration_inputs_hash()
     batch = BatchContext(
         batch_id=mint_batch_id(
             seed=seed,
             grammar_version=grammar.grammar_version,
             registry_hash=reg_hash,
+            extra_inputs=enum_inputs,
         ),
         grammar_version=grammar.grammar_version,
         registry_hash=reg_hash,
         submitted_at=utc_now(),
         seed=seed,
+        enumeration_inputs_hash=enum_inputs,
     )
     _t_submit = _time.monotonic()
     with db_connection(forge_db_path) as conn:

@@ -51,6 +51,13 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     # 0, so neither hypothesis can be the source of novelty rejections —
     # they're killed by an earlier filter before reaching novelty.
     "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS prefilter_rejections_by_hypothesis JSON",
+    # D085 / audit M-14 + H-3: reproducibility metadata. `seed` is the enumeration
+    # seed for the batch; `enumeration_inputs_hash` fingerprints the auto-tightenings
+    # YAML + universe pool that shadow the sampler but aren't in grammar_version/
+    # registry_version. Together with those two, they are the full §13.1 identity
+    # needed to reproduce a recorded batch (hard rule #6). Idempotent ALTER.
+    "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS seed BIGINT",
+    "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS enumeration_inputs_hash VARCHAR(16)",
     """
     CREATE TABLE IF NOT EXISTS pre_filter_logs (
         forge_candidate_id  UUID,

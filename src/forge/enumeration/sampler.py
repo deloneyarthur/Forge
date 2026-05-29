@@ -26,6 +26,7 @@ runs ``validate()`` as a safety net and logs any residual rejections.
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -116,6 +117,20 @@ def _load_underlyings() -> tuple[str, ...]:
         except (OSError, json.JSONDecodeError, TypeError):
             pass
     return _FALLBACK_TIER_1_2_UNDERLYINGS
+
+
+def universe_fingerprint() -> str:
+    """H-3: stable 16-hex fingerprint of the resolved underlying pool (D078).
+
+    The universe pool shadows `_pick_underlying`'s draws but isn't in
+    `registry_hash`/`grammar_version`, so the day Crucible publishes
+    `universe_tickers.json` (or changes it) every same-seed reproduction would
+    silently diverge (hard rule #6). This folds into `mint_batch_id` +
+    `batch_summaries`. `_load_underlyings()` already returns a sorted tuple, so
+    the hash is order-stable.
+    """
+    payload = "|".join(_load_underlyings())
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 _TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"})

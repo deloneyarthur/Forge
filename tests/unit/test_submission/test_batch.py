@@ -49,6 +49,24 @@ def test_mint_batch_id_returns_uuid() -> None:
     assert isinstance(bid, uuid.UUID)
 
 
+def test_mint_batch_id_changes_with_extra_inputs() -> None:
+    """H-7: distinct enumeration-shadowing inputs (auto-tightenings YAML /
+    universe pool) must mint distinct batch_ids. Pre-fix, a proposer-rewritten
+    threshold YAML yielded the SAME UUID for a genuinely different config
+    population, silently corrupting batch_summaries + promotion_rate."""
+    a = mint_batch_id(seed=1, grammar_version="v1", registry_hash="abc", extra_inputs="t1|u1")
+    b = mint_batch_id(seed=1, grammar_version="v1", registry_hash="abc", extra_inputs="t2|u1")
+    assert a != b
+
+
+def test_mint_batch_id_empty_extra_inputs_is_backcompat() -> None:
+    """Empty extra_inputs reproduces the pre-H-7 3-arg UUID — no batch_id churn
+    for callers that don't (yet) supply enumeration fingerprints."""
+    three_arg = mint_batch_id(seed=7, grammar_version="v1", registry_hash="abc")
+    empty_extra = mint_batch_id(seed=7, grammar_version="v1", registry_hash="abc", extra_inputs="")
+    assert three_arg == empty_extra
+
+
 def test_mint_batch_id_version_marker_is_set() -> None:
     """UUID's `version` field should be set (any value 1-5) — confirms
     we're producing a well-formed UUID, not a raw 16-byte blob."""
@@ -76,6 +94,33 @@ def test_batch_context_constructs() -> None:
     assert ctx.grammar_version == "v1"
     assert ctx.submitted_at == ts
     assert ctx.seed == 0
+
+
+def test_batch_context_records_enumeration_inputs_hash() -> None:
+    """M-14: the enumeration-inputs fingerprint is persisted on the context
+    (and thence batch_summaries) so a batch is reproducible from recorded state."""
+    bid = mint_batch_id(seed=0, grammar_version="v1", registry_hash="abc", extra_inputs="h9")
+    ctx = BatchContext(
+        batch_id=bid,
+        grammar_version="v1",
+        registry_hash="abc",
+        submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+        seed=0,
+        enumeration_inputs_hash="h9",
+    )
+    assert ctx.enumeration_inputs_hash == "h9"
+
+
+def test_batch_context_enumeration_inputs_hash_defaults_empty() -> None:
+    """Back-compat: contexts built without the new field default to ''."""
+    ctx = BatchContext(
+        batch_id=mint_batch_id(seed=0, grammar_version="v1", registry_hash="abc"),
+        grammar_version="v1",
+        registry_hash="abc",
+        submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
+        seed=0,
+    )
+    assert ctx.enumeration_inputs_hash == ""
 
 
 def test_batch_context_is_frozen() -> None:

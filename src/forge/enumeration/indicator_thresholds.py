@@ -30,6 +30,8 @@ the predicate is `value != 0`, not a threshold compare.
 from __future__ import annotations
 
 import functools
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -327,6 +329,25 @@ def _effective_range(
 ) -> tuple[float, float]:
     """Return the auto-tightened range if present, else the D031 baseline."""
     return _auto_tightenings().get((indicator_id, role), baseline)
+
+
+def auto_tightenings_fingerprint() -> str:
+    """H-3: stable 16-hex fingerprint of the ACTIVE auto-tightenings.
+
+    These ranges (D073) shadow the sampler's threshold draws but aren't in
+    `registry_hash` or `grammar_version`, so a proposer rewrite of
+    `auto_tightened_thresholds.yaml` silently changed the enumerated sequence
+    with no change to the recorded identity (hard rule #6 violation). This
+    fingerprint folds into `mint_batch_id` + `batch_summaries` so the identity
+    tracks the inputs. Hashes the VALIDATED set (post-baseline-filter), so
+    comment/formatting churn in the YAML doesn't move the hash — only the
+    ranges that actually affect enumeration do. Empty set → fixed hash.
+    """
+    normalized = sorted(
+        [ind, role, low, high] for (ind, role), (low, high) in _auto_tightenings().items()
+    )
+    payload = json.dumps(normalized, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 def is_threshold_skippable(indicator_id: str, role: str = "directional") -> bool:

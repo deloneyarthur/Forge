@@ -19,17 +19,31 @@ Public API:
 
 from __future__ import annotations
 
+from forge.enumeration.indicator_thresholds import auto_tightenings_fingerprint
 from forge.enumeration.iterator import EnumerationCapped, enumerate_candidates
 from forge.enumeration.registry_fingerprint import registry_hash
-from forge.enumeration.sampler import SamplerError, sample_config
+from forge.enumeration.sampler import SamplerError, sample_config, universe_fingerprint
 from forge.enumeration.search_space import SearchSpace, build_search_space
+
+
+def enumeration_inputs_hash() -> str:
+    """H-3: combined fingerprint of the enumeration-shadowing inputs that
+    `registry_hash`/`grammar_version` don't capture — the auto-tightenings YAML
+    (D073) and the universe pool (D078). Folded into `mint_batch_id` +
+    `batch_summaries` so the recorded identity tracks everything that determines
+    the enumerated config sequence (hard rule #6)."""
+    return f"{auto_tightenings_fingerprint()}|{universe_fingerprint()}"
+
 
 __all__ = [
     "EnumerationCapped",
     "SamplerError",
     "SearchSpace",
+    "auto_tightenings_fingerprint",
     "build_search_space",
     "enumerate_candidates",
+    "enumeration_inputs_hash",
     "registry_hash",
     "sample_config",
+    "universe_fingerprint",
 ]

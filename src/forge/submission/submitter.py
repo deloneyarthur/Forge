@@ -96,8 +96,9 @@ def _insert_batch_summary(
     db.execute(
         """
         INSERT INTO batch_summaries
-            (forge_batch_id, batch_size, submitted_at, grammar_version, registry_version)
-        VALUES (?, ?, ?, ?, ?)
+            (forge_batch_id, batch_size, submitted_at, grammar_version, registry_version,
+             seed, enumeration_inputs_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         [
             str(batch.batch_id),
@@ -105,6 +106,9 @@ def _insert_batch_summary(
             batch.submitted_at,
             batch.grammar_version,
             batch.registry_hash,
+            # M-14/H-3: persist the full reproducibility identity.
+            batch.seed,
+            batch.enumeration_inputs_hash,
         ],
     )
 
