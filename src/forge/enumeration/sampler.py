@@ -115,6 +115,21 @@ def _load_underlyings() -> tuple[str, ...]:
         try:
             data = json.loads(_UNIVERSE_EXPORT_PATH.read_text())
             tickers = sorted(set(data.get("tier_1", []) + data.get("tier_2", [])))
+        except (OSError, json.JSONDecodeError, TypeError) as err:
+            # M-13 (audit 2026-05-29): present-but-unparseable is a DRIFT signal
+            # distinct from "file absent" (expected offline). Pre-fix this `pass`
+            # was silent, so a malformed export degraded the pool from ~152 to 24
+            # tickers with zero observability — and the lru_cache froze that stale
+            # pool for the whole process. Log loudly (mirrors registry_demo_fallback
+            # / D080's loud-fallback stance) before falling back.
+            _logger.warning(
+                "universe_export_unreadable",
+                path=str(_UNIVERSE_EXPORT_PATH),
+                error=str(err),
+                hard_rule="2",
+                open_question="Q23",
+            )
+        else:
             if tickers:
                 # H-5 (audit 2026-05-29): this reads a Crucible export that is NOT
                 # on the `crucible_contracts.EXPORT_LAYOUT` surface — a hard-rule-#2
@@ -131,8 +146,14 @@ def _load_underlyings() -> tuple[str, ...]:
                     open_question="Q23",
                 )
                 return tuple(tickers)
-        except (OSError, json.JSONDecodeError, TypeError):
-            pass
+            # M-13: file present + parses but yields no tickers — also a soft
+            # drift signal (schema change / empty publish), not the offline case.
+            _logger.warning(
+                "universe_export_empty",
+                path=str(_UNIVERSE_EXPORT_PATH),
+                hard_rule="2",
+                open_question="Q23",
+            )
     _logger.info(
         "universe_fallback_hardcoded", n_tickers=len(_FALLBACK_TIER_1_2_UNDERLYINGS)
     )

@@ -524,3 +524,42 @@ def test_d064_record_prefilter_rejections_partitions_by_hypothesis(tmp_path: Pat
         "mean_reversion": {"signal_density": 2},
         "trend_continuation": {"predicted_activations": 1},
     }
+
+
+# ---------------------------------------------------------------------------
+# M-10 (audit 2026-05-29) — submit transaction: a crash between INSERT(pending)
+# and the final UPDATE must not strand a row that permanently burns the
+# config_hash slot (hard rule #9 idempotency in the crash case).
+# ---------------------------------------------------------------------------
+
+
+def test_m10_crash_before_commit_leaves_no_orphan_row(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A crash mid-write rolls back the pending INSERT (one transaction), so the
+    config_hash is freed and the candidate can be resubmitted — not lost to a
+    permanent skipped_duplicate."""
+    import forge.submission.submitter as submitter_mod
+
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    cand = _candidate("c1", "dir_c1")
+    cfg_hash = cand.report.config.config_hash
+
+    def _boom(*_a: object, **_k: object) -> object:
+        # A BaseException (not the caught submission_failed path) simulates a
+        # crash between INSERT(pending) and the final UPDATE.
+        raise KeyboardInterrupt("simulated crash mid inbox write")
+
+    monkeypatch.setattr(submitter_mod, "submit_candidate", _boom)
+    with db_connection(forge_db) as conn:
+        with pytest.raises(KeyboardInterrupt):
+            submit_batch(conn, batch=_ctx(seed=1), candidates=(cand,), inbox_root=inbox)
+        n = conn.execute(
+            "SELECT COUNT(*) FROM submissions WHERE config_hash = ?", [cfg_hash]
+        ).fetchone()
+        assert n is not None and int(n[0]) == 0  # rolled back: no orphan row
+
+    monkeypatch.undo()  # restore the real submit_candidate
+    with db_connection(forge_db) as conn:
+        result = submit_batch(conn, batch=_ctx(seed=2), candidates=(cand,), inbox_root=inbox)
+    assert result.submitted_count == 1
+    assert result.skipped_duplicate_count == 0  # hash was NOT burned by the crash

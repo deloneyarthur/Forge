@@ -567,3 +567,38 @@ def test_load_underlyings_reads_export(tmp_path: Path) -> None:
     finally:
         sampler_mod._UNIVERSE_EXPORT_PATH = original_path
         _load_underlyings.cache_clear()
+
+
+def test_m13_unreadable_export_logs_drift_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """M-13: a present-but-unparseable universe export logs a distinct drift
+    WARNING (not silent) before falling back — separate from the expected
+    'file absent' offline case.
+
+    Asserts via capsys rather than structlog.testing.capture_logs(): the
+    module-level logger caches its bound logger once another test configures
+    structlog, so capture_logs() can't intercept it (order-dependent). The
+    rendered output is stable regardless.
+    """
+    import forge.enumeration.sampler as sampler_mod
+    from forge.enumeration.sampler import (
+        _FALLBACK_TIER_1_2_UNDERLYINGS,
+        _load_underlyings,
+    )
+
+    bad = tmp_path / "universe_tickers.json"
+    bad.write_text("{ this is not valid json ")  # malformed -> JSONDecodeError
+
+    original_path = sampler_mod._UNIVERSE_EXPORT_PATH
+    sampler_mod._UNIVERSE_EXPORT_PATH = bad
+    try:
+        _load_underlyings.cache_clear()
+        result = _load_underlyings()
+        assert result == _FALLBACK_TIER_1_2_UNDERLYINGS
+        captured = capsys.readouterr()
+        # Drift WARNING emitted (distinct from the silent pre-fix `pass`).
+        assert "universe_export_unreadable" in (captured.out + captured.err)
+    finally:
+        sampler_mod._UNIVERSE_EXPORT_PATH = original_path
+        _load_underlyings.cache_clear()

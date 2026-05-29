@@ -535,3 +535,43 @@ def test_write_calibration_yaml_is_atomic(tmp_path: Path, monkeypatch: pytest.Mo
     # Atomicity: the destination still holds the complete original content
     # (the partial write landed in a tmp file, never the live path).
     assert dest.read_text(encoding="utf-8") == original
+
+
+# ---------------------------------------------------------------------------
+# M-11 (audit 2026-05-29) — crash-ordering: the grammar_versions audit row is
+# written BEFORE the prefilter.yaml mutation, so a crash between them can only
+# UNDER-apply (cumulative-cap over-counts → conservative), never silently
+# tighten past the §5.5 cap with no audit trail.
+# ---------------------------------------------------------------------------
+
+
+def test_m11_audit_row_written_before_yaml_mutation(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import forge.feedback.auto_tune as at_mod
+    from forge.feedback.auto_tune import _apply_tighten_and_persist
+
+    forge_db = tmp_path / "forge.db"
+    yaml_path = tmp_path / "prefilter.yaml"
+    cal = _default_calibration()
+    write_calibration_yaml(cal, yaml_path)
+    original_yaml = yaml_path.read_text()
+
+    def _boom(*_a: object, **_k: object) -> None:
+        raise OSError("simulated crash during yaml write")
+
+    # Patch the yaml writer to crash; the audit row must already be persisted.
+    monkeypatch.setattr(at_mod, "write_calibration_yaml", _boom)
+    with db_connection(forge_db) as conn:
+        with pytest.raises(OSError, match="simulated crash"):
+            _apply_tighten_and_persist(
+                db=conn,
+                calibration=cal,
+                yaml_path=yaml_path,
+                auto_tune_cfg=cal.auto_tune,
+                at=_AT,
+            )
+        rows = conn.execute(
+            "SELECT change_type FROM grammar_versions WHERE change_type = ?",
+            ["auto_tighten_calibration"],
+        ).fetchall()
+    assert len(rows) == 1  # audit row written BEFORE the failing yaml mutation
+    assert yaml_path.read_text() == original_yaml  # mutation never ran

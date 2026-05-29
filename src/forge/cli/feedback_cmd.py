@@ -73,6 +73,14 @@ def cmd_feedback(
     ),
 ) -> None:
     """Read Crucible's gated runs, analyze, propose refinements."""
+    # M-12 (audit 2026-05-29): §13.5 startup contracts-version check. Every other
+    # Crucible-touching command runs this first; feedback was the gap — a major
+    # contracts mismatch would otherwise fail late / mis-parse inside
+    # consume_batch_results instead of halting cleanly here.
+    from forge.core.contracts_check import check_contracts_version
+
+    check_contracts_version()
+
     crucible_db_path, forge_db_path = _resolve_paths(
         config=config,
         no_config=no_config,

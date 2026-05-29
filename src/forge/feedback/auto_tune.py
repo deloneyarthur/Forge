@@ -210,13 +210,20 @@ def _apply_tighten_and_persist(
         reason="auto_tighten: rolling promotion rate above max threshold",
     )
     new_cal = apply_tightening(calibration, proposal)
-    write_calibration_yaml(new_cal, yaml_path)
+    # M-11 (audit 2026-05-29): write the grammar_versions audit row BEFORE the
+    # YAML mutation. The §5.5 cumulative-tightening cap sums recorded step_pcts;
+    # if the process dies between the two writes, the safe failure is
+    # recorded-but-not-applied (next run's cap over-counts -> conservative). The
+    # old order (yaml first) failed the other way: applied-but-not-recorded ->
+    # the cap under-counts and silently permits tightening past 30%. The YAML
+    # write is atomic (D086) so it cannot leave a half-written file.
     _write_grammar_versions_row(
         db,
         change_type="auto_tighten_calibration",
         description=f"step_pct={auto_tune_cfg.adjustment_pct_per_step:.4f}",
         at=at,
     )
+    write_calibration_yaml(new_cal, yaml_path)
     return new_cal
 
 

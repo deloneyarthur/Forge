@@ -292,3 +292,30 @@ def test_d054_feedback_cmd_stamps_counterfactual_phase_into_proposals(
     assert "counterfactual_promoted_count" in content
     # And the static disclaimer note.
     assert "phase-1 binary safety floor" in content
+
+
+# ---------------------------------------------------------------------------
+# M-12 (audit 2026-05-29) — `forge feedback` must run the §13.5 startup
+# contracts-version check before any Crucible I/O (every other Crucible-touching
+# command does; feedback was the gap).
+# ---------------------------------------------------------------------------
+
+
+def test_m12_feedback_checks_contracts_version_before_io(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import forge.core.contracts_check as cc
+    from crucible_contracts import SchemaVersionMismatch
+
+    forge_db = tmp_path / "forge.db"
+    crucible_db = tmp_path / "crucible.db"
+
+    def _raise() -> str:
+        raise SchemaVersionMismatch("forge expects 1.x, contracts is 2.x")
+
+    monkeypatch.setattr(cc, "check_contracts_version", _raise)
+    result = runner.invoke(
+        app,
+        ["feedback", "--no-config", "--forge-db", str(forge_db),
+         "--crucible-db", str(crucible_db)],
+    )
+    assert result.exit_code != 0
+    assert isinstance(result.exception, SchemaVersionMismatch)

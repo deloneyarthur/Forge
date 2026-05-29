@@ -150,62 +150,87 @@ def _submit_one(
         )
     config_json = config.model_dump_json()
 
+    # M-10 (audit 2026-05-29): wrap INSERT(pending) -> submit_candidate -> UPDATE
+    # in one explicit transaction. Pre-fix these were three autocommit statements;
+    # a crash between the INSERT and the final UPDATE committed a `pending` row
+    # that is never reconciled (write-only status) — permanently burning the
+    # unique config_hash so the candidate could never be resubmitted (hard rule
+    # #9 in the crash case). With a single transaction an uncommitted crash rolls
+    # back, freeing the slot. The inbox write is idempotent (atomic
+    # tmp-then-rename keyed by config_hash), so committing it inside the txn is
+    # safe: a re-run rewrites the same file.
+    db.execute("BEGIN TRANSACTION")
     try:
-        db.execute(
-            """
-            INSERT INTO submissions
-                (forge_candidate_id, forge_batch_id, config_hash, config_json,
-                 submitted_at, status)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            [
-                str(candidate_id),
-                str(batch.batch_id),
+        try:
+            db.execute(
+                """
+                INSERT INTO submissions
+                    (forge_candidate_id, forge_batch_id, config_hash, config_json,
+                     submitted_at, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    str(candidate_id),
+                    str(batch.batch_id),
+                    config_hash,
+                    config_json,
+                    batch.submitted_at,
+                    "pending",
+                ],
+            )
+        except duckdb.ConstraintException:
+            db.execute("ROLLBACK")
+            _log.warning(
+                "submit_batch: skipping duplicate config_hash %s (already submitted)",
                 config_hash,
-                config_json,
-                batch.submitted_at,
-                "pending",
-            ],
-        )
-    except duckdb.ConstraintException:
-        _log.warning(
-            "submit_batch: skipping duplicate config_hash %s (already submitted)",
-            config_hash,
-        )
-        return SubmissionRecord(
-            candidate_id=candidate_id,
-            config_hash=config_hash,
-            status="skipped_duplicate",
-            inbox_path=None,
-            error=None,
-        )
+            )
+            return SubmissionRecord(
+                candidate_id=candidate_id,
+                config_hash=config_hash,
+                status="skipped_duplicate",
+                inbox_path=None,
+                error=None,
+            )
 
-    try:
-        receipt = submit_candidate(config, inbox_root)
-    except Exception as err:  # contracts may raise IOError, etc.
+        try:
+            receipt = submit_candidate(config, inbox_root)
+        except Exception as err:  # contracts may raise IOError, etc.
+            # Caught failure (distinct from a crash): record the terminal
+            # submission_failed status and COMMIT it so the failure is durable
+            # and observable. The pending->failed UPDATE rides the same txn.
+            db.execute(
+                "UPDATE submissions SET status = ? WHERE forge_candidate_id = ?",
+                ["submission_failed", str(candidate_id)],
+            )
+            db.execute("COMMIT")
+            return SubmissionRecord(
+                candidate_id=candidate_id,
+                config_hash=config_hash,
+                status="submission_failed",
+                inbox_path=None,
+                error=str(err),
+            )
+
         db.execute(
             "UPDATE submissions SET status = ? WHERE forge_candidate_id = ?",
-            ["submission_failed", str(candidate_id)],
+            ["submitted", str(candidate_id)],
         )
-        return SubmissionRecord(
+        record_pre_filter_logs(
+            db,
             candidate_id=candidate_id,
-            config_hash=config_hash,
-            status="submission_failed",
-            inbox_path=None,
-            error=str(err),
+            report=candidate.report,
+            evaluated_at=batch.submitted_at,
+            batch_id=batch.batch_id,
         )
+        db.execute("COMMIT")
+    except BaseException:
+        # Any unexpected failure (incl. KeyboardInterrupt mid-write) must not
+        # leave the transaction open — that would strand the pending row AND
+        # break the next candidate's BEGIN. Roll back so the slot is freed, then
+        # re-raise (the daemon loop guard / caller decides how to proceed).
+        db.execute("ROLLBACK")
+        raise
 
-    db.execute(
-        "UPDATE submissions SET status = ? WHERE forge_candidate_id = ?",
-        ["submitted", str(candidate_id)],
-    )
-    record_pre_filter_logs(
-        db,
-        candidate_id=candidate_id,
-        report=candidate.report,
-        evaluated_at=batch.submitted_at,
-        batch_id=batch.batch_id,
-    )
     return SubmissionRecord(
         candidate_id=candidate_id,
         config_hash=config_hash,

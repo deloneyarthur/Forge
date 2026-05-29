@@ -2829,3 +2829,20 @@ Fixes:
 **Tested (TDD, red->green):** `test_crucible_feature_cache.py` (empty window → flagged + raises; populated window stays available), `test_battery.py` (proactive short-circuit runs no filters; mid-filter raise caught), `test_submitter.py` (distinct bucket, no `"unknown"`), `test_pre_filter_logger.py` (data_unavailable rows skipped). 307 prefilter+submission tests green; ruff + mypy clean.
 
 **Files modified:** `src/forge/prefilters/{types,crucible_feature_cache,battery}.py`, `src/forge/submission/{submitter,pre_filter_logger}.py`, + the four test files.
+
+---
+
+## D091 — 2026-05-29 — Submit-path integrity + contracts-boundary hardening (audit M-10, M-11, M-12, M-13)
+
+**Spec section:** §7.2/§13.4 + hard rule #9; §5.5 + hard rule #4; §13.5 + hard rule #2; D080
+**Decision:** four independent integrity/boundary fixes bundled as Batch D.
+- **M-10 (submit transaction):** `_submit_one` ran three autocommit statements — INSERT(`pending`) → `submit_candidate` (FS write) → UPDATE(`submitted`). A crash between INSERT and the final UPDATE committed a `pending` row that is **never reconciled** (write-only status; `reconcile_all_pending` selects `submitted`) and permanently held its unique `config_hash` → the candidate could never be resubmitted (`skipped_duplicate` forever) — a hard-rule-#9 break in the crash case. Fix: wrap the three in one explicit `BEGIN/COMMIT`; an uncommitted crash (incl. `KeyboardInterrupt`) hits `except BaseException: ROLLBACK; raise`, freeing the slot. The caught-error path (`submit_candidate` raises) still records the terminal `submission_failed` and COMMITs. The inbox write is idempotent (atomic tmp-then-rename keyed by config_hash) so committing it inside the txn is safe. (Corrects D046's stale "production never writes pending" note.)
+- **M-11 (crash-ordering):** `_apply_tighten_and_persist` mutated `prefilter.yaml` *then* wrote the `grammar_versions` audit row. A crash between them left the calibration tightened on disk but unrecorded → the §5.5 cumulative-cap (sums recorded step_pcts) under-counts → silently permits tightening past 30%. Fix: write the audit row FIRST, then the (atomic, D086) YAML — so a crash can only *under*-apply (cap over-counts → conservative).
+- **M-12 (contracts check):** `forge feedback` did Crucible I/O with no §13.5 startup `check_contracts_version()` (every other Crucible-touching command had it). Added at the top of `cmd_feedback` — a major mismatch now halts cleanly instead of failing late / mis-parsing.
+- **M-13 (loud universe fallback):** `_load_underlyings`'s `except (...): pass` was silent — a present-but-unparseable universe export degraded the pool 152→24 tickers with zero observability (and the `lru_cache` froze it for the process). Fix: emit a `universe_export_unreadable` WARNING (and `universe_export_empty` for a parses-but-empty export), distinct from the expected `universe_fallback_hardcoded` info (file absent / offline). Mirrors D080's loud-fallback stance.
+
+**Tested (TDD, red->green):** `test_submitter.py` (crash mid-write leaves no orphan row + hash resubmittable), `test_auto_tune.py` (audit row persisted before a failing YAML write; YAML untouched), `test_feedback_cmd.py` (mismatch halts before I/O), `test_sampler.py` (malformed export logs the drift WARNING — asserted via `capsys` since the module logger caches past `capture_logs()`). Submission + auto_tune + feedback_cmd + sampler suites green; 9 submit-path integration tests green; ruff + mypy clean.
+
+**Files modified:** `src/forge/submission/submitter.py`, `src/forge/feedback/auto_tune.py`, `src/forge/cli/feedback_cmd.py`, `src/forge/enumeration/sampler.py`, + the four test files.
+
+**Note:** M-10's rollback-on-crash also softens L-10 (transient `submission_failed` no longer the only outcome of a mid-write death), but L-10's explicit retry/reset of *caught* failures stays open for Batch E.
