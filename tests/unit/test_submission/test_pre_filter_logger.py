@@ -340,6 +340,35 @@ def test_rejected_writer_writes_only_rejected(tmp_path: Path) -> None:
         assert int(rows[0]) == 2  # one fresh candidate_id per rejected report
 
 
+def test_rejected_writer_skips_data_unavailable(tmp_path: Path) -> None:
+    """M-5: data_unavailable verdicts must NOT be written to pre_filter_logs —
+    they'd masquerade as signal-quality rejections and pollute the D076 priors."""
+    forge_db = tmp_path / "forge.db"
+    batch_id = uuid.uuid4()
+    dead = PreFilterReport(
+        config=minimal_strategy_config(),
+        passed=False,
+        filter_results=MappingProxyType({}),
+        diagnostic_notes=("data_unavailable: empty window",),
+        data_unavailable=True,
+    )
+    reports = (dead, _rejected_report())
+    with db_connection(forge_db) as conn:
+        n = record_pre_filter_logs_for_rejected(
+            conn,
+            reports=reports,
+            batch_id=batch_id,
+            evaluated_at=datetime(2026, 5, 20, tzinfo=UTC),
+        )
+        # Only the real rejected report (3 filter rows) — the dead one is skipped.
+        assert n == 3
+        distinct = conn.execute(
+            "SELECT COUNT(DISTINCT forge_candidate_id) FROM pre_filter_logs",
+        ).fetchone()
+    assert distinct is not None
+    assert int(distinct[0]) == 1
+
+
 def test_rejected_writer_mints_unique_candidate_ids(tmp_path: Path) -> None:
     """Each rejected report gets its own UUID (no PK collisions across reports)."""
     forge_db = tmp_path / "forge.db"

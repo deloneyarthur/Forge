@@ -33,6 +33,7 @@ from collections.abc import Iterable, Mapping
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, cast
 
+import structlog
 from crucible_contracts import (
     DEFAULT_DATA_HISTORY_DAYS,
     DEFAULT_UNDERLYING,
@@ -42,8 +43,14 @@ from crucible_contracts import (
     signal_content_key,
 )
 
+from forge.prefilters.types import FeatureDataUnavailable
+
 if TYPE_CHECKING:
     from crucible_contracts import Regime
+
+# Placed after all imports (incl. the TYPE_CHECKING block) to keep ruff's E402
+# happy — mirrors forge.enumeration.sampler.
+_logger = structlog.get_logger(__name__)
 
 
 # Chunk size for `prefetch_for_batch`. Bounds the writer's per-request work
@@ -88,6 +95,7 @@ class CrucibleFeatureCache:
         "_client",
         "_data_history_days",
         "_data_start_date",
+        "_data_unavailable_for",
         "_default_underlying",
         "_display_id_index",
         "_regimes",
@@ -131,6 +139,11 @@ class CrucibleFeatureCache:
         self._regimes: dict[str, dict[date, Regime]] = defaultdict(dict)
         # Per-underlying flag set after the first window-fetch lands.
         self._window_loaded_for: set[str] = set()
+        # M-5: underlyings whose window fetch came back empty (activations may
+        # exist, but zero returns AND zero regimes). The Protocol accessors
+        # raise `FeatureDataUnavailable` for these rather than silently
+        # mislabeling every date "low_vol" / returning {} (the D080 class).
+        self._data_unavailable_for: set[str] = set()
         # Currently active underlying — set during prefetch_for_config so
         # the Protocol methods (activation_dates / returns / regime_label)
         # know which slice to serve.
@@ -191,18 +204,43 @@ class CrucibleFeatureCache:
         )
         ret_map = self._returns[underlying]
         reg_map = self._regimes[underlying]
+        returns_added = 0
+        regimes_added = 0
         for feature_map in response.features.values():
             if "returns" in feature_map:
                 for date_str, value in feature_map["returns"].items():
                     ret_map[date.fromisoformat(date_str)] = float(value)
+                    returns_added += 1
             if "regime_label" in feature_map:
                 for date_str, label in feature_map["regime_label"].items():
                     reg_map[date.fromisoformat(date_str)] = cast(
                         "Regime",
                         str(label),
                     )
+                    regimes_added += 1
             break  # one signal entry is enough — values are global per underlying
         self._window_loaded_for.add(underlying)
+
+        # M-5/M-6: detect the degenerate "fetched but empty" response. We asked
+        # for dates (`dates_to_fetch` non-empty) but the writer populated zero
+        # returns AND zero regimes — a thin Tier-2 underlying or transient writer
+        # state. Mark it data_unavailable so the Protocol accessors raise instead
+        # of silently mislabeling, and log loudly (D080 stance). Recovery on a
+        # later non-empty fetch clears the flag.
+        if dates_to_fetch and returns_added == 0 and regimes_added == 0:
+            if underlying not in self._data_unavailable_for:
+                _logger.warning(
+                    "feature_cache_window_empty",
+                    underlying=underlying,
+                    dates_requested=len(dates_to_fetch),
+                    cache_hits=getattr(response, "cache_hits", None),
+                    cache_misses=getattr(response, "cache_misses", None),
+                    window_hash=getattr(response, "window_hash", None),
+                    open_question="M-5",
+                )
+            self._data_unavailable_for.add(underlying)
+        else:
+            self._data_unavailable_for.discard(underlying)
 
     def _permutation_window_dates(self) -> list[date]:
         """M-2: the calendar dates `permutation_test` requests as its null pool
@@ -271,6 +309,23 @@ class CrucibleFeatureCache:
                     missing_dates, group[0].signals[0], underlying,
                 )
 
+        # M-6: per-batch coverage telemetry. The only operator-visible signal
+        # that a batch ran against thin/partial data used to be the downstream
+        # `prefilter_rejections` histogram, which is indistinguishable from
+        # genuine signal-quality rejections — the blindness that let D080 persist
+        # for 7 iterations. Emit per-underlying coverage + which degraded.
+        _logger.info(
+            "feature_cache_prefetch_batch",
+            n_configs=len(configs_list),
+            n_underlyings=len(configs_by_underlying),
+            underlyings=sorted(configs_by_underlying),
+            returns_coverage={u: len(self._returns[u]) for u in configs_by_underlying},
+            regime_coverage={u: len(self._regimes[u]) for u in configs_by_underlying},
+            data_unavailable=sorted(
+                u for u in configs_by_underlying if u in self._data_unavailable_for
+            ),
+        )
+
     def prefetch_for_config(self, config: StrategyConfig) -> None:
         """Pre-populate the cache for one config's signals.
 
@@ -333,6 +388,16 @@ class CrucibleFeatureCache:
     # FeatureCache Protocol methods — serve from the active underlying
     # ------------------------------------------------------------------
 
+    def active_underlying_data_unavailable(self) -> bool:
+        """M-5: True when the active underlying's window came back empty.
+
+        The battery checks this right after `prefetch_for_config` and
+        short-circuits to a `data_unavailable` verdict — distinct from a
+        signal-quality FAIL — rather than running `regime_exposure` /
+        `permutation_test` against a window that would mislabel every date.
+        """
+        return self._active_underlying in self._data_unavailable_for
+
     def activation_dates(self, signal_id: str) -> frozenset[date]:
         content_key = self._display_id_index.get(signal_id)
         if content_key is None:
@@ -360,8 +425,17 @@ class CrucibleFeatureCache:
         callers (permutation_test passes the full window; regime_exposure
         passes only activations) tolerate shorter result maps.
 
-        Served from `_active_underlying`'s returns slice (D033).
+        Served from `_active_underlying`'s returns slice (D033). Raises
+        `FeatureDataUnavailable` (M-5) when the active underlying's window came
+        back empty — the caller must not treat the resulting `{}` as a genuine
+        zero-return series.
         """
+        if self._active_underlying in self._data_unavailable_for:
+            msg = (
+                f"returns: feature-cache window unavailable for underlying "
+                f"{self._active_underlying!r} (empty response from writer)"
+            )
+            raise FeatureDataUnavailable(msg)
         ret_map = self._returns[self._active_underlying]
         return {d: ret_map[d] for d in dates if d in ret_map}
 
@@ -372,8 +446,17 @@ class CrucibleFeatureCache:
         Activation dates that fall on non-classified days (rare) get the
         defensive "low_vol" default rather than crashing the filter.
 
-        Served from `_active_underlying`'s regimes slice (D033).
+        Served from `_active_underlying`'s regimes slice (D033). Raises
+        `FeatureDataUnavailable` (M-5) when the active underlying's window came
+        back empty — otherwise every activation would default to "low_vol",
+        which `regime_exposure` reads as a max_share=1.0 signal-quality REJECT.
         """
+        if self._active_underlying in self._data_unavailable_for:
+            msg = (
+                f"regime_label: feature-cache window unavailable for underlying "
+                f"{self._active_underlying!r} (empty response from writer)"
+            )
+            raise FeatureDataUnavailable(msg)
         return self._regimes[self._active_underlying].get(d, "low_vol")
 
 

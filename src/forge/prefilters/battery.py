@@ -22,7 +22,12 @@ from forge.prefilters.resource_feasibility import ResourceFeasibilityFilter
 from forge.prefilters.signal_correlation import SignalCorrelationFilter
 from forge.prefilters.signal_density import SignalDensityFilter
 from forge.prefilters.structural_redundancy import StructuralRedundancyFilter
-from forge.prefilters.types import Filter, FilterResult, PreFilterReport
+from forge.prefilters.types import (
+    FeatureDataUnavailable,
+    Filter,
+    FilterResult,
+    PreFilterReport,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -78,13 +83,29 @@ def run_battery(
     if callable(prefetch):
         prefetch(config)
 
-    for f in ordered:
-        result = f.apply(config, ctx)
-        results[f.name] = result
-        if not result.passed:
-            overall_passed = False
-            notes.append(f"short-circuited at cost_tier={f.cost_tier} (filter {f.name!r})")
-            break
+    # M-5: if the active underlying's feature window came back empty, short-circuit
+    # to an explicit data_unavailable verdict — distinct from a signal-quality FAIL
+    # — BEFORE any filter runs. Otherwise regime_exposure/permutation_test would
+    # mislabel a thin-data underlying as a genuine rejection (the D080 class).
+    unavailable_check = getattr(
+        ctx.feature_cache, "active_underlying_data_unavailable", None,
+    )
+    if callable(unavailable_check) and unavailable_check():
+        return _data_unavailable_report(config, results)
+
+    try:
+        for f in ordered:
+            result = f.apply(config, ctx)
+            results[f.name] = result
+            if not result.passed:
+                overall_passed = False
+                notes.append(f"short-circuited at cost_tier={f.cost_tier} (filter {f.name!r})")
+                break
+    except FeatureDataUnavailable:
+        # Safety net: a feature accessor raised mid-pass even though the proactive
+        # check didn't fire (e.g. a cache impl that flags lazily). Treat it as a
+        # data_unavailable verdict rather than crashing the batch.
+        return _data_unavailable_report(config, results)
 
     return PreFilterReport(
         config=config,
@@ -92,6 +113,22 @@ def run_battery(
         filter_results=results,
         diagnostic_notes=tuple(notes),
         composite_score=None,
+    )
+
+
+def _data_unavailable_report(
+    config: StrategyConfig,
+    results: dict[str, FilterResult],
+) -> PreFilterReport:
+    """Build the M-5 data_unavailable verdict, preserving any filter results
+    that completed before the short-circuit."""
+    return PreFilterReport(
+        config=config,
+        passed=False,
+        filter_results=results,
+        diagnostic_notes=("data_unavailable: feature-cache window empty for underlying",),
+        composite_score=None,
+        data_unavailable=True,
     )
 
 

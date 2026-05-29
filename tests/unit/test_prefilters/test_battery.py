@@ -10,6 +10,7 @@ Covers the §5.2 battery orchestrator:
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -19,7 +20,12 @@ from forge.core.seed import SeedHierarchy
 from forge.prefilters.battery import default_filters, run_battery
 from forge.prefilters.calibration import load_calibration
 from forge.prefilters.feature_cache import REGIMES, SyntheticFeatureCache
-from forge.prefilters.types import Filter, FilterContext, FilterResult
+from forge.prefilters.types import (
+    FeatureDataUnavailable,
+    Filter,
+    FilterContext,
+    FilterResult,
+)
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
     minimal_strategy_config,
@@ -224,3 +230,78 @@ class _BadCache:
     def regime_label(self, d: date) -> str:
         del d
         return REGIMES[0]
+
+
+# ----------------------------------------------------------------------
+# M-5 (audit 2026-05-29): the battery must translate a degraded feature-cache
+# window into an explicit `data_unavailable` verdict — distinct from a
+# signal-quality FAIL — so thin-data false-rejections don't pollute the
+# rejection histogram / D076 priors.
+# ----------------------------------------------------------------------
+
+
+class _DataUnavailableCache:
+    """Cache stub whose active underlying's window came back empty.
+
+    Mirrors `CrucibleFeatureCache` once an underlying is flagged
+    `data_unavailable`: the proactive battery check sees it via
+    `active_underlying_data_unavailable()`, and the Protocol accessors raise
+    the typed sentinel if ever reached.
+    """
+
+    data_history_days = 1008
+
+    def active_underlying_data_unavailable(self) -> bool:
+        return True
+
+    def prefetch_for_config(self, config: object) -> None:
+        del config
+
+    def activation_dates(self, signal_id: str) -> frozenset[date]:
+        raise FeatureDataUnavailable(signal_id)
+
+    def returns(self, dates: Iterable[date]) -> Mapping[date, float]:
+        raise FeatureDataUnavailable(str(list(dates)))
+
+    def regime_label(self, d: date) -> str:
+        raise FeatureDataUnavailable(str(d))
+
+
+class _RaisingFilter:
+    """Filter that raises the data-unavailable sentinel mid-pass.
+
+    Exercises the battery's catch path (the safety net for any accessor
+    that raises even when the proactive check didn't fire).
+    """
+
+    name = "raises_unavailable"
+    cost_tier = 1
+
+    def apply(self, config: object, ctx: object) -> FilterResult:
+        del config, ctx
+        raise FeatureDataUnavailable("simulated empty window mid-filter")
+
+
+def test_data_unavailable_cache_short_circuits_to_distinct_verdict() -> None:
+    """A flagged-unavailable underlying yields a data_unavailable report,
+    not a signal-quality FAIL — and no filter runs."""
+    ctx = replace(_ctx(), feature_cache=_DataUnavailableCache())  # type: ignore[arg-type]
+    cfg = minimal_strategy_config()
+    recorders = [_RecordingFilter(name=f"f{i}", cost_tier=i, passed=True) for i in range(1, 4)]
+
+    report = run_battery(cfg, ctx, recorders)
+
+    assert report.passed is False
+    assert report.data_unavailable is True
+    assert report.filter_results == {}
+    assert all(r.calls == 0 for r in recorders), "no filter should run on data_unavailable"
+
+
+def test_battery_catches_data_unavailable_raise_midfilter() -> None:
+    """If an accessor raises the sentinel mid-pass, the battery converts it
+    to a data_unavailable verdict rather than crashing the run."""
+    cfg = minimal_strategy_config()
+    report = run_battery(cfg, _ctx(), [_RaisingFilter()])
+
+    assert report.passed is False
+    assert report.data_unavailable is True

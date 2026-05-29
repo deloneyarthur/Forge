@@ -129,6 +129,12 @@ def record_pre_filter_logs_for_rejected(
     for report in reports:
         if report.passed:
             continue
+        # M-5: skip data_unavailable verdicts — recording them as filter rows
+        # would masquerade as signal-quality rejections and pollute the D076
+        # empirical-prior buckets. They're surfaced via the cache's loud
+        # logging + the `data_unavailable` rejection-histogram bucket instead.
+        if getattr(report, "data_unavailable", False):
+            continue
         candidate_id = str(uuid.uuid4())
         config_hash = report.config.config_hash
         for filter_name, result in report.filter_results.items():

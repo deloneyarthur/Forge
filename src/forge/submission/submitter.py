@@ -310,11 +310,17 @@ def record_prefilter_rejections(
     for r in reports:
         if getattr(r, "passed", False):
             continue
-        filter_results = getattr(r, "filter_results", {}) or {}
-        failing = next(
-            (name for name, fr in filter_results.items() if not getattr(fr, "passed", True)),
-            "unknown",
-        )
+        # M-5: a data_unavailable verdict is a data-availability failure, not a
+        # signal-quality one — bucket it distinctly so the histogram doesn't
+        # attribute thin-data false-rejections to a filter (or to "unknown").
+        if getattr(r, "data_unavailable", False):
+            failing = "data_unavailable"
+        else:
+            filter_results = getattr(r, "filter_results", {}) or {}
+            failing = next(
+                (name for name, fr in filter_results.items() if not getattr(fr, "passed", True)),
+                "unknown",
+            )
         total[failing] += 1
         cfg = getattr(r, "config", None)
         hyp = getattr(cfg, "hypothesis", None) if cfg is not None else None

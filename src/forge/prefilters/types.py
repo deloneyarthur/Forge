@@ -31,6 +31,19 @@ if TYPE_CHECKING:
     from forge.prefilters.feature_cache import FeatureCache
 
 
+class FeatureDataUnavailable(RuntimeError):
+    """Raised when a feature-cache window is structurally unavailable for the
+    active underlying (M-5, audit 2026-05-29).
+
+    Distinguishes a *data-availability* failure (thin Tier-2 underlying, transient
+    writer state, empty window response) from a *signal-quality* FAIL. The battery
+    catches this and produces a `PreFilterReport(data_unavailable=True)` so the
+    config isn't mislabeled as a genuine rejection — which would pollute
+    `pre_filter_logs` and the D076 empirical-prior buckets (same silent-degradation
+    class as the D080 incident, at per-underlying granularity).
+    """
+
+
 def _empty_details() -> Mapping[str, Any]:
     return MappingProxyType({})
 
@@ -73,6 +86,13 @@ class PreFilterReport:
     filter_results: Mapping[str, FilterResult]
     diagnostic_notes: tuple[str, ...]
     composite_score: float | None = None
+    # M-5 (audit 2026-05-29): True when the battery short-circuited because the
+    # feature-cache window was unavailable for this config's underlying — a
+    # data-availability verdict distinct from a signal-quality FAIL. These
+    # reports are bucketed separately in the rejection histogram and excluded
+    # from `pre_filter_logs` so thin-data false-rejections don't pollute the
+    # D076 priors.
+    data_unavailable: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +150,7 @@ class Filter(Protocol):
 
 
 __all__ = [
+    "FeatureDataUnavailable",
     "Filter",
     "FilterContext",
     "FilterResult",

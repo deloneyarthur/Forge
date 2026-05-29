@@ -2815,3 +2815,17 @@ Fixes:
 **Tested (TDD, red->green):** `test_consumer.py` — sentinel rows excluded from promotion_rate denominator (1 promoted / (3-2 sentinels) = 1.0, not 0.33). `test_calibration.py` — tighten raises `min_pass_probability` and the 0.95 cap holds from near-1.0. 55 tests green (calibration + consumer + auto_tune); ruff + mypy clean.
 
 **Files modified:** `src/forge/feedback/consumer.py`, `src/forge/prefilters/calibration.py`, `tests/unit/test_feedback/test_consumer.py`, `tests/unit/test_prefilters/test_calibration.py`.
+
+---
+
+## D090 — 2026-05-29 — Per-underlying degraded feature-cache response → explicit `data_unavailable` verdict + telemetry (audit M-5, M-6)
+
+**Spec section:** §5.3.6/§5.3.7, §13 (observability); `prefilters/crucible_feature_cache.py`, `prefilters/battery.py`, `prefilters/types.py`
+**Decision:** A valid `FeatureBatchResponse` may carry activations but an empty `features` window (thin Tier-2 underlying / transient writer state). Pre-fix, `returns()` returned `{}` and `regime_label()` defaulted **every** date to `"low_vol"`, so `regime_exposure` saw `max_share=1.0` → REJECT and `permutation_test` saw `effective_n=0` → `p=1.0` → REJECT — a *data-availability* failure indistinguishable from a *signal-quality* one (the D080 class, at per-underlying granularity, which D080's SPY-only `probe()` can't catch). The harm is false rejections polluting `pre_filter_logs` + the D076 priors.
+- **M-5 detection + verdict:** `_fetch_window_for_dates` now counts populated returns/regimes; a non-empty request that yields zero of both marks the underlying in `_data_unavailable_for` and logs `feature_cache_window_empty` loudly (D080 stance, once per episode). `returns()`/`regime_label()` raise the new typed `FeatureDataUnavailable` for such underlyings; `active_underlying_data_unavailable()` lets the battery short-circuit *before* any filter runs to a `PreFilterReport(data_unavailable=True, passed=False)` (distinct from a signal-quality FAIL). The battery also wraps the filter loop in `except FeatureDataUnavailable` as a safety net.
+- **M-6 observability:** `prefetch_for_batch` emits a `feature_cache_prefetch_batch` INFO line (per-underlying returns/regime coverage + which underlyings degraded); the empty-window WARNING plumbs `cache_hits`/`cache_misses`/`window_hash`. The module previously had zero logging.
+- **Non-pollution:** `record_prefilter_rejections` buckets `data_unavailable` reports under a distinct `"data_unavailable"` key (not `"unknown"`); `record_pre_filter_logs_for_rejected` skips them entirely.
+
+**Tested (TDD, red->green):** `test_crucible_feature_cache.py` (empty window → flagged + raises; populated window stays available), `test_battery.py` (proactive short-circuit runs no filters; mid-filter raise caught), `test_submitter.py` (distinct bucket, no `"unknown"`), `test_pre_filter_logger.py` (data_unavailable rows skipped). 307 prefilter+submission tests green; ruff + mypy clean.
+
+**Files modified:** `src/forge/prefilters/{types,crucible_feature_cache,battery}.py`, `src/forge/submission/{submitter,pre_filter_logger}.py`, + the four test files.

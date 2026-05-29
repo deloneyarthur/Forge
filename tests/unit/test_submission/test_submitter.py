@@ -421,6 +421,34 @@ def test_d062_record_prefilter_rejections_writes_counter(tmp_path: Path) -> None
     assert persisted == {"signal_density": 2, "structural_redundancy": 1}
 
 
+def test_m5_record_prefilter_rejections_buckets_data_unavailable(tmp_path: Path) -> None:
+    """M-5: data_unavailable reports count under a distinct `data_unavailable`
+    bucket, not as an `unknown` signal-quality rejection."""
+    from forge.submission.submitter import record_prefilter_rejections
+
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    batch = _ctx(seed=505)
+    survivor = _candidate("s1", "dir_s1")
+    # A data_unavailable verdict carries no failing filter (battery short-circuit).
+    dead = PreFilterReport(
+        config=_named_config("du1", "dir_du1"),
+        passed=False,
+        filter_results=MappingProxyType({}),
+        diagnostic_notes=("data_unavailable: empty window",),
+        data_unavailable=True,
+    )
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=batch, candidates=(survivor,), inbox_root=inbox)
+        out = record_prefilter_rejections(
+            conn,
+            batch_id=batch.batch_id,
+            reports=(dead, _failing_report("r1", "signal_density"), survivor.report),
+        )
+    assert out.total == {"data_unavailable": 1, "signal_density": 1}
+    assert "unknown" not in out.total
+
+
 def test_d062_record_prefilter_rejections_no_op_when_all_passed(tmp_path: Path) -> None:
     """D062: when no reports failed, counter is empty and no UPDATE fires."""
     from forge.submission.submitter import record_prefilter_rejections

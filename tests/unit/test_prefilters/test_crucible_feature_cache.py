@@ -24,6 +24,7 @@ from crucible_contracts import (
 )
 
 from forge.prefilters.crucible_feature_cache import CrucibleFeatureCache
+from forge.prefilters.types import FeatureDataUnavailable
 
 _MANDATORY_EXITS = (
     ExitSpec(id="expiry_exit"),
@@ -506,3 +507,74 @@ def test_d033_underlying_none_falls_back_to_default() -> None:
     # the fallback applied.
     assert ("SPY", content_key) in cache._activations
     assert cache.activation_dates(spec.id) == frozenset({date(2024, 1, 2)})
+
+
+# ----------------------------------------------------------------------
+# M-5 / M-6 (audit 2026-05-29): degraded-response detection + observability.
+# A valid FeatureBatchResponse may carry activations but an empty window
+# (thin Tier-2 underlying / transient writer state). Silently, returns() = {}
+# and regime_label() defaults every date to "low_vol", which downstream looks
+# like a genuine signal-quality REJECT. We instead mark the underlying
+# data_unavailable and raise a typed sentinel so the verdict is distinct.
+# ----------------------------------------------------------------------
+
+
+def test_window_empty_marks_active_underlying_data_unavailable() -> None:
+    """Activations present but the window fetch returns nothing → data_unavailable."""
+    client = MagicMock()
+    spec = _spec()
+    content_key = signal_content_key(spec)
+    client.get_features.side_effect = [
+        # activation_dates: the signal DOES fire (so this isn't a density reject)
+        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
+        # window (returns + regime_label): empty — Crucible has no data for it
+        _response({}),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=4, data_start_date=date(2024, 1, 1))
+    cache.prefetch_for_config(_config(spec))
+
+    # Activations still resolve — only the window is unavailable.
+    assert cache.activation_dates(spec.id) == frozenset({date(2024, 1, 2)})
+    assert cache.active_underlying_data_unavailable() is True
+
+
+def test_returns_and_regime_label_raise_when_data_unavailable() -> None:
+    """returns()/regime_label() raise the typed sentinel rather than mislabel."""
+    client = MagicMock()
+    spec = _spec()
+    content_key = signal_content_key(spec)
+    client.get_features.side_effect = [
+        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
+        _response({}),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=4, data_start_date=date(2024, 1, 1))
+    cache.prefetch_for_config(_config(spec))
+
+    with pytest.raises(FeatureDataUnavailable):
+        cache.returns([date(2024, 1, 2)])
+    with pytest.raises(FeatureDataUnavailable):
+        cache.regime_label(date(2024, 1, 2))
+
+
+def test_populated_window_underlying_stays_available() -> None:
+    """A normal response (returns + regimes present) is NOT flagged unavailable."""
+    client = MagicMock()
+    spec = _spec()
+    content_key = signal_content_key(spec)
+    client.get_features.side_effect = [
+        _response({content_key: {"activation_dates": ["2024-01-02"]}}),
+        _response(
+            {
+                content_key: {
+                    "returns": {"2024-01-02": 0.01},
+                    "regime_label": {"2024-01-02": "bull"},
+                }
+            }
+        ),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=4, data_start_date=date(2024, 1, 1))
+    cache.prefetch_for_config(_config(spec))
+
+    assert cache.active_underlying_data_unavailable() is False
+    assert cache.returns([date(2024, 1, 2)])[date(2024, 1, 2)] == pytest.approx(0.01)
+    assert cache.regime_label(date(2024, 1, 2)) == "bull"
