@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 import yaml
 
 from forge.feedback.auto_tune import (
@@ -501,3 +502,36 @@ def test_d058_ensure_grammar_version_no_duplicate_under_concurrent_writers(
     assert saw_constraint or saw_loser_noop, (
         f"expected one writer to either skip (False) or hit constraint, got: {results}"
     )
+
+
+# ---------------------------------------------------------------------------
+# H-6 (audit 2026-05-29) — prefilter.yaml writes must be atomic
+# ---------------------------------------------------------------------------
+
+
+def test_write_calibration_yaml_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A crash mid-write must NOT truncate the live prefilter.yaml — the daemon
+    re-reads it via `load_calibration` every iteration and raises on a partial
+    file, which (with M-1) would brick it into a 30s systemd crash-loop. Atomic
+    tmp+rename means a failed write leaves the destination's prior content whole."""
+    import os as _os
+
+    from forge.feedback.auto_tune import write_calibration_yaml
+    from forge.prefilters.calibration import load_calibration
+
+    repo_root = Path(__file__).resolve().parents[3]
+    calib = load_calibration(repo_root / "config" / "prefilter.yaml")
+    dest = tmp_path / "prefilter.yaml"
+    write_calibration_yaml(calib, dest)
+    original = dest.read_text(encoding="utf-8")
+    assert original.strip()  # a valid, complete file
+
+    def _boom(*_a: object, **_k: object) -> None:
+        raise OSError("simulated crash during rename")
+
+    monkeypatch.setattr(_os, "replace", _boom)
+    with pytest.raises(OSError, match="simulated crash"):
+        write_calibration_yaml(calib, dest)
+    # Atomicity: the destination still holds the complete original content
+    # (the partial write landed in a tmp file, never the live path).
+    assert dest.read_text(encoding="utf-8") == original

@@ -22,6 +22,7 @@ loosening always routes through `feedback.proposal_writer.append_proposal`.
 from __future__ import annotations
 
 import hashlib
+import os
 import uuid
 from dataclasses import asdict
 from typing import TYPE_CHECKING
@@ -47,7 +48,16 @@ if TYPE_CHECKING:
 
 
 def write_calibration_yaml(calibration: Calibration, path: Path) -> None:
-    """Serialize `Calibration` back to the §10.2 YAML shape."""
+    """Serialize `Calibration` back to the §10.2 YAML shape, atomically.
+
+    H-6 (audit 2026-05-29): the daemon re-reads this file via
+    `load_calibration` at the top of EVERY iteration, and that loader raises on
+    a missing-key/truncated file. A non-atomic `write_text` killed mid-flight
+    (OOM, SIGTERM, power loss) would leave `prefilter.yaml` partial and brick
+    the daemon into a 30s systemd crash-loop on the file the auto-tuner itself
+    tunes. Write to a sibling tmp then `os.replace` (POSIX-atomic on the same
+    filesystem) — mirrors `proposal_writer._atomic_write`.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "prefilter": {
@@ -61,7 +71,10 @@ def write_calibration_yaml(calibration: Calibration, path: Path) -> None:
             "auto_tune": asdict(calibration.auto_tune),
         }
     }
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    content = yaml.safe_dump(data, sort_keys=False)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _rolling_promotion_rate(

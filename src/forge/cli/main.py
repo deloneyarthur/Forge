@@ -1467,6 +1467,8 @@ def cmd_run(
     """
     import time
 
+    from crucible_contracts import SchemaVersionMismatch
+
     resolved = _resolve_run_defaults(
         config=config,
         no_config=no_config,
@@ -1526,20 +1528,35 @@ def cmd_run(
             iteration = iter_offset + local_iter
             effective_seed = _effective_seed(seed, iteration)
             typer.echo(f"--- loop iteration {iteration} (effective_seed={effective_seed}) ---")
-            _run_one_iteration(
-                seed=effective_seed,
-                batch_size=batch_size,
-                max_candidates=max_candidates,
-                inbox=inbox,
-                crucible_db=crucible_db,
-                forge_db_path=forge_db_path,
-                dry_run=dry_run,
-                consume_feedback=consume_feedback,
-                open_proposals=open_proposals,
-                prefilter_yaml=prefilter_yaml,
-                require_real_cache=require_real_cache,
-                inflight_threshold=inflight_threshold,
-            )
+            try:
+                _run_one_iteration(
+                    seed=effective_seed,
+                    batch_size=batch_size,
+                    max_candidates=max_candidates,
+                    inbox=inbox,
+                    crucible_db=crucible_db,
+                    forge_db_path=forge_db_path,
+                    dry_run=dry_run,
+                    consume_feedback=consume_feedback,
+                    open_proposals=open_proposals,
+                    prefilter_yaml=prefilter_yaml,
+                    require_real_cache=require_real_cache,
+                    inflight_threshold=inflight_threshold,
+                )
+            except (KeyboardInterrupt, SchemaVersionMismatch):
+                # SIGINT stops cleanly via the outer handler; a contracts
+                # mismatch (§13.5) is a deliberate hard halt. Never swallow.
+                raise
+            except Exception as exc:
+                # One bad iteration (transient DB / IO / export error) must not
+                # crash the daemon into a systemd restart loop. Log loudly and
+                # continue; poll_interval is the backoff. A persistent error
+                # surfaces as a repeating journal line, not a flapping service.
+                typer.echo(
+                    f"iteration {iteration} failed: {type(exc).__name__}: {exc}; "
+                    "continuing next poll",
+                    err=True,
+                )
             if max_iterations is not None and local_iter >= max_iterations:
                 break
             time.sleep(poll_interval_seconds)

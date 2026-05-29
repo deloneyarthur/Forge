@@ -2761,3 +2761,16 @@ Fixes:
 **Files modified:** `src/forge/submission/batch.py`, `src/forge/enumeration/{indicator_thresholds,sampler,__init__}.py`, `src/forge/persistence/schemas.py`, `src/forge/submission/submitter.py`, `src/forge/cli/main.py`, `tests/unit/test_submission/test_batch.py`, `tests/unit/test_enumeration/test_determinism_inputs.py`.
 
 **Note:** the `lru_cache` on both loaders still means a mid-run YAML/export change is only picked up on restart — but the fingerprint is now computed per batch from the cached value, so the recorded identity is correct for whatever the process actually used. Sourcing the universe from `RegistrySnapshot` (which would also resolve H-5 and let it ride `registry_hash`) remains the cleaner long-term path.
+
+---
+
+## D086 — 2026-05-29 — Crash-safe config writes: atomic prefilter.yaml + per-iteration loop guard (audit H-6, M-1)
+
+**Spec section:** DESIGN §5.5, §13.2; `feedback/auto_tune.py`, `cli/main.py`
+**Decision:** Two daemon-bricking paths, both fixed:
+- **H-6:** `write_calibration_yaml` wrote the live `config/prefilter.yaml` with a plain `path.write_text(...)` — non-atomic. The auto-tuner runs every `--consume-feedback` iteration, and `_run_one_iteration` re-reads that file at the top of EVERY iteration via `load_calibration` (which raises on a truncated/missing-key file). A kill mid-write (OOM/SIGTERM/power loss) → next iteration's load raises → (pre-M-1) uncaught → systemd restart → raise again → permanent 30s crash-loop on the file the tuner tunes. Fix: write to a sibling `.tmp` then `os.replace` (POSIX-atomic same-filesystem), mirroring `proposal_writer._atomic_write`.
+- **M-1:** the `--loop` body had no per-iteration exception guard, so any non-`KeyboardInterrupt` error crashed the process into the same systemd restart loop. Fix: wrap `_run_one_iteration` in `try/except` — re-raise `KeyboardInterrupt` (clean SIGINT stop) and `SchemaVersionMismatch` (§13.5 contracts hard-halt, must NOT be swallowed); for any other `Exception`, log loudly to stderr and continue to the next poll (`poll_interval` is the backoff; a persistent error becomes a repeating journal line, not a flapping service).
+
+**Tested (TDD, red->green):** `test_auto_tune.py::test_write_calibration_yaml_is_atomic` — a monkeypatched `os.replace` failure leaves the destination's prior content fully intact (write staged in tmp). `test_run_loop.py` — a transient first-iteration error lets the loop continue and run the second iteration (exit 0, both ran); `SchemaVersionMismatch` propagates (non-zero exit, not swallowed). 34 tests green; ruff + mypy clean.
+
+**Files modified:** `src/forge/feedback/auto_tune.py`, `src/forge/cli/main.py`, `tests/unit/test_feedback/test_auto_tune.py`, `tests/unit/test_cli/test_run_loop.py`.

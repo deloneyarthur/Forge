@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from forge.cli.main import _effective_seed, _next_iteration_number, app
@@ -441,3 +442,60 @@ def test_select_feedback_target_none_when_nothing_gated() -> None:
     # from -> None (caller skips the chain rather than analyzing 0-gated data).
     assert _select_feedback_target_batch([(a, 0), (b, 0)]) is None
     assert _select_feedback_target_batch([]) is None
+
+
+# ---------------------------------------------------------------------------
+# M-1 (audit 2026-05-29) — a single failing iteration must not crash the daemon
+# into a systemd restart loop; SchemaVersionMismatch (§13.5) still hard-halts.
+# ---------------------------------------------------------------------------
+
+
+def test_loop_continues_after_failing_iteration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time as _time
+
+    from forge.cli import main as m
+
+    calls: list[int] = []
+
+    def _flaky(**_kwargs: object) -> str:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("transient boom")
+        return "submitted"
+
+    monkeypatch.setattr(m, "_run_one_iteration", _flaky)
+    monkeypatch.setattr(_time, "sleep", lambda *_a, **_k: None)
+    result = runner.invoke(
+        app,
+        ["run", "--no-config", "--loop", "--max-iterations", "2", "--dry-run",
+         "--inbox", str(tmp_path / "ib")],
+    )
+    assert result.exit_code == 0, result.stdout
+    # The first iteration raised; the loop logged it and ran the second anyway.
+    assert len(calls) == 2
+
+
+def test_loop_does_not_swallow_schema_version_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time as _time
+
+    from crucible_contracts import SchemaVersionMismatch
+
+    from forge.cli import main as m
+
+    def _halt(**_kwargs: object) -> str:
+        raise SchemaVersionMismatch("contracts drift")
+
+    monkeypatch.setattr(m, "_run_one_iteration", _halt)
+    monkeypatch.setattr(_time, "sleep", lambda *_a, **_k: None)
+    result = runner.invoke(
+        app,
+        ["run", "--no-config", "--loop", "--max-iterations", "2", "--dry-run",
+         "--inbox", str(tmp_path / "ib")],
+    )
+    # §13.5: a contracts mismatch is a hard halt — it must propagate, not be
+    # caught-and-continued like a transient error.
+    assert result.exit_code != 0
