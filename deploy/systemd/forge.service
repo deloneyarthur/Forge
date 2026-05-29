@@ -7,7 +7,10 @@ Wants=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/aj/proj/Forge
-ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback
+# --require-real-cache: skip the iteration if Crucible's writer/feature cache
+# is unavailable rather than silently degrading to the synthetic cache and
+# submitting a noise-filtered batch (2026-05-28 RCA / D080).
+ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache
 Restart=on-failure
 RestartSec=30
 TimeoutStopSec=120

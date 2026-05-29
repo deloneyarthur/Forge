@@ -2650,3 +2650,25 @@ Mean_reversion's family (bb_pct, keltner_pct, rsi*, zscore_returns) is largely c
 **Files modified:**
 - `src/forge/enumeration/sampler.py` — removed `relative_value` early return + comment updates.
 
+---
+
+## D080 — 2026-05-28 — Production runs must not silently degrade to the synthetic feature cache
+
+**Spec section:** §5.2 battery / §13 production-quality; `cli/main.py` `_build_feature_cache`
+**Decision:** Add a `--require-real-cache` flag to `forge run` (default **off**). When set and Crucible's real feature cache is unreachable, `_build_feature_cache` raises `FeatureCacheUnavailableError` and `_run_one_iteration` returns `"skipped"` (logged loudly) instead of degrading to `SyntheticFeatureCache`. The systemd service (`deploy/systemd/forge.service`) sets the flag. The fallback now logs LOUDLY in every mode, even when degradation is allowed.
+
+**RCA (verified):** After the PC rebooted on 2026-05-28, the service's first iteration logged `prefetch=0.00s, battery=63.58s, passed_prefilter=0`. `prefetch=0.00s` is an unambiguous fingerprint of `SyntheticFeatureCache` (it has no `prefetch_for_batch` hook), and a 63s battery is impossible for the real cache (which takes 17-38 min on the socket). The Crucible writer socket was not yet up during the cold start, so `_build_feature_cache`'s `except FeatureCacheUnavailableError: pass` silently fell back to synthetic. Synthetic returns are pure Gaussian noise uncorrelated with activations, so `permutation_test` rejected ~100% of what `expected_trades` passed -> 0 submissions. The same silent path could equally PASS garbage and submit it. Historical journal scan: 7 such synthetic-fallback iterations clustered on 2026-05-21/22 (matching the "writer socket broken" errors) plus this reboot — i.e. the gap fires on every writer-unavailable event.
+
+**Rationale:** Hard-rule spirit / §13 production quality: Forge must never filter or submit a batch against a cache it knows is meaningless. Default-off preserves offline dev/test flows (no writer socket -> synthetic) and every existing test; production opts in via the service unit. The fallback path is now observable (loud `warning:` to stderr/journal) regardless of the flag.
+
+**Tested (TDD, red->green):** `tests/unit/test_cli/test_feature_cache_fallback.py` (4 tests): `require_real=True` raises when the socket is absent (hermetic via injectable `data_root`); `require_real=False` falls back to synthetic; a production `forge run --require-real-cache` with the cache unavailable SKIPS (exit 0, no inbox files, no `submissions` rows); the default path still submits on synthetic (back-compat guard).
+
+**Files modified:**
+- `src/forge/cli/main.py` — `_build_feature_cache(require_real=, data_root=)` (raise-or-warn, no more silent `pass`); `_run_battery_for_seed(require_real_cache=)`; `_run_one_iteration` try/except -> `"skipped"`; `cmd_run` `--require-real-cache` flag threaded to both call sites.
+- `tests/unit/test_cli/test_feature_cache_fallback.py` — new.
+- `deploy/systemd/forge.service` — ExecStart adds `--require-real-cache`.
+
+**Deployed:** unit edited, `systemctl --user daemon-reload` + restart; flag confirmed active in `ExecStart`.
+
+**Follow-ups (see OPEN_QUESTIONS Q21, Q22):** latent `permutation_test._full_window` calendar/trading-day bug (exposed by the window doubling, not the outage cause); prefetch perf (17-38 min/batch, dominated by ~10k unique-spec computations over the socket, not the window size).
+

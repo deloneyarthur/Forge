@@ -144,13 +144,28 @@ def cmd_enumerate(
 def _build_feature_cache(
     registry: RegistrySnapshot,
     seed: int,
+    *,
+    require_real: bool = False,
+    data_root: Path | None = None,
 ) -> object:
     """Construct the production FeatureCache; fall back to synthetic on failure.
 
-    Tries `crucible_contracts.FeatureCacheClient` against the default
-    `~/optbt_data/db_writer.sock`. If the writer socket isn't reachable
-    (no Crucible running, e.g. in test environments), falls back to
-    `SyntheticFeatureCache` so dev/test flows keep working.
+    Tries `crucible_contracts.FeatureCacheClient` against the writer socket
+    under `data_root` (default `~/optbt_data`). When the socket isn't reachable
+    (no Crucible running, writer restarting, e.g. in test environments) the
+    behaviour depends on `require_real`:
+
+      - `require_real=False` (dev/test default): fall back to
+        `SyntheticFeatureCache` so offline flows keep working — but log
+        LOUDLY, because synthetic returns are pure noise that make the whole
+        pre-filter battery meaningless (the 2026-05-28 RCA: a post-reboot
+        silent fallback rejected every config at `permutation_test`).
+      - `require_real=True` (production submission path): raise
+        `FeatureCacheUnavailableError` rather than degrade silently, so the
+        caller can skip the iteration instead of filtering/submitting on noise.
+
+    `data_root` is injectable so tests can point at a socket-free directory
+    without depending on whether a live writer exists on the host.
     """
     from pathlib import Path
 
@@ -159,9 +174,12 @@ def _build_feature_cache(
     from forge.prefilters import SyntheticFeatureCache
     from forge.prefilters.crucible_feature_cache import CrucibleFeatureCache
 
-    socket_path = Path.home() / "optbt_data" / "db_writer.sock"
-    authkey_path = Path.home() / "optbt_data" / "db_writer.authkey"
-    db_path = Path.home() / "optbt_data" / "runs.duckdb"
+    root = data_root if data_root is not None else Path.home() / "optbt_data"
+    socket_path = root / "db_writer.sock"
+    authkey_path = root / "db_writer.authkey"
+    db_path = root / "runs.duckdb"
+
+    unavailable_reason: str | None = None
     if socket_path.exists() and authkey_path.exists():
         try:
             client = FeatureCacheClient(
@@ -176,11 +194,24 @@ def _build_feature_cache(
             )
             # Probe — Crucible's writer may not yet support feature_batch
             # requests (the writer-side handler ships in a separate change).
-            # Falls back to SyntheticFeatureCache if the probe fails.
             cache.probe()
             return cache
-        except FeatureCacheUnavailableError:
-            pass
+        except FeatureCacheUnavailableError as exc:
+            unavailable_reason = str(exc)
+    else:
+        unavailable_reason = f"writer socket not found at {socket_path}"
+
+    # Real cache unavailable. Hard rule: production never degrades silently.
+    if require_real:
+        raise FeatureCacheUnavailableError(
+            f"{unavailable_reason}; refusing to run on the synthetic cache "
+            "(--require-real-cache is set)."
+        )
+    typer.echo(
+        f"warning: {unavailable_reason}; falling back to SyntheticFeatureCache "
+        "— pre-filter results are NOT data-grounded.",
+        err=True,
+    )
     return SyntheticFeatureCache(
         root_seed=seed,
         data_history_days=registry.data_history_days,
@@ -700,6 +731,7 @@ def _run_battery_for_seed(
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
+    require_real_cache: bool = False,
 ) -> list[PreFilterReport]:
     """Enumerate and run the §5.2 battery; return one PreFilterReport per config.
 
@@ -731,7 +763,9 @@ def _run_battery_for_seed(
 
     ctx = FilterContext(
         registry=registry,
-        feature_cache=_build_feature_cache(registry, seed),  # type: ignore[arg-type]
+        feature_cache=_build_feature_cache(  # type: ignore[arg-type]
+            registry, seed, require_real=require_real_cache
+        ),
         prior_config_hashes=frozenset(),
         prior_firing_dates={},
         calibration=calibration,
@@ -989,8 +1023,9 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     consume_feedback: bool,
     open_proposals: Path,
     prefilter_yaml: Path,
+    require_real_cache: bool = False,
 ) -> str:
-    """Run one cycle; return one of 'submitted', 'blocked', 'dry-run'.
+    """Run one cycle; return one of 'submitted', 'blocked', 'dry-run', 'skipped'.
 
     PLR0915 suppression: D062/D064/D065 progressively added per-iteration
     telemetry (rejection counter, per-hypothesis breakdown, phase timings,
@@ -1000,6 +1035,8 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     cycle: gate → enumerate → rank → submit → log → feedback.
     """
     import time as _time
+
+    from crucible_contracts import FeatureCacheUnavailableError
 
     from forge.core.clock import utc_now
     from forge.core.contracts_check import check_contracts_version
@@ -1088,17 +1125,28 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
             f"min_pass_p={calibration.expected_trade_count.min_pass_probability} "
             f"min_samples={calibration.expected_trade_count.min_bucket_samples}"
         )
-    reports = _run_battery_for_seed(
-        grammar,
-        registry,
-        seed,
-        max_candidates,
-        calibration,
-        hypothesis_weights=hypothesis_weights,
-        trade_rate_priors=trade_rate_priors,
-        forge_db_path=forge_db_path,
-        timings=timings,
-    )
+    try:
+        reports = _run_battery_for_seed(
+            grammar,
+            registry,
+            seed,
+            max_candidates,
+            calibration,
+            hypothesis_weights=hypothesis_weights,
+            trade_rate_priors=trade_rate_priors,
+            forge_db_path=forge_db_path,
+            timings=timings,
+            require_real_cache=require_real_cache,
+        )
+    except FeatureCacheUnavailableError:
+        # Production safety (2026-05-28 RCA): never filter/submit a batch
+        # against the synthetic cache. Skip this iteration; the daemon loop
+        # retries on the next poll once Crucible's writer is back.
+        typer.echo(
+            "skipped: real feature cache unavailable (Crucible writer down?); "
+            "refusing to filter/submit on the synthetic fallback. Retrying next poll."
+        )
+        return "skipped"
     passed = sum(1 for r in reports if r.passed)
     typer.echo(f"enumerated={len(reports)} passed_prefilter={passed}")
 
@@ -1292,6 +1340,15 @@ def cmd_run(
         "--loop",
         help="daemon-loop: repeat the cycle, sleeping --poll-interval-seconds between (§7.3)",
     ),
+    require_real_cache: bool = typer.Option(
+        False,
+        "--require-real-cache",
+        help=(
+            "skip the iteration (no submit) when Crucible's real feature cache is "
+            "unavailable, instead of silently degrading to the synthetic cache. "
+            "Production safety; default off so offline dev/test runs work on synthetic."
+        ),
+    ),
     max_iterations: int | None = typer.Option(
         None,
         "--max-iterations",
@@ -1384,6 +1441,7 @@ def cmd_run(
             consume_feedback=consume_feedback,
             open_proposals=open_proposals,
             prefilter_yaml=prefilter_yaml,
+            require_real_cache=require_real_cache,
         )
         return
 
@@ -1411,6 +1469,7 @@ def cmd_run(
                 consume_feedback=consume_feedback,
                 open_proposals=open_proposals,
                 prefilter_yaml=prefilter_yaml,
+                require_real_cache=require_real_cache,
             )
             if max_iterations is not None and local_iter >= max_iterations:
                 break
