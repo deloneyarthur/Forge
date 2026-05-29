@@ -35,11 +35,13 @@ from forge.core.logging import configure_logging
 from forge.version import __version__
 
 if TYPE_CHECKING:
+    import uuid
     from collections.abc import Mapping, Sequence
 
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
     from forge.feedback.trade_rate_priors import BucketKey, BucketStats
+    from forge.feedback.types import BatchFeedback
     from forge.grammar import Grammar
     from forge.prefilters.calibration import Calibration
     from forge.prefilters.types import PreFilterReport
@@ -855,7 +857,7 @@ def _ensure_grammar_version_recorded_silently(
 def _reconcile_pending_silently(
     forge_db_path: Path,
     crucible_db: Path,
-) -> None:
+) -> tuple[BatchFeedback, ...]:
     """D046: flush stranded `submitted` rows to `gated` against the export.
 
     Called at the start of every `_run_one_cycle` invocation before the
@@ -863,6 +865,11 @@ def _reconcile_pending_silently(
     Swallows `QueryError` (Crucible offline) — the rate-limit check will
     handle that case via its own conservative path. Logs the per-batch
     reconciliation count when there's something to report; silent otherwise.
+
+    H-2 (audit 2026-05-29): returns the per-batch `BatchFeedback`s so the
+    caller can run the §2.1 step-10/11 feedback chain on a batch that is
+    actually gated — previously these were discarded and the chain ran on
+    the just-submitted (0-gated) batch, producing nothing.
     """
     from crucible_contracts.exceptions import QueryError
 
@@ -875,13 +882,33 @@ def _reconcile_pending_silently(
     except QueryError:
         # Crucible offline / both fetch paths failed. The rate-limit check
         # has its own fallback; nothing more to do here.
-        return
-    if not feedbacks:
-        return
+        return ()
     flipped = sum(fb.gated_count for fb in feedbacks)
-    if flipped == 0:
-        return
-    typer.echo(f"reconciled: batches={len(feedbacks)} newly_gated_total={flipped}")
+    if flipped:
+        typer.echo(f"reconciled: batches={len(feedbacks)} newly_gated_total={flipped}")
+    return feedbacks
+
+
+def _select_feedback_target_batch(
+    candidates: Sequence[tuple[uuid.UUID, int]],
+) -> uuid.UUID | None:
+    """H-2: pick which reconciled batch the feedback chain should analyze.
+
+    `candidates` is `(batch_id, gated_count)` per reconciled in-flight batch.
+    Returns the batch with the MOST real gated outcomes — the richest, most-
+    completed learning signal — or `None` when no reconciled batch has any
+    gated outcomes (nothing newly completed; the caller then skips the chain
+    rather than analyzing the just-submitted 0-gated batch as it did pre-fix).
+    Ties keep the first (oldest, since `reconcile_all_pending` orders
+    oldest-first) for determinism.
+    """
+    best: tuple[uuid.UUID, int] | None = None
+    for batch_id, gated in candidates:
+        if gated <= 0:
+            continue
+        if best is None or gated > best[1]:
+            best = (batch_id, gated)
+    return best[0] if best else None
 
 
 def _consume_feedback_after_submit(
@@ -895,6 +922,11 @@ def _consume_feedback_after_submit(
     """Best-effort feedback chain wrapper for `forge run --consume-feedback`."""
     if crucible_db is None:
         typer.echo("feedback: skipped (no --crucible-db)")
+        return
+    if batch_id is None:
+        # H-2: no reconciled batch had gated outcomes this cycle — nothing newly
+        # completed to learn from. Skip rather than analyze a 0-gated batch.
+        typer.echo("feedback: skipped (no completed batch with gated results this cycle)")
         return
 
     from forge.core.clock import utc_now
@@ -1087,13 +1119,17 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
             yaml_path=config_root / "grammar.yaml",
         )
 
+    # H-2: BatchFeedbacks from reconcile drive the post-submit feedback chain
+    # (which batch is actually gated). Default empty for the dry-run / no-crucible
+    # paths where reconcile is skipped.
+    reconciled: tuple[BatchFeedback, ...] = ()
     if crucible_db is not None and not dry_run:
         # D046: reconcile every batch with `submitted` rows against the
         # gated-runs export before checking the rate limit. Without this,
         # older batches stay in `submitted` indefinitely and the oldest-batch
         # rate limit logic blocks the loop forever.
         _t_reconcile = _time.monotonic()
-        _reconcile_pending_silently(forge_db_path, crucible_db)
+        reconciled = _reconcile_pending_silently(forge_db_path, crucible_db)
         timings["reconcile"] = _time.monotonic() - _t_reconcile
         rate = check_rate_limit(forge_db_path, crucible_db, threshold=inflight_threshold)
         if not rate.clear:
@@ -1221,10 +1257,17 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     typer.echo(_format_phase_timings_line(timings))
 
     if consume_feedback:
+        # H-2: analyze the most-recently-completed (most-gated) batch from this
+        # iteration's reconcile, NOT result.batch_id — the batch just written to
+        # the inbox is 0-gated, so the chain produced nothing on it. None target
+        # => no batch has fresh gated data, so skip the chain this iteration.
+        feedback_target = _select_feedback_target_batch(
+            [(fb.batch_id, fb.gated_count) for fb in reconciled]
+        )
         _consume_feedback_after_submit(
             forge_db_path=forge_db_path,
             crucible_db=crucible_db,
-            batch_id=result.batch_id,
+            batch_id=feedback_target,
             open_proposals=open_proposals,
             prefilter_yaml=prefilter_yaml,
         )

@@ -412,3 +412,32 @@ def test_d065_run_battery_for_seed_populates_timings(tmp_path: Path) -> None:
     assert set(timings) == {"enumeration", "prefetch", "battery"}
     for k, v in timings.items():
         assert v >= 0.0, f"{k} should be non-negative"
+
+
+# ---------------------------------------------------------------------------
+# H-2 (audit 2026-05-29) — the feedback chain must analyze a COMPLETED batch
+# (most real gated outcomes from reconcile), never the just-submitted 0-gated
+# batch. `_select_feedback_target_batch` is the pure selector that decides it.
+# ---------------------------------------------------------------------------
+
+
+def test_select_feedback_target_picks_most_gated_batch() -> None:
+    import uuid as _uuid
+
+    from forge.cli.main import _select_feedback_target_batch
+
+    a, b, c = _uuid.uuid4(), _uuid.uuid4(), _uuid.uuid4()
+    # b has the most real gated outcomes -> richest signal -> target.
+    assert _select_feedback_target_batch([(a, 5), (b, 40), (c, 12)]) == b
+
+
+def test_select_feedback_target_none_when_nothing_gated() -> None:
+    import uuid as _uuid
+
+    from forge.cli.main import _select_feedback_target_batch
+
+    a, b = _uuid.uuid4(), _uuid.uuid4()
+    # No reconciled batch has gated outcomes -> nothing newly completed to learn
+    # from -> None (caller skips the chain rather than analyzing 0-gated data).
+    assert _select_feedback_target_batch([(a, 0), (b, 0)]) is None
+    assert _select_feedback_target_batch([]) is None

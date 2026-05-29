@@ -2725,3 +2725,21 @@ This **changes the behaviour of a spec mechanism** (per the audit's instruction 
 **Files modified:** `src/forge/submission/rate_limiter.py`, `src/forge/cli/main.py`, `tests/unit/test_submission/test_rate_limiter.py`, `tests/unit/test_cli/test_config_threading.py`.
 
 **Not addressed here (audit follow-ups):** M-7 (sentinel flush also dilutes `promotion_rate`, biasing auto-tune LOOSEN) and the option (b) rolling submission-vs-real-gate ratio remain open; this fix re-couples the throttle to real gates, which is the load-bearing change.
+
+---
+
+## D084 — 2026-05-29 — Revive the §2.1 feedback loop: analyze the most-completed batch, not the just-submitted one (audit H-2)
+
+**Spec section:** DESIGN §2.1 steps 10-11, §8.2/§8.3; `cli/main.py`
+**Decision:** In the `--loop` body, `_reconcile_pending_silently` discarded the `BatchFeedback`s from `reconcile_all_pending` (used only for a log line), and `_consume_feedback_after_submit` ran the analyze/propose/promoted-patterns/auto-tune chain on `result.batch_id` — the batch written to the inbox seconds earlier, which is 0-gated, so the join produced 0 matches and the entire learning layer (§2.1 steps 10-11) was inert in autonomous operation. Fix:
+- `_reconcile_pending_silently` now returns the `tuple[BatchFeedback, ...]`.
+- New pure helper `_select_feedback_target_batch(candidates: Sequence[(batch_id, gated_count)]) -> uuid | None` picks the batch with the MOST real gated outcomes (richest, most-completed signal), or None when none are gated.
+- `_run_one_iteration` feeds `[(fb.batch_id, fb.gated_count) for fb in reconciled]` to the selector and passes the chosen batch (not `result.batch_id`) to `_consume_feedback_after_submit`, which now skips cleanly when the target is None.
+
+**Why re-running is safe (no proposal flooding):** `proposal_writer` already has intent-dedup (`proposal_writer.py:198`, built specifically because the §8.4 trigger fires every batch) and `auto_tune` has the cumulative-tightening cap — so analyzing the most-complete batch across iterations until a newer one supersedes it does not flood OPEN_PROPOSALS.md or over-tighten.
+
+**Tested (TDD, red->green):** `test_run_loop.py` — selector picks the most-gated batch; returns None when nothing is gated or the list is empty. 29 CLI/submission/resilience regression tests green; ruff + mypy clean.
+
+**Files modified:** `src/forge/cli/main.py`, `tests/unit/test_cli/test_run_loop.py`.
+
+**Scope note:** the chain still only runs on non-blocked iterations (after a successful submit), matching the pre-fix call site; running feedback on blocked polls too is a separate enhancement, not required by H-2. Target selection uses most-gated as the proxy for "most-recently-completed" (richest signal); exact completion-recency ordering is a future refinement.
