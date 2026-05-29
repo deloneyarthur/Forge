@@ -1,5 +1,21 @@
 # Forge — Status
 
+## Current status — 2026-05-28 (supersedes the 2026-05-18 block below)
+
+**Pipeline: HEALTHY, submitting on grammar v4.** Service running with `--require-real-cache` (D080). ~184 v4 configs gated so far at **36% zero-trade** vs 61.6% legacy — D077-D079 confirmed working. 0 promotions / 5000 (expected; Crucible's gate is the authority). Cohort is still thin + skewed (98% volatility_event + regime_arbitrage; relative_value / mean_reversion / tail_hedge have **0** v4 gated runs).
+
+**This session (D080-D082):**
+- **D080** — `forge run --require-real-cache` (service opts in): skip-and-retry instead of silently degrading to the synthetic cache. RCA: a post-reboot synthetic fallback (writer socket cold) made `permutation_test` reject ~100% → 0 submissions. Deployed.
+- **D081** — version-weight the `expected_trades` trade-rate priors (current grammar 1.0, prior 0.25) so v4 configs aren't judged on legacy behaviour, without going inert on thin buckets. Deployed.
+- **D082** — fix `permutation_test._full_window` calendar/trading-day truncation (Q21). Committed; deploys next restart.
+- Tests: +9 this session (D080-D082), all green; ruff + mypy clean on changed scope.
+
+**Open / next:**
+- **Q22** (prefetch 17-38 min/batch) — Crucible already has a feature_cache; root cause is `window_hash` churning on daily ingest. Handoff sent: `../Crucible/docs/handoffs/PROMPT_CRUCIBLE_FEATURE_CACHE_PERF.md`.
+- **WS1a** (re-run threshold proposer) + **WS2** (relative_value entry rate, likely Crucible-side) — **data-gated**: need a representative v4 cohort across all hypotheses. Revisit once throughput improves and the slow/rare hypotheses gate.
+
+---
+
 > **Note (D059 / P3-4 2026-05-18):** Some historical entries below reference Crucible coordination prompts (`CRUCIBLE_*_AGENT_PROMPT.md` at repo root) that were deleted in commit `e85f0d4` after their work shipped. The references are preserved as historical narrative; the prompt files are recoverable via `git show e85f0d4^:<filename>`. See the matching D059 entry in `IMPLEMENTATION_DECISIONS.md` for the deleted-file list.
 
 **v1 go-live status:** **DEGRADED 2026-05-18** — service is running but the feedback path has been silently broken since 2026-05-14. Per the 2026-05-17 audit: 4,020 submissions, 308 gated (all from a single batch on 2026-05-14), `forge.submissions.crucible_run_id ∩ export.gated_runs.run_id = 0` after 2026-05-14, rate-limit-blocked on batch `e2658f76` for 8+ hours. Auto-tune fired 19 stale tighten proposals during the gap (suppressed post-D034). Q14 issues + D031-D045 in-flight (42 modified + 6 new files uncommitted; 1028/1028 tests green locally). Root-cause diagnosis + fix in progress; v1-go-live framing was true once (2026-05-14 00:23:32 PDT, D029) but has not held since.
