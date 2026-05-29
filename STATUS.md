@@ -1,19 +1,24 @@
 # Forge — Status
 
-## Current status — 2026-05-28 (supersedes the 2026-05-18 block below)
+## Current status — 2026-05-29 (supersedes the blocks below)
 
-**Pipeline: HEALTHY, submitting on grammar v4** (~16 min/batch post-Q22-fix, no longer rate-limited). Service running with `--require-real-cache` (D080). ~220 v4 configs gated so far at **36% zero-trade** vs 61.6% legacy — D077-D079 confirmed working. 0 promotions / 5000 (expected; Crucible's gate is the authority). Cohort is still thin + skewed (98% volatility_event + regime_arbitrage; relative_value / mean_reversion / tail_hedge have **0** v4 gated runs).
+**Pipeline: HEALTHY on grammar v4 — full-audit remediation deployed.** Service runs `forge run --loop --consume-feedback --require-real-cache`. The full codebase+pipeline audit (`AUDIT.md`, 2026-05-29 — 65 verified findings, **0 critical / 7 high** / 16 med / 18 low) is remediated: **all 7 highs fixed (D083-D087) and deployed 2026-05-29 09:38.** 0 promotions / 5000 remains expected (§1.2; Crucible's gate is the authority). v4 zero-trade ~36% vs 61.6% legacy.
 
-**This session (D080-D082):**
-- **D080** — `forge run --require-real-cache` (service opts in): skip-and-retry instead of silently degrading to the synthetic cache. RCA: a post-reboot synthetic fallback (writer socket cold) made `permutation_test` reject ~100% → 0 submissions. Deployed.
-- **D081** — version-weight the `expected_trades` trade-rate priors (current grammar 1.0, prior 0.25) so v4 configs aren't judged on legacy behaviour, without going inert on thin buckets. Deployed.
-- **D082** — fix `permutation_test._full_window` calendar/trading-day truncation (Q21). Committed + deployed (forge restarted 2026-05-28 19:56).
-- Tests: +9 this session (D080-D082), all green; ruff + mypy clean on changed scope.
+**Audit remediation — D083-D087 (all committed + deployed):**
+- **D083** — §7.3 rate limiter counts only REAL gates (excludes D052 nil-UUID sentinels — ~91.6% of `gated` rows were sentinels, silently voiding the throttle); `inflight_threshold` wired from `forge.yaml`. It now throttles honestly: CLEARS only when the oldest in-flight batch has ≥80% real Crucible decisions — expect genuine blocking whenever real gating lags submission.
+- **D084** — feedback loop revived: analyze/propose/auto_tune runs on the most-recently-completed reconciled batch, not the just-submitted 0-gated one (§2.1 steps 10-11 were inert in `--loop`).
+- **D085** — cross-restart determinism (#6): auto-tightenings + universe fingerprints folded into `mint_batch_id` + `batch_summaries` (new `seed`/`enumeration_inputs_hash` columns) — closes the identity gap + batch_id collisions.
+- **D086** — crash-safe config writes: atomic `prefilter.yaml` (tmp+rename) + per-iteration `--loop` exception guard (re-raises SchemaVersionMismatch / SIGINT).
+- **D087** — hard-rule-#2 universe read: D078 dynamic read kept, deviation now logged + tracked (Q23) + contracts handoff sent.
+- Verification: **539 regression tests green** (changed scope + invariants); ruff + mypy clean on all 75 src files.
+
+**Earlier this session (D080-D082, deployed):** D080 `--require-real-cache` (no silent synthetic-cache fallback — post-reboot RCA); D081 version-weighted `expected_trades` priors; D082 `permutation_test._full_window` calendar fix (Q21). NOTE per audit M-3: D082 is a **no-op in production** until M-2 (permutation null pool restricted to prefetched activation-date returns, not the full series) is fixed.
 
 **Open / next:**
-- **Q22 (prefetch perf) — Crucible fix DEPLOYED + verified.** Crucible shipped window-stable value_series + tail-recompute + hit/miss logging (commits `4f585da` / `4633189`); writer restarted 2026-05-28 19:56. Verified: one-time **2.3× drop** (cold 2199s → ~950s) then **plateaued ~950s** (value-series coverage saturates in a single 5000-config batch). Residual ~16 min/batch floor = per-spec `activation_dates` overhead = `PROMPT_CRUCIBLE_FEATURE_CACHE_PERF` **#2 (bulk path), deferred by Crucible**.
-  - **PENDING — operator re-engages ~Fri 2026-05-29 20:30 PDT** for the post-ingest regression check (chose manual over a scheduled run; the schedule skill is remote-cloud-only and can't read this machine's journal). After `crucible-ingest-daily` (19:00) the first post-ingest Forge batch's prefetch should stay **~950s** (tail-recompute held across the daily append), NOT spike back to ~2199s. Check: `journalctl --user -u forge.service --since '2026-05-29 19:00:00' --no-pager | grep phase_timings` (+ writer `feature_batch` telemetry). If it plateaus >~15 min, send Crucible the **#2 bulk-path** follow-up.
-- **WS1a** (re-run threshold proposer) + **WS2** (relative_value entry rate, likely Crucible-side) — **data-gated**: need a representative v4 cohort across all hypotheses (relative_value / mean_reversion / tail_hedge still ~0 v4 gated). Revisit once the cohort fills out.
+- **Q22 (prefetch perf)** — Crucible's tail-recompute fix deployed + verified (one-time 2.3× drop to ~950s, then plateau; residual floor = per-spec activation overhead = the deferred `PROMPT_CRUCIBLE_FEATURE_CACHE_PERF` #2 bulk-path). PENDING manual post-ingest regression check (~Fri 2026-05-29 evening): first batch after `crucible-ingest-daily` (19:00) should stay ~950s, NOT spike to ~2199s. `journalctl --user -u forge.service --since '2026-05-29 19:00:00' --no-pager | grep phase_timings`.
+- **Q23 / H-5** — universe read not on the contracts surface; handoff `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md` sent (add `load_universe_tickers_from_export`). Route Forge through it when it lands; drop the `universe_uncontracted_read` warning + retire `universe_fingerprint`.
+- **Audit Medium/Low backlog** — `AUDIT.md` has 16 Med + 18 Low beyond the 7 highs, NOT yet triaged. Notables: **M-2** (permutation null-pool coverage — makes D082/D075 no-ops), **M-7** (sentinel flush dilutes `promotion_rate` → biases auto-tune LOOSEN), **M-8** (auto-tune doesn't tighten the D076 primary `min_pass_probability` knob), **M-15/M-16** (GRAMMAR.md S5/R3 stale + missing `K_MAX_OPTIONAL` test).
+- **WS1a / WS2** — data-gated: re-run threshold proposer + assess relative_value entry rate once a representative v4 cohort accumulates across all hypotheses (relative_value / mean_reversion / tail_hedge still ~0 v4 gated).
 
 ---
 
