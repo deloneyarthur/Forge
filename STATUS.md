@@ -2,17 +2,18 @@
 
 ## Current status — 2026-05-28 (supersedes the 2026-05-18 block below)
 
-**Pipeline: HEALTHY, submitting on grammar v4.** Service running with `--require-real-cache` (D080). ~184 v4 configs gated so far at **36% zero-trade** vs 61.6% legacy — D077-D079 confirmed working. 0 promotions / 5000 (expected; Crucible's gate is the authority). Cohort is still thin + skewed (98% volatility_event + regime_arbitrage; relative_value / mean_reversion / tail_hedge have **0** v4 gated runs).
+**Pipeline: HEALTHY, submitting on grammar v4** (~16 min/batch post-Q22-fix, no longer rate-limited). Service running with `--require-real-cache` (D080). ~220 v4 configs gated so far at **36% zero-trade** vs 61.6% legacy — D077-D079 confirmed working. 0 promotions / 5000 (expected; Crucible's gate is the authority). Cohort is still thin + skewed (98% volatility_event + regime_arbitrage; relative_value / mean_reversion / tail_hedge have **0** v4 gated runs).
 
 **This session (D080-D082):**
 - **D080** — `forge run --require-real-cache` (service opts in): skip-and-retry instead of silently degrading to the synthetic cache. RCA: a post-reboot synthetic fallback (writer socket cold) made `permutation_test` reject ~100% → 0 submissions. Deployed.
 - **D081** — version-weight the `expected_trades` trade-rate priors (current grammar 1.0, prior 0.25) so v4 configs aren't judged on legacy behaviour, without going inert on thin buckets. Deployed.
-- **D082** — fix `permutation_test._full_window` calendar/trading-day truncation (Q21). Committed; deploys next restart.
+- **D082** — fix `permutation_test._full_window` calendar/trading-day truncation (Q21). Committed + deployed (forge restarted 2026-05-28 19:56).
 - Tests: +9 this session (D080-D082), all green; ruff + mypy clean on changed scope.
 
 **Open / next:**
-- **Q22** (prefetch 17-38 min/batch) — Crucible already has a feature_cache; root cause is `window_hash` churning on daily ingest. Handoff sent: `../Crucible/docs/handoffs/PROMPT_CRUCIBLE_FEATURE_CACHE_PERF.md`.
-- **WS1a** (re-run threshold proposer) + **WS2** (relative_value entry rate, likely Crucible-side) — **data-gated**: need a representative v4 cohort across all hypotheses. Revisit once throughput improves and the slow/rare hypotheses gate.
+- **Q22 (prefetch perf) — Crucible fix DEPLOYED + verified.** Crucible shipped window-stable value_series + tail-recompute + hit/miss logging (commits `4f585da` / `4633189`); writer restarted 2026-05-28 19:56. Verified: one-time **2.3× drop** (cold 2199s → ~950s) then **plateaued ~950s** (value-series coverage saturates in a single 5000-config batch). Residual ~16 min/batch floor = per-spec `activation_dates` overhead = `PROMPT_CRUCIBLE_FEATURE_CACHE_PERF` **#2 (bulk path), deferred by Crucible**.
+  - **PENDING — operator re-engages ~Fri 2026-05-29 20:30 PDT** for the post-ingest regression check (chose manual over a scheduled run; the schedule skill is remote-cloud-only and can't read this machine's journal). After `crucible-ingest-daily` (19:00) the first post-ingest Forge batch's prefetch should stay **~950s** (tail-recompute held across the daily append), NOT spike back to ~2199s. Check: `journalctl --user -u forge.service --since '2026-05-29 19:00:00' --no-pager | grep phase_timings` (+ writer `feature_batch` telemetry). If it plateaus >~15 min, send Crucible the **#2 bulk-path** follow-up.
+- **WS1a** (re-run threshold proposer) + **WS2** (relative_value entry rate, likely Crucible-side) — **data-gated**: need a representative v4 cohort across all hypotheses (relative_value / mean_reversion / tail_hedge still ~0 v4 gated). Revisit once the cohort fills out.
 
 ---
 
