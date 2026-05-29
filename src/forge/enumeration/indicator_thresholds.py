@@ -175,6 +175,24 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         directional_range=(5.0, 30.0),
         regime_range=(7.0, 60.0),
     ),
+    # M-9 (audit 2026-05-29): T1.4/D039 widened R3's event-proximity pool to
+    # these macro-calendar indicators to make `volatility_event` usable on ETFs
+    # (which return sentinel 999 for days_to_earnings). They were never added
+    # here, so `is_threshold_skippable(..., 'regime_filter')` filtered them out
+    # and the widening was inert. Mirror days_to_fomc's "event imminent" /
+    # allow-window ranges (all are days-to-event countdowns with the same scale).
+    "days_to_cpi": IndicatorThresholdSpec(
+        directional_range=(5.0, 14.0),
+        regime_range=(7.0, 60.0),
+    ),
+    "days_to_nfp": IndicatorThresholdSpec(
+        directional_range=(5.0, 14.0),
+        regime_range=(7.0, 60.0),
+    ),
+    "days_to_opex": IndicatorThresholdSpec(
+        directional_range=(3.0, 10.0),  # OPEX is monthly — tighter imminence window
+        regime_range=(5.0, 30.0),
+    ),
     # ----- IV / event / pairs / macro (post-D031 real Crucible v2 implementations) -----
     # iv_rank: §3.5 R1 demands threshold <= 50 on mean_reversion regime; honored here.
     "iv_rank": IndicatorThresholdSpec(

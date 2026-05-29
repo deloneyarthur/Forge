@@ -499,3 +499,32 @@ def test_loop_does_not_swallow_schema_version_mismatch(
     # §13.5: a contracts mismatch is a hard halt — it must propagate, not be
     # caught-and-continued like a transient error.
     assert result.exit_code != 0
+
+
+def test_l9_loop_requires_crucible_db(tmp_path: Path) -> None:
+    """L-9 (audit 2026-05-29): --loop without a Crucible DB must error (exit 2).
+
+    The §7.3 rate limiter is the only backpressure against unbounded submission,
+    and it's silently skipped when crucible_db is None — a loop would then submit
+    a full batch every poll interval with zero throttle. Mirrors the --inbox guard.
+    """
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--no-config",
+            "--inbox",
+            str(tmp_path / "inbox"),
+            "--forge-db",
+            str(tmp_path / "forge.db"),
+            "--loop",
+            "--max-iterations",
+            "1",
+            # deliberately NO --crucible-db
+        ],
+    )
+    # exit 2 with --inbox supplied uniquely identifies the L-9 crucible-db guard
+    # (the only remaining code-2 path on this invocation). The message goes to
+    # stderr; its exact capture varies by Click version, so the exit code is the
+    # contract we assert.
+    assert result.exit_code == 2, result.output

@@ -100,6 +100,39 @@ def test_s4_unknown_indicator_reported() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_m15_grammar_md_s5_documents_every_exit_in_source_table() -> None:
+    """M-15 (audit 2026-05-29): content-aware S5 doc-sync. GRAMMAR.md §S5 must
+    document the v3 schema vocabulary AND every exit id in the source-of-truth
+    `_S5_HYPOTHESIS_EXITS`. The pre-commit doc-sync hook only checks heading-id
+    existence, not content, so the §S5 narrative silently drifted to the stale
+    v2 single-required wording. (Implemented as a pytest invariant rather than
+    in the stdlib-only hook, which can't import the Python table.)
+    """
+    import re
+    from pathlib import Path
+
+    from forge.grammar.custom_predicates import _S5_HYPOTHESIS_EXITS
+
+    grammar_md = (
+        Path(__file__).resolve().parents[3] / "docs" / "GRAMMAR.md"
+    ).read_text()
+    match = re.search(r"### S5:.*?(?=\n### |\n## |\Z)", grammar_md, re.DOTALL)
+    assert match, "GRAMMAR.md is missing the ### S5 section"
+    s5 = match.group(0)
+
+    for kw in ("required_always", "required_from_set", "optional_additions", "forbidden"):
+        assert kw in s5, f"GRAMMAR.md §S5 missing v3 schema term {kw!r}"
+
+    missing = [
+        (hyp, key, exit_id)
+        for hyp, table in _S5_HYPOTHESIS_EXITS.items()
+        for key in ("required_always", "required_from_set", "optional_additions", "forbidden")
+        for exit_id in table[key]
+        if exit_id not in s5
+    ]
+    assert not missing, f"GRAMMAR.md §S5 omits exit ids from _S5_HYPOTHESIS_EXITS: {missing}"
+
+
 def test_s5_mean_reversion_with_time_stop_passes() -> None:
     """Baseline has time_stop + mean_reversion → S5 passes."""
     result = evaluate(_predicate("exits_match_hypothesis"), grammar_valid_baseline(), _registry())
@@ -243,31 +276,46 @@ def test_d071_foreign_exit_fails() -> None:
     assert "trailing_atr" in result.detail
 
 
-def test_d071_too_many_optional_additions_fails() -> None:
-    """If K_MAX_OPTIONAL=2 and the config carries 3 optional_additions,
-    the validator rejects. Synthesize via a hypothesis that has enough
-    optional_additions — pre-v3-bump, most hypotheses only have 1-2
-    optional entries, so to exercise this we need a synthetic case with
-    an extended optional_additions list. Skip if no hypothesis currently
-    has ≥3 entries in optional_additions (true in the pre-bump schema)."""
-    from forge.grammar.custom_predicates import _S5_HYPOTHESIS_EXITS, K_MAX_OPTIONAL
+def test_d071_too_many_optional_additions_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """M-16 (audit 2026-05-29): the K_MAX_OPTIONAL=2 cap is a hard-rule-#1 (§3.5)
+    rejection branch and MUST have a failure-mode test with an assertion.
 
-    # Find a hypothesis whose optional_additions has > K_MAX_OPTIONAL entries.
-    candidate = None
-    for hyp, table in _S5_HYPOTHESIS_EXITS.items():
-        if len(table["optional_additions"]) > K_MAX_OPTIONAL:
-            candidate = hyp
-            break
+    No shipped hypothesis currently ships >2 optional_additions, so the prior
+    test always `pytest.skip`ped and asserted nothing. Here we extend one
+    hypothesis's optional pool to 3 entries (via monkeypatch), attach all 3 to a
+    config, and assert the cap branch fires — exercising the reachable
+    set-arithmetic directly rather than waiting on a future grammar expansion.
+    """
+    from forge.grammar import custom_predicates as cp
 
-    if candidate is None:
-        pytest.skip(
-            "No hypothesis currently has >K_MAX_OPTIONAL optional_additions; "
-            "test becomes active once grammar v3 (D071 final) adds wider "
-            "optional pools",
-        )
+    # regime_arbitrage: requires exactly 1 of {regime_flip_exit}; extend its
+    # optional pool to 3 so attaching all 3 trips branch (4) and ONLY branch (4)
+    # (the 3 are in the allow-set, so branch (3) "foreign exits" stays quiet).
+    synthetic = {
+        "required_always": (),
+        "required_from_set": ("regime_flip_exit",),
+        "optional_additions": ("time_stop", "iv_crush_exit", "target_exit"),
+        "forbidden": (),
+    }
+    monkeypatch.setitem(cp._S5_HYPOTHESIS_EXITS, "regime_arbitrage", synthetic)
 
-    # Construct a config that violates the cap (not asserted here because the
-    # pre-v3-bump schema doesn't trigger this yet; the test exists for v3 final).
+    cfg = grammar_valid_baseline(
+        hypothesis="regime_arbitrage",
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="regime_flip_exit"),  # required_from_set (exactly 1)
+            ExitSpec(id="time_stop"),  # optional #1
+            ExitSpec(id="iv_crush_exit"),  # optional #2
+            ExitSpec(id="target_exit"),  # optional #3 -> exceeds K_MAX_OPTIONAL=2
+        ),
+    )
+    result = evaluate(_predicate("exits_match_hypothesis"), cfg, _registry())
+    assert not result.passed
+    assert "too many optional_additions" in result.detail
+    assert f"K_MAX_OPTIONAL={cp.K_MAX_OPTIONAL}" in result.detail
 
 
 def test_d071_sampler_optional_additions_can_fire_over_seeds() -> None:

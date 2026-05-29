@@ -1493,6 +1493,20 @@ def cmd_run(
         typer.echo("error: --inbox is required unless --dry-run", err=True)
         raise typer.Exit(code=2)
 
+    # L-9 (audit 2026-05-29): in --loop mode the §7.3 rate limiter is the only
+    # backpressure against unbounded submission, and it's silently skipped when
+    # crucible_db is None (the rate-limit call site is guarded on it). A loop
+    # with no Crucible DB would submit a full batch every poll interval with zero
+    # throttle. Production (forge.yaml) always supplies crucible.db_path; this
+    # guards the dev/test --no-config invocation. Mirrors the --inbox guard.
+    if loop and not dry_run and crucible_db is None:
+        typer.echo(
+            "error: --crucible-db (or forge.yaml crucible.db_path) is required "
+            "with --loop — the §7.3 rate limiter cannot throttle without it",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     forge_db_path = forge_db if forge_db is not None else Path(":memory:")
 
     if not loop:

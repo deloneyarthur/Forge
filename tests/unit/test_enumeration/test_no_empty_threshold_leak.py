@@ -143,3 +143,26 @@ def test_sampler_raises_on_synthetic_threshold_leak() -> None:
         assert leaked, "expected sample_config to raise SamplerError on synthetic leak"
     finally:
         sampler_mod.is_threshold_skippable = original  # type: ignore[assignment]
+
+
+def test_m9_all_r3_event_proximity_indicators_are_regime_samplable() -> None:
+    """M-9 (audit 2026-05-29): every R3 event-proximity indicator must have a
+    regime threshold entry, else it's silently unsamplable as a regime gate.
+
+    T1.4/D039 widened R3's pool to days_to_cpi/nfp/opex specifically to make
+    `volatility_event` usable on ETFs — but those three were never added to
+    `_INDICATOR_THRESHOLD_TABLE`, so `is_threshold_skippable(..., 'regime_filter')`
+    returned True and the sampler filtered them out, making the widening inert.
+    """
+    from forge.enumeration.indicator_thresholds import is_threshold_skippable
+    from forge.grammar.custom_predicates import _R3_EVENT_PROXIMITY_INDICATORS
+
+    skippable = [
+        ind
+        for ind in _R3_EVENT_PROXIMITY_INDICATORS
+        if is_threshold_skippable(ind, "regime_filter")
+    ]
+    assert not skippable, (
+        f"R3 event-proximity indicators not samplable as regime gates: {skippable} "
+        "(add regime_range + op_regime entries to _INDICATOR_THRESHOLD_TABLE)"
+    )

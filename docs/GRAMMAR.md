@@ -59,15 +59,43 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 ### S5: Exit framework consistent with hypothesis
 
-**What.** Each hypothesis names its required and forbidden exit ids:
-- `trend_continuation`: must include `trailing_atr`; must NOT include `hard_profit_target`.
-- `mean_reversion`: must include `time_stop`.
-- `regime_arbitrage`: must include `regime_flip_exit`.
-- `relative_value`: must include `convergence_exit`.
-- `volatility_event`: must include `iv_crush_exit` and `event_passed_exit`.
-- `tail_hedge`: must include `roll_on_schedule_exit`; must NOT include `hard_profit_target` (the canonical "profit-taking" exit per §3.5 narrative — see D015 / D018).
+> **(v3, D071-final)** — schema bump. The original v1/v2 model named a single
+> required exit per hypothesis ("must include `trailing_atr`"). v3 replaces that
+> with a four-part composition (`required_always` / `required_from_set` /
+> `optional_additions` / `forbidden`) so a hypothesis can offer a *choice* of
+> equivalent exits. Operator-approved; see `IMPLEMENTATION_DECISIONS.md`
+> D071-final and the source-of-truth table `_S5_HYPOTHESIS_EXITS` in
+> `src/forge/grammar/custom_predicates.py`. The §3.5 DESIGN text still uses the
+> single-required wording — see the L-3 amendment note in DESIGN §3.5 S5.
 
-**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — trailing stops capture that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — time stops bound exposure. Volatility-event strategies have a discrete event in mind — exits must reference it. The required/forbidden lists keep exit logic from contradicting the hypothesis.
+**What.** Every config carries the four E1 mandatory exits
+(`expiry_exit`, `theta_cliff_exit`, `earnings_exit`, `liquidity_exit`, per
+contracts `MANDATORY_EXIT_IDS`). On top of those, each hypothesis composes its
+exit stack from four sets:
+
+- `required_always` — all must be present.
+- `required_from_set` — exactly **one** must be present (the "choose one of N"
+  slot). Empty when `required_always` already exhausts the requirement.
+- `optional_additions` — 0..`K_MAX_OPTIONAL` (=2) may be added.
+- `forbidden` — none may be present.
+
+Any exit beyond `E1 ∪ required_always ∪ chosen_from_set ∪ optional_additions`
+is a "foreign" exit and rejects.
+
+| Hypothesis | required_always | required_from_set (pick 1) | optional_additions | forbidden |
+|---|---|---|---|---|
+| `trend_continuation` | — | `trailing_atr` / `chandelier_exit` / `parabolic_sar_exit` | `time_stop` | `hard_profit_target` |
+| `mean_reversion` | — | `time_stop` / `target_exit` / `zscore_reversion_exit` | `iv_crush_exit` | — |
+| `regime_arbitrage` | — | `regime_flip_exit` | `time_stop` | — |
+| `relative_value` | — | `convergence_exit` / `zscore_reversion_exit` | `time_stop` | — |
+| `volatility_event` | `iv_crush_exit`, `event_passed_exit` | — | `time_stop` | — |
+| `tail_hedge` | `roll_on_schedule_exit` | — | — | `hard_profit_target` |
+
+(`tail_hedge` is overlay-only and filtered at the sampler via D066's
+`OVERLAY_ONLY_HYPOTHESES`; its row is retained for parity. `hard_profit_target`
+is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.)
+
+**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — a trailing/chandelier/parabolic stop captures that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — a time stop or target/zscore exit bounds exposure. Volatility-event strategies have a discrete event in mind — exits must reference it (`event_passed_exit`) and the IV collapse (`iv_crush_exit`). The `required_from_set` choice lets Forge enumerate equivalent exit framings without contradicting the hypothesis; the `K_MAX_OPTIONAL` cap keeps the optional tail from bloating the stack.
 
 **Cost.** Medium. Excludes most internally-inconsistent exit stacks; the surviving candidates have well-shaped exits.
 
@@ -79,7 +107,7 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 ### C1: No two indicators from the same family
 
-**What.** Across all signals in the strategy, no two indicators share the same `IndicatorMetadata.family` (the 11 canonical families: `trend`, `mean_reversion`, `volatility`, `iv_structure`, `dealer_positioning`, `flow`, `macro`, `calendar`, `fundamental`, `smart_money`, `pairs`).
+**What.** Across all signals in the strategy, no two indicators share the same `IndicatorMetadata.family` (the 12 canonical families: `trend`, `trend_strength`, `mean_reversion`, `volatility`, `iv_structure`, `dealer_positioning`, `flow`, `macro`, `calendar`, `fundamental`, `smart_money`, `pairs`). The check reads `IndicatorMetadata.family` dynamically — the canonical list is `crucible_contracts._INDICATOR_FAMILIES` (12 since D019 added `trend_strength`); this prose count is informational only.
 
 **Why.** Two same-family indicators correlate by construction — they're measuring the same latent variable through different statistics. RSI(2) and RSI(14) are both mean-reversion family; using both is redundancy that inflates apparent confluence. The rule forces signal diversity: confluence comes from independent information sources, not parameter variations.
 
@@ -235,9 +263,12 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 ### R3: Volatility-event strategies require event-proximity gate
 
-**What.** When `hypothesis == "volatility_event"`, at least one `regime_filter` signal must reference indicator `days_to_earnings` or `days_to_fomc`.
+> **(v2, D039 + M-9)** — pool widened from 2 to 5 event-proximity indicators
+> and ETF-incompatibility added.
 
-**Why.** Volatility-event strategies depend on a discrete event happening (earnings, FOMC) — firing far from any event means the volatility setup hasn't materialized. The gate forces declaration of the event the strategy is anchoring to.
+**What.** When `hypothesis == "volatility_event"`, at least one `regime_filter` signal must reference one of the five event-proximity indicators: `days_to_earnings`, `days_to_fomc`, `days_to_cpi`, `days_to_nfp`, `days_to_opex` (all `calendar` family). **ETF exception:** ETF underlyings (`SPY`, `QQQ`, `IWM`, `DIA`) have no earnings, so `days_to_earnings` returns the sentinel 999 and never fires — the (ETF underlying, `days_to_earnings`) combination is rejected at validation time (T1.4/D039). On ETFs the gate must use a macro-calendar indicator instead.
+
+**Why.** Volatility-event strategies depend on a discrete event happening (earnings, FOMC, CPI, NFP, OPEX) — firing far from any event means the volatility setup hasn't materialized. The gate forces declaration of the event the strategy is anchoring to. The macro-calendar additions (D039) make the hypothesis usable on ETFs, which have no single-name earnings. (All five are sampled as regime gates per `_INDICATOR_THRESHOLD_TABLE` — M-9 added the threshold entries for the three macro indicators that D039 introduced but left unsamplable.)
 
 **Cost.** Medium. Excludes volatility-event strategies without an explicit event reference.
 

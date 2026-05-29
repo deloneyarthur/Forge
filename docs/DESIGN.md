@@ -284,6 +284,16 @@ Long-lookback signals (12-month momentum, quality factors, cointegration) → `s
 - `volatility_event`: IV-crush exit required; event-passed exit required.
 - `tail_hedge`: roll-on-schedule exit required; profit-taking forbidden.
 
+> **Amendment (D071-final, v3 grammar; L-3 audit 2026-05-29).** The single-required
+> exits above were made *substitutable* — each "X required" became a
+> `required_from_set` "pick one of {X, …}" choice (operator-approved). e.g.
+> `trend_continuation` accepts `trailing_atr` **or** `chandelier_exit` **or**
+> `parabolic_sar_exit`; `mean_reversion` accepts `time_stop` **or** `target_exit`
+> **or** `zscore_reversion_exit` (so `time_stop` is no longer always-required for MR).
+> The live schema is the table in `docs/GRAMMAR.md` §S5 and the source of truth
+> `_S5_HYPOTHESIS_EXITS` in `src/forge/grammar/custom_predicates.py`. This DESIGN
+> text is kept verbatim as the original intent; the impl follows D071-final.
+
 #### Signal composition rules
 
 **C1: No two indicators from the same family.**

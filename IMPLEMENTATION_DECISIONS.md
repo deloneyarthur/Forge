@@ -2846,3 +2846,22 @@ Fixes:
 **Files modified:** `src/forge/submission/submitter.py`, `src/forge/feedback/auto_tune.py`, `src/forge/cli/feedback_cmd.py`, `src/forge/enumeration/sampler.py`, + the four test files.
 
 **Note:** M-10's rollback-on-crash also softens L-10 (transient `submission_failed` no longer the only outcome of a mid-write death), but L-10's explicit retry/reset of *caught* failures stays open for Batch E.
+
+---
+
+## D092 — 2026-05-29 — Batch E: grammar samplability + doc/spec sync + invariant-suite hardening (audit M-9, M-15, M-16, L-1/2/3, L-9, L-15/16, L-20)
+
+**Spec section:** §3.5 R3/S5/C1 + hard rules #1/#10; §7.3 + hard rule #8; §13
+**Decision:** a sweep of one Medium-trio + supporting Lows, no production-loop behavior change beyond M-9 and L-9.
+- **M-9 (R3 samplability):** added `regime_range`/`op_regime` entries for `days_to_cpi`, `days_to_nfp`, `days_to_opex` to `_INDICATOR_THRESHOLD_TABLE` (mirroring `days_to_fomc`). T1.4/D039 widened R3's event-proximity pool to these macro indicators but never made them samplable — `is_threshold_skippable(ind, 'regime_filter')` returned True, so the ETF-usability widening was inert. New coverage test asserts every `_R3_EVENT_PROXIMITY_INDICATORS` entry is regime-samplable.
+- **M-16 (K_MAX_OPTIONAL test):** the lone failure-mode test for the §3.5 S5 optional-exit cap (hard rule #1) `pytest.skip`ped unconditionally and asserted nothing (no shipped hypothesis has >2 optional_additions). Rewrote it to extend a hypothesis's optional pool via monkeypatch, attach 3 optional exits, and assert `_s5_exits_match_hypothesis` rejects with "too many optional_additions". The suite now has 0 skips (was 1).
+- **M-15 + L-1/L-2/L-3 (doc sync):** rewrote `GRAMMAR.md` §S5 to the v3 `required_always`/`required_from_set`/`optional_additions`/`forbidden` schema (was stale v2 single-required prose) with a per-hypothesis table matching `_S5_HYPOTHESIS_EXITS`; refreshed §R3 (5 indicators + ETF rejection + `(v2, D039)` marker) and §C1 (11→12 families, `trend_strength`); added the D071-final amendment note to `DESIGN.md` §3.5 S5. Added a content-aware S5 doc-sync **pytest invariant** (asserts every source-table exit id + the v3 vocabulary appear in §S5) — implemented as a test rather than in the stdlib-only `check_grammar_doc_sync.py` hook, which can't import the Python table.
+- **L-9 (loop guard):** `forge run --loop` now errors (exit 2) when `crucible_db` is None — the §7.3 rate limiter is the only submission backpressure and was silently skipped, so a no-Crucible-DB loop would submit unthrottled every poll interval. Mirrors the `--inbox` guard. Production (forge.yaml) is unaffected.
+- **L-15/L-16 (invariant hardening):** broadened the hard-rule-#8 RNG scan from 2 literal forms to the full construction surface (`random.Random(`, `.seed(`, `np.random.RandomState/Generator/PCG64/SeedSequence`, `secrets.`) as a path-aware allow-list (only `seed.py` exempt); added a positive-control canary meta-test proving the clock/RNG regexes fire on known offenders (+ a negative control). No current violations.
+- **L-20 (dead code):** deleted `src/forge/core/config.py` (`load_yaml` had zero production callers; every YAML consumer inlines `yaml.safe_load`) + fixed the `core/__init__` docstring.
+
+**Tested (TDD, red->green where applicable):** new/updated tests in `test_no_empty_threshold_leak.py` (M-9), `test_custom_predicates.py` (M-16 + M-15 content-sync), `test_run_loop.py` (L-9), `test_phase0_invariants.py` (L-15/L-16). 287 grammar+enumeration+run_loop+invariant tests green; ruff clean; mypy clean on 74 src files (was 75 — confirms the deletion broke no imports).
+
+**Files modified:** `src/forge/enumeration/indicator_thresholds.py`, `src/forge/cli/main.py`, `src/forge/core/__init__.py`, `docs/GRAMMAR.md`, `docs/DESIGN.md`; deleted `src/forge/core/config.py`; + the four test files.
+
+**Deferred:** L-10 (explicit retry/reset of caught `submission_failed`), L-4..L-8/L-11..L-14/L-17..L-19, I-2/I-3 — lower-value latent/optional items left in `AUDIT.md` for a future pass.
