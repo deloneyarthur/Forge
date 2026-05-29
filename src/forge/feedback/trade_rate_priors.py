@@ -52,6 +52,15 @@ DEFAULT_BETA: float = 10.0
 # `Calibration` (CLI helpers, tests) don't need to plumb one in.
 DEFAULT_MIN_TRADES: int = 50
 
+# D081 — grammar-version weighting. Gated runs submitted under a grammar
+# version other than the caller's `current_grammar_version` contribute to a
+# bucket's posterior at this weight instead of 1.0. Down-weighting (rather than
+# discarding) keeps legacy signal alive for buckets that have no current-version
+# data yet — e.g. relative_value with 0 v4 gated runs — so the filter doesn't go
+# inert and re-flood Crucible, while current-version evidence comes to dominate
+# as it accumulates. 0.25 ⇒ one current-version run is worth ~4 prior-version runs.
+DEFAULT_PRIOR_VERSION_WEIGHT: float = 0.25
+
 
 BucketKey = tuple[str, str, str]  # (hypothesis, dte_bucket, directional_family)
 
@@ -123,6 +132,8 @@ def compute_trade_rate_priors(
     min_trades: int = DEFAULT_MIN_TRADES,
     alpha: float = DEFAULT_ALPHA,
     beta: float = DEFAULT_BETA,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = DEFAULT_PRIOR_VERSION_WEIGHT,
 ) -> dict[BucketKey, BucketStats]:
     """Per-bucket P(n_trades >= min_trades) posteriors from the gated cohort.
 
@@ -138,6 +149,15 @@ def compute_trade_rate_priors(
     is the threshold that defines a "pass" in the underlying cohort —
     set it equal to `ExpectedTradeCountCalibration.min_trades` so the
     posterior measures what the filter actually wants.
+
+    D081 — `current_grammar_version`: when set, gated runs submitted under a
+    different grammar version (resolved via `submissions -> batch_summaries`)
+    are down-weighted to `prior_version_weight` in the posterior, so a config
+    built under grammar vN is judged mostly by vN trade behaviour (grammar
+    changes are exactly what shift trade rates — e.g. D077-D079). Raw counts
+    (`n_total`/`n_pass`/`n_zero_trade`) stay unweighted: they feed the
+    cold-start sample floor and telemetry. `None` (default) weights every run
+    1.0 — identical to pre-D081 behaviour.
     """
     if not gated_runs:
         return {}
@@ -145,13 +165,23 @@ def compute_trade_rate_priors(
     trades_by_hash = {gr.run.config_hash: int(gr.run.trade_count) for gr in gated_runs}
     family_by_indicator = {ind.id: ind.family for ind in registry.indicators}
 
+    # LEFT JOIN so submissions without a batch_summaries row (legacy / orphan)
+    # still bucket; their NULL grammar_version is treated as a prior version
+    # when scoping is active. `forge_batch_id` is the batch_summaries PK and
+    # `config_hash` is unique in submissions, so neither join multiplies rows.
     rows = db.execute(
-        "SELECT config_hash, config_json FROM submissions WHERE config_hash IN (SELECT UNNEST(?))",
+        """
+        SELECT s.config_hash, s.config_json, b.grammar_version
+        FROM submissions s
+        LEFT JOIN batch_summaries b ON s.forge_batch_id = b.forge_batch_id
+        WHERE s.config_hash IN (SELECT UNNEST(?))
+        """,
         [list(trades_by_hash.keys())],
     ).fetchall()
 
-    buckets: dict[BucketKey, list[int]] = {}
-    for config_hash, config_json in rows:
+    # bucket -> list of (trade_count, version_weight)
+    buckets: dict[BucketKey, list[tuple[int, float]]] = {}
+    for config_hash, config_json, grammar_version in rows:
         extracted = _extract_bucket_inputs(config_json)
         if extracted is None:
             continue
@@ -159,15 +189,23 @@ def compute_trade_rate_priors(
         family = family_by_indicator.get(directional_indicator)
         if family is None:
             continue
+        if current_grammar_version is None or grammar_version == current_grammar_version:
+            weight = 1.0
+        else:
+            weight = prior_version_weight
         key: BucketKey = (hypothesis, dte_bucket, family)
-        buckets.setdefault(key, []).append(trades_by_hash[config_hash])
+        buckets.setdefault(key, []).append((trades_by_hash[config_hash], weight))
 
     out: dict[BucketKey, BucketStats] = {}
-    for key, trade_counts in buckets.items():
-        n_total = len(trade_counts)
-        n_pass = sum(1 for n in trade_counts if n >= min_trades)
-        n_zero_trade = sum(1 for n in trade_counts if n == 0)
-        posterior = (alpha + n_pass) / (alpha + beta + n_total)
+    for key, observations in buckets.items():
+        # Raw counts feed the cold-start floor + telemetry; the posterior uses
+        # version-weighted evidence (D081).
+        n_total = len(observations)
+        n_pass = sum(1 for trades, _w in observations if trades >= min_trades)
+        n_zero_trade = sum(1 for trades, _w in observations if trades == 0)
+        weighted_total = sum(w for _t, w in observations)
+        weighted_pass = sum(w for trades, w in observations if trades >= min_trades)
+        posterior = (alpha + weighted_pass) / (alpha + beta + weighted_total)
         out[key] = BucketStats(
             n_total=n_total,
             n_pass=n_pass,
@@ -181,6 +219,7 @@ __all__ = [
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
     "DEFAULT_MIN_TRADES",
+    "DEFAULT_PRIOR_VERSION_WEIGHT",
     "BucketKey",
     "BucketStats",
     "compute_trade_rate_priors",

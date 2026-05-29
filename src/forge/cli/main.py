@@ -562,6 +562,7 @@ def _load_trade_rate_priors(
     registry: RegistrySnapshot,
     *,
     min_trades: int,
+    current_grammar_version: str | None = None,
 ) -> dict[BucketKey, BucketStats]:
     """D076 / Q16 — compute per-bucket trade-rate posteriors for the empirical
     `expected_trades` filter.
@@ -602,6 +603,7 @@ def _load_trade_rate_priors(
             gated_runs,
             registry,
             min_trades=min_trades,
+            current_grammar_version=current_grammar_version,
         )
 
 
@@ -1111,6 +1113,9 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
         forge_db_path,
         registry,
         min_trades=calibration.expected_trade_count.min_trades,
+        # D081: judge each config mostly by trade behaviour under the grammar
+        # version it was built on; prior versions are down-weighted, not dropped.
+        current_grammar_version=grammar.grammar_version,
     )
     if trade_rate_priors:
         n_buckets = len(trade_rate_priors)

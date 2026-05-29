@@ -2672,3 +2672,23 @@ Mean_reversion's family (bb_pct, keltner_pct, rsi*, zscore_returns) is largely c
 
 **Follow-ups (see OPEN_QUESTIONS Q21, Q22):** latent `permutation_test._full_window` calendar/trading-day bug (exposed by the window doubling, not the outage cause); prefetch perf (17-38 min/batch, dominated by ~10k unique-spec computations over the socket, not the window size).
 
+---
+
+## D081 — 2026-05-28 — Grammar-version weighting for the `expected_trades` trade-rate priors (WS1b)
+
+**Spec section:** §5.3.4 / Q16 / D076; `feedback/trade_rate_priors.py`
+**Decision:** `compute_trade_rate_priors` gains `current_grammar_version` + `prior_version_weight` (default 0.25). Gated runs submitted under a grammar version other than the current one (resolved via `submissions LEFT JOIN batch_summaries.grammar_version`) contribute to a bucket's Beta posterior at the reduced weight instead of 1.0. `_run_one_iteration` passes `grammar.grammar_version`. Raw counts (`n_total`/`n_pass`/`n_zero_trade`) stay unweighted — they feed the cold-start sample floor + telemetry; only the posterior is weighted. `current_grammar_version=None` reproduces pre-D081 behaviour exactly (all weights 1.0).
+
+**Why weighting, not a hard version cut:** a config built under grammar vN should be judged by vN trade behaviour — D077-D079 are exactly the kind of grammar change that shifts trade rates, so the legacy (pre-v4) cohort's 61.6% zero-trade rate was unfairly suppressing buckets the fixes improved. But a HARD cut to v4-only would make the filter go inert on thin buckets: as of 2026-05-28 only 184 v4 runs have gated, 98% in two hypotheses, and **relative_value/mean_reversion/tail_hedge have ZERO v4 gated runs**. Cutting them to v4-only drops them below `min_bucket_samples` → cold-start activations heuristic (which Q16 showed passes ~everything) → Forge would re-rank and re-submit known-bad relative_value configs *before* having any v4 evidence that D079 fixed them. Down-weighting keeps the legacy signal alive (a bucket with only legacy zero-trade data still scores low) while letting current-version evidence dominate as it accumulates: a bucket with 100 legacy-zero + 10 v4 (6 pass) flips from ~0.03 to ~0.15 posterior.
+
+**Interaction with throughput (Q22):** keeping the filter discriminating (not inert) matters because the §7.3 rate limiter caps *submission rate* but not *submission quality* — an inert filter would let more zero-trade configs rank into the top-200, wasting Crucible backtests. Weighting preserves quality while the v4 cohort fills out.
+
+**Tested (TDD, red->green):** `tests/unit/test_feedback/test_trade_rate_priors.py` +3 tests: v4-scoping raises the posterior for an all-zero-legacy/passing-v4 bucket (exact 5/16.25 vs 5/20); lowers it for a good-legacy/bad-v4 bucket (3/15 vs 9/21); `version=None` matches the unweighted 4/21. Raw counts asserted unchanged. All 9 pre-D081 tests still green (LEFT JOIN + None default = no behaviour change). 23 CLI iteration tests green; ruff + mypy clean.
+
+**Files modified:**
+- `src/forge/feedback/trade_rate_priors.py` — `DEFAULT_PRIOR_VERSION_WEIGHT`; version-aware query + weighted posterior.
+- `src/forge/cli/main.py` — `_load_trade_rate_priors(current_grammar_version=)` threaded from `_run_one_iteration`.
+- `tests/unit/test_feedback/test_trade_rate_priors.py` — +3 tests, +2 helpers.
+
+**Not done (deliberately):** `prior_version_weight` is a function default, not yet a `prefilter.yaml` calibration field — promote it to calibration only if the operator wants to tune it. The effect is small until the v4 cohort fills out (most buckets are still cold-start); its value compounds as throughput improves (Q22).
+
