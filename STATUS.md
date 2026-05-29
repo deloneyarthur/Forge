@@ -12,7 +12,18 @@
 - **D087** — hard-rule-#2 universe read: D078 dynamic read kept, deviation now logged + tracked (Q23) + contracts handoff sent.
 - Verification: **539 regression tests green** (changed scope + invariants); ruff + mypy clean on all 75 src files.
 
-**Earlier this session (D080-D082, deployed):** D080 `--require-real-cache` (no silent synthetic-cache fallback — post-reboot RCA); D081 version-weighted `expected_trades` priors; D082 `permutation_test._full_window` calendar fix (Q21). NOTE per audit M-3: D082 is a **no-op in production** until M-2 (permutation null pool restricted to prefetched activation-date returns, not the full series) is fixed.
+**Earlier this session (D080-D082, deployed):** D080 `--require-real-cache` (no silent synthetic-cache fallback — post-reboot RCA); D081 version-weighted `expected_trades` priors; D082 `permutation_test._full_window` calendar fix (Q21). [D082/D075 were prod no-ops per M-3/M-4 — **now LIVE** since D088 fixed M-2.]
+
+**Audit Medium/Low backlog — IN PROGRESS (RESUME ANCHOR; operator directive: "push on everything"):**
+- **DONE (committed, NOT yet deployed — D088/D089 need a forge restart):**
+  - **D088** (`61dfe80`) — M-2/M-3/M-4: prefetch full permutation-window returns per underlying (gated by `_window_loaded_for`) → revives D082/D075.
+  - **D089** (`a4b7d98`) — M-7 (promotion_rate denominator excludes sentinels) + M-8 (`apply_tightening` raises `min_pass_probability`, cap 0.95).
+- **REMAINING (tasks #16/#18/#19/#20; full text in `AUDIT.md`):**
+  - **Batch B (#16)** — M-5/M-6: detect empty/partial `CrucibleFeatureCache` responses per-underlying → `data_unavailable` verdict instead of silent miscalibration (D080 class); emit cache telemetry.
+  - **Batch D (#18)** — M-10 (transaction around INSERT(pending)→submit_candidate→UPDATE so a crash doesn't strand rows / burn the config_hash), M-11 (write `grammar_versions` audit row BEFORE the YAML mutation), M-12 (`check_contracts_version()` in `forge feedback`), M-13 (confirm D087 covers the silent universe error-swallow).
+  - **Batch E (#19)** — M-9 (`days_to_cpi/nfp/opex` threshold entries), M-15 (GRAMMAR.md S5/R3 sync, hard rule #10), M-16 (real `K_MAX_OPTIONAL` failure-mode test — current one always skips); + Low/Info: delete dead `core/config.py`, invariant-suite canaries/allowlists, guard `--crucible-db`-absent loop path.
+  - **Batch F (#20)** — Q23 `crucible_contracts` bump: add `load_universe_tickers_from_export` + `universe_tickers.json` to `EXPORT_LAYOUT.files`, bump minor version; Forge routes `_load_underlyings` through it, drops the `universe_uncontracted_read` warning, bumps `FORGE_EXPECTED_CONTRACT_VERSION`, regens uv.lock. (Handoff: `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md`.)
+- **Method:** TDD red→green per batch, ruff+mypy, D-entry (next is D090), commit per batch. After all batches: redeploy (forge restart) to activate D088/D089 + the rest.
 
 **Open / next:**
 - **Q22 (prefetch perf)** — Crucible's tail-recompute fix deployed + verified (one-time 2.3× drop to ~950s, then plateau; residual floor = per-spec activation overhead = the deferred `PROMPT_CRUCIBLE_FEATURE_CACHE_PERF` #2 bulk-path). PENDING manual post-ingest regression check (~Fri 2026-05-29 evening): first batch after `crucible-ingest-daily` (19:00) should stay ~950s, NOT spike to ~2199s. `journalctl --user -u forge.service --since '2026-05-29 19:00:00' --no-pager | grep phase_timings`.
