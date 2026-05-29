@@ -2,7 +2,7 @@
 
 ## Current status — 2026-05-29 (supersedes the blocks below)
 
-**Pipeline: HEALTHY on grammar v4 — full-audit remediation deployed.** Service runs `forge run --loop --consume-feedback --require-real-cache`. The full codebase+pipeline audit (`AUDIT.md`, 2026-05-29 — 65 verified findings, **0 critical / 7 high** / 16 med / 18 low) is remediated: **all 7 highs fixed (D083-D087) and deployed 2026-05-29 09:38.** 0 promotions / 5000 remains expected (§1.2; Crucible's gate is the authority). v4 zero-trade ~36% vs 61.6% legacy.
+**Pipeline: HEALTHY on grammar v4 — FULL audit remediation deployed (highs + all mediums + scoped lows).** Service runs `forge run --loop --consume-feedback --require-real-cache`. The full codebase+pipeline audit (`AUDIT.md`, 2026-05-29 — 65 verified findings, **0 critical / 7 high** / 16 med / 18 low) is remediated end-to-end: **7 highs (D083-D087, deployed 09:38) + all 16 mediums + scoped lows (D088-D093, deployed 12:32)**, plus contracts bumped 1.12.0→1.13.0. 0 promotions / 5000 remains expected (§1.2; Crucible's gate is the authority). v4 zero-trade **~30% (n=258)** vs ~83% for v1 alone (I-6 correction: the earlier "36% vs 61.6%" mislabeled the mixed/legacy-window figure as the baseline — 61.6% is the v1-dominated mixed window, not pure v1; v4 cohort is volatility_event/regime_arbitrage-skewed).
 
 **Audit remediation — D083-D087 (all committed + deployed):**
 - **D083** — §7.3 rate limiter counts only REAL gates (excludes D052 nil-UUID sentinels — ~91.6% of `gated` rows were sentinels, silently voiding the throttle); `inflight_threshold` wired from `forge.yaml`. It now throttles honestly: CLEARS only when the oldest in-flight batch has ≥80% real Crucible decisions — expect genuine blocking whenever real gating lags submission.
@@ -14,21 +14,20 @@
 
 **Earlier this session (D080-D082, deployed):** D080 `--require-real-cache` (no silent synthetic-cache fallback — post-reboot RCA); D081 version-weighted `expected_trades` priors; D082 `permutation_test._full_window` calendar fix (Q21). [D082/D075 were prod no-ops per M-3/M-4 — **now LIVE** since D088 fixed M-2.]
 
-**Audit Medium/Low backlog — IN PROGRESS (RESUME ANCHOR; operator directive: "push on everything"):**
-- **DONE (committed, NOT yet deployed — D088/D089 need a forge restart):**
-  - **D088** (`61dfe80`) — M-2/M-3/M-4: prefetch full permutation-window returns per underlying (gated by `_window_loaded_for`) → revives D082/D075.
-  - **D089** (`a4b7d98`) — M-7 (promotion_rate denominator excludes sentinels) + M-8 (`apply_tightening` raises `min_pass_probability`, cap 0.95).
-- **REMAINING (tasks #16/#18/#19/#20; full text in `AUDIT.md`):**
-  - **Batch B (#16)** — M-5/M-6: detect empty/partial `CrucibleFeatureCache` responses per-underlying → `data_unavailable` verdict instead of silent miscalibration (D080 class); emit cache telemetry.
-  - **Batch D (#18)** — M-10 (transaction around INSERT(pending)→submit_candidate→UPDATE so a crash doesn't strand rows / burn the config_hash), M-11 (write `grammar_versions` audit row BEFORE the YAML mutation), M-12 (`check_contracts_version()` in `forge feedback`), M-13 (confirm D087 covers the silent universe error-swallow).
-  - **Batch E (#19)** — M-9 (`days_to_cpi/nfp/opex` threshold entries), M-15 (GRAMMAR.md S5/R3 sync, hard rule #10), M-16 (real `K_MAX_OPTIONAL` failure-mode test — current one always skips); + Low/Info: delete dead `core/config.py`, invariant-suite canaries/allowlists, guard `--crucible-db`-absent loop path.
-  - **Batch F (#20)** — Q23 `crucible_contracts` bump: add `load_universe_tickers_from_export` + `universe_tickers.json` to `EXPORT_LAYOUT.files`, bump minor version; Forge routes `_load_underlyings` through it, drops the `universe_uncontracted_read` warning, bumps `FORGE_EXPECTED_CONTRACT_VERSION`, regens uv.lock. (Handoff: `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md`.)
-- **Method:** TDD red→green per batch, ruff+mypy, D-entry (next is D090), commit per batch. After all batches: redeploy (forge restart) to activate D088/D089 + the rest.
+**Audit Medium/Low backlog — COMPLETE 2026-05-29 (D088-D093; all 16 Med + the scoped Lows remediated).** Per operator directive "push on everything / incl. contracts bump." Committed `61dfe80`(D088) → `f32a175`(D093):
+- **D088** (M-2/3/4) — prefetch full permutation-window returns per underlying → revives D082/D075.
+- **D089** (M-7/8) — promotion_rate excludes sentinels + `apply_tightening` raises `min_pass_probability` (cap 0.95).
+- **D090** (M-5/6, Batch B) — degraded feature-cache window → typed `FeatureDataUnavailable` + battery `data_unavailable` verdict (distinct from signal-quality FAIL) + per-batch cache telemetry; rejection histogram buckets it distinctly + `pre_filter_logs` skips it.
+- **D091** (M-10/11/12/13, Batch D) — submit txn (crash no longer strands a `pending` row / burns the config_hash); auto-tune writes the audit row before the YAML mutation; `forge feedback` runs the §13.5 contracts check; `_load_underlyings` drift WARNING.
+- **D092** (M-9/15/16 + L-1/2/3/9/15/16/20, Batch E) — `days_to_cpi/nfp/opex` regime threshold entries; GRAMMAR.md §S5 v3 rewrite + §R3/§C1 sync + DESIGN §3.5 amendment + content-aware S5 doc-sync test; real `K_MAX_OPTIONAL` test (0 skips); `--loop` requires crucible-db guard; broadened RNG invariant scan + canary; deleted dead `core/config.py`.
+- **D093** (H-5/Q23, Batch F) — **contracts 1.13.0** (`crucible_contracts` `45f2ea0`): `load_universe_tickers_from_export` + `universe_tickers*.json` on `EXPORT_LAYOUT`; Forge routes `_load_underlyings` through it, drops `universe_uncontracted_read`, `FORGE_EXPECTED_CONTRACT_VERSION`→1.13.0, uv.lock regenerated. **Q23 CLOSED.**
+- **DEPLOYED 2026-05-29 12:32 PDT** — `forge.service` restarted onto D088-D093. Verified: active, `NRestarts=0` (no crash-loop), resumed at loop iteration 189, contracts **1.13.0** startup check passed (no `SchemaVersionMismatch`), D093 universe loader live (`universe_fallback_hardcoded`, NO `universe_uncontracted_read`). Per-iteration D090 cache telemetry (`feature_cache_prefetch_batch`) + full-loop D091 validation accrue on the first post-restart iteration (prefetch ~950s).
+- **Deferred (left in `AUDIT.md`):** L-4..L-8, L-10..L-14, L-17..L-19, I-2/I-3 — lower-value latent/optional items.
 
 **Open / next:**
 - **Q22 (prefetch perf)** — Crucible's tail-recompute fix deployed + verified (one-time 2.3× drop to ~950s, then plateau; residual floor = per-spec activation overhead = the deferred `PROMPT_CRUCIBLE_FEATURE_CACHE_PERF` #2 bulk-path). PENDING manual post-ingest regression check (~Fri 2026-05-29 evening): first batch after `crucible-ingest-daily` (19:00) should stay ~950s, NOT spike to ~2199s. `journalctl --user -u forge.service --since '2026-05-29 19:00:00' --no-pager | grep phase_timings`.
-- **Q23 / H-5** — universe read not on the contracts surface; handoff `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md` sent (add `load_universe_tickers_from_export`). Route Forge through it when it lands; drop the `universe_uncontracted_read` warning + retire `universe_fingerprint`.
-- **Audit Medium/Low backlog** — `AUDIT.md` has 16 Med + 18 Low beyond the 7 highs, NOT yet triaged. Notables: **M-2** (permutation null-pool coverage — makes D082/D075 no-ops), **M-7** (sentinel flush dilutes `promotion_rate` → biases auto-tune LOOSEN), **M-8** (auto-tune doesn't tighten the D076 primary `min_pass_probability` knob), **M-15/M-16** (GRAMMAR.md S5/R3 stale + missing `K_MAX_OPTIONAL` test).
+- **Q23 / H-5 — CLOSED 2026-05-29 (D093).** contracts 1.13.0 shipped `load_universe_tickers_from_export`; Forge routes through it, `universe_uncontracted_read` removed, pin at 1.13.0. (`universe_fingerprint` retained — only the unbuilt Option B would retire it.)
+- **Audit Medium/Low backlog — REMEDIATED 2026-05-29 (D088-D093).** All 16 Med + the scoped Lows (L-1/2/3/9/15/16/20) fixed; M-2/M-7/M-8/M-15/M-16 all closed. Remaining deferred Lows/Info (L-4..L-8, L-10..L-14, L-17..L-19, I-2/I-3) are lower-value latent/optional items tracked in `AUDIT.md`.
 - **WS1a / WS2** — data-gated: re-run threshold proposer + assess relative_value entry rate once a representative v4 cohort accumulates across all hypotheses (relative_value / mean_reversion / tail_hedge still ~0 v4 gated).
 
 ---
