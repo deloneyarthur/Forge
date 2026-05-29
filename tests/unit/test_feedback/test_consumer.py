@@ -43,12 +43,13 @@ def _insert_forge_submission(
     batch_id: uuid.UUID,
     status: str = "submitted",
     submitted_at: datetime | None = None,
+    crucible_run_id: str | None = None,
 ) -> uuid.UUID:
     candidate_id = uuid.uuid4()
     ts = submitted_at or datetime(2026, 5, 13, 12, tzinfo=UTC)
     db.execute(
         "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
-        "config_json, submitted_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+        "config_json, submitted_at, status, crucible_run_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
             str(candidate_id),
             str(batch_id),
@@ -56,6 +57,7 @@ def _insert_forge_submission(
             config.model_dump_json(),
             ts,
             status,
+            crucible_run_id,
         ],
     )
     return candidate_id
@@ -274,6 +276,39 @@ def test_consume_updates_batch_summary_promotion_rate(tmp_path: Path) -> None:
         ).fetchone()
     assert row is not None
     # 1 promoted / 1 submitted = 1.0 (we only count actually-submitted rows)
+    assert row[0] == pytest.approx(1.0)
+
+
+def test_consume_excludes_sentinel_rows_from_promotion_rate(tmp_path: Path) -> None:
+    """M-7 (audit 2026-05-29): D052 sentinel-flushed rows ('gated' + nil-UUID,
+    Crucible never decided them) must NOT dilute promotion_rate, or export-window
+    loss (not candidate quality) drives the rate down and triggers spurious
+    auto-tune LOOSEN. Denominator excludes sentinels."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    cfg = minimal_strategy_config()
+    _insert_crucible_gated(crucible_db, config_hash=cfg.config_hash, decision="promote")
+    batch_id = uuid.uuid4()
+    sentinel = "00000000-0000-0000-0000-000000000000"
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch_id, batch_size=3)
+        # 1 genuinely promoted + 2 sentinel-flushed (aged out, never decided).
+        _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
+        for i in range(2):
+            other = minimal_strategy_config().model_copy(update={"name": f"sent_{i}"})
+            _insert_forge_submission(
+                conn, config=other, batch_id=batch_id,
+                status="gated", crucible_run_id=sentinel,
+            )
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
+        row = conn.execute(
+            "SELECT promotion_rate FROM batch_summaries WHERE forge_batch_id = ?",
+            [str(batch_id)],
+        ).fetchone()
+    assert row is not None
+    # 1 promoted / (3 - 2 sentinels) = 1.0, NOT 1/3 ≈ 0.33.
     assert row[0] == pytest.approx(1.0)
 
 

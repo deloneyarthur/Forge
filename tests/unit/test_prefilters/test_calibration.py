@@ -253,6 +253,27 @@ def test_apply_tightening_returns_new_calibration_with_stricter_thresholds() -> 
     assert new.permutation_test.p_value_threshold < c.permutation_test.p_value_threshold
 
 
+def test_apply_tightening_raises_and_caps_min_pass_probability() -> None:
+    """M-8 (audit 2026-05-29): `min_pass_probability` is the D076 empirical-prior
+    knob — the PRIMARY expected-trades gate for warmed buckets (rejects
+    ~3,250/5,000 per batch live). A tighten must make it stricter (higher), not
+    leave it untouched, but capped < 1.0 so it can't reject every warmed bucket."""
+    from dataclasses import replace
+
+    c = load_calibration(_PREFILTER_YAML)
+    p = AdjustmentProposal(direction="tighten", magnitude_pct=0.10, reason="above 5%")
+    new = apply_tightening(c, p)
+    assert (
+        new.expected_trade_count.min_pass_probability
+        > c.expected_trade_count.min_pass_probability
+    )
+    # Cap holds even starting near 1.0.
+    near = replace(
+        c, expected_trade_count=replace(c.expected_trade_count, min_pass_probability=0.99)
+    )
+    assert apply_tightening(near, p).expected_trade_count.min_pass_probability <= 0.95
+
+
 def test_apply_tightening_is_pure() -> None:
     """The input calibration must not be mutated."""
     c = load_calibration(_PREFILTER_YAML)

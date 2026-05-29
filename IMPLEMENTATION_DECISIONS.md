@@ -2802,3 +2802,16 @@ Fixes:
 **Files modified:** `src/forge/prefilters/crucible_feature_cache.py`, `tests/unit/test_prefilters/test_crucible_feature_cache.py`.
 
 **Note:** this revives D082/D075 — `permutation_test` now compares against the real return series. It does add a per-underlying window-returns fetch to prefetch (bounded); watch alongside Q22.
+
+---
+
+## D089 — 2026-05-29 — Auto-tune correctness: exclude sentinels from promotion_rate + tighten the D076 primary knob (audit M-7, M-8)
+
+**Spec section:** DESIGN §5.5, §8.2; `feedback/consumer.py`, `prefilters/calibration.py`
+**Decision:**
+- **M-7:** `_update_batch_summary` computed `promotion_rate = promoted / submitted_count`, where `submitted_count` includes D052 sentinel-flushed rows ('gated' + nil-UUID, but Crucible never decided them). Export-window loss (not candidate quality) thus depressed the rate and could trigger spurious auto-tune LOOSEN proposals. Fix: `consume_batch_results` counts sentinel rows for the batch and passes `promotion_basis = submitted_count - sentinel_count` as the rate denominator (parallels the D083 rate-limiter fix). `submitted_count` is unchanged for `BatchFeedback` (true batch size).
+- **M-8:** `apply_tightening` shifted `min_trades`/Jaccard/regime/p-value but left `expected_trade_count.min_pass_probability` untouched — yet since D076/Q16 that posterior threshold is the PRIMARY expected-trades gate for warmed buckets (`min_trades` only governs the cold-start fallback), so a §5.5 tighten was a near-no-op for the filter rejecting ~3,250/5,000 per batch. Fix: tighten raises `min_pass_probability` by `step`, capped at 0.95 (so a tighten can't reject every warmed bucket outright).
+
+**Tested (TDD, red->green):** `test_consumer.py` — sentinel rows excluded from promotion_rate denominator (1 promoted / (3-2 sentinels) = 1.0, not 0.33). `test_calibration.py` — tighten raises `min_pass_probability` and the 0.95 cap holds from near-1.0. 55 tests green (calibration + consumer + auto_tune); ruff + mypy clean.
+
+**Files modified:** `src/forge/feedback/consumer.py`, `src/forge/prefilters/calibration.py`, `tests/unit/test_feedback/test_consumer.py`, `tests/unit/test_prefilters/test_calibration.py`.

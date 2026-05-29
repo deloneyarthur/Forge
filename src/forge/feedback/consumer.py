@@ -155,9 +155,13 @@ def _update_batch_summary(
     outcomes: tuple[CandidateOutcome, ...],
     completed: bool,
     decided_at_max: datetime | None,
+    promotion_basis: int | None = None,
 ) -> None:
+    # M-7: promotion_rate denominator excludes D052 sentinel-flushed rows
+    # (`promotion_basis`); falls back to `submitted_count` when not supplied.
     promoted = sum(1 for o in outcomes if o.promoted)
-    rate = promoted / submitted_count if submitted_count > 0 else 0.0
+    denom = promotion_basis if promotion_basis is not None else submitted_count
+    rate = promoted / denom if denom > 0 else 0.0
     common = _common_failures(outcomes)
     common_json = json.dumps(common, sort_keys=True)
     if completed and decided_at_max is not None:
@@ -283,6 +287,17 @@ def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
     completed = len(outcomes) == submitted_count and submitted_count > 0
     decided_at_max = max((d for _, d in ordered_outcomes), default=None)
 
+    # M-7: D052 sentinel-flushed rows ('gated' + nil-UUID, but Crucible never
+    # decided them) only depress promotion_rate — export-window loss, not
+    # candidate quality — biasing auto-tune toward spurious LOOSEN. Exclude them
+    # from the promotion_rate denominator (parallels the D083 rate-limiter fix).
+    sentinel_row = forge_db.execute(
+        "SELECT COUNT(*) FROM submissions WHERE forge_batch_id = ? AND crucible_run_id = ?",
+        [str(resolved_batch_id), _AGED_OUT_SENTINEL_RUN_ID],
+    ).fetchone()
+    sentinel_count = int(sentinel_row[0]) if sentinel_row else 0
+    promotion_basis = max(submitted_count - sentinel_count, 0)
+
     _update_batch_summary(
         forge_db,
         batch_id=resolved_batch_id,
@@ -290,6 +305,7 @@ def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
         outcomes=outcomes,
         completed=completed,
         decided_at_max=decided_at_max,
+        promotion_basis=promotion_basis,
     )
 
     return BatchFeedback(

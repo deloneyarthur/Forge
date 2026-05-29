@@ -370,6 +370,13 @@ def apply_tightening(
     new_etc = replace(
         calibration.expected_trade_count,
         min_trades=round(calibration.expected_trade_count.min_trades * (1.0 + step)),
+        # M-8: `min_pass_probability` is the D076 PRIMARY expected-trades gate for
+        # warmed buckets (`min_trades` only governs the cold-start fallback). A
+        # tighten must raise it too, else a tighten step is a near-no-op for the
+        # filter §5.5 most needs. Cap < 1.0 so a tighten can't reject every bucket.
+        min_pass_probability=min(
+            0.95, calibration.expected_trade_count.min_pass_probability * (1.0 + step)
+        ),
     )
     new_pa = replace(
         calibration.predicted_activations,
