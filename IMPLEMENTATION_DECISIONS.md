@@ -2878,3 +2878,49 @@ Fixes:
 **Tested:** sampler + determinism-inputs (133) green with the 3 universe tests reworked to the dir-based loader; contracts-integration + feedback_cmd (10) green; `forge enumerate` end-to-end smoke passes the 1.13.0 startup check and falls back cleanly with the export absent. ruff + mypy clean. Q23 **CLOSED**.
 
 **Files modified:** `src/forge/enumeration/sampler.py`, `src/forge/core/contracts_check.py`, `uv.lock`, `OPEN_QUESTIONS.md`, + `tests/unit/test_enumeration/{test_sampler,test_determinism_inputs}.py`. Contracts side committed separately in `../crucible_contracts` (`45f2ea0`).
+
+---
+
+## D094 — 2026-05-29 — Multi-class reward weighting: enumerator learns from trade-production + gate-progress, not just promotions (improvement-plan Phase 2)
+
+**Spec section:** §8 feedback; hard rule #6 (deterministic enumeration); `FORGE_GENERATOR_IMPROVEMENT_PLAN.md` Phase 2
+**Decision:** the per-hypothesis sampling weight fed to the enumerator (`compute_hypothesis_weights`, D063/D067) learned ONLY from promotions: `(alpha + promoted)/(alpha + beta + total)`. With Forge in the designed-for sustained zero-promotion regime (§1.2; 0 promotions across 189 batches / 29,749 gated), every hypothesis collapses to the same trial-count decay `1/(11+total)` floored at 0.05 — i.e. ~uniform coverage with no gradient toward configs that even *trade*. Since the binding Crucible gate is `min_oos_trade_count` (~99.9% of decisions fail it; ~60% of real-decision runs trade zero times), the enumerator had no signal pulling it toward the one thing that must happen before edge can even be measured.
+
+Added `compute_hypothesis_reward_weights` — a graded generalization. Each gated run contributes a reward in [0, 1] instead of a binary promoted flag, and the weight is the Beta-smoothed mean of that reward. Reward blends the two signals that actually vary across hypotheses pre-promotion:
+- **trade production** — `run.trade_count >= TRADE_FLOOR` (default 1): "does this hypothesis fire at all" — the highest-information pre-promotion signal.
+- **gate progress** — fraction of `gate_results` passed: a continuous "how far down the gauntlet" measure that → 1.0 for a promoted run (the contracts `PromotionDecision` validator guarantees promote ⟹ no failed gate), layering an edge gradient on top of bare trade production.
+
+`reward = 0.6·traded + 0.4·gate_fraction`, with a promotion short-circuit to the 1.0 ceiling; the two weights sum to 1.0 so reward ∈ [0,1] and the smoothed weight stays in (0,1), leaving the D067 exploration floor's semantics unchanged. As promotions appear, gate_fraction → 1.0 for the promoting hypotheses and the signal transitions smoothly from "fires at all" toward "promotes". The shared submissions↔gated-runs join was factored into `_iter_hypothesis_outcomes` (used by both weighters); `compute_hypothesis_weights` is kept behavior-identical and still exported (its 13 tests unchanged). The single production call site (`_load_hypothesis_weights`, `cli/main.py`) now calls the reward weighter; everything downstream (D067 floor, cold-start fallback, journal line, sampler `rng.choices`) is untouched.
+
+**Why this is not a hard-rule-#4 (loosening) or grammar concern:** the change only reallocates *sampling budget* across the canonical hypotheses. It touches no grammar, no gate, no validation, and cannot loosen anything — strictly an exploration-steering input. Reversible by reverting the one call site.
+
+**Determinism (hard rule #6):** the reward weighter is a pure function of the `submissions` table + the `gated_runs` snapshot — same snapshot → same weights, identical to the promotion-only function's property (`rejection_weights.py` module docstring). `test_reward_weights_deterministic` pins it.
+
+**Scope (deliberate, not yet complete):** the plan's `prefilter_killed` / `runner_failed` classes are NOT consumed — they never produce a GatedRun, and down-weighting a structurally-scarce-but-valid hypothesis (relative_value has a single pairs indicator; mean_reversion ~12 structural skeletons) for being prefilter-deduped would worsen the monoculture this is meant to relieve. The D067 floor still guarantees every hypothesis minimum budget. Consuming those classes (from `pre_filter_logs` / Crucible failure records) is a follow-up if the gated-cohort signal proves insufficient.
+
+**Tested (TDD, red→green):** 9 new tests in `test_rejection_weights.py` — the core `test_reward_weights_trading_beats_zero_trading_at_zero_promotions` (a trading hypothesis outweighs a zero-trading one at 0 promotions, AND asserts the promotion-only weighter rates them equal — the contrast that motivates the change), plus promotion-ceiling, gate-progress gradient, unit-interval bound, tunable-knob, orphan-ignored, alpha/beta override, determinism, corrupt-config-skip. Full `test_rejection_weights.py` 22/22 green; ruff + mypy --strict clean on changed scope.
+
+**Files modified:** `src/forge/feedback/rejection_weights.py`, `src/forge/cli/main.py`, `tests/unit/test_feedback/test_rejection_weights.py`.
+
+**Deploy note:** behavior-changing for the live `--loop` sampler; requires a `forge.service` restart to pick up the new code path (weights are recomputed per iteration, but the running process holds the old function). No grammar bump, no contracts change, no migration. Verify-live: after restart, the `hypothesis_weights:` journal line should show non-uniform weights once a batch with traded gated runs is reconciled (regime_arbitrage / volatility_event above relative_value), vs the prior ~flat-at-floor distribution.
+
+---
+
+## D095 — 2026-05-29 — Re-grade the permutation_test ranker sub-score to use the full passing range (ranker-flatness; item 4)
+
+**Spec section:** §6.2 composite scorer; §5.3.7 permutation test
+**Decision:** the §6.2 composite was near-flat among submitted survivors — three of its five weighted inputs carried almost no variance (novelty std ~0.000, permutation std ~0.03, prior-promotion identically 0.0), so "top-N of survivors" was barely distinguishable from random. The fixable compression was the permutation factor: `PermutationTestFilter` scored `1 - p_value`, and since passers have `p ∈ [0, threshold=0.10]`, every passer's score landed in [0.90, 1.0] — the 0.15 §6.2 weight contributed a composite range of only ~0.015.
+
+Replaced the sub-score with a threshold-relative map, `_significance_score(p, thr) = clamp(1 - p/thr, 0, 1)`, so the passing range spans the full [0, 1]: a highly-significant passer (p≈0) → ~1.0, a barely-significant one (p≈threshold) → ~0.0. Statistical significance now has real resolution in the ranker. **Pass/fail is unchanged** (`p_value <= p_threshold`); only the [0,1] quality score feeds §6.2. No weight change (so no §6.2 spec deviation) — this is a sub-score refinement.
+
+**Deliberately NOT changed:**
+- **novelty** score (`1 - max_temporal_overlap`) is saturated at 1.0 among survivors *by correctness* — the structural-fingerprint dedup (D069) removes exact duplicates first, so survivors genuinely have ~0 temporal overlap. No cheap richer novelty signal exists; forcing variance would fabricate it.
+- **signal_density** is already log-graded (`log1p(n)/log1p(10·min)`); its top-saturation reflects most survivors firing well above the floor — real, not a bug.
+- **prior_promotion_proximity** is identically 0 only because nothing has promoted; it self-heals when promotions appear (and D094 now steers generation toward trade-production meanwhile).
+- **§6.2 weights** themselves: the 0.25 on novelty is effectively wasted in the current regime, but re-weighting is a §6.2 spec deviation; surfaced to the operator as an option rather than applied unilaterally.
+
+**Tested (TDD):** the obsolete `test_score_is_one_minus_p_value` (which would now fail — behavior changed as intended) replaced by `test_score_is_threshold_relative` (integration: filter score == helper) + `test_significance_score_uses_full_passing_range` (unit: 0.0→1.0, threshold→0.0, mid→0.5, failing→clamp, degenerate-threshold→0). 130 prefilter + ranking + phase3/4-invariant tests green; ruff + mypy --strict clean on changed scope. (The `test_perf_rank_and_submit_30_candidates_under_5s` invariant failed at 8.9–14s, but it constructs a hardcoded `FilterResult(score=0.85)` and never invokes the permutation filter — proven independent of this change; the machine was under heavy load: load avg 11.6, ~195 MiB free RAM with forge.service + the suite running. Not a real regression; perf guard left intact rather than loosened to mask load.)
+
+**Files modified:** `src/forge/prefilters/permutation_test.py`, `tests/unit/test_prefilters/test_permutation_test.py`.
+
+**Deploy note:** behavior-changing for ranker ordering (which ~200 of ~277 survivors get submitted); requires a `forge.service` restart to take effect. No grammar/contracts/schema change.

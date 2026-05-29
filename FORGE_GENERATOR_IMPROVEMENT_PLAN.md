@@ -113,7 +113,7 @@ The trade-count floor dominates everything else: 3,818 of 3,820 = **99.9% fail `
 | Phase | Status | Decision Log |
 |---|---|---|
 | 1 | ✅ Landed + verified live (iters 37-41 stable at 200 ranked / 3-5 hypotheses producing) | D069 |
-| 2 | Pending | — |
+| 2 | Code landed 2026-05-29 (22/22 tests green; ruff+mypy clean) — restart-pending for live verification. Reward = 0.6·trade-production + 0.4·gate-progress, promotion = ceiling; `compute_hypothesis_reward_weights` replaces the promotion-only weighter at the one CLI call site. Deliberately excludes prefilter-killed/runner-failed (would worsen the monoculture). | D094 |
 | 3 | ✅ Landed 2026-05-19 (operator-driven; auto-fire in production loop is Phase 3.x follow-up) | D073 |
 | 3.5 | ✅ Forge-side landed (D072); ✅ Crucible-side landed (pair-universe 15 → 37, commit `fef53b3`) | D072 |
 | 4 | ✅ Landed 2026-05-19 — grammar v3 bump + Crucible's 4 new ExitRule classes + contracts 1.11.0 | D071 / D071-final |

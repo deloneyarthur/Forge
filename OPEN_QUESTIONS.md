@@ -459,3 +459,35 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 **Tag:** `hard-rule-2`, `contracts-gap`, `universe`, `D078`, `relates-to-H5`, `relates-to-D085`
 
 **RESOLVED 2026-05-29 (D093):** contracts **1.13.0** shipped `load_universe_tickers_from_export` + added `universe_tickers*.json` to `EXPORT_LAYOUT.files` (commit `45f2ea0`). Forge's `_load_underlyings` now routes through that blessed helper (`_UNIVERSE_EXPORT_DIR` + glob), `FORGE_EXPECTED_CONTRACT_VERSION` bumped to `1.13.0`, and the `universe_uncontracted_read` warning is removed — the read is on the contracts surface, so the hard-rule-#2 deviation is closed. The M-13 drift logging is preserved via the helper's `QueryError` (malformed export → `universe_export_unreadable` warning + fallback). `universe_fingerprint()` (D085) is retained (Option A keeps Forge's separate identity fold; only the unbuilt Option B `RegistrySnapshot.tier_tickers` would let it ride `registry_hash` and retire). **CLOSED.**
+
+---
+
+## 2026-05-29 — Q24 — Non-pairs template "hidden param contract" audit REFUTED; residual risk is the un-contracted pairs entry-key schema — **LOW SEVERITY (latent)**
+
+**Hypothesis investigated:** the generator improvement plan (`FORGE_GENERATOR_IMPROVEMENT_PLAN.md:56`) flagged that `trend_rider` / `regime_mean_revert` / `cross_sectional_rank` "likely have analogous hidden [entry-param] contracts that Forge can't satisfy" — the same trap D068/D072 fixed for `pairs_convergence` — potentially silently zero-trading whole hypotheses (a candidate explanation for the ~60% zero-trade rate).
+
+**What I found (read-only audit of Crucible `src/optbt/`):** **REFUTED.** Crucible's router `_detect_strategy_name` (`runner.py:459-515`) maps every `forge_*` config via `_HYPOTHESIS_TO_TEMPLATE` to exactly TWO templates: `composable_long_options` (mean_reversion / trend_continuation / regime_arbitrage / volatility_event) and `pairs_convergence` (relative_value). The three suspect templates only run for configs literally named after them (YAML/Optuna fixtures); Forge never reaches them. `composable_long_options` reads entries from the declarative `signals[].params` (`threshold`/`op`), which Forge always populates (+ the leak-guard assert at `sampler.py:301-309`). So there is no hidden-key trap on Forge's path; an analogous sampler fix would be dead code. The real zero-trade levers are entry-threshold *strictness* (D031/D073 calibration) and the relative_value pair-universe size (Crucible-side), not missing keys.
+
+**Residual risk surfaced (the real finding):** the pairs entry-key names (`pvalue_max`, `zscore_entry`, `halflife_min/max`, `lookback`) are duplicated as bare string literals on BOTH sides — Crucible `pairs_convergence.py:91-96` and Forge `sampler.py:_sample_pairs_template_params` — with no shared schema in `crucible_contracts`. If Crucible renames or adds a required entry key, Forge silently regresses to template defaults and relative_value quietly returns to ~99% zero-trade, undetectable until a gauntlet diagnostic — exactly the D068 failure mode. Soft violation of hard-rule-#2's spirit (inter-system coupling via contracts).
+
+**What I did instead of code:** logged it; no Forge bug to fix. Recommended (needs operator priority; both cross-repo): (a) promote the pairs entry-key schema (names + default-when-missing semantics) into `crucible_contracts` so both sides import one source of truth, + a contracts test that the template's `params.get(...)` keys match the schema; (b) a Crucible-side invariant test asserting `forge_*` configs only ever dispatch to `{composable_long_options, pairs_convergence}` — the routing table is the sole safety net today.
+
+**Severity:** **low (latent)** — no current trade loss; it is a future-silent-regression guard. Both fixes are cross-repo (contracts + Crucible), not Forge.
+
+**Tag:** `hard-rule-2`, `contracts-gap`, `pairs`, `zero-trade`, `crucible-coordination`, `relates-to-D068`, `relates-to-D072`
+
+---
+
+## 2026-05-29 — Q25 — `universe_fallback_hardcoded` is a Crucible publisher gap, not a Forge bug; 24 tickers IS the canonical Tier1+2 universe — **LOW/MEDIUM SEVERITY**
+
+**Symptom:** the live service logs `universe_fallback_hardcoded n_tickers=24` every iteration, suggesting generation is degraded to a hardcoded 24-ticker pool instead of the full universe (D093's `load_universe_tickers_from_export` read path).
+
+**Root cause (read-only investigation):** NOT a Forge or contracts bug — both work as designed and fall back correctly. Crucible never *publishes* `universe_tickers.json`: it has `build_universe_tickers()` / `write_universe_tickers()` (`Crucible/src/optbt/data/exports.py:752-803`) but NO `publish_universe_tickers()` and no `scripts/export_universe.py` / `crucible-universe-publisher.service` — unlike the three working exports (registry / gated_runs / promoted_strategies), each of which has a publisher script + enabled systemd unit. `write_universe_tickers` is referenced only by Crucible tests; in production the file has never been written (confirmed absent on disk; the other exports are fresh). D093 deliberately scoped only the READ side; the "Crucible export-side confirm" in `PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md` was assumed-satisfied but never wired.
+
+**Important secondary finding:** even once published, the file would currently yield **24 tickers** — `build_universe_tickers()` reads `Crucible/config/universe.yaml` (tier_1=4 + tier_2=20) and deliberately excludes tier_3. Those 24 are identical to Forge's hardcoded fallback. So the symptom is cosmetic (a log line); the pool is not actually narrowed below canonical. The "~152" figure is the set Crucible has bar data for (tier_3 = dynamic ranks 25-100), NOT a configured universe.
+
+**What I did instead:** logged; no Forge change (Forge is correct). Two separable follow-ups, both Crucible-side + operator scope: (a) wire a universe publisher so the read path is exercised + the log stops falling back (cosmetic; a one-shot `write_universe_tickers()` + `forge.service` restart unblocks it immediately — note Forge's `lru_cache` on `_load_underlyings` requires the restart); (b) the *real* lever — widening beyond 24 — is a deliberate `config/universe.yaml` tier_2/tier_3 expansion decision with downstream effects (more underlyings → more trade diversity, but also more bar-data + compute). Surfaced to the operator as a scope decision.
+
+**Severity:** **low** for the cosmetic symptom; **medium** if the operator wants universe breadth as a zero-trade / diversity lever (then it is a real Crucible-side expansion, with a fresh handoff).
+
+**Tag:** `universe`, `crucible-coordination`, `operator-decision`, `relates-to-D093`, `relates-to-Q23`
