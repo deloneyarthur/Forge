@@ -486,13 +486,17 @@ def _format_hypothesis_weights_line(weights: Mapping[str, float]) -> str:
 
 
 def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
-    """Compute per-hypothesis posterior promotion rates for failure-biased sampling.
+    """Compute per-hypothesis multi-class reward weights for failure-biased sampling.
 
     Reads Crucible's gated_runs export (file-based to avoid the writer's
     exclusive DuckDB lock; see contracts v1.8.0) and joins against
-    Forge's `submissions` table on config_hash. Empty result (no exports,
-    no overlap with submissions) is the normal cold-start path — the
-    sampler treats `{}` as "use uniform `rng.choice`".
+    Forge's `submissions` table on config_hash. The weight blends
+    trade-production and gate-progress with promotion as the ceiling
+    (D094 / improvement-plan Phase 2), so the enumerator keeps a gradient
+    even at zero promotions — `compute_hypothesis_weights`' promotion-only
+    signal is flat in that regime. Empty result (no exports, no overlap
+    with submissions) is the normal cold-start path — the sampler treats
+    `{}` as "use uniform `rng.choice`".
 
     Exceptions on the export read are caught and converted to `{}` so
     a missing/corrupt export file never crashes the iteration loop. The
@@ -505,7 +509,7 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     from forge.enumeration.search_space import _HYPOTHESES, OVERLAY_ONLY_HYPOTHESES
     from forge.feedback.rejection_weights import (
         apply_exploration_floor,
-        compute_hypothesis_weights,
+        compute_hypothesis_reward_weights,
         prior_mean,
     )
     from forge.persistence.db import db_connection
@@ -546,7 +550,7 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
             fallback=prior_mean(),
         )
     with db_connection(forge_db_path) as conn:
-        raw = compute_hypothesis_weights(conn, gated_runs)
+        raw = compute_hypothesis_reward_weights(conn, gated_runs)
     # D067: floor every canonical sampling hypothesis at
     # DEFAULT_EXPLORATION_FLOOR so observed-but-low ones (regime_arbitrage
     # at 0.004, relative_value at 0.003) still get measurable exploration

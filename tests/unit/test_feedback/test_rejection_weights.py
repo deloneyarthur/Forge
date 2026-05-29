@@ -27,6 +27,7 @@ from forge.feedback.rejection_weights import (
     DEFAULT_BETA,
     DEFAULT_EXPLORATION_FLOOR,
     apply_exploration_floor,
+    compute_hypothesis_reward_weights,
     compute_hypothesis_weights,
     prior_mean,
 )
@@ -252,7 +253,9 @@ def test_d067_unobserved_uses_fallback_then_floor() -> None:
     if the fallback is below it."""
     raw: dict[str, float] = {}
     out_prior = apply_exploration_floor(
-        raw, hypotheses=_CANONICAL, fallback=prior_mean(),
+        raw,
+        hypotheses=_CANONICAL,
+        fallback=prior_mean(),
     )
     # prior_mean() = 1/11 ≈ 0.0909 > floor 0.05, so the prior wins.
     for h in _CANONICAL:
@@ -271,7 +274,9 @@ def test_d067_all_canonical_hypotheses_always_present() -> None:
     D067 ensures they're always represented in the sampler input."""
     sparse = {"volatility_event": 0.05}
     out = apply_exploration_floor(
-        sparse, hypotheses=_CANONICAL, fallback=prior_mean(),
+        sparse,
+        hypotheses=_CANONICAL,
+        fallback=prior_mean(),
     )
     assert set(out) == set(_CANONICAL)
 
@@ -280,7 +285,10 @@ def test_d067_custom_floor_threshold() -> None:
     """Floor is a tunable parameter; pin the math at non-default values."""
     raw = {"regime_arbitrage": 0.001}
     out = apply_exploration_floor(
-        raw, hypotheses=_CANONICAL, floor=0.10, fallback=prior_mean(),
+        raw,
+        hypotheses=_CANONICAL,
+        floor=0.10,
+        fallback=prior_mean(),
     )
     # regime_arbitrage floored from 0.001 → 0.10
     assert out["regime_arbitrage"] == pytest.approx(0.10)
@@ -317,4 +325,274 @@ def test_handles_corrupt_config_json_gracefully(tmp_path: Path) -> None:
         ]
         weights = compute_hypothesis_weights(conn, gated_runs)
     # Only the real config contributes
+    assert weights == {"mean_reversion": pytest.approx(2 / 12, rel=1e-6)}
+
+
+# ---------------------------------------------------------------------------
+# Multi-class reward weighting — improvement-plan Phase 2 (item 3 / D094).
+#
+# `compute_hypothesis_weights` learns ONLY from promotions; with 0 promotions
+# across the cohort it returns a flat trial-count decay (every hypothesis
+# ~equal), so the enumerator has no gradient toward configs that even trade.
+# `compute_hypothesis_reward_weights` generalizes the Beta-posterior mean to a
+# graded per-run reward from the signals that DO vary today: trade-production
+# (the binding `min_oos_trade_count` constraint) and gate-progress. Promotion
+# stays the ceiling (reward 1.0) so the signal transitions smoothly once
+# promotions appear.
+# ---------------------------------------------------------------------------
+
+
+def _gated_run_graded(
+    *,
+    config_hash: str,
+    trade_count: int,
+    gates_passed: int,
+    gates_failed: int,
+    decision: str = "reject",
+) -> GatedRun:
+    """Build a GatedRun with explicit trade_count + gate pass/fail counts.
+
+    ``decision='promote'`` requires ``gates_failed == 0`` — the contracts
+    PromotionDecision validator forbids a promote with any failed gate.
+    """
+    run_id = str(uuid.uuid4())
+    gate_results: dict[str, GateResult] = {}
+    for i in range(gates_passed):
+        gate_results[f"gate_pass_{i}"] = GateResult(gate_name=f"gate_pass_{i}", passed=True)
+    for i in range(gates_failed):
+        gate_results[f"gate_fail_{i}"] = GateResult(gate_name=f"gate_fail_{i}", passed=False)
+    return GatedRun(
+        run=RunResult(
+            run_id=run_id,
+            config_hash=config_hash,
+            metrics={},
+            trade_count=trade_count,
+            period_start=date(2024, 1, 1),
+            period_end=date(2024, 6, 30),
+        ),
+        decision=PromotionDecision(
+            run_id=run_id,
+            decision=decision,  # type: ignore[arg-type]
+            gate_results=gate_results,
+            decided_at=datetime.now(UTC),
+            decided_by="test_evaluator/v1",
+        ),
+    )
+
+
+def test_reward_weights_empty_returns_empty(tmp_path: Path) -> None:
+    with db_connection(tmp_path / "forge.db") as conn:
+        assert compute_hypothesis_reward_weights(conn, []) == {}
+
+
+def test_reward_weights_trading_beats_zero_trading_at_zero_promotions(tmp_path: Path) -> None:
+    """THE core behavior: with 0 promotions, a hypothesis whose runs TRADE must
+    outweigh one whose runs all ZERO-TRADE. The promotion-only weighter rates
+    them equal — that flat gradient is the bug this fixes."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated_runs: list[GatedRun] = []
+        for i in range(10):  # regime_arbitrage: trades (50), reject, 1/2 gates
+            cfg = _config("regime_arbitrage", f"ra_{i}")
+            chash = f"ra_hash_{i:04d}"
+            _insert_submission(conn, config=cfg, config_hash=chash)
+            gated_runs.append(
+                _gated_run_graded(config_hash=chash, trade_count=50, gates_passed=1, gates_failed=1)
+            )
+        for i in range(10):  # relative_value: zero-trade, reject, 0/2 gates
+            cfg = _config("relative_value", f"rv_{i}")
+            chash = f"rv_hash_{i:04d}"
+            _insert_submission(conn, config=cfg, config_hash=chash)
+            gated_runs.append(
+                _gated_run_graded(config_hash=chash, trade_count=0, gates_passed=0, gates_failed=2)
+            )
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+        promo_only = compute_hypothesis_weights(conn, gated_runs)
+
+    # trading run reward = 0.6*1 + 0.4*0.5 = 0.8 → Σ=8 → (1+8)/(1+10+10)
+    assert reward["regime_arbitrage"] == pytest.approx(9 / 21, rel=1e-6)
+    # zero-trade run reward = 0 → (1+0)/21
+    assert reward["relative_value"] == pytest.approx(1 / 21, rel=1e-6)
+    assert reward["regime_arbitrage"] > reward["relative_value"]
+    # contrast: the promotion-only weighter rates the two identically (both 1/21)
+    assert promo_only["regime_arbitrage"] == pytest.approx(promo_only["relative_value"])
+
+
+def test_reward_weights_promotion_is_ceiling(tmp_path: Path) -> None:
+    """A promoted run scores the max reward (1.0); a trading-but-failing run
+    scores less, so a promoting hypothesis outweighs a merely-trading one."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(
+            conn, config=_config("volatility_event", "ve_p"), config_hash="promo_hash"
+        )
+        _insert_submission(
+            conn, config=_config("trend_continuation", "tc_t"), config_hash="trade_hash"
+        )
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="promo_hash",
+                decision="promote",
+                trade_count=100,
+                gates_passed=4,
+                gates_failed=0,
+            ),
+            _gated_run_graded(
+                config_hash="trade_hash",
+                decision="reject",
+                trade_count=100,
+                gates_passed=1,
+                gates_failed=3,
+            ),
+        ]
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+    # promoted reward 1.0 → (1+1)/12 ; trading-partial 0.6+0.4*0.25=0.7 → (1+0.7)/12
+    assert reward["volatility_event"] == pytest.approx(2 / 12, rel=1e-6)
+    assert reward["trend_continuation"] == pytest.approx(1.7 / 12, rel=1e-6)
+    assert reward["volatility_event"] > reward["trend_continuation"]
+
+
+def test_reward_weights_gate_progress_gradient(tmp_path: Path) -> None:
+    """Two trading, non-promoting hypotheses: more gates passed → higher weight."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(
+            conn, config=_config("regime_arbitrage", "ra_more"), config_hash="more_hash"
+        )
+        _insert_submission(
+            conn, config=_config("mean_reversion", "mr_less"), config_hash="less_hash"
+        )
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="more_hash", trade_count=50, gates_passed=3, gates_failed=1
+            ),
+            _gated_run_graded(
+                config_hash="less_hash", trade_count=50, gates_passed=1, gates_failed=3
+            ),
+        ]
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+    # more: 0.6+0.4*0.75=0.9 → (1+0.9)/12 ; less: 0.6+0.4*0.25=0.7 → (1+0.7)/12
+    assert reward["regime_arbitrage"] == pytest.approx(1.9 / 12, rel=1e-6)
+    assert reward["mean_reversion"] == pytest.approx(1.7 / 12, rel=1e-6)
+    assert reward["regime_arbitrage"] > reward["mean_reversion"]
+
+
+def test_reward_weights_in_unit_interval(tmp_path: Path) -> None:
+    """Reward-smoothed weights stay in (0, 1) like the promotion-only version,
+    so apply_exploration_floor's semantics are unchanged."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated_runs: list[GatedRun] = []
+        for i in range(5):
+            chash = f"ra_{i:04d}"
+            _insert_submission(
+                conn, config=_config("regime_arbitrage", f"ra_{i}"), config_hash=chash
+            )
+            gated_runs.append(
+                _gated_run_graded(
+                    config_hash=chash,
+                    decision="promote",
+                    trade_count=99,
+                    gates_passed=5,
+                    gates_failed=0,
+                )
+            )
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+    assert 0.0 < reward["regime_arbitrage"] < 1.0
+
+
+def test_reward_weights_orphan_runs_ignored(tmp_path: Path) -> None:
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated_runs = [
+            _gated_run_graded(config_hash="orphan", trade_count=50, gates_passed=2, gates_failed=0)
+        ]
+        assert compute_hypothesis_reward_weights(conn, gated_runs) == {}
+
+
+def test_reward_weights_alpha_beta_override(tmp_path: Path) -> None:
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(conn, config=_config("mean_reversion", "mr_1"), config_hash="hash_1")
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="hash_1",
+                decision="promote",
+                trade_count=100,
+                gates_passed=3,
+                gates_failed=0,
+            )
+        ]
+        # No prior, one max-reward run → 1.0 / 1.0 = 1.0
+        weights = compute_hypothesis_reward_weights(conn, gated_runs, alpha=0.0, beta=0.0)
+        assert weights["mean_reversion"] == pytest.approx(1.0)
+
+
+def test_reward_weights_custom_knobs(tmp_path: Path) -> None:
+    """Trade-production / gate-progress split is tunable; pin the math."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(conn, config=_config("regime_arbitrage", "ra_1"), config_hash="hash_1")
+        # trade-only weighting: a trading reject with 0 gates passed → reward 1.0
+        gated_runs = [
+            _gated_run_graded(config_hash="hash_1", trade_count=10, gates_passed=0, gates_failed=4)
+        ]
+        weights = compute_hypothesis_reward_weights(
+            conn, gated_runs, trade_production_weight=1.0, gate_progress_weight=0.0
+        )
+    # reward = 1.0*1 + 0.0*0 = 1.0 → (1+1)/(1+10+1) = 2/12
+    assert weights["regime_arbitrage"] == pytest.approx(2 / 12, rel=1e-6)
+
+
+def test_reward_weights_deterministic(tmp_path: Path) -> None:
+    """Hard rule #6: same (submissions, gated_runs) snapshot → identical weights."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated_runs: list[GatedRun] = []
+        for i in range(6):
+            chash = f"ve_{i:04d}"
+            _insert_submission(
+                conn, config=_config("volatility_event", f"ve_{i}"), config_hash=chash
+            )
+            gated_runs.append(
+                _gated_run_graded(
+                    config_hash=chash,
+                    trade_count=i * 7,
+                    gates_passed=i % 3,
+                    gates_failed=3 - (i % 3),
+                )
+            )
+        first = compute_hypothesis_reward_weights(conn, gated_runs)
+        second = compute_hypothesis_reward_weights(conn, gated_runs)
+    assert first == second
+
+
+def test_reward_weights_corrupt_config_skipped(tmp_path: Path) -> None:
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(conn, config=_config("mean_reversion", "mr_1"), config_hash="real_hash")
+        conn.execute(
+            """
+            INSERT INTO submissions
+                (forge_candidate_id, forge_batch_id, config_hash, config_json,
+                 submitted_at, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                str(uuid.uuid4()),
+                str(uuid.uuid4()),
+                "corrupt_hash",
+                json.dumps({"not_a_config": True}),
+                datetime.now(UTC),
+                "submitted",
+            ],
+        )
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="real_hash",
+                decision="promote",
+                trade_count=100,
+                gates_passed=2,
+                gates_failed=0,
+            ),
+            _gated_run_graded(
+                config_hash="corrupt_hash",
+                decision="promote",
+                trade_count=100,
+                gates_passed=2,
+                gates_failed=0,
+            ),
+        ]
+        weights = compute_hypothesis_reward_weights(conn, gated_runs)
     assert weights == {"mean_reversion": pytest.approx(2 / 12, rel=1e-6)}

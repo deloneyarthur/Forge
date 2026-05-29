@@ -28,7 +28,7 @@ import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
     import duckdb
     from crucible_contracts import GatedRun
@@ -44,6 +44,30 @@ if TYPE_CHECKING:
 # enough that one unlucky batch doesn't zero out a class.
 DEFAULT_ALPHA: float = 1.0
 DEFAULT_BETA: float = 10.0
+
+
+def _iter_hypothesis_outcomes(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+) -> Iterator[tuple[str, GatedRun]]:
+    """Yield ``(hypothesis, gated_run)`` per submission with a matching gated run.
+
+    The shared join behind both the promotion-only and the multi-class reward
+    weighters. Submissions whose ``config_json`` is not a dict, or that lack a
+    string ``hypothesis``, are skipped. config_hash is unique-indexed in
+    ``submissions`` (§13.4), so each hash maps to at most one row.
+    """
+    run_by_hash: dict[str, GatedRun] = {gr.run.config_hash: gr for gr in gated_runs}
+    rows = db.execute("SELECT config_hash, config_json FROM submissions").fetchall()
+    for config_hash, config_json_raw in rows:
+        gr = run_by_hash.get(config_hash)
+        if gr is None:
+            continue
+        cfg = json.loads(config_json_raw) if isinstance(config_json_raw, str) else config_json_raw
+        hyp = cfg.get("hypothesis") if isinstance(cfg, dict) else None
+        if not isinstance(hyp, str):
+            continue
+        yield hyp, gr
 
 
 def compute_hypothesis_weights(
@@ -67,22 +91,11 @@ def compute_hypothesis_weights(
     """
     if not gated_runs:
         return {}
-
-    promoted_by_hash: dict[str, bool] = {
-        gr.run.config_hash: gr.decision.decision == "promote" for gr in gated_runs
-    }
-    rows = db.execute("SELECT config_hash, config_json FROM submissions").fetchall()
     counts: dict[str, list[int]] = {}  # hypothesis → [total, promoted]
-    for config_hash, config_json_raw in rows:
-        if config_hash not in promoted_by_hash:
-            continue
-        cfg = json.loads(config_json_raw) if isinstance(config_json_raw, str) else config_json_raw
-        hyp = cfg.get("hypothesis") if isinstance(cfg, dict) else None
-        if not isinstance(hyp, str):
-            continue
+    for hyp, gr in _iter_hypothesis_outcomes(db, gated_runs):
         bucket = counts.setdefault(hyp, [0, 0])
         bucket[0] += 1
-        if promoted_by_hash[config_hash]:
+        if gr.decision.decision == "promote":
             bucket[1] += 1
     return {
         hyp: (alpha + promoted) / (alpha + beta + total)
@@ -93,6 +106,97 @@ def compute_hypothesis_weights(
 def prior_mean(*, alpha: float = DEFAULT_ALPHA, beta: float = DEFAULT_BETA) -> float:
     """Beta(alpha, beta) prior mean — the weight given to unseen hypotheses."""
     return alpha / (alpha + beta)
+
+
+# ---------------------------------------------------------------------------
+# Multi-class reward weighting (improvement-plan Phase 2; D094).
+#
+# `compute_hypothesis_weights` learns only from promotions. With Forge in a
+# sustained zero-promotion regime (§1.2), every hypothesis collapses to the
+# same trial-count decay and the enumerator loses its gradient. This weighter
+# generalizes the Beta-posterior mean to a graded per-run reward built from the
+# two signals that DO vary across hypotheses pre-promotion:
+#
+#   - trade production — `run.trade_count >= TRADE_FLOOR`. The dominant gate
+#     failure is `min_oos_trade_count` (~99.9% of decisions per the generator
+#     plan), so "does this hypothesis fire at all" is the highest-information
+#     signal available before anything promotes.
+#   - gate progress — fraction of `gate_results` passed: a continuous "how far
+#     down the gauntlet" measure that → 1.0 for a promoted run (the contracts
+#     validator guarantees promote => no failed gate), layering an edge
+#     gradient on top of bare trade production.
+#
+# reward = TRADE_PRODUCTION_WEIGHT*traded + GATE_PROGRESS_WEIGHT*gate_fraction,
+# with a promotion short-circuit to the ceiling (1.0). The two weights sum to
+# 1.0 so reward in [0, 1] and the smoothed weight stays in (0, 1), leaving
+# `apply_exploration_floor`'s semantics unchanged. As promotions appear,
+# gate_fraction -> 1.0 for the promoting hypotheses and the signal transitions
+# smoothly from "fires at all" toward "promotes".
+#
+# Scope (deliberate): the prefilter-killed / runner-failed outcomes the plan
+# also names are NOT consumed here — they never produce a GatedRun, and
+# down-weighting a structurally-scarce-but-valid hypothesis (e.g. relative_value
+# with its single pairs indicator) for being prefilter-deduped would worsen the
+# monoculture this is meant to relieve. The D067 exploration floor still
+# guarantees every hypothesis a minimum sampling budget regardless of reward.
+# ---------------------------------------------------------------------------
+
+DEFAULT_TRADE_FLOOR: int = 1
+DEFAULT_TRADE_PRODUCTION_WEIGHT: float = 0.6
+DEFAULT_GATE_PROGRESS_WEIGHT: float = 0.4
+
+
+def _run_reward(
+    gated_run: GatedRun,
+    *,
+    trade_floor: int,
+    trade_production_weight: float,
+    gate_progress_weight: float,
+) -> float:
+    """Graded reward in [0, 1] for one gated run (see the module section above)."""
+    if gated_run.decision.decision == "promote":
+        return 1.0
+    traded = 1.0 if gated_run.run.trade_count >= trade_floor else 0.0
+    gates = gated_run.decision.gate_results
+    gate_fraction = sum(1 for g in gates.values() if g.passed) / len(gates) if gates else 0.0
+    return trade_production_weight * traded + gate_progress_weight * gate_fraction
+
+
+def compute_hypothesis_reward_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = DEFAULT_ALPHA,
+    beta: float = DEFAULT_BETA,
+    trade_floor: int = DEFAULT_TRADE_FLOOR,
+    trade_production_weight: float = DEFAULT_TRADE_PRODUCTION_WEIGHT,
+    gate_progress_weight: float = DEFAULT_GATE_PROGRESS_WEIGHT,
+) -> dict[str, float]:
+    """Per-hypothesis Beta-smoothed mean of a graded multi-class reward.
+
+    Generalizes `compute_hypothesis_weights`: each gated run contributes a
+    reward in [0, 1] (trade-production + gate-progress, promotion = 1.0)
+    rather than a binary promoted flag, so the enumerator keeps a gradient
+    even when nothing has promoted. Same join semantics, same empty -> `{}`
+    cold-start contract, and the same determinism property (hard rule #6:
+    a pure function of the `submissions` table + the `gated_runs` snapshot).
+    """
+    if not gated_runs:
+        return {}
+    acc: dict[str, list[float]] = {}  # hypothesis → [total, reward_sum]
+    for hyp, gr in _iter_hypothesis_outcomes(db, gated_runs):
+        bucket = acc.setdefault(hyp, [0.0, 0.0])
+        bucket[0] += 1.0
+        bucket[1] += _run_reward(
+            gr,
+            trade_floor=trade_floor,
+            trade_production_weight=trade_production_weight,
+            gate_progress_weight=gate_progress_weight,
+        )
+    return {
+        hyp: (alpha + reward_sum) / (alpha + beta + total)
+        for hyp, (total, reward_sum) in acc.items()
+    }
 
 
 # D067 — minimum exploration weight applied across all canonical
@@ -148,7 +252,11 @@ __all__ = [
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
     "DEFAULT_EXPLORATION_FLOOR",
+    "DEFAULT_GATE_PROGRESS_WEIGHT",
+    "DEFAULT_TRADE_FLOOR",
+    "DEFAULT_TRADE_PRODUCTION_WEIGHT",
     "apply_exploration_floor",
+    "compute_hypothesis_reward_weights",
     "compute_hypothesis_weights",
     "prior_mean",
 ]
