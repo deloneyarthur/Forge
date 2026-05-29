@@ -27,9 +27,10 @@ silent per-call round-trips — the design intent is per-config batching.
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from datetime import date
+from datetime import date, timedelta
 from typing import TYPE_CHECKING, cast
 
 from crucible_contracts import (
@@ -49,6 +50,12 @@ if TYPE_CHECKING:
 # and the connection-message envelope size. 500 splits a typical
 # unique-spec count (~2k-10k per batch) into 4-20 round-trips.
 _BATCH_PREFETCH_CHUNK = 500
+
+# M-2 (audit 2026-05-29): mirror `permutation_test._full_window`'s trading->calendar
+# conversion (D082) so prefetch loads exactly the dates that filter reads back as its
+# null pool. 366/252 over-covers (holidays/leap years); the writer returns only the
+# trading days within, and `returns()` silently drops the surplus.
+_CALENDAR_DAYS_PER_TRADING_DAY = 366 / 252
 
 
 def _resolve_underlying(config: StrategyConfig, default: str) -> str:
@@ -197,6 +204,15 @@ class CrucibleFeatureCache:
             break  # one signal entry is enough — values are global per underlying
         self._window_loaded_for.add(underlying)
 
+    def _permutation_window_dates(self) -> list[date]:
+        """M-2: the calendar dates `permutation_test` requests as its null pool
+        (`data_start_date` spanning `data_history_days` TRADING sessions). Mirrors
+        `permutation_test._full_window` so prefetch loads what that filter reads
+        back — otherwise the null pool is just the signal's activation-date returns
+        and the permutation test (plus D082/D075) is meaningless."""
+        n_cal = math.ceil(self._data_history_days * _CALENDAR_DAYS_PER_TRADING_DAY)
+        return [self._data_start_date + timedelta(days=i) for i in range(n_cal)]
+
     def prefetch_for_batch(self, configs: Iterable[StrategyConfig]) -> None:
         """One-shot prefetch across an entire batch — amortises round-trips.
 
@@ -240,8 +256,15 @@ class CrucibleFeatureCache:
                     cached = self._activations.get((underlying, signal_content_key(spec)))
                     if cached is not None:
                         all_activations.update(cached)
+            # M-2: on first touch of this underlying, load the FULL permutation
+            # window's returns (the null pool) — not just activation dates;
+            # afterward only any new activation dates (keeps re-prefetch io-light).
+            if underlying not in self._window_loaded_for:
+                returns_targets = all_activations | set(self._permutation_window_dates())
+            else:
+                returns_targets = all_activations
             missing_dates = tuple(
-                sorted(all_activations - self._returns[underlying].keys()),
+                sorted(returns_targets - self._returns[underlying].keys()),
             )
             if missing_dates and group and group[0].signals:
                 self._fetch_window_for_dates(
@@ -292,8 +315,14 @@ class CrucibleFeatureCache:
             cached = self._activations.get((underlying, key))
             if cached is not None:
                 all_activations.update(cached)
+        # M-2: on first touch of this underlying load the full permutation window;
+        # afterward only new activations (so a prior batch-prefetch stays io-free).
+        if underlying not in self._window_loaded_for:
+            returns_targets = all_activations | set(self._permutation_window_dates())
+        else:
+            returns_targets = all_activations
         missing_dates = tuple(
-            sorted(all_activations - self._returns[underlying].keys()),
+            sorted(returns_targets - self._returns[underlying].keys()),
         )
         if missing_dates and config.signals:
             self._fetch_window_for_dates(

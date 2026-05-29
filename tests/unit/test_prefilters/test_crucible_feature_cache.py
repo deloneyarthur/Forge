@@ -263,6 +263,36 @@ def test_prefetch_for_batch_fetches_all_signals_then_one_window() -> None:
     assert cache.regime_label(date(2024, 1, 3)) == "low_vol"
 
 
+def test_prefetch_for_batch_loads_full_window_returns_for_null_pool() -> None:
+    """M-2 (audit 2026-05-29): permutation_test's null pool is
+    `returns(full_window)`. Prefetch must load the FULL permutation window's
+    returns per underlying — not just activation-date returns — or the pool
+    degenerates to the signal's own fire-day returns, and D082 (full window) +
+    D075 (forward horizon) become prod no-ops. Returns are per-underlying (one
+    series), so this is a single bounded window fetch, not per-spec."""
+    client = MagicMock()
+    spec = _spec()
+    ck = signal_content_key(spec)
+    client.get_features.side_effect = [
+        _response({ck: {"activation_dates": ["2024-01-02"]}}),
+        _response({ck: {"returns": {}, "regime_label": {}}}),
+    ]
+    cache = CrucibleFeatureCache(client, data_history_days=10, data_start_date=date(2024, 1, 1))
+    cache.prefetch_for_batch([_config(spec)])
+
+    returns_calls = [
+        c
+        for c in client.get_features.call_args_list
+        if "returns" in (c.kwargs.get("feature_names") or ())
+    ]
+    assert returns_calls, "expected a returns/regime fetch"
+    requested = returns_calls[0].kwargs["dates"]
+    # window = ceil(10 * 366/252) = 15 calendar dates from data_start_date;
+    # pre-fix only the single activation date (2024-01-02) was requested.
+    assert len(requested) >= 14
+    assert date(2024, 1, 1) in requested  # window start — NOT an activation date
+
+
 def test_prefetch_for_batch_then_config_is_io_free() -> None:
     """After batch prefetch, `prefetch_for_config` does NO socket calls.
 

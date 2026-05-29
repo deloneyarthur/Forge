@@ -2789,3 +2789,16 @@ Fixes:
 **Tested:** logic is unchanged from D078 (still reads export, falls back to hardcoded) — the existing universe-loader tests (`test_sampler.py`, 132 green) cover it; the added structlog logging is observability, not behavior. ruff + mypy clean.
 
 **Files modified:** `src/forge/enumeration/sampler.py`, `OPEN_QUESTIONS.md` (Q23); plus `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md` (Crucible repo).
+
+---
+
+## D088 — 2026-05-29 — Prefetch the full permutation-window returns (audit M-2; revives M-3/M-4)
+
+**Spec section:** §5.3.7; `prefilters/crucible_feature_cache.py`
+**Decision:** `permutation_test` builds its null pool from `ctx.feature_cache.returns(full_window)`, but `CrucibleFeatureCache.prefetch_*` only fetched returns for **activation dates** — so `returns(full_window)` (which silently drops unloaded dates) returned just the signal's own fire-day returns, not the market series. The permutation test was therefore comparing the real notional against a pool of ~the same activation returns → meaningless, and **D082 (full-window span) + D075 (forward-horizon) were prod no-ops** (M-3/M-4) because the dates they widened to had no loaded returns. Fix: on first touch of an underlying, prefetch returns for the FULL permutation window (`_permutation_window_dates`, mirroring `permutation_test._full_window`'s 366/252 calendar conversion), gated by the existing `_window_loaded_for` flag so re-prefetch stays io-light. Returns are per-underlying (one series), so the cost is one window fetch per underlying — bounded, not per-spec (modest vs Q22's ~10k activation computes).
+
+**Tested (TDD, red->green):** `test_crucible_feature_cache.py` — prefetch's returns call now requests the full window (≥14 dates incl. the window start, not just the 1 activation date). All 231 prefilter tests green (incl. the 5 io-free/cache-sharing tests, kept passing via the `_window_loaded_for` gate); ruff + mypy clean.
+
+**Files modified:** `src/forge/prefilters/crucible_feature_cache.py`, `tests/unit/test_prefilters/test_crucible_feature_cache.py`.
+
+**Note:** this revives D082/D075 — `permutation_test` now compares against the real return series. It does add a per-underlying window-returns fetch to prefetch (bounded); watch alongside Q22.
