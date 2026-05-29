@@ -32,6 +32,7 @@ import random
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import structlog
 from crucible_contracts import (
     CombinerSpec,
     ExitSpec,
@@ -58,6 +59,8 @@ if TYPE_CHECKING:
     from crucible_contracts import IndicatorMetadata, RegistrySnapshot
 
     from forge.enumeration.search_space import SearchSpace
+
+_logger = structlog.get_logger(__name__)
 
 
 # Prior mean for hypotheses absent from the rejection-weights map.
@@ -113,9 +116,26 @@ def _load_underlyings() -> tuple[str, ...]:
             data = json.loads(_UNIVERSE_EXPORT_PATH.read_text())
             tickers = sorted(set(data.get("tier_1", []) + data.get("tier_2", [])))
             if tickers:
+                # H-5 (audit 2026-05-29): this reads a Crucible export that is NOT
+                # on the `crucible_contracts.EXPORT_LAYOUT` surface — a hard-rule-#2
+                # deviation (all inter-system access should go through a contracts
+                # helper, like `registry_snapshot_*.json`). Tracked in OPEN_QUESTIONS
+                # Q23; proper fix is a `load_universe_tickers_from_export` contracts
+                # helper (PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md). Logged loudly (once
+                # per process, lru_cached) so the uncontracted read stays visible.
+                _logger.warning(
+                    "universe_uncontracted_read",
+                    path=str(_UNIVERSE_EXPORT_PATH),
+                    n_tickers=len(tickers),
+                    hard_rule="2",
+                    open_question="Q23",
+                )
                 return tuple(tickers)
         except (OSError, json.JSONDecodeError, TypeError):
             pass
+    _logger.info(
+        "universe_fallback_hardcoded", n_tickers=len(_FALLBACK_TIER_1_2_UNDERLYINGS)
+    )
     return _FALLBACK_TIER_1_2_UNDERLYINGS
 
 

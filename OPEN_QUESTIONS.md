@@ -447,3 +447,13 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 **Severity:** **medium** — no correctness break, but throughput is degraded enough to matter for the feedback-loop cadence (fewer batches gated/day = slower threshold learning).
 
 **Tag:** `prefetch-perf`, `feature-cache`, `writer-contention`, `throughput`, `relates-to-D080`
+
+## 2026-05-29 — Q23 — enumerator reads `universe_tickers.json` directly — hard-rule-#2 deviation pending a contracts helper — **MEDIUM SEVERITY**
+
+**Question:** `sampler._load_underlyings` (D078) reads `~/optbt_data/exports/universe_tickers.json` via raw `json.loads(path.read_text())`. That file is NOT on the `crucible_contracts.EXPORT_LAYOUT` surface (verified: `EXPORT_LAYOUT.files == ('registry_snapshot_*.json', 'gated_runs_*.json', 'promoted_strategies_*.json', 'promoted/')`), so this is an inter-system data dependency that bypasses `crucible_contracts` — a hard-rule-#2 deviation. The contrast is explicit: `registry_loader` reads the contract-listed `registry_snapshot_*.json` through `RegistrySnapshot.model_validate_json` (the blessed pattern). Surfaced by the 2026-05-29 audit (H-5).
+
+**What I did instead (D087):** did NOT revert D078 (its dynamic-universe value is real — the operator-requested ticker expansion). Per the audit's sanctioned interim, kept the dynamic read but made the deviation observable (`_logger.warning("universe_uncontracted_read", hard_rule="2", open_question="Q23")`, once per process) and surfaced the contracts gap via `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md`. The proper fix is a `crucible_contracts.load_universe_tickers_from_export` helper (or a `tier_tickers` field on `RegistrySnapshot`) — the Q19/`universe_min_asof` precedent — after which Forge routes the read through contracts and the warning is removed.
+
+**Severity:** **medium** — every produced candidate's underlying is chosen via this uncontracted read (hot path), but there is no correctness break and the fallback to the D033 hardcoded list is safe. It is a contract-surface purity violation + a determinism input (now folded into the batch identity by D085), not a data bug.
+
+**Tag:** `hard-rule-2`, `contracts-gap`, `universe`, `D078`, `relates-to-H5`, `relates-to-D085`

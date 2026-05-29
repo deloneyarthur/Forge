@@ -2774,3 +2774,18 @@ Fixes:
 **Tested (TDD, red->green):** `test_auto_tune.py::test_write_calibration_yaml_is_atomic` — a monkeypatched `os.replace` failure leaves the destination's prior content fully intact (write staged in tmp). `test_run_loop.py` — a transient first-iteration error lets the loop continue and run the second iteration (exit 0, both ran); `SchemaVersionMismatch` propagates (non-zero exit, not swallowed). 34 tests green; ruff + mypy clean.
 
 **Files modified:** `src/forge/feedback/auto_tune.py`, `src/forge/cli/main.py`, `tests/unit/test_feedback/test_auto_tune.py`, `tests/unit/test_cli/test_run_loop.py`.
+
+---
+
+## D087 — 2026-05-29 — Hard-rule-#2 universe read: make the deviation observable + surface the contracts gap (audit H-5)
+
+**Spec section:** **hard rule #2** (all inter-system access via `crucible_contracts`); `enumeration/sampler.py`
+**Decision:** `sampler._load_underlyings` (D078) reads `~/optbt_data/exports/universe_tickers.json` with a raw `json.loads`, but that file is not on `crucible_contracts.EXPORT_LAYOUT` — an inter-system read bypassing the contracts surface (hard-rule-#2 deviation), in the hot path of every config's underlying pick.
+
+**Chosen resolution — the audit's sanctioned interim, NOT a revert.** Reverting to the D033 hardcoded list would discard D078's operator-requested dynamic-universe value, and the proper fix (a `crucible_contracts` loader) is a 3-system contract-surface change that belongs in its own coordinated release, not rushed inline. So: keep the dynamic read; make the deviation **observable** (`_logger.warning("universe_uncontracted_read", hard_rule="2", open_question="Q23")`, once per process via the lru_cache); **track** it in OPEN_QUESTIONS Q23; and **surface the contracts gap** via `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md` (add `load_universe_tickers_from_export` + an EXPORT_LAYOUT entry, or a `tier_tickers` field on `RegistrySnapshot` per the `universe_min_asof` precedent).
+
+**Why not the full fix now:** the contracts route requires a `crucible_contracts` minor bump that QuantIQ + Crucible also consume; additive + backward-compatible, but a shared-surface change warrants its own focused change + operator awareness (the handoff is that vehicle). When it lands, Forge routes `_load_underlyings` through the helper, drops the warning, closes Q23 — and (Option B) can retire `universe_fingerprint()` since the pool would ride `registry_hash`.
+
+**Tested:** logic is unchanged from D078 (still reads export, falls back to hardcoded) — the existing universe-loader tests (`test_sampler.py`, 132 green) cover it; the added structlog logging is observability, not behavior. ruff + mypy clean.
+
+**Files modified:** `src/forge/enumeration/sampler.py`, `OPEN_QUESTIONS.md` (Q23); plus `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md` (Crucible repo).
