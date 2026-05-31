@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +96,10 @@ def _run_script(script: str, repo: Path) -> tuple[int, str]:
     target = target_dir / script
     target.write_bytes(source.read_bytes())
     result = subprocess.run(
-        ["python", str(target)],
+        # `sys.executable`, not bare "python": the active interpreter is
+        # guaranteed present (the hosts here expose only `python3`), and the
+        # hook scripts are stdlib-only so any Python 3 runs them.
+        [sys.executable, str(target)],
         capture_output=True,
         text=True,
         cwd=repo,

@@ -364,8 +364,14 @@ def test_version_weighting_upweights_current_grammar(tmp_path: Path) -> None:
             conn, gated, registry, min_trades=50, alpha=1.0, beta=10.0
         )
         scoped = compute_trade_rate_priors(
-            conn, gated, registry, min_trades=50, alpha=1.0, beta=10.0,
-            current_grammar_version="v4", prior_version_weight=0.25,
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            alpha=1.0,
+            beta=10.0,
+            current_grammar_version="v4",
+            prior_version_weight=0.25,
         )
     key = ("mean_reversion", "swing_short", "mean_reversion")
     # Unscoped: all weight 1.0 -> (1+4)/(11+9) = 5/20.
@@ -400,8 +406,14 @@ def test_version_weighting_downweights_stale_good_bucket(tmp_path: Path) -> None
             conn, gated, registry, min_trades=50, alpha=1.0, beta=10.0
         )
         scoped = compute_trade_rate_priors(
-            conn, gated, registry, min_trades=50, alpha=1.0, beta=10.0,
-            current_grammar_version="v4", prior_version_weight=0.25,
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            alpha=1.0,
+            beta=10.0,
+            current_grammar_version="v4",
+            prior_version_weight=0.25,
         )
     key = ("mean_reversion", "swing_short", "mean_reversion")
     # Unscoped: (1+8)/(11+10) = 9/21.
@@ -432,9 +444,144 @@ def test_version_none_matches_unweighted(tmp_path: Path) -> None:
             _insert_in_batch(conn, config_hash=ch, config_json=cj, batch_id=_V4_BATCH)
             gated.append(_gated_run(config_hash=ch, trade_count=0))
         out = compute_trade_rate_priors(
-            conn, gated, registry, min_trades=50, alpha=1.0, beta=10.0,
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            alpha=1.0,
+            beta=10.0,
             current_grammar_version=None,
         )
     key = ("mean_reversion", "swing_short", "mean_reversion")
     # 3 pass / 10 total, all weight 1.0 -> (1+3)/(11+10) = 4/21.
     assert out[key].posterior_p_pass == pytest.approx(4 / 21, rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# D098 (v5) — cold-start hypotheses: drop prior-version evidence ENTIRELY (not
+# just down-weight) so a hypothesis whose pre-current-version cohort is invalid
+# (relative_value's ~100% zero-trade was a now-fixed Crucible pairs-loading
+# defect, 4f5271f — not a real signal) falls below `min_bucket_samples` and the
+# filter cold-starts to the activations heuristic, giving it a fair v5 test.
+# Contrast with D081, which DOWN-weights prior versions but keeps them.
+# ---------------------------------------------------------------------------
+
+_V5_BATCH = "55555555-5555-5555-5555-555555555555"
+_RV_KEY = ("relative_value", "swing_short", "pairs")
+
+
+def test_d098_cold_start_drops_prior_version_for_listed_hypothesis(tmp_path: Path) -> None:
+    """relative_value with only prior-version (v4) gated runs: D081 keeps the
+    bucket (down-weighted), but D098 cold-start drops it entirely → absent."""
+    registry = minimal_registry_snapshot()
+    cj = _config_json(
+        hypothesis="relative_value", dte_bucket="swing_short", directional_indicator="pairs_zscore"
+    )
+    gated = []
+    with db_connection(tmp_path / "forge.db") as conn:
+        _seed_batch(conn, batch_id=_V4_BATCH, grammar_version="v4")
+        for i in range(30):  # 30 v4 relative_value runs, all zero-trade (poisoned)
+            ch = f"v4_{i}"
+            _insert_in_batch(conn, config_hash=ch, config_json=cj, batch_id=_V4_BATCH)
+            gated.append(_gated_run(config_hash=ch, trade_count=0))
+        downweighted = compute_trade_rate_priors(
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            current_grammar_version="v5",
+            prior_version_weight=0.25,
+        )
+        cold = compute_trade_rate_priors(
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            current_grammar_version="v5",
+            prior_version_weight=0.25,
+            cold_start_hypotheses=frozenset({"relative_value"}),
+        )
+    # D081 keeps it (raw n_total=30, low posterior); D098 cold-start removes it.
+    assert _RV_KEY in downweighted
+    assert downweighted[_RV_KEY].n_total == 30
+    assert _RV_KEY not in cold
+
+
+def test_d098_cold_start_keeps_current_version_and_other_hypotheses(tmp_path: Path) -> None:
+    """Cold-start is surgical: it drops ONLY prior-version rows of the listed
+    hypothesis. Current-version relative_value rows survive; other hypotheses'
+    prior-version rows are still down-weighted (not dropped)."""
+    registry = minimal_registry_snapshot()
+    rv = _config_json(
+        hypothesis="relative_value", dte_bucket="swing_short", directional_indicator="pairs_zscore"
+    )
+    mr = _config_json(
+        hypothesis="mean_reversion", dte_bucket="swing_short", directional_indicator="rsi_2"
+    )
+    gated = []
+    with db_connection(tmp_path / "forge.db") as conn:
+        _seed_batch(conn, batch_id=_V4_BATCH, grammar_version="v4")
+        _seed_batch(conn, batch_id=_V5_BATCH, grammar_version="v5")
+        for i in range(30):  # v4 relative_value — poisoned, must be dropped
+            ch = f"rv_v4_{i}"
+            _insert_in_batch(conn, config_hash=ch, config_json=rv, batch_id=_V4_BATCH)
+            gated.append(_gated_run(config_hash=ch, trade_count=0))
+        for i in range(25):  # v5 relative_value — the fair test, must survive
+            ch = f"rv_v5_{i}"
+            _insert_in_batch(conn, config_hash=ch, config_json=rv, batch_id=_V5_BATCH)
+            gated.append(_gated_run(config_hash=ch, trade_count=100 if i < 10 else 0))
+        for i in range(8):  # v4 mean_reversion — down-weighted, NOT cold-started
+            ch = f"mr_v4_{i}"
+            _insert_in_batch(conn, config_hash=ch, config_json=mr, batch_id=_V4_BATCH)
+            gated.append(_gated_run(config_hash=ch, trade_count=100))
+        cold = compute_trade_rate_priors(
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            current_grammar_version="v5",
+            prior_version_weight=0.25,
+            cold_start_hypotheses=frozenset({"relative_value"}),
+        )
+    mr_key = ("mean_reversion", "swing_short", "mean_reversion")
+    # relative_value present but from v5 ONLY (n_total=25, not 55).
+    assert cold[_RV_KEY].n_total == 25
+    assert cold[_RV_KEY].n_pass == 10
+    # mean_reversion still present (down-weighted prior version, not dropped).
+    assert mr_key in cold
+    assert cold[mr_key].n_total == 8
+
+
+def test_d098_cold_start_default_empty_is_back_compat(tmp_path: Path) -> None:
+    """Default `cold_start_hypotheses=frozenset()` reproduces pure D081
+    down-weighting — no behavior change for callers that don't opt in."""
+    registry = minimal_registry_snapshot()
+    cj = _config_json(
+        hypothesis="relative_value", dte_bucket="swing_short", directional_indicator="pairs_zscore"
+    )
+    gated = []
+    with db_connection(tmp_path / "forge.db") as conn:
+        _seed_batch(conn, batch_id=_V4_BATCH, grammar_version="v4")
+        for i in range(30):
+            ch = f"v4_{i}"
+            _insert_in_batch(conn, config_hash=ch, config_json=cj, batch_id=_V4_BATCH)
+            gated.append(_gated_run(config_hash=ch, trade_count=0))
+        default = compute_trade_rate_priors(
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            current_grammar_version="v5",
+        )
+        explicit_empty = compute_trade_rate_priors(
+            conn,
+            gated,
+            registry,
+            min_trades=50,
+            current_grammar_version="v5",
+            cold_start_hypotheses=frozenset(),
+        )
+    assert _RV_KEY in default
+    assert default[_RV_KEY].posterior_p_pass == pytest.approx(
+        explicit_empty[_RV_KEY].posterior_p_pass
+    )

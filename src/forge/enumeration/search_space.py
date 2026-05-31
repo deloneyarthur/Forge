@@ -73,6 +73,23 @@ _HYPOTHESES: tuple[str, ...] = (
 # overlay (see OPEN_QUESTIONS.md contracts gap, 2026-05-18).
 OVERLAY_ONLY_HYPOTHESES: frozenset[str] = frozenset({"tail_hedge"})
 
+# D098 (v5) — hypotheses Forge stops enumerating because they are low-yield by
+# construction, not by a wiring bug. `regime_arbitrage` routes to the same
+# ComposableLongOptions template as the productive hypotheses, but its enumerated
+# signal set is incoherent: the mandatory regime_filter stacks contradictory
+# regime concepts (momentum_252 trend + rsi_2 mean-reversion + iv_rank vol +
+# expected_value_estimator) that rarely all align — 81% zero-trade, and the few
+# that trade carry no edge thesis (Crucible pre-v5 investigation, DESIGN §20).
+# Like `OVERLAY_ONLY_HYPOTHESES` this is Forge runtime policy, NOT a grammar
+# edit: grammar.yaml S1 still lists `regime_arbitrage` (hard rule #1 — the
+# operator owns the rule set), so a hand-authored regime_arbitrage config still
+# validates. Forge simply never enumerates one. Re-admit by removing it here.
+DISABLED_HYPOTHESES: frozenset[str] = frozenset({"regime_arbitrage"})
+
+# The union Forge never enumerates as a standalone StrategyConfig: overlay-only
+# (D066) + disabled-by-policy (D098). Every enumeration-path filter reads this.
+NON_ENUMERABLE_HYPOTHESES: frozenset[str] = OVERLAY_ONLY_HYPOTHESES | DISABLED_HYPOTHESES
+
 # Fallback if no §3.5 P4 numerical_range rule is present in the grammar
 # (won't happen with v1; defended in `build_search_space`).
 _P4_DEFAULT_RISK_PCT_RANGE: tuple[float, float] = (0.005, 0.02)
@@ -156,13 +173,15 @@ def build_search_space(
     )
     # Legacy convenience: required_always + the first (canonical) element of
     # required_from_set, for callers / tests that need a single tuple.
-    s5_required_legacy = MappingProxyType({
-        h: (
-            *_S5_HYPOTHESIS_EXITS[h]["required_always"],
-            *(_S5_HYPOTHESIS_EXITS[h]["required_from_set"][:1]),
-        )
-        for h in _HYPOTHESES
-    })
+    s5_required_legacy = MappingProxyType(
+        {
+            h: (
+                *_S5_HYPOTHESIS_EXITS[h]["required_always"],
+                *(_S5_HYPOTHESIS_EXITS[h]["required_from_set"][:1]),
+            )
+            for h in _HYPOTHESES
+        }
+    )
 
     return SearchSpace(
         hypotheses=_HYPOTHESES,

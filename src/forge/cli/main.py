@@ -520,7 +520,7 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     from crucible_contracts import load_recent_gated_runs_from_export
     from crucible_contracts.exceptions import QueryError
 
-    from forge.enumeration.search_space import _HYPOTHESES, OVERLAY_ONLY_HYPOTHESES
+    from forge.enumeration.search_space import _HYPOTHESES, NON_ENUMERABLE_HYPOTHESES
     from forge.feedback.rejection_weights import (
         apply_exploration_floor,
         compute_hypothesis_reward_weights,
@@ -528,8 +528,11 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     )
     from forge.persistence.db import db_connection
 
-    # D067 — sampling hypotheses: canonical minus overlay-only (D066).
-    sampling_hypotheses = tuple(h for h in _HYPOTHESES if h not in OVERLAY_ONLY_HYPOTHESES)
+    # D067 — sampling hypotheses: canonical minus non-enumerable (D066
+    # overlay-only + D098 disabled). Keeps the floored-weights journal line in
+    # sync with what the sampler actually draws — regime_arbitrage (D098) now
+    # renders with the `*` prior marker like tail_hedge, not a live weight.
+    sampling_hypotheses = tuple(h for h in _HYPOTHESES if h not in NON_ENUMERABLE_HYPOTHESES)
 
     if forge_db_path == Path(":memory:") or not forge_db_path.exists():
         # D067: even on cold start, return floored weights so the journal
@@ -592,11 +595,21 @@ def _load_trade_rate_priors(
     OSError catches degrade to empty dict; warn-once on first failure).
     Empty dict → filter falls back to the activations heuristic for every
     config, matching pre-D076 behaviour.
+
+    D081: `current_grammar_version` down-weights prior-grammar gated runs in the
+    posterior (judge a config mostly by its own grammar version's behaviour).
+    D098: `COLD_START_HYPOTHESES` (relative_value) goes further — its prior-
+    version cohort is dropped entirely, so its now-fixed-defect zero-trade
+    history can't keep the bucket in empirical-prior mode and block the v5
+    retest; the bucket cold-starts to the activations heuristic instead.
     """
     from crucible_contracts import load_recent_gated_runs_from_export
     from crucible_contracts.exceptions import QueryError
 
-    from forge.feedback.trade_rate_priors import compute_trade_rate_priors
+    from forge.feedback.trade_rate_priors import (
+        COLD_START_HYPOTHESES,
+        compute_trade_rate_priors,
+    )
     from forge.persistence.db import db_connection
 
     if forge_db_path == Path(":memory:") or not forge_db_path.exists():
@@ -624,6 +637,7 @@ def _load_trade_rate_priors(
             registry,
             min_trades=min_trades,
             current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
         )
 
 

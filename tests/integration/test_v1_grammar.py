@@ -72,7 +72,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # indicators + ETF compatibility).
     # D071-final bumped v2 -> v3 (§3.5 S5 multi-exit schema).
     # D077 bumped v3 -> v4 (R2 expanded with rv_rank regime gate).
-    assert grammar.grammar_version == "v4"  # type: ignore[attr-defined]
+    # D098 bumped v4 -> v5 (enumeration-policy only: regime_arbitrage dropped +
+    # relative_value re-tested; the 21 `rules:` are textually unchanged).
+    assert grammar.grammar_version == "v5"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

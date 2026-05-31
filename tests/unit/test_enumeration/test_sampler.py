@@ -253,20 +253,21 @@ def test_p4_risk_pct_in_range(grammar: Grammar, registry: RegistrySnapshot) -> N
 
 
 def test_d074_dte_min_strictly_less_than_dte_max(
-    grammar: Grammar, registry: RegistrySnapshot,
+    grammar: Grammar,
+    registry: RegistrySnapshot,
 ) -> None:
     """D074: dte_min sampled from the low half, dte_max from the high
     half — disjoint, so dte_min < dte_max by construction across seeds."""
     for seed in range(100):
         cfg = _sample(grammar, registry, seed=seed)
         assert cfg.selector.dte_min < cfg.selector.dte_max, (
-            f"seed={seed}: dte_min={cfg.selector.dte_min} >= "
-            f"dte_max={cfg.selector.dte_max}"
+            f"seed={seed}: dte_min={cfg.selector.dte_min} >= dte_max={cfg.selector.dte_max}"
         )
 
 
 def test_d074_dte_window_uses_both_halves(
-    grammar: Grammar, registry: RegistrySnapshot,
+    grammar: Grammar,
+    registry: RegistrySnapshot,
 ) -> None:
     """D074: across 100 seeds for swing_short configs, the sampler should
     produce dte_min values that span the low half of the window and
@@ -289,7 +290,8 @@ def test_d074_dte_window_uses_both_halves(
 
 
 def test_d074_kelly_fraction_sampled_for_fractional_kelly_mode(
-    grammar: Grammar, registry: RegistrySnapshot,
+    grammar: Grammar,
+    registry: RegistrySnapshot,
 ) -> None:
     """fractional_kelly configs sample kelly_fraction in [0.10, 0.50]."""
     seen: set[float] = set()
@@ -307,7 +309,8 @@ def test_d074_kelly_fraction_sampled_for_fractional_kelly_mode(
 
 
 def test_d074_vol_target_sampled_for_vol_target_mode(
-    grammar: Grammar, registry: RegistrySnapshot,
+    grammar: Grammar,
+    registry: RegistrySnapshot,
 ) -> None:
     """vol_target configs sample vol_target_annual in [0.10, 0.30]."""
     seen: set[float] = set()
@@ -324,7 +327,8 @@ def test_d074_vol_target_sampled_for_vol_target_mode(
 
 
 def test_d074_fixed_risk_pct_keeps_default_kelly_and_vol_target(
-    grammar: Grammar, registry: RegistrySnapshot,
+    grammar: Grammar,
+    registry: RegistrySnapshot,
 ) -> None:
     """fixed_risk_pct mode doesn't read kelly_fraction or vol_target_annual;
     they stay at defaults (0.25 / 0.20) for those configs."""
@@ -393,8 +397,13 @@ def test_d068_pairs_zscore_directional_emits_template_params() -> None:
 
     params = _directional_signal_params("pairs_zscore", random.Random(0))
     for key in (
-        "threshold", "op",  # generic threshold predicate (activation date)
-        "lookback", "pvalue_max", "zscore_entry", "halflife_min", "halflife_max",
+        "threshold",
+        "op",  # generic threshold predicate (activation date)
+        "lookback",
+        "pvalue_max",
+        "zscore_entry",
+        "halflife_min",
+        "halflife_max",
     ):
         assert key in params, f"missing pairs template key {key!r} in {params}"
 
@@ -440,12 +449,13 @@ def test_d068_non_pairs_indicator_does_not_get_template_params() -> None:
 
 
 def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySnapshot) -> None:
-    """Across 300 seeds, every hypothesis with non-empty pools should appear
-    at least once. Catches biased sampling that locks onto one hypothesis.
+    """Across 300 seeds, every samplable hypothesis should appear at least
+    once. Catches biased sampling that locks onto one hypothesis.
 
-    D066: ``tail_hedge`` is excluded — it's overlay-only and Forge's
-    sampler filters it out of ``samplable_hypotheses``. See
-    ``test_d066_no_overlay_only_hypothesis_*`` in invariants."""
+    D066: ``tail_hedge`` is excluded — it's overlay-only.
+    D098 (v5): ``regime_arbitrage`` is excluded — dropped from enumeration as
+    a low-yield-by-construction grammar-iteration decision. Both are in
+    ``NON_ENUMERABLE_HYPOTHESES``; see the D098 invariants for the leak guard."""
     seen: set[str] = set()
     for seed in range(300):
         cfg = _sample(grammar, registry, seed=seed)
@@ -453,10 +463,51 @@ def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySn
     assert seen == {
         "trend_continuation",
         "mean_reversion",
-        "regime_arbitrage",
         "relative_value",
         "volatility_event",
     }
+
+
+def test_d098_regime_arbitrage_not_sampled(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """D098 (v5): regime_arbitrage is in ``DISABLED_HYPOTHESES`` and must never
+    be emitted by the weighted/uniform sampler across a seed sweep."""
+    for seed in range(300):
+        cfg = _sample(grammar, registry, seed=seed)
+        assert cfg.hypothesis != "regime_arbitrage", f"seed={seed} leaked regime_arbitrage"
+
+
+def test_d098_regime_arbitrage_blocked_when_forced(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D098 (v5): a direct sampler call must reject ``forced_hypothesis=
+    'regime_arbitrage'`` exactly as it does for the overlay-only set — it's no
+    longer in the samplable pool."""
+    space = build_search_space(grammar, registry)
+    with pytest.raises(SamplerError, match=r"forced_hypothesis='regime_arbitrage'"):
+        sample_config(space, registry, random.Random(0), forced_hypothesis="regime_arbitrage")
+
+
+def test_d098_relative_value_underlying_is_none(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D098 (v5): relative_value is a pairs strategy — its underlying is the
+    pair itself (resolved Crucible-side), so the config must carry
+    ``underlying=None``. Reverts D079's single-ticker anchor (no longer needed
+    after Crucible 4f5271f loads all pair legs regardless of tier)."""
+    space = build_search_space(grammar, registry)
+    rv = sample_config(space, registry, random.Random(3), forced_hypothesis="relative_value")
+    assert rv.hypothesis == "relative_value"
+    assert rv.underlying is None
+
+
+def test_d098_non_pairs_hypothesis_still_gets_underlying(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D098 guard: the underlying=None branch is relative_value-only — other
+    hypotheses still draw a concrete ticker from the universe pool."""
+    space = build_search_space(grammar, registry)
+    cfg = sample_config(space, registry, random.Random(5), forced_hypothesis="trend_continuation")
+    assert cfg.underlying is not None
 
 
 # ---------------------------------------------------------------------------

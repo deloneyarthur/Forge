@@ -61,6 +61,20 @@ DEFAULT_MIN_TRADES: int = 50
 # as it accumulates. 0.25 ⇒ one current-version run is worth ~4 prior-version runs.
 DEFAULT_PRIOR_VERSION_WEIGHT: float = 0.25
 
+# D098 — hypotheses whose pre-current-grammar-version gated cohort is
+# structurally invalid (a now-fixed defect, not a real edge signal) and so must
+# be re-learned from current-version evidence only. The production CLI passes
+# this set to `compute_trade_rate_priors` as `cold_start_hypotheses`.
+#
+# relative_value: its ~100% zero-trade history (e.g. 370/375 in the 2026-05-15
+# cohort) was Crucible's pre-4f5271f pairs-loading bug — each run reached only
+# 1-5 of 37 pairs. Commit 4f5271f loads all pair legs regardless of tier, so v5
+# is relative_value's first fair test; down-weighting (D081) alone would leave
+# its high-n poisoned bucket in empirical-prior mode and block it at pre-filter.
+# Remove an entry once the hypothesis has a representative current-version
+# cohort — the D081 down-weighting path then suffices.
+COLD_START_HYPOTHESES: frozenset[str] = frozenset({"relative_value"})
+
 
 BucketKey = tuple[str, str, str]  # (hypothesis, dte_bucket, directional_family)
 
@@ -134,6 +148,7 @@ def compute_trade_rate_priors(
     beta: float = DEFAULT_BETA,
     current_grammar_version: str | None = None,
     prior_version_weight: float = DEFAULT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
 ) -> dict[BucketKey, BucketStats]:
     """Per-bucket P(n_trades >= min_trades) posteriors from the gated cohort.
 
@@ -158,6 +173,18 @@ def compute_trade_rate_priors(
     (`n_total`/`n_pass`/`n_zero_trade`) stay unweighted: they feed the
     cold-start sample floor and telemetry. `None` (default) weights every run
     1.0 — identical to pre-D081 behaviour.
+
+    D098 — `cold_start_hypotheses`: for these hypotheses, prior-version gated
+    runs are DROPPED ENTIRELY (not merely down-weighted as in D081). Use when a
+    hypothesis's pre-current-version cohort is structurally invalid rather than
+    merely stale — e.g. relative_value's ~100% zero-trade history was a now-fixed
+    Crucible pairs-loading defect (commit 4f5271f), not a real edge signal.
+    Dropping that evidence lets the bucket fall below `min_bucket_samples`, so
+    the `expected_trades` filter cold-starts to the permissive activations
+    heuristic and the hypothesis gets a genuine current-version retest instead
+    of being killed at pre-filter on poisoned priors. No-op when
+    `current_grammar_version is None` (prior/current is indistinguishable) or a
+    hypothesis isn't listed; the default empty set reproduces pure D081.
     """
     if not gated_runs:
         return {}
@@ -189,10 +216,13 @@ def compute_trade_rate_priors(
         family = family_by_indicator.get(directional_indicator)
         if family is None:
             continue
-        if current_grammar_version is None or grammar_version == current_grammar_version:
-            weight = 1.0
-        else:
-            weight = prior_version_weight
+        is_current = current_grammar_version is None or grammar_version == current_grammar_version
+        # D098: drop prior-version evidence entirely for cold-start hypotheses
+        # (see docstring) so their poisoned legacy cohort can't keep the bucket
+        # in empirical-prior mode and block the current-version retest.
+        if not is_current and hypothesis in cold_start_hypotheses:
+            continue
+        weight = 1.0 if is_current else prior_version_weight
         key: BucketKey = (hypothesis, dte_bucket, family)
         buckets.setdefault(key, []).append((trades_by_hash[config_hash], weight))
 
@@ -216,6 +246,7 @@ def compute_trade_rate_priors(
 
 
 __all__ = [
+    "COLD_START_HYPOTHESES",
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
     "DEFAULT_MIN_TRADES",

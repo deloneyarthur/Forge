@@ -20,7 +20,7 @@ import structlog
 
 from forge.core.seed import SeedHierarchy
 from forge.enumeration.sampler import SamplerError, sample_config
-from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES, build_search_space
+from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES, build_search_space
 from forge.grammar import validate
 
 if TYPE_CHECKING:
@@ -118,27 +118,27 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
         msg = f"max_candidates must be > 0, got {max_candidates}"
         raise ValueError(msg)
     if not (0.0 <= min_hypothesis_fraction <= 1.0):
-        msg = (
-            f"min_hypothesis_fraction must be in [0.0, 1.0], "
-            f"got {min_hypothesis_fraction}"
-        )
+        msg = f"min_hypothesis_fraction must be in [0.0, 1.0], got {min_hypothesis_fraction}"
         raise ValueError(msg)
 
     space = build_search_space(grammar, registry)
     rng = SeedHierarchy(seed).rng("enumeration")
 
     # D037 stratification setup: per-hypothesis quota, sorted name for
-    # deterministic rotation order. D066: exclude overlay-only hypotheses
-    # so the forced-rotation floor never tries to enumerate them.
+    # deterministic rotation order. D066/D098: exclude non-enumerable
+    # hypotheses (overlay-only tail_hedge + disabled regime_arbitrage) so the
+    # forced-rotation floor never tries to enumerate them.
     samplable = sorted(
         h
         for h in space.hypotheses
-        if h not in OVERLAY_ONLY_HYPOTHESES
+        if h not in NON_ENUMERABLE_HYPOTHESES
         and space.directional_indicators_by_hypothesis[h]
         and space.regime_indicators_by_hypothesis[h]
     )
     floor_per_hyp = _compute_stratification_floor(
-        max_candidates, min_hypothesis_fraction, len(samplable),
+        max_candidates,
+        min_hypothesis_fraction,
+        len(samplable),
     )
     yielded_by_hyp: dict[str, int] = {h: 0 for h in samplable}
     # D037: forced-pick failure cap. If a hypothesis CSP-dead-ends this
@@ -179,9 +179,9 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
         forced_hypothesis: str | None = None
         if floor_per_hyp > 0:
             under_quota = [
-                h for h in samplable
-                if yielded_by_hyp[h] < floor_per_hyp
-                and forced_failures[h] < _FORCED_FAILURE_CAP
+                h
+                for h in samplable
+                if yielded_by_hyp[h] < floor_per_hyp and forced_failures[h] < _FORCED_FAILURE_CAP
             ]
             if under_quota:
                 forced_hypothesis = under_quota[attempts % len(under_quota)]

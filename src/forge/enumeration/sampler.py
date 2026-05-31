@@ -48,7 +48,7 @@ from forge.enumeration.indicator_thresholds import (
     is_threshold_skippable,
     sample_threshold_params,
 )
-from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
+from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES
 from forge.grammar.custom_predicates import (
     _LOOKBACK_MEDIUM_MAX,
     _LOOKBACK_SHORT_MAX,
@@ -96,10 +96,30 @@ _BUCKETS_FOR_LOOKBACK_CLASS: dict[str, tuple[str, ...]] = {
 
 # D033 fallback — used when the Crucible universe export is absent.
 _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
-    "SPY", "QQQ", "IWM", "DIA",
-    "AAPL", "MSFT", "NVDA", "TSLA", "AMD", "META", "AMZN", "GOOGL",
-    "NFLX", "AVGO", "BAC", "JPM", "XOM", "CVX", "BA", "GE",
-    "GS", "MS", "COIN", "MSTR",
+    "SPY",
+    "QQQ",
+    "IWM",
+    "DIA",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "TSLA",
+    "AMD",
+    "META",
+    "AMZN",
+    "GOOGL",
+    "NFLX",
+    "AVGO",
+    "BAC",
+    "JPM",
+    "XOM",
+    "CVX",
+    "BA",
+    "GE",
+    "GS",
+    "MS",
+    "COIN",
+    "MSTR",
 )
 
 # Exports directory Crucible publishes to. `load_universe_tickers_from_export`
@@ -135,9 +155,7 @@ def _load_underlyings() -> tuple[str, ...]:
         tickers = ()
     if tickers:
         return tuple(tickers)
-    _logger.info(
-        "universe_fallback_hardcoded", n_tickers=len(_FALLBACK_TIER_1_2_UNDERLYINGS)
-    )
+    _logger.info("universe_fallback_hardcoded", n_tickers=len(_FALLBACK_TIER_1_2_UNDERLYINGS))
     return _FALLBACK_TIER_1_2_UNDERLYINGS
 
 
@@ -168,10 +186,14 @@ def _pick_underlying(
     D078: reads from Crucible's universe export when available, falls back
     to the D033 hardcoded list. Determinism preserved via shared rng.
 
-    D079: `relative_value` now gets a real ticker. Previously returned None
-    (99% zero-trade — pairs_convergence template needs a concrete primary
-    ticker). Crucible's template uses `config.underlying` as the primary
-    pair leg and finds partners from `pair_candidates.yaml`.
+    D098 (v5): `relative_value` returns None — it is a pairs strategy whose
+    legs Crucible's PairsConvergence resolves itself (post-commit 4f5271f it
+    loads all pair legs regardless of tier, so a single anchor ticker is no
+    longer needed). This reverts D079, which had assigned a concrete ticker to
+    work around the OLD path's anchor requirement; the tier-loading fix removed
+    that requirement, and stamping a single underlying on a pairs config is
+    misleading. The rng draw is still consumed below for non-pairs hypotheses,
+    keeping the per-hypothesis sampling sequence aligned.
 
     T1.4 (grammar v2 / D039): when the regime indicators include any
     ETF-incompatible indicator (e.g., `days_to_earnings`), the pool is
@@ -179,11 +201,11 @@ def _pick_underlying(
     compatibility constraint at sample time so the validator doesn't have
     to reject the config downstream.
     """
+    if hypothesis == "relative_value":
+        return None
     underlyings = _load_underlyings()
     if any(ind == "days_to_earnings" for ind in regime_indicators):
-        single_names = tuple(
-            u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS
-        )
+        single_names = tuple(u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS)
         return rng.choice(single_names)
     return rng.choice(underlyings)
 
@@ -223,13 +245,14 @@ def sample_config(
     """
     by_id: dict[str, IndicatorMetadata] = {ind.id: ind for ind in registry.indicators}
 
-    # D066: exclude overlay-only hypotheses (e.g., tail_hedge) — Crucible's
-    # runner rejects them at dispatch as RunnerError. See
-    # `OVERLAY_ONLY_HYPOTHESES` in search_space.py for rationale.
+    # D066/D098: exclude non-enumerable hypotheses — overlay-only tail_hedge
+    # (Crucible's runner RunnerErrors it at dispatch) + disabled-by-policy
+    # regime_arbitrage (low-yield by construction). See
+    # `NON_ENUMERABLE_HYPOTHESES` in search_space.py for rationale.
     samplable_hypotheses = tuple(
         h
         for h in space.hypotheses
-        if h not in OVERLAY_ONLY_HYPOTHESES
+        if h not in NON_ENUMERABLE_HYPOTHESES
         and space.directional_indicators_by_hypothesis[h]
         and space.regime_indicators_by_hypothesis[h]
     )
@@ -273,7 +296,12 @@ def sample_config(
     # regime via C1; in that case we fall back to the deterministic-by-rng
     # `_pair_for_bucket` search to keep path (a) intact.
     directional_id, regime_id = _pick_directional_regime_pair(
-        space, by_id, hypothesis, bucket, rng, chain_id=chain_id,
+        space,
+        by_id,
+        hypothesis,
+        bucket,
+        rng,
+        chain_id=chain_id,
     )
 
     signals = [
@@ -336,10 +364,7 @@ def sample_config(
             rng,
             hypothesis,
             regime_indicators=tuple(
-                ind
-                for sig in signals
-                if sig.role == "regime_filter"
-                for ind in sig.indicators
+                ind for sig in signals if sig.role == "regime_filter" for ind in sig.indicators
             ),
         ),
         tier=2,

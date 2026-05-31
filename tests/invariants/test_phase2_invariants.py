@@ -187,15 +187,15 @@ def test_d066_no_overlay_only_hypothesis_in_any_yielded_config(
     seen_overlay: list[str] = []
     for seed in (0, 1, 7, 137, 2026):
         for cfg in enumerate_candidates(
-            grammar, registry, seed=seed, max_candidates=100,
+            grammar,
+            registry,
+            seed=seed,
+            max_candidates=100,
         ):
             if cfg.hypothesis in OVERLAY_ONLY_HYPOTHESES:
-                seen_overlay.append(
-                    f"seed={seed} hash={cfg.config_hash} hyp={cfg.hypothesis}"
-                )
+                seen_overlay.append(f"seed={seed} hash={cfg.config_hash} hyp={cfg.hypothesis}")
     assert not seen_overlay, (
-        f"D066 violated: {len(seen_overlay)} overlay-only configs leaked: "
-        f"{seen_overlay[:5]}"
+        f"D066 violated: {len(seen_overlay)} overlay-only configs leaked: {seen_overlay[:5]}"
     )
 
 
@@ -213,8 +213,51 @@ def test_d066_overlay_only_hypothesis_blocked_when_forced(grammar: Grammar) -> N
     space = build_search_space(grammar, registry)
     with pytest.raises(SamplerError, match=r"forced_hypothesis='tail_hedge'"):
         sample_config(
-            space, registry, random.Random(0), forced_hypothesis="tail_hedge",
+            space,
+            registry,
+            random.Random(0),
+            forced_hypothesis="tail_hedge",
         )
+
+
+# ---------------------------------------------------------------------------
+# D098 (v5) — regime_arbitrage dropped from enumeration (low-yield by
+# construction: its mandatory regime_filter stacks contradictory regime
+# concepts that rarely co-align — 81% zero-trade, no edge thesis). It stays a
+# valid hand-authored hypothesis (grammar.yaml S1 lists it; hard rule #1) but
+# Forge's runtime policy never enumerates it. See `DISABLED_HYPOTHESES`.
+# ---------------------------------------------------------------------------
+
+
+def test_d098_no_disabled_hypothesis_in_any_yielded_config(grammar: Grammar) -> None:
+    """Across a seed sweep at N=200, the iterator must never emit a config
+    whose ``hypothesis`` is in ``DISABLED_HYPOTHESES`` (regime_arbitrage)."""
+    from forge.enumeration.search_space import DISABLED_HYPOTHESES
+
+    registry = demo_registry()
+    leaked: list[str] = []
+    for seed in (0, 1, 7, 137, 2026):
+        for cfg in enumerate_candidates(grammar, registry, seed=seed, max_candidates=200):
+            if cfg.hypothesis in DISABLED_HYPOTHESES:
+                leaked.append(f"seed={seed} hash={cfg.config_hash} hyp={cfg.hypothesis}")
+    assert not leaked, (
+        f"D098 violated: {len(leaked)} disabled-hypothesis configs leaked: {leaked[:5]}"
+    )
+
+
+def test_d098_relative_value_underlying_is_none_at_scale(grammar: Grammar) -> None:
+    """Every enumerated relative_value config carries underlying=None — it's a
+    pairs strategy whose legs Crucible resolves itself (reverts D079)."""
+    registry = demo_registry()
+    seen_relative_value = False
+    for cfg in enumerate_candidates(grammar, registry, seed=2026, max_candidates=500):
+        if cfg.hypothesis == "relative_value":
+            seen_relative_value = True
+            assert cfg.underlying is None, (
+                f"D098 violated: relative_value config {cfg.config_hash} has "
+                f"underlying={cfg.underlying!r}, expected None"
+            )
+    assert seen_relative_value, "expected at least one relative_value config in 500"
 
 
 def test_capped_is_loud_for_unsatisfiable_registries(grammar: Grammar) -> None:
@@ -255,13 +298,16 @@ def test_d037_stratification_floor_guarantees_each_hypothesis(grammar: Grammar) 
     fraction = 0.05  # → ceil(600 * 0.05) = 30 per hypothesis
     configs = list(
         enumerate_candidates(
-            grammar, registry, seed=137,
+            grammar,
+            registry,
+            seed=137,
             max_candidates=max_candidates,
             min_hypothesis_fraction=fraction,
         )
     )
     assert len(configs) == max_candidates
     from collections import Counter
+
     hyps = Counter(c.hypothesis for c in configs)
     expected_floor = 30
     samplable = [h for h, _ in hyps.most_common() if hyps[h] >= 1]
@@ -281,7 +327,9 @@ def test_d037_stratification_disabled_when_fraction_zero(grammar: Grammar) -> No
     registry = demo_registry()
     configs = list(
         enumerate_candidates(
-            grammar, registry, seed=137,
+            grammar,
+            registry,
+            seed=137,
             max_candidates=100,
             min_hypothesis_fraction=0.0,
         )
@@ -305,7 +353,9 @@ def test_d037_floor_caps_at_50pct_of_budget(grammar: Grammar) -> None:
     # Should NOT raise EnumerationCapped under the 50% cap.
     configs = list(
         enumerate_candidates(
-            grammar, registry, seed=42,
+            grammar,
+            registry,
+            seed=42,
             max_candidates=4,
             min_hypothesis_fraction=0.5,  # would request 2/hyp without cap
         )
@@ -317,15 +367,21 @@ def test_d037_determinism_preserved_with_stratification(grammar: Grammar) -> Non
     """Same triple + same fraction → identical sequence (hard rule #6)."""
     registry = demo_registry()
     a = [
-        c.config_hash for c in enumerate_candidates(
-            grammar, registry, seed=2026,
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar,
+            registry,
+            seed=2026,
             max_candidates=120,
             min_hypothesis_fraction=0.05,
         )
     ]
     b = [
-        c.config_hash for c in enumerate_candidates(
-            grammar, registry, seed=2026,
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar,
+            registry,
+            seed=2026,
             max_candidates=120,
             min_hypothesis_fraction=0.05,
         )
