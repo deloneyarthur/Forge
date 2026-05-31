@@ -2924,3 +2924,52 @@ Replaced the sub-score with a threshold-relative map, `_significance_score(p, th
 **Files modified:** `src/forge/prefilters/permutation_test.py`, `tests/unit/test_prefilters/test_permutation_test.py`.
 
 **Deploy note:** behavior-changing for ranker ordering (which ~200 of ~277 survivors get submitted); requires a `forge.service` restart to take effect. No grammar/contracts/schema change.
+
+---
+
+## D096 — 2026-05-29 — Funnel instrumentation complement (Forge side): grammar-version slicing + pre-filter funnel export
+
+**Spec section:** §9.1 (`batch_summaries` schema); §2.1 step 10 (analyzer); dispatch `FUNNEL_INSTRUMENTATION_FORGE.md` (Forge complement) aligning with the Crucible-side `FUNNEL_INSTRUMENTATION.md` (the combined pipeline funnel). Hard rules #2 (contracts boundary), #8 (blessed clock), #9 (config_hash idempotency).
+
+**Why:** Crucible's funnel measures grammar iteration from `submitted` onward but is blind to what Forge discards *before* submission — and the pre-filter battery rejects the large majority of candidates (`expected_trades` ~69% in v4). A grammar change that gets its candidates killed at the pre-filter would show up in Crucible's funnel only as "fewer submissions this version," with no cause. This exposes Forge's two upstream funnel stages so the operator can distinguish "grammar produced worse candidates" from "pre-filter wrongly rejected this grammar's candidates," sliced by grammar version.
+
+**Decision — two parts (operator chose "ship A now + propose B"; export to Forge's own dir):**
+
+- **Part A (grammar-version slicing) — interim working path + durable proposal.** Forge cannot stamp `grammar_version` into the submission today: `crucible_contracts.submit_candidate` writes the bare `StrategyConfig` (`queries.py` — `model_dump_json`), and `StrategyConfig` is `extra="forbid"` with no `grammar_version` field (`models.py`). Crucible's funnel Stage 0 expects to read the version from submission metadata (`FUNNEL_INSTRUMENTATION.md` §Stage 0). **Interim:** Forge publishes a `config_hash → grammar_version` join-map (`forge_submission_versions.json`); Crucible joins `runs.config_hash` against it. Well-defined because hard rule #9 unique-indexes `config_hash` → each hash has exactly one batch → one grammar version. **Durable:** a contracts proposal (`CONTRACTS_GRAMMAR_VERSION_PROPOSAL.md`) to carry `grammar_version` in the submission payload *without* changing `config_hash` (exclude it from the hash), matching Crucible's Stage-0 spec as written. The join-map is the bridge until that lands.
+
+- **Part B (pre-filter funnel export).** New `forge.funnel` subpackage aggregates `batch_summaries` per grammar version into the two Crucible `[Forge-opt]` stages — `enumerated` and `survived pre-filters` — plus `rejection_breakdown` (which filter killed the rest) and `enumerated_by_hypothesis` (which grammar branch). Written atomically to `~/forge_data/exports/forge_funnel.json` after each batch.
+
+**Schema (idempotent ALTERs on `batch_summaries`, the D062/D076/D085 pattern):** `enumerated_count BIGINT`, `survived_count BIGINT`, `enumerated_by_hypothesis JSON`. `batch_size` already held the *post-diversifier submitted* count (a later, distinct stage); these add the two stages above it. `len(reports)` and `sum(r.passed)` are recorded by `submit_batch` from the run loop; pre-D096 batches keep NULL and are excluded from the export (with a `coverage` count so the exclusion is never silent), so the funnel invariant holds exactly.
+
+**Load-bearing invariant:** `sum(rejection_breakdown) == enumerated − survived`, per grammar version. Holds by construction (`record_prefilter_rejections` buckets every non-passing report exactly once) and is locked at both the recording layer (`tests/invariants/test_funnel_invariants.py`) and the aggregated product (`test_aggregate.py`).
+
+**Alignment with the Crucible funnel (operator-requested):** export keys match the dispatch JSON exactly (`enumerated`, `survived_prefilters`, `rejection_breakdown`, `enumerated_by_hypothesis`) so Crucible lines up its `[Forge-opt]` stages; primary axis is `per_grammar_version` (their Req 1); `schema_version` is self-describing so their funnel degrades gracefully (their hard rule #7); pure instrumentation, no threshold/grammar changes (their hard rule #5). The one divergence — Stage 0 via join-map rather than payload field — is documented in the handoff and resolved by the contracts proposal.
+
+**Tested (TDD, red→green):** 2 submitter persistence tests + 6 aggregation + 7 export-writer + 1 recording-layer invariant + 1 full-run integration (the run loop actually emits the export, invariant holds on real data). Changed-scope + broad regression: 238 tests green (funnel/submission/invariants/cli/persistence); ruff + mypy --strict clean on changed scope.
+
+**Files:** new `src/forge/funnel/{__init__,types,aggregate,export}.py`; modified `src/forge/persistence/schemas.py`, `src/forge/submission/submitter.py`, `src/forge/cli/main.py`; new tests under `tests/unit/test_funnel/`, `tests/invariants/test_funnel_invariants.py`, `tests/integration/test_funnel_export_integration.py`; handoffs `CRUCIBLE_FUNNEL_FORGE_HANDOFF.md`, `CONTRACTS_GRAMMAR_VERSION_PROPOSAL.md`.
+
+**Deploy note:** the export is refreshed inside the per-batch submit block and is strictly non-fatal (a failure logs and the iteration proceeds; Crucible's funnel degrades gracefully without it). Requires a `forge.service` restart to begin emitting. No grammar bump, no contracts change yet (Part A interim is Forge-only; the contracts proposal is separate, awaiting operator + Crucible). DB picks up the three columns on next open (idempotent ALTER). Coordinate with the Crucible agent (handoff) so their funnel consumes both files.
+
+## D097 — 2026-05-30 — Forward `grammar_version` stamping on submissions + contracts pin -> 1.14.0
+
+**Spec section:** dispatch `FORGE_GRAMMAR_VERSION_STAMPING_PROMPT.md` (Tracks A + B); §7 submitter; hard rules #9/#10; §13.5.
+
+**Decision:** Stamp the live grammar version onto every config the submitter writes to Crucible's inbox, and adopt `crucible_contracts` 1.14.0 (which carries the hash-excluded `grammar_version` field proposed in D096 / `CONTRACTS_GRAMMAR_VERSION_PROPOSAL.md`).
+
+**Rationale:** Crucible's funnel slices runs by the grammar version that produced them. Forge had no way to carry the version on a submission (D096 noted the contracts gap). Contracts shipped the durable field (1.14.0, `StrategyConfig.grammar_version: str | None = None`, excluded from `config_hash`), so the clean forward fix is now available; the interim join-map (D096 Part A) becomes the historical-backfill complement rather than the only path.
+
+**Action:**
+- `src/forge/core/contracts_check.py`: `FORGE_EXPECTED_CONTRACT_VERSION` 1.13.0 -> 1.14.0; `uv.lock` regenerated; startup `check_contracts_version()` passes (same-major; the bump is honest pinning per D008/D016/D020/D022/D093).
+- `src/forge/submission/submitter.py` (`_submit_one`): `config = config.model_copy(update={"grammar_version": batch.grammar_version})` before `submit_candidate` + `config.model_dump_json()`. Value = live grammar version via `BatchContext.grammar_version` (from `config/grammar.yaml`), so it changes exactly when the grammar does (hard rule #10). Both the inbox JSON and `submissions.config_json` carry it.
+- Stamp is applied after the D066 overlay-only early-return (only submitted configs are stamped).
+
+**Hard rule #9 safety:** `config_hash` excludes `grammar_version` (contracts), so the stamp leaves the inbox filename, the `submissions` unique index, and the join-map key byte-identical. Pinned by `test_grammar_version_stamp_preserves_config_hash` in `tests/invariants/test_funnel_invariants.py`.
+
+**Track B note:** the historical join-map (`forge_submission_versions.json`, `build_version_map` + `write_funnel_export`) was already implemented under D096; D097 only adds the forward column. Crucible's resolver prefers per-run column -> join-map -> `pre-instrumentation`.
+
+**Alternatives considered:** (a) post-process the written inbox JSON to inject the key — rejected (bypasses the contracts model / blessed API, fragile). (b) wrap the inbox file in an envelope `{config, grammar_version}` — rejected in the D096 proposal (changes the inbox file format / larger blast radius). The optional hash-excluded field is the minimal change.
+
+**Tests/gates:** 2 forward-stamping unit tests (`test_submitter.py`) + 1 hash-preservation invariant; submission + funnel scope green; ruff + ruff format + mypy --strict clean on changed scope. Full uncontended suite + commit (D096 + D097) + `forge.service` restart are operator-directed (live service holds the DuckDB lock).
+
+**References:** [[D096]] (interim join-map + proposal), hard rules #9/#10, §13.5.

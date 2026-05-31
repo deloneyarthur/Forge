@@ -400,6 +400,24 @@ def _echo_dry_run_preview(ranked: Sequence[RankedCandidate]) -> None:
         )
 
 
+def _enumerated_by_hypothesis(reports: object) -> dict[str, int]:
+    """D096: per-hypothesis count of enumerated configs (input to the battery).
+
+    This is the funnel export's `enumerated_by_hypothesis` — the "which
+    grammar branch" annotation Crucible's funnel wants on the enumerated
+    stage. Shares its derivation with the journal's `sampler_attempts`
+    line (D065) so the persisted column and the log line never drift.
+    """
+    from collections import Counter as _Counter
+
+    counts: _Counter[str] = _Counter(
+        getattr(r, "config", None).hypothesis  # type: ignore[union-attr]
+        for r in reports  # type: ignore[attr-defined]
+        if getattr(r, "config", None) is not None
+    )
+    return dict(counts)
+
+
 def _log_hypothesis_distributions(
     reports: object,
     ranked: object,
@@ -416,11 +434,7 @@ def _log_hypothesis_distributions(
     """
     from collections import Counter as _Counter
 
-    attempts: _Counter[str] = _Counter(
-        getattr(r, "config", None).hypothesis  # type: ignore[union-attr]
-        for r in reports  # type: ignore[attr-defined]
-        if getattr(r, "config", None) is not None
-    )
+    attempts = _enumerated_by_hypothesis(reports)
     survivors: _Counter[str] = _Counter(
         c.report.config.hypothesis
         for c in ranked  # type: ignore[attr-defined]
@@ -1081,6 +1095,7 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     from forge.core.clock import utc_now
     from forge.core.contracts_check import check_contracts_version
     from forge.enumeration import enumeration_inputs_hash, registry_hash
+    from forge.funnel import write_funnel_export
     from forge.grammar import load_grammar
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
@@ -1236,7 +1251,18 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     )
     _t_submit = _time.monotonic()
     with db_connection(forge_db_path) as conn:
-        result = submit_batch(conn, batch=batch, candidates=ranked, inbox_root=inbox)
+        # D096: persist the funnel's two upstream stages on the batch_summaries
+        # row — `enumerated` (configs run through the battery) and `survived`
+        # (configs that passed it), plus the per-hypothesis enumerated split.
+        result = submit_batch(
+            conn,
+            batch=batch,
+            candidates=ranked,
+            inbox_root=inbox,
+            enumerated_count=len(reports),
+            survived_count=passed,
+            enumerated_by_hypothesis=_enumerated_by_hypothesis(reports),
+        )
         # D062 + D064: persist per-filter rejection counts to batch_summaries
         # (aggregate + per-hypothesis breakdown). Same connection so the
         # UPDATE sees the INSERT submit_batch just did.
@@ -1257,6 +1283,16 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
             batch_id=result.batch_id,
             evaluated_at=batch.submitted_at,
         )
+        # D096: refresh the pre-filter funnel export (Part B) + the
+        # config_hash->grammar_version join-map (Part A interim) for Crucible's
+        # combined funnel. Instrumentation only — a failure here must never
+        # crash the production loop, and Crucible's funnel degrades gracefully
+        # if the export is stale/absent (their hard rule #7).
+        try:
+            funnel_path, _ = write_funnel_export(conn, forge_db_path.parent / "exports")
+            typer.echo(f"funnel_export: {funnel_path}")
+        except Exception as exc:
+            typer.echo(f"funnel_export: skipped (non-fatal): {exc}")
     timings["submit"] = _time.monotonic() - _t_submit
     typer.echo(
         f"batch_id={result.batch_id} submitted={result.submitted_count} "

@@ -33,7 +33,7 @@ from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
 from forge.submission.pre_filter_logger import record_pre_filter_logs
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from forge.ranking.types import RankedCandidate
     from forge.submission.batch import BatchContext
@@ -81,11 +81,19 @@ def _insert_batch_summary(
     *,
     batch: BatchContext,
     batch_size: int,
+    enumerated_count: int | None = None,
+    survived_count: int | None = None,
+    enumerated_by_hypothesis: Mapping[str, int] | None = None,
 ) -> None:
     """Insert one batch_summaries row; no-op if the batch_id already exists.
 
     DuckDB lacks `INSERT OR IGNORE` syntax sugar, so a SELECT-first
     guard keeps the call idempotent.
+
+    D096: `enumerated_count` / `survived_count` / `enumerated_by_hypothesis`
+    are the pre-filter funnel's two upstream stages (default NULL for callers
+    that don't supply them). `batch_size` remains the post-diversifier
+    submitted count.
     """
     existing = db.execute(
         "SELECT 1 FROM batch_summaries WHERE forge_batch_id = ?",
@@ -97,8 +105,9 @@ def _insert_batch_summary(
         """
         INSERT INTO batch_summaries
             (forge_batch_id, batch_size, submitted_at, grammar_version, registry_version,
-             seed, enumeration_inputs_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+             seed, enumeration_inputs_hash,
+             enumerated_count, survived_count, enumerated_by_hypothesis)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             str(batch.batch_id),
@@ -109,6 +118,12 @@ def _insert_batch_summary(
             # M-14/H-3: persist the full reproducibility identity.
             batch.seed,
             batch.enumeration_inputs_hash,
+            # D096: funnel upstream-stage counts.
+            enumerated_count,
+            survived_count,
+            json.dumps(dict(enumerated_by_hypothesis))
+            if enumerated_by_hypothesis is not None
+            else None,
         ],
     )
 
@@ -148,6 +163,13 @@ def _submit_one(
                 f"(StrategySpec submission would RunnerError at Crucible)"
             ),
         )
+    # D097: stamp the grammar version that produced this config so it
+    # rides the submission into Crucible's runs.grammar_version (the
+    # funnel's Stage-0 slice axis). grammar_version is hash-excluded in
+    # crucible_contracts (>=1.14.0), so config_hash -- the inbox
+    # filename, the submissions unique index (hard rule #9), and the
+    # join-map key -- is byte-identical with or without the stamp.
+    config = config.model_copy(update={"grammar_version": batch.grammar_version})
     config_json = config.model_dump_json()
 
     # M-10 (audit 2026-05-29): wrap INSERT(pending) -> submit_candidate -> UPDATE
@@ -246,6 +268,9 @@ def submit_batch(
     batch: BatchContext,
     candidates: Sequence[RankedCandidate],
     inbox_root: Path,
+    enumerated_count: int | None = None,
+    survived_count: int | None = None,
+    enumerated_by_hypothesis: Mapping[str, int] | None = None,
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
@@ -254,8 +279,21 @@ def submit_batch(
     earlier per-batch-subdir layout that Crucible's contract-compliant
     inbox watcher silently skipped). Batch association is preserved via
     the `submissions.forge_batch_id` column, not via filesystem grouping.
+
+    D096: `enumerated_count` (configs run through the battery) and
+    `survived_count` (configs that passed it) feed the pre-filter funnel
+    export's two upstream stages; `enumerated_by_hypothesis` is the
+    per-hypothesis enumerated breakdown. All optional — pre-D096 callers
+    leave the columns NULL.
     """
-    _insert_batch_summary(db, batch=batch, batch_size=len(candidates))
+    _insert_batch_summary(
+        db,
+        batch=batch,
+        batch_size=len(candidates),
+        enumerated_count=enumerated_count,
+        survived_count=survived_count,
+        enumerated_by_hypothesis=enumerated_by_hypothesis,
+    )
 
     records: list[SubmissionRecord] = []
     submitted = 0

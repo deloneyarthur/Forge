@@ -17,7 +17,7 @@ from crucible_contracts import (
     validate_schema_version,
 )
 
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.13.0"
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.14.0"
 
 
 def check_contracts_version() -> str:

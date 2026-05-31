@@ -335,9 +335,7 @@ def test_d066_submitter_drops_overlay_only_hypothesis(tmp_path: Path) -> None:
             candidates=(overlay_cand, healthy),
             inbox_root=inbox,
         )
-        sub_rows = conn.execute(
-            "SELECT config_hash, status FROM submissions"
-        ).fetchall()
+        sub_rows = conn.execute("SELECT config_hash, status FROM submissions").fetchall()
 
     assert result.submitted_count == 1
     assert result.dropped_overlay_count == 1
@@ -411,8 +409,7 @@ def test_d062_record_prefilter_rejections_writes_counter(tmp_path: Path) -> None
             reports=(*rejected, survivor.report),
         )
         row = conn.execute(
-            "SELECT prefilter_rejections FROM batch_summaries "
-            "WHERE forge_batch_id = ?",
+            "SELECT prefilter_rejections FROM batch_summaries WHERE forge_batch_id = ?",
             [str(batch.batch_id)],
         ).fetchone()
     assert out.total == {"signal_density": 2, "structural_redundancy": 1}
@@ -465,8 +462,7 @@ def test_d062_record_prefilter_rejections_no_op_when_all_passed(tmp_path: Path) 
             reports=tuple(c.report for c in survivors),
         )
         row = conn.execute(
-            "SELECT prefilter_rejections FROM batch_summaries "
-            "WHERE forge_batch_id = ?",
+            "SELECT prefilter_rejections FROM batch_summaries WHERE forge_batch_id = ?",
             [str(batch.batch_id)],
         ).fetchone()
     assert out.total == {}
@@ -527,6 +523,68 @@ def test_d064_record_prefilter_rejections_partitions_by_hypothesis(tmp_path: Pat
 
 
 # ---------------------------------------------------------------------------
+# D096 — funnel upstream-stage counts persisted on the batch_summaries row so
+# the pre-filter funnel export (FUNNEL_INSTRUMENTATION_FORGE.md Part B) can
+# report `enumerated` and `survived pre-filters` per grammar version.
+# ---------------------------------------------------------------------------
+
+
+def test_funnel_counts_persisted_when_provided(tmp_path: Path) -> None:
+    """submit_batch records enumerated_count / survived_count /
+    enumerated_by_hypothesis on the batch_summaries row when supplied.
+
+    These are the two Crucible [Forge-opt] funnel stages: `enumerated`
+    (len(reports)) and `survived pre-filters` (sum r.passed). batch_size
+    stays the post-diversifier submitted count — a distinct, later stage."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    batch = _ctx(seed=314)
+    cands = (_candidate("a", "dir_a"), _candidate("b", "dir_b"))
+    with db_connection(forge_db) as conn:
+        submit_batch(
+            conn,
+            batch=batch,
+            candidates=cands,
+            inbox_root=inbox,
+            enumerated_count=500,
+            survived_count=12,
+            enumerated_by_hypothesis={"regime_arbitrage": 400, "mean_reversion": 100},
+        )
+        row = conn.execute(
+            "SELECT batch_size, enumerated_count, survived_count, "
+            "enumerated_by_hypothesis FROM batch_summaries WHERE forge_batch_id = ?",
+            [str(batch.batch_id)],
+        ).fetchone()
+    assert row is not None
+    batch_size, enumerated, survived, by_hyp = row
+    assert int(batch_size) == 2  # submitted top-N, unchanged
+    assert int(enumerated) == 500
+    assert int(survived) == 12
+    persisted = json.loads(by_hyp) if isinstance(by_hyp, str) else by_hyp
+    assert persisted == {"regime_arbitrage": 400, "mean_reversion": 100}
+
+
+def test_funnel_counts_null_when_not_provided(tmp_path: Path) -> None:
+    """Back-compat: callers that don't supply the funnel counts (every
+    pre-D096 call site + the existing tests) leave the columns NULL."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    batch = _ctx(seed=315)
+    cands = (_candidate("a", "dir_a"),)
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=batch, candidates=cands, inbox_root=inbox)
+        row = conn.execute(
+            "SELECT enumerated_count, survived_count, enumerated_by_hypothesis "
+            "FROM batch_summaries WHERE forge_batch_id = ?",
+            [str(batch.batch_id)],
+        ).fetchone()
+    assert row is not None
+    assert row[0] is None
+    assert row[1] is None
+    assert row[2] is None
+
+
+# ---------------------------------------------------------------------------
 # M-10 (audit 2026-05-29) — submit transaction: a crash between INSERT(pending)
 # and the final UPDATE must not strand a row that permanently burns the
 # config_hash slot (hard rule #9 idempotency in the crash case).
@@ -556,10 +614,69 @@ def test_m10_crash_before_commit_leaves_no_orphan_row(tmp_path: Path, monkeypatc
         n = conn.execute(
             "SELECT COUNT(*) FROM submissions WHERE config_hash = ?", [cfg_hash]
         ).fetchone()
-        assert n is not None and int(n[0]) == 0  # rolled back: no orphan row
+        assert n is not None
+        assert int(n[0]) == 0  # rolled back: no orphan row
 
     monkeypatch.undo()  # restore the real submit_candidate
     with db_connection(forge_db) as conn:
         result = submit_batch(conn, batch=_ctx(seed=2), candidates=(cand,), inbox_root=inbox)
     assert result.submitted_count == 1
     assert result.skipped_duplicate_count == 0  # hash was NOT burned by the crash
+
+
+# ---------------------------------------------------------------------------
+# D097 — forward grammar_version stamping (the funnel's Stage-0 axis, forward
+# half; the historical join-map in forge.funnel is the back-resolution half).
+# The stamped value rides the StrategyConfig into Crucible's inbox ->
+# runs.grammar_version. grammar_version is hash-excluded in contracts (>=1.14.0),
+# so config_hash -- the inbox filename, the submissions unique index (hard rule
+# #9), and the join-map key -- stays byte-identical.
+# ---------------------------------------------------------------------------
+
+
+def test_d097_submitted_config_carries_grammar_version(tmp_path: Path) -> None:
+    """The inbox JSON Crucible reads carries the batch's grammar_version."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    with db_connection(forge_db) as conn:
+        submit_batch(
+            conn,
+            batch=_ctx(seed=970),
+            candidates=(_candidate("a", "dir_a"),),
+            inbox_root=inbox,
+        )
+    payload = json.loads(next(iter(inbox.glob("*.json"))).read_text())
+    assert payload["grammar_version"] == "v1"  # _ctx's grammar_version
+
+
+def test_d097_stamp_tracks_batch_and_preserves_config_hash(tmp_path: Path) -> None:
+    """A non-default grammar version stamps through to both the inbox JSON and
+    Forge's stored config_json, and the stamp leaves config_hash (the inbox
+    filename + the submissions dedup key) byte-identical -- hard rule #9 intact.
+    """
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    cand = _candidate("gv", "dir_gv")
+    expected_hash = cand.report.config.config_hash  # unstamped identity
+    batch = BatchContext(
+        batch_id=mint_batch_id(seed=971, grammar_version="v4", registry_hash="abc"),
+        grammar_version="v4",
+        registry_hash="abc",
+        submitted_at=datetime(2026, 5, 30, 12, tzinfo=UTC),
+        seed=971,
+    )
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=batch, candidates=(cand,), inbox_root=inbox)
+        row = conn.execute(
+            "SELECT config_hash, config_json FROM submissions WHERE forge_batch_id = ?",
+            [str(batch.batch_id)],
+        ).fetchone()
+
+    files = list(inbox.glob("*.json"))
+    assert len(files) == 1
+    payload = json.loads(files[0].read_text())
+    assert payload["grammar_version"] == "v4"
+    assert files[0].stem == expected_hash
+    assert row is not None
+    assert row[0] == expected_hash
+    assert json.loads(row[1])["grammar_version"] == "v4"

@@ -58,6 +58,19 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     # needed to reproduce a recorded batch (hard rule #6). Idempotent ALTER.
     "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS seed BIGINT",
     "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS enumeration_inputs_hash VARCHAR(16)",
+    # D096 — pre-filter funnel upstream-stage counts
+    # (FUNNEL_INSTRUMENTATION_FORGE.md Part B). `batch_size` is the
+    # post-diversifier submitted count; the funnel also needs the two stages
+    # above it: `enumerated_count` = total configs run through the battery
+    # (len(reports)) and `survived_count` = configs that passed the whole
+    # battery (sum r.passed). With `prefilter_rejections` (D062) these satisfy
+    # the funnel invariant sum(rejections) == enumerated - survived.
+    # `enumerated_by_hypothesis` is the per-hypothesis enumerated breakdown —
+    # the "which grammar branch" annotation Crucible's funnel wants on the
+    # enumerated stage. Idempotent ALTERs so prod DBs pick them up on open.
+    "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS enumerated_count BIGINT",
+    "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS survived_count BIGINT",
+    "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS enumerated_by_hypothesis JSON",
     """
     CREATE TABLE IF NOT EXISTS pre_filter_logs (
         forge_candidate_id  UUID,
