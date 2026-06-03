@@ -2,7 +2,7 @@
 
 ## Current status — 2026-06-03 (D101 — Sharpe-aware feedback reward — SUPERSEDES below)
 
-**Built + full-suite-green, deploying** (FEEDBACK change, NO grammar version bump — D094 precedent). Decision **D101**; Crucible Sharpe-lever #4.
+**DEPLOYED + VERIFIED 2026-06-03 ~13:03 PDT** (committed `a5de187`; full suite 1245 passed; restarted — `grammar_version=v7` unchanged, `NRestarts=0`, iteration 320). **#4 live in `hypothesis_weights:`** — shifted to Sharpe-aware: trend_continuation=0.449, mean_reversion=0.395, relative_value=0.377, volatility_event=0.368 (vol_event now lowest of the active set; all ≫ the 0.05 floor — no starvation). FEEDBACK change, NO grammar version bump (D094 precedent). Decision **D101**; Crucible Sharpe-lever #4.
 
 - **v7 CONFIRMED LIVE WORKING:** iteration 318 (first v7 batch) took `mean_reversion` from **0 (v6) → 142/200 submitted** (iter 319: 144) — the D100 cold-start unblocked it exactly as designed; mean_reversion now barely touches `expected_trades` (1 rejection vs 923 under v6) and selects at `permutation_test` (the right place). hurst op-fix live too (trend_continuation flowing 28-39). **v7 is a clear success.**
 - **#4 change:** `_run_reward` gains a Sharpe-proximity term — `reward = 0.5·traded + 0.2·gate_fraction + 0.3·sharpe` (was 0.6/0.4, Sharpe-blind). sharpe = `walk_forward_sharpe_median` ramped 0→2.0 (gate threshold), clamped, credited only for traded runs, 0 if metric absent. Realigns the enumerator's gradient onto the gate's FAILING axis. No contract change (data already in the export); CLI auto-adopts via defaults.
