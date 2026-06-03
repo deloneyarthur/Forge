@@ -1,5 +1,19 @@
 # Forge — Status
 
+## Current status — 2026-06-03 (D101 — Sharpe-aware feedback reward — SUPERSEDES below)
+
+**Built + full-suite-green, deploying** (FEEDBACK change, NO grammar version bump — D094 precedent). Decision **D101**; Crucible Sharpe-lever #4.
+
+- **v7 CONFIRMED LIVE WORKING:** iteration 318 (first v7 batch) took `mean_reversion` from **0 (v6) → 142/200 submitted** (iter 319: 144) — the D100 cold-start unblocked it exactly as designed; mean_reversion now barely touches `expected_trades` (1 rejection vs 923 under v6) and selects at `permutation_test` (the right place). hurst op-fix live too (trend_continuation flowing 28-39). **v7 is a clear success.**
+- **#4 change:** `_run_reward` gains a Sharpe-proximity term — `reward = 0.5·traded + 0.2·gate_fraction + 0.3·sharpe` (was 0.6/0.4, Sharpe-blind). sharpe = `walk_forward_sharpe_median` ramped 0→2.0 (gate threshold), clamped, credited only for traded runs, 0 if metric absent. Realigns the enumerator's gradient onto the gate's FAILING axis. No contract change (data already in the export); CLI auto-adopts via defaults.
+- **Diversity guard:** the D067 exploration floor (0.05) + Beta prior — the Sharpe tilt can't starve a hypothesis. Critical for just-cold-started mean_reversion (no Sharpe data yet → sharpe term 0; floor + trade-term keep it sampled while it accrues).
+- **Watch:** mean_reversion now dominant (~142-144/batch) — expected (was starved, now flowing + finally being tested); #4 + Crucible's gate rebalance it on realized Sharpe as its v7 configs gate.
+- **Still queued (greenlit, ship-as-ready):** #1a mandatory stop on vol_event (§3.5 S5 rule change); #1b/#3 mandatory 2nd vol-regime gate.
+
+**Verification:** 4 new reward tests RED→GREEN + 4 D094 value-assertions updated for the reseated split; 26 reward tests pass; full uncontended suite 1245 passed / 0 failed; ruff+format+mypy --strict clean.
+
+---
+
 ## Current status — 2026-06-03 (v7 — hurst regime-op fix + mean_reversion cold-start — SUPERSEDES below)
 
 **DEPLOYED + VERIFIED 2026-06-03 ~11:12 PDT** (committed `814dad5` to `main`; full uncontended suite 1241 passed; restarted onto v7 — `grammar_version=v7`, `NRestarts=0`, clean startup, iteration 318; standalone emission proof: hurst regime op `>`, hurst directional unchanged op `<`, `COLD_START_HYPOTHESES={mean_reversion, relative_value}`). Two fixes triggered by v6's first live batch (iteration 317), shipped as v7 (orthogonal by hypothesis → `crucible funnel --compare v6 v7` attributes each). No `rules:` text change (hard rule #1). Decision **D100**.

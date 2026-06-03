@@ -349,11 +349,16 @@ def _gated_run_graded(
     gates_passed: int,
     gates_failed: int,
     decision: str = "reject",
+    wf_sharpe: float | None = None,
 ) -> GatedRun:
     """Build a GatedRun with explicit trade_count + gate pass/fail counts.
 
     ``decision='promote'`` requires ``gates_failed == 0`` — the contracts
     PromotionDecision validator forbids a promote with any failed gate.
+
+    ``wf_sharpe`` (D101): when set, populates
+    ``metrics['walk_forward_sharpe_median']`` so the Sharpe-aware reward term
+    is exercised; ``None`` leaves ``metrics`` empty (no Sharpe credit).
     """
     run_id = str(uuid.uuid4())
     gate_results: dict[str, GateResult] = {}
@@ -361,11 +366,12 @@ def _gated_run_graded(
         gate_results[f"gate_pass_{i}"] = GateResult(gate_name=f"gate_pass_{i}", passed=True)
     for i in range(gates_failed):
         gate_results[f"gate_fail_{i}"] = GateResult(gate_name=f"gate_fail_{i}", passed=False)
+    metrics = {} if wf_sharpe is None else {"walk_forward_sharpe_median": wf_sharpe}
     return GatedRun(
         run=RunResult(
             run_id=run_id,
             config_hash=config_hash,
-            metrics={},
+            metrics=metrics,
             trade_count=trade_count,
             period_start=date(2024, 1, 1),
             period_end=date(2024, 6, 30),
@@ -408,8 +414,8 @@ def test_reward_weights_trading_beats_zero_trading_at_zero_promotions(tmp_path: 
         reward = compute_hypothesis_reward_weights(conn, gated_runs)
         promo_only = compute_hypothesis_weights(conn, gated_runs)
 
-    # trading run reward = 0.6*1 + 0.4*0.5 = 0.8 → Σ=8 → (1+8)/(1+10+10)
-    assert reward["regime_arbitrage"] == pytest.approx(9 / 21, rel=1e-6)
+    # trading run reward = 0.5*1 + 0.2*0.5 + 0.3*0(no sharpe metric) = 0.6 → Σ=6
+    assert reward["regime_arbitrage"] == pytest.approx(7 / 21, rel=1e-6)
     # zero-trade run reward = 0 → (1+0)/21
     assert reward["relative_value"] == pytest.approx(1 / 21, rel=1e-6)
     assert reward["regime_arbitrage"] > reward["relative_value"]
@@ -444,9 +450,9 @@ def test_reward_weights_promotion_is_ceiling(tmp_path: Path) -> None:
             ),
         ]
         reward = compute_hypothesis_reward_weights(conn, gated_runs)
-    # promoted reward 1.0 → (1+1)/12 ; trading-partial 0.6+0.4*0.25=0.7 → (1+0.7)/12
+    # promoted reward 1.0 → (1+1)/12 ; trading-partial 0.5+0.2*0.25+0=0.55 → (1+0.55)/12
     assert reward["volatility_event"] == pytest.approx(2 / 12, rel=1e-6)
-    assert reward["trend_continuation"] == pytest.approx(1.7 / 12, rel=1e-6)
+    assert reward["trend_continuation"] == pytest.approx(1.55 / 12, rel=1e-6)
     assert reward["volatility_event"] > reward["trend_continuation"]
 
 
@@ -468,9 +474,9 @@ def test_reward_weights_gate_progress_gradient(tmp_path: Path) -> None:
             ),
         ]
         reward = compute_hypothesis_reward_weights(conn, gated_runs)
-    # more: 0.6+0.4*0.75=0.9 → (1+0.9)/12 ; less: 0.6+0.4*0.25=0.7 → (1+0.7)/12
-    assert reward["regime_arbitrage"] == pytest.approx(1.9 / 12, rel=1e-6)
-    assert reward["mean_reversion"] == pytest.approx(1.7 / 12, rel=1e-6)
+    # more: 0.5+0.2*0.75+0=0.65 → (1+0.65)/12 ; less: 0.5+0.2*0.25+0=0.55 → (1+0.55)/12
+    assert reward["regime_arbitrage"] == pytest.approx(1.65 / 12, rel=1e-6)
+    assert reward["mean_reversion"] == pytest.approx(1.55 / 12, rel=1e-6)
     assert reward["regime_arbitrage"] > reward["mean_reversion"]
 
 
@@ -596,3 +602,95 @@ def test_reward_weights_corrupt_config_skipped(tmp_path: Path) -> None:
         ]
         weights = compute_hypothesis_reward_weights(conn, gated_runs)
     assert weights == {"mean_reversion": pytest.approx(2 / 12, rel=1e-6)}
+
+
+# ---------------------------------------------------------------------------
+# D101 — Sharpe-aware reward: the reward gradient now climbs the gate's failing
+# axis (walk_forward_sharpe_median), not just trade-production + generic
+# gate-progress. Default split is 0.5 trade + 0.2 gate + 0.3 sharpe (Σ=1.0).
+# ---------------------------------------------------------------------------
+
+
+def test_reward_weights_higher_sharpe_outweighs_lower(tmp_path: Path) -> None:
+    """Among trading, equally-gated, non-promoting runs, higher
+    walk_forward_sharpe_median earns a higher reward → the enumerator tilts
+    toward the gate's failing axis."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(conn, config=_config("volatility_event", "hi"), config_hash="hi_hash")
+        _insert_submission(conn, config=_config("trend_continuation", "lo"), config_hash="lo_hash")
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="hi_hash",
+                trade_count=50,
+                gates_passed=2,
+                gates_failed=2,
+                wf_sharpe=2.0,
+            ),
+            _gated_run_graded(
+                config_hash="lo_hash",
+                trade_count=50,
+                gates_passed=2,
+                gates_failed=2,
+                wf_sharpe=0.0,
+            ),
+        ]
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+    # hi: 0.5 + 0.2*0.5 + 0.3*clamp(2.0/2.0)=0.5+0.1+0.3=0.9 → (1+0.9)/12
+    # lo: 0.5 + 0.2*0.5 + 0.3*clamp(0.0/2.0)=0.5+0.1+0.0=0.6 → (1+0.6)/12
+    assert reward["volatility_event"] == pytest.approx(1.9 / 12, rel=1e-6)
+    assert reward["trend_continuation"] == pytest.approx(1.6 / 12, rel=1e-6)
+    assert reward["volatility_event"] > reward["trend_continuation"]
+
+
+def test_reward_weights_sharpe_only_credited_when_traded(tmp_path: Path) -> None:
+    """A zero-trade run gets no Sharpe credit even if a (stale) metric is present
+    — the Sharpe of a non-trading strategy is meaningless."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(conn, config=_config("mean_reversion", "z"), config_hash="z_hash")
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="z_hash",
+                trade_count=0,
+                gates_passed=0,
+                gates_failed=2,
+                wf_sharpe=2.0,  # present but must NOT be credited (zero-trade)
+            )
+        ]
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+    # not traded → 0.5*0 + 0.2*0 + 0.3*0 = 0 → (1+0)/12
+    assert reward["mean_reversion"] == pytest.approx(1 / 12, rel=1e-6)
+
+
+def test_reward_weights_missing_sharpe_metric_no_credit(tmp_path: Path) -> None:
+    """A traded run lacking walk_forward_sharpe_median gets 0 Sharpe credit (no
+    crash, no default credit) — the Sharpe term simply drops out."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(conn, config=_config("trend_continuation", "m"), config_hash="m_hash")
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="m_hash", trade_count=50, gates_passed=2, gates_failed=2
+            )  # no wf_sharpe → metrics {}
+        ]
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+    # traded, 2/4 gates, no sharpe → 0.5 + 0.2*0.5 + 0 = 0.6 → (1+0.6)/12
+    assert reward["trend_continuation"] == pytest.approx(1.6 / 12, rel=1e-6)
+
+
+def test_reward_weights_sharpe_clamped_to_unit(tmp_path: Path) -> None:
+    """walk_forward_sharpe_median above the ceiling clamps to 1.0; the blended
+    reward stays in [0,1] (weights sum to 1.0, so floor semantics hold)."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(conn, config=_config("volatility_event", "x"), config_hash="x_hash")
+        gated_runs = [
+            _gated_run_graded(
+                config_hash="x_hash",
+                trade_count=99,
+                gates_passed=3,
+                gates_failed=1,
+                wf_sharpe=5.0,  # >> ceiling 2.0 → clamps to 1.0
+            )
+        ]
+        reward = compute_hypothesis_reward_weights(conn, gated_runs)
+    # 0.5 + 0.2*0.75 + 0.3*clamp(5/2)=0.5+0.15+0.3=0.95 → (1+0.95)/12
+    assert reward["volatility_event"] == pytest.approx(1.95 / 12, rel=1e-6)
+    assert 0.0 < reward["volatility_event"] < 1.0

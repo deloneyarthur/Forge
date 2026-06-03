@@ -125,13 +125,20 @@ def prior_mean(*, alpha: float = DEFAULT_ALPHA, beta: float = DEFAULT_BETA) -> f
 #     down the gauntlet" measure that → 1.0 for a promoted run (the contracts
 #     validator guarantees promote => no failed gate), layering an edge
 #     gradient on top of bare trade production.
+#   - sharpe proximity (D101) — `walk_forward_sharpe_median` (the gate's FAILING
+#     axis) linearly ramped to [0, 1] against the 2.0 gate threshold, credited
+#     only for runs that traded. gate_progress is a GENERIC pass-fraction
+#     (dominated by the easy Calmar/DD gates) and so Sharpe-blind — without this
+#     term the gradient hill-climbs the axis that passes and ignores the one
+#     that fails (Crucible's 2026-06-03 v5 Sharpe diagnosis).
 #
-# reward = TRADE_PRODUCTION_WEIGHT*traded + GATE_PROGRESS_WEIGHT*gate_fraction,
-# with a promotion short-circuit to the ceiling (1.0). The two weights sum to
-# 1.0 so reward in [0, 1] and the smoothed weight stays in (0, 1), leaving
-# `apply_exploration_floor`'s semantics unchanged. As promotions appear,
-# gate_fraction -> 1.0 for the promoting hypotheses and the signal transitions
-# smoothly from "fires at all" toward "promotes".
+# reward = TRADE_PRODUCTION_WEIGHT*traded + GATE_PROGRESS_WEIGHT*gate_fraction
+# + SHARPE_WEIGHT*sharpe_proximity, with a promotion short-circuit to the
+# ceiling (1.0). The three weights sum to 1.0 so reward in [0, 1] and the
+# smoothed weight stays in (0, 1), leaving `apply_exploration_floor`'s semantics
+# unchanged. The D067 floor is the diversity guard for the Sharpe tilt: a
+# hypothesis with no Sharpe data yet (e.g. just-cold-started mean_reversion)
+# keeps its floored / Beta-prior budget and cannot be starved.
 #
 # Scope (deliberate): the prefilter-killed / runner-failed outcomes the plan
 # also names are NOT consumed here — they never produce a GatedRun, and
@@ -142,8 +149,40 @@ def prior_mean(*, alpha: float = DEFAULT_ALPHA, beta: float = DEFAULT_BETA) -> f
 # ---------------------------------------------------------------------------
 
 DEFAULT_TRADE_FLOOR: int = 1
-DEFAULT_TRADE_PRODUCTION_WEIGHT: float = 0.6
-DEFAULT_GATE_PROGRESS_WEIGHT: float = 0.4
+# D101 — the three reward weights sum to 1.0 so reward stays in [0, 1]
+# (apply_exploration_floor's semantics unchanged). Split was 0.6/0.4 (D094,
+# trade/gate only); D101 reseats it to seat the Sharpe term — gate_progress is a
+# generic, Sharpe-blind pass-fraction, the exact axis the gate fails on.
+DEFAULT_TRADE_PRODUCTION_WEIGHT: float = 0.5
+DEFAULT_GATE_PROGRESS_WEIGHT: float = 0.2
+DEFAULT_SHARPE_WEIGHT: float = 0.3
+# Sharpe normalization (D101): linear ramp from FLOOR (0 reward) to CEILING
+# (full reward) of `walk_forward_sharpe_median` — CEILING = the §8.7
+# WF-Sharpe-median gate threshold (2.0), so the term rewards proximity to
+# passing. Credited only for runs that traded.
+DEFAULT_SHARPE_METRIC: str = "walk_forward_sharpe_median"
+DEFAULT_SHARPE_FLOOR: float = 0.0
+DEFAULT_SHARPE_CEILING: float = 2.0
+
+
+def _sharpe_reward(gated_run: GatedRun, *, traded: bool) -> float:
+    """Proximity of a run's walk-forward Sharpe to the gate, in [0, 1] (D101).
+
+    Linear ramp from `DEFAULT_SHARPE_FLOOR` (0.0 reward) to
+    `DEFAULT_SHARPE_CEILING` (1.0 reward = the WF-Sharpe-median gate threshold),
+    clamped. Credited only for runs that traded — a non-trading strategy's
+    Sharpe is meaningless — and 0.0 when the metric is absent (no crash, no
+    credit), so missing data never inflates the reward.
+    """
+    if not traded:
+        return 0.0
+    raw = gated_run.run.metrics.get(DEFAULT_SHARPE_METRIC)
+    if raw is None:
+        return 0.0
+    span = DEFAULT_SHARPE_CEILING - DEFAULT_SHARPE_FLOOR
+    if span <= 0:
+        return 0.0
+    return max(0.0, min(1.0, (float(raw) - DEFAULT_SHARPE_FLOOR) / span))
 
 
 def _run_reward(
@@ -152,14 +191,19 @@ def _run_reward(
     trade_floor: int,
     trade_production_weight: float,
     gate_progress_weight: float,
+    sharpe_weight: float,
 ) -> float:
     """Graded reward in [0, 1] for one gated run (see the module section above)."""
     if gated_run.decision.decision == "promote":
         return 1.0
-    traded = 1.0 if gated_run.run.trade_count >= trade_floor else 0.0
+    traded = gated_run.run.trade_count >= trade_floor
     gates = gated_run.decision.gate_results
     gate_fraction = sum(1 for g in gates.values() if g.passed) / len(gates) if gates else 0.0
-    return trade_production_weight * traded + gate_progress_weight * gate_fraction
+    return (
+        trade_production_weight * (1.0 if traded else 0.0)
+        + gate_progress_weight * gate_fraction
+        + sharpe_weight * _sharpe_reward(gated_run, traded=traded)
+    )
 
 
 def compute_hypothesis_reward_weights(
@@ -171,11 +215,13 @@ def compute_hypothesis_reward_weights(
     trade_floor: int = DEFAULT_TRADE_FLOOR,
     trade_production_weight: float = DEFAULT_TRADE_PRODUCTION_WEIGHT,
     gate_progress_weight: float = DEFAULT_GATE_PROGRESS_WEIGHT,
+    sharpe_weight: float = DEFAULT_SHARPE_WEIGHT,
 ) -> dict[str, float]:
     """Per-hypothesis Beta-smoothed mean of a graded multi-class reward.
 
     Generalizes `compute_hypothesis_weights`: each gated run contributes a
-    reward in [0, 1] (trade-production + gate-progress, promotion = 1.0)
+    reward in [0, 1] (trade-production + gate-progress + Sharpe-proximity,
+    promotion = 1.0)
     rather than a binary promoted flag, so the enumerator keeps a gradient
     even when nothing has promoted. Same join semantics, same empty -> `{}`
     cold-start contract, and the same determinism property (hard rule #6:
@@ -192,6 +238,7 @@ def compute_hypothesis_reward_weights(
             trade_floor=trade_floor,
             trade_production_weight=trade_production_weight,
             gate_progress_weight=gate_progress_weight,
+            sharpe_weight=sharpe_weight,
         )
     return {
         hyp: (alpha + reward_sum) / (alpha + beta + total)
@@ -253,6 +300,10 @@ __all__ = [
     "DEFAULT_BETA",
     "DEFAULT_EXPLORATION_FLOOR",
     "DEFAULT_GATE_PROGRESS_WEIGHT",
+    "DEFAULT_SHARPE_CEILING",
+    "DEFAULT_SHARPE_FLOOR",
+    "DEFAULT_SHARPE_METRIC",
+    "DEFAULT_SHARPE_WEIGHT",
     "DEFAULT_TRADE_FLOOR",
     "DEFAULT_TRADE_PRODUCTION_WEIGHT",
     "apply_exploration_floor",
