@@ -2,7 +2,7 @@
 
 ## Current status — 2026-06-03 (v7 — hurst regime-op fix + mean_reversion cold-start — SUPERSEDES below)
 
-**Built + full-suite-green, deploying.** Two fixes triggered by v6's first live batch (iteration 317), shipped as v7 (orthogonal by hypothesis → `crucible funnel --compare v6 v7` attributes each). No `rules:` text change (hard rule #1). Decision **D100**.
+**DEPLOYED + VERIFIED 2026-06-03 ~11:12 PDT** (committed `814dad5` to `main`; full uncontended suite 1241 passed; restarted onto v7 — `grammar_version=v7`, `NRestarts=0`, clean startup, iteration 318; standalone emission proof: hurst regime op `>`, hurst directional unchanged op `<`, `COLD_START_HYPOTHESES={mean_reversion, relative_value}`). Two fixes triggered by v6's first live batch (iteration 317), shipped as v7 (orthogonal by hypothesis → `crucible funnel --compare v6 v7` attributes each). No `rules:` text change (hard rule #1). Decision **D100**.
 
 - **v6 working, half-blocked (the trigger):** first v6 batch submitted 200 — trend_continuation=98 (percentile firing fix working), volatility_event=94, relative_value=8, **mean_reversion=0**. mean_reversion had ZERO signal_density rejections but **923 killed at `expected_trades`** → the percentile rsi_2/rsi_14 DO fire (pass density), but the poisoned pre-v6 empirical prior (absolute-era ~0-trade) rejected them all — the D098 relative_value deadlock.
 - **Part 1 — hurst regime-op fix (Q26 RESOLVED):** trend_continuation's `hurst` gate was `op="<"` (allowed the *mean-reverting* regime — backwards). Flipped to `op=">"` (allow TRENDING) + `regime_percentile_range=(0.25,0.50)`, mirroring adx. mean_reversion directional hurst (`op="<"`) untouched. (`indicator_thresholds.py`)
@@ -10,7 +10,7 @@
 - **Crucible handoff shipped:** `PROMPT_CRUCIBLE_SHARPE_LEVERS.md` — Forge's response to the v5 Sharpe diagnosis (corrects #4 [no NSGA; Sharpe-blind feedback], reframes #3 [k=1 confirmed; real lever = mandatory 2nd vol-regime gate], confirms #2/#1c Crucible-side gated on Forge widening *survival*, relays operator's "#5 not verified — keep gating in-scope").
 - **Still queued (greenlit, ship-as-ready):** #4 Sharpe-aware feedback (wire WF-Sharpe into the reward + diversity guard); #1a mandatory stop on vol_event (§3.5 S5 rule change); #1b/#3 mandatory 2nd vol-regime gate.
 
-**Verification:** 2 new tests RED→GREEN (`test_hurst_regime_op_is_trending_but_directional_unchanged`, `test_d100_mean_reversion_and_relative_value_are_cold_started`); full uncontended suite 1241 passed / 0 failed; ruff+format+mypy --strict clean on changed scope; v7.yaml byte-identical + loader/doc-sync/version-bump hooks pass. **To deploy:** commit D100+v7 → restart forge.service onto v7 → verify (grammar v7, mean_reversion now flows, hurst regime op ">").
+**Verification:** 2 new tests RED→GREEN (`test_hurst_regime_op_is_trending_but_directional_unchanged`, `test_d100_mean_reversion_and_relative_value_are_cold_started`); full uncontended suite 1241 passed / 0 failed; ruff+format+mypy --strict clean on changed scope; v7.yaml byte-identical + loader/doc-sync/version-bump hooks pass. **Watch on the first post-restart batch** (iteration 318, ~45-min prefetch): `ranked_top_n_by_hypothesis: mean_reversion` should rise from **0** (v6 — 100% killed at expected_trades) to **non-zero** — empirical confirmation the cold-start unblocked v6's mean_reversion firing fix. Then **#4 Sharpe-aware feedback** is the next queued ship.
 
 ---
 
