@@ -59,6 +59,13 @@ class IndicatorThresholdSpec:
     op_directional: str = "<"
     op_regime: str = "<"
     is_skip: bool = False
+    # v6 (D099): when set for a role, the sampler emits a PERCENTILE threshold
+    # (a value in [0, 1]) + use_percentile/percentile_window, instead of an
+    # absolute value — Crucible ranks the latest indicator value against its
+    # trailing window and compares that percentile. Scope = mean_reversion-
+    # family directional oscillators + the adx/hurst trend regime gate (D099).
+    directional_percentile_range: tuple[float, float] | None = None
+    regime_percentile_range: tuple[float, float] | None = None
 
 
 # Price-scale indicators — never threshold-style; passthrough-only.
@@ -74,25 +81,30 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     "rsi": IndicatorThresholdSpec(
         directional_range=(20.0, 35.0),  # oversold: fires when RSI < threshold
         regime_range=(40.0, 70.0),  # allow window: trade when RSI < 70
+        directional_percentile_range=(0.05, 0.20),  # v6 (D099): enter in bottom 5-20%
     ),
     "rsi_14": IndicatorThresholdSpec(
         directional_range=(20.0, 35.0),
         regime_range=(40.0, 70.0),
+        directional_percentile_range=(0.05, 0.20),  # v6 (D099): enter in bottom 5-20%
     ),
     "rsi_2": IndicatorThresholdSpec(
         directional_range=(5.0, 15.0),  # rsi_2 is much more extreme
         regime_range=(20.0, 50.0),
+        directional_percentile_range=(0.05, 0.20),  # v6 (D099): the diagnosed-too-tight culprit
     ),
     "adx": IndicatorThresholdSpec(
         directional_range=(25.0, 35.0),  # trend strong: fires when ADX > threshold
         regime_range=(15.0, 25.0),
         op_directional=">",  # ADX is "strength" — fires when above threshold
         op_regime=">",
+        regime_percentile_range=(0.25, 0.50),  # v6 (D099): loosen gate — allow ~top 50-75%
     ),
     # ----- Bounded 0-1 / position-in-range -----
     "bb_pct": IndicatorThresholdSpec(
         directional_range=(0.05, 0.20),
         regime_range=(0.10, 0.80),
+        directional_percentile_range=(0.05, 0.20),  # v6 (D099): lower-band entry, bottom 5-20%
     ),
     "donchian": IndicatorThresholdSpec(
         directional_range=(0.05, 0.20),
@@ -105,6 +117,7 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     "hurst": IndicatorThresholdSpec(
         directional_range=(0.40, 0.50),  # mean-reverting: H < 0.5
         regime_range=(0.40, 0.60),
+        regime_percentile_range=(0.50, 0.75),  # v6 (D099): loosen gate (op "<"; see OQ)
     ),
     # ----- Volatility (small positive, log-scale) -----
     "realized_vol": IndicatorThresholdSpec(
@@ -131,6 +144,7 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     "zscore_returns": IndicatorThresholdSpec(
         directional_range=(-1.5, -0.5),  # D031 widened: -2/-1 was too extreme on SPY OOS
         regime_range=(-1.5, 1.5),  # normal range
+        directional_percentile_range=(0.05, 0.20),  # v6 (D099): oversold z, bottom 5-20%
     ),
     "rolling_sharpe": IndicatorThresholdSpec(
         directional_range=(-0.5, 0.5),  # low sharpe entry
@@ -291,9 +305,7 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
 # Loaded lazily on first sampler call, cached for the rest of the
 # process lifetime. Restart forge.service to pick up a new YAML.
 _AUTO_TIGHTENINGS_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "config"
-    / "auto_tightened_thresholds.yaml"
+    Path(__file__).resolve().parents[3] / "config" / "auto_tightened_thresholds.yaml"
 )
 
 
@@ -318,8 +330,12 @@ def _auto_tightenings() -> dict[tuple[str, str], tuple[float, float]]:
         ind_id = entry.get("indicator_id")
         role = entry.get("role")
         proposed = entry.get("proposed_range")
-        if not (isinstance(ind_id, str) and isinstance(role, str)
-                and isinstance(proposed, list) and len(proposed) == 2):
+        if not (
+            isinstance(ind_id, str)
+            and isinstance(role, str)
+            and isinstance(proposed, list)
+            and len(proposed) == 2
+        ):
             continue
         p_low, p_high = float(proposed[0]), float(proposed[1])
         # Validate against D031 baseline (defensive — proposer should already
@@ -343,7 +359,9 @@ def _auto_tightenings() -> dict[tuple[str, str], tuple[float, float]]:
 
 
 def _effective_range(
-    indicator_id: str, role: str, baseline: tuple[float, float],
+    indicator_id: str,
+    role: str,
+    baseline: tuple[float, float],
 ) -> tuple[float, float]:
     """Return the auto-tightened range if present, else the D031 baseline."""
     return _auto_tightenings().get((indicator_id, role), baseline)
@@ -397,7 +415,55 @@ def is_threshold_skippable(indicator_id: str, role: str = "directional") -> bool
     return role == "regime_filter" and spec.regime_range is None
 
 
-def sample_threshold_params(
+# v6 (D099): percentile-emission window. Crucible ranks the latest indicator
+# value against its trailing `_PERCENTILE_WINDOW` bars; the default mirrors
+# Crucible's percentile-mode default (1 trading year).
+_PERCENTILE_WINDOW = 252
+
+
+def is_percentile_emitting(indicator_id: str, role: str = "directional") -> bool:
+    """True if `(indicator_id, role)` emits a PERCENTILE threshold under v6.
+
+    Percentile-eligible pairs (D099) emit `use_percentile=True` + a `threshold`
+    in [0, 1] instead of an absolute value. Exposed so the native-unit
+    auto-tightening path (D073) and the threshold proposer can stay out of
+    percentile space — a native-unit tightening is meaningless for a [0, 1]
+    percentile (and the loader's baseline check would reject it anyway).
+    """
+    spec = _INDICATOR_THRESHOLD_TABLE.get(indicator_id)
+    if spec is None or spec.is_skip:
+        return False
+    if role == "directional":
+        return spec.directional_percentile_range is not None
+    if role == "regime_filter":
+        return spec.regime_percentile_range is not None
+    return False
+
+
+def _percentile_params(
+    prange: tuple[float, float],
+    op: str,
+    rng: random.Random,
+) -> dict[str, object]:
+    """Build percentile-mode `params` for a threshold SignalSpec (D099).
+
+    `prange` is a `(low, high)` PERCENTILE range in [0, 1]. The draw consumes
+    the same single `rng.uniform` as the absolute path, so the seeded sequence
+    is unchanged (hard rule #6) — only the emitted value + the two extra keys
+    differ. `op` is carried over unchanged from the absolute table: percentile
+    mode swaps the units of `threshold`, never the firing direction.
+    """
+    low, high = prange
+    threshold = round(rng.uniform(low, high), 4) if low != high else low
+    return {
+        "threshold": threshold,
+        "op": op,
+        "use_percentile": True,
+        "percentile_window": _PERCENTILE_WINDOW,
+    }
+
+
+def sample_threshold_params(  # noqa: PLR0911 — one return per (role, percentile/absolute) branch
     indicator_id: str,
     role: str,
     rng: random.Random,
@@ -414,6 +480,14 @@ def sample_threshold_params(
     if role == "directional":
         if spec.directional_range is None:
             return {}
+        # v6 (D099): percentile-eligible indicators emit a [0,1] percentile
+        # threshold + use_percentile, bypassing the native-unit auto-tightening.
+        if spec.directional_percentile_range is not None:
+            return _percentile_params(
+                spec.directional_percentile_range,
+                spec.op_directional,
+                rng,
+            )
         # D073: prefer auto-tightened range over D031 baseline when present.
         low, high = _effective_range(indicator_id, role, spec.directional_range)
         threshold = round(rng.uniform(low, high), 4) if low != high else low
@@ -421,6 +495,12 @@ def sample_threshold_params(
     if role == "regime_filter":
         if spec.regime_range is None:
             return {}
+        if spec.regime_percentile_range is not None:
+            return _percentile_params(
+                spec.regime_percentile_range,
+                spec.op_regime,
+                rng,
+            )
         low, high = _effective_range(indicator_id, role, spec.regime_range)
         threshold = round(rng.uniform(low, high), 4) if low != high else low
         return {"threshold": threshold, "op": spec.op_regime}
@@ -430,6 +510,7 @@ def sample_threshold_params(
 
 __all__ = [
     "IndicatorThresholdSpec",
+    "is_percentile_emitting",
     "is_threshold_skippable",
     "sample_threshold_params",
 ]

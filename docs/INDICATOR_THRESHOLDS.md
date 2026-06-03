@@ -140,3 +140,23 @@ These are **operator-decision** items beyond this audit's scope.
 ## Q13 closure note
 
 Q13 in `OPEN_QUESTIONS.md` documented "100% rejection at permutation_test under synthetic cache." With the real Crucible cache active (`b447597`), the rejection has shifted to `signal_density` because threshold defaults don't match real indicator scales. The fix is indicator-aware threshold sampling per this audit. Logged as **Q14** in `OPEN_QUESTIONS.md`.
+
+---
+
+## v6 (2026-06-02, D099) — percentile-parameterized thresholds for the firing-starved indicators
+
+**Why a second pass:** the absolute ranges above were audited once on SPY and applied to every ticker. An absolute threshold fires at an **uncontrolled, name-dependent rate** — the 2026-06-02 firing decomposition put the binding constraint on discovery at signal *firing* (~70% of decided runs never trade; `mean_reversion` ~78% directional-never-fired = absolute `rsi_2` too tight; `trend_continuation` ~58% regime-gated). The fix (Crucible's own DESIGN §5.2): for raw-unit indicators, emit a **percentile of the indicator's own trailing distribution** instead of an absolute value, so firing rate is controlled *by construction* per name.
+
+**Mechanism (`indicator_thresholds.py`):** an `IndicatorThresholdSpec` may carry `directional_percentile_range` / `regime_percentile_range` (a `(low, high)` in **[0, 1]**). When set for the sampled role, `sample_threshold_params` emits `params = {threshold: <pct>, op, use_percentile: True, percentile_window: 252}` — same `op` as the absolute table (percentile swaps the *units* of `threshold`, never the firing direction), same single `rng.uniform` draw (so the seeded sequence is unchanged — hard rule #6). Crucible ranks the latest value vs its trailing 252 bars and compares the percentile. The percentile branch **bypasses** the native-unit auto-tightening (D073): a native tightening is meaningless for a [0,1] percentile (and the loader's baseline check rejects it anyway).
+
+**Scope (operator decision 2026-06-02, "exclude dealer_positioning directional"):**
+
+| (indicator, role) | percentile range | intent |
+|---|---|---|
+| `rsi_2`, `rsi_14`, `rsi`, `zscore_returns`, `bb_pct` — directional | `(0.05, 0.20)`, op `<` | enter in the bottom 5-20% of the oscillator's own distribution |
+| `adx` — regime_filter | `(0.25, 0.50)`, op `>` | loosen the trend gate: allow ~top 50-75% |
+| `hurst` — regime_filter | `(0.50, 0.75)`, op `<` | loosen the gate (op preserved; **see Q26** — the `<` direction looks backwards for trend_continuation) |
+
+**Left absolute (out of scope):** `dealer_positioning` directional (call/put-wall, gamma-flip — the only `mean_reversion`-directional overlap with `volatility_event`); already-rank `iv_rank` / `rv_rank` (percentile-by-construction); and the entire `volatility_event` indicator set (`days_to_*`, vol indicators) — it fires in ~every fold, so D099 deliberately does not touch it. Because `mean_reversion`-family directional indicators are sampled only by `mean_reversion`, and `adx`/`hurst` are `trend_strength` (regime-only, not in `volatility_event`'s R3 gate), this `(indicator, role)` allowlist provably cannot leak into `volatility_event`.
+
+**Coordination:** percentile mode is interpreted on Crucible's side in **two** paths — the strategy/backtest path (`494cf96`) and the feature-cache writer that answers Forge's pre-filter `activation_dates` queries (`PROMPT_CRUCIBLE_PERCENTILE_FEATURE_CACHE.md`). Forge holds v6 emission undeployed until both are live. The percentile ranges here are calibrated to *intent* (loosen the diagnosed-too-tight constraints), not to SPY data — they are tunable as the `crucible funnel --compare v5 v6` signal comes in.
