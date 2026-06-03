@@ -115,9 +115,10 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=(0.10, 0.80),
     ),
     "hurst": IndicatorThresholdSpec(
-        directional_range=(0.40, 0.50),  # mean-reverting: H < 0.5
+        directional_range=(0.40, 0.50),  # mean-reverting H<0.5 (mean_reversion directional)
         regime_range=(0.40, 0.60),
-        regime_percentile_range=(0.50, 0.75),  # v6 (D099): loosen gate (op "<"; see OQ)
+        op_regime=">",  # v7 (D100/Q26): trend regime = allow when TRENDING (H high)
+        regime_percentile_range=(0.25, 0.50),  # v7 (D100): allow ~top 50-75%, mirrors adx
     ),
     # ----- Volatility (small positive, log-scale) -----
     "realized_vol": IndicatorThresholdSpec(

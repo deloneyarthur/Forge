@@ -77,7 +77,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D099 bumped v5 -> v6 (enumeration-layer only: percentile-parameterized
     # signal thresholds for the firing-starved binding-constraint indicators;
     # the 21 `rules:` are again textually unchanged).
-    assert grammar.grammar_version == "v6"  # type: ignore[attr-defined]
+    # D100 bumped v6 -> v7 (hurst regime-op fix + mean_reversion cold-start;
+    # again enumeration-layer/feedback, the 21 `rules:` unchanged).
+    assert grammar.grammar_version == "v7"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

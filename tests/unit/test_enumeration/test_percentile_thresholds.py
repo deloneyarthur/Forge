@@ -178,3 +178,19 @@ def test_mean_reversion_rsi_directional_emits_percentile() -> None:
     assert saw_percentile >= 5, (
         f"expected some mean_reversion rsi directional percentile signals; saw {saw_percentile}"
     )
+
+
+def test_hurst_regime_op_is_trending_but_directional_unchanged() -> None:
+    """v7 (D100/Q26): trend_continuation's hurst regime gate flips to op ">"
+    (allow when TRENDING — high hurst), not "<" (mean-reverting). Its separate
+    mean_reversion DIRECTIONAL use stays op "<" (fire when mean-reverting). Only
+    the regime op moved; the directional op is correct as-is."""
+    for seed in range(20):
+        reg = sample_threshold_params("hurst", "regime_filter", random.Random(seed))
+        assert reg["op"] == ">", reg
+        assert reg["use_percentile"] is True
+        assert 0.0 <= float(reg["threshold"]) <= 1.0
+    # mean_reversion directional use of hurst must NOT have flipped (absolute path).
+    dir_ = sample_threshold_params("hurst", "directional", random.Random(0))
+    assert dir_["op"] == "<", dir_
+    assert "use_percentile" not in dir_  # directional hurst stays absolute

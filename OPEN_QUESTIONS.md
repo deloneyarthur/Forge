@@ -492,7 +492,7 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 
 **Tag:** `universe`, `crucible-coordination`, `operator-decision`, `relates-to-D093`, `relates-to-Q23`
 
-## 2026-06-02 — Q26 — `hurst` regime-gate `op` is `<` (allow when hurst LOW = mean-reverting), which looks backwards for `trend_continuation` — **LOW/MEDIUM SEVERITY (latent, pre-existing)**
+## 2026-06-02 — Q26 — `hurst` regime-gate `op` is `<` (allow when hurst LOW = mean-reverting), which looks backwards for `trend_continuation` — **RESOLVED 2026-06-03 (D100 / v7)**
 
 **Symptom:** `trend_continuation`'s R2 regime gate may admit `hurst`, whose threshold-table entry uses the default `op_regime="<"` — i.e. the gate "allows" (is open) when hurst is *below* threshold. But low hurst (H < 0.5) is the **mean-reverting** regime; trend-continuation wants the **trending** regime (high hurst). So as written, the hurst gate appears to admit precisely the regime the hypothesis does *not* want — a plausible secondary contributor to the "trend_continuation ~58% regime-gated" firing decomposition that motivated D099.
 
@@ -500,4 +500,6 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 
 **Resolve by:** operator confirms whether `trend_continuation`'s `hurst` regime gate should be `op=">"` (allow when trending). If yes, it is a small `_INDICATOR_THRESHOLD_TABLE` change (`op_regime=">"` on the `hurst` entry) + a percentile-range flip (allow ~top 50-75% → `regime_percentile_range` like adx's `(0.25, 0.50)`), shipped as its own decision/version bump. If the current direction is intentional (e.g. "fade exhausted trends"), document the rationale and close.
 
-**Tag:** `grammar`, `firing-rate`, `relates-to-D099`, `operator-decision`
+**Resolution (2026-06-03, D100/v7):** operator confirmed the trending-regime thesis — `hurst`'s `trend_continuation` regime gate should allow when TRENDING. Flipped `op_regime` to `>` + set `regime_percentile_range=(0.25, 0.50)` (allow ~top 50-75%, mirroring `adx`) on the `hurst` table entry. `hurst`'s separate `mean_reversion` **directional** use (`op_directional="<"`, fire when mean-reverting) is correct and untouched — only the regime op moved. Shipped in the v7 bump alongside the mean_reversion cold-start (orthogonal by hypothesis). Test: `test_hurst_regime_op_is_trending_but_directional_unchanged`.
+
+**Tag:** `grammar`, `firing-rate`, `relates-to-D099`, `relates-to-D100`, `operator-decision`, `resolved`

@@ -585,3 +585,15 @@ def test_d098_cold_start_default_empty_is_back_compat(tmp_path: Path) -> None:
     assert default[_RV_KEY].posterior_p_pass == pytest.approx(
         explicit_empty[_RV_KEY].posterior_p_pass
     )
+
+
+def test_d100_mean_reversion_and_relative_value_are_cold_started() -> None:
+    """v7 (D100): mean_reversion joins relative_value in the cold-start policy.
+    v6 percentile-ized mean_reversion's rsi_2/rsi_14 firing (now passes
+    signal_density), but its high-n pre-v6 absolute-threshold bucket kept it in
+    empirical-prior mode and killed 100% at expected_trades (first v6 batch:
+    923 rejected, 0 submitted). Same deadlock + fix as relative_value (D098)."""
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+
+    assert "mean_reversion" in COLD_START_HYPOTHESES
+    assert "relative_value" in COLD_START_HYPOTHESES  # D098 entry unchanged

@@ -71,9 +71,15 @@ DEFAULT_PRIOR_VERSION_WEIGHT: float = 0.25
 # 1-5 of 37 pairs. Commit 4f5271f loads all pair legs regardless of tier, so v5
 # is relative_value's first fair test; down-weighting (D081) alone would leave
 # its high-n poisoned bucket in empirical-prior mode and block it at pre-filter.
+# mean_reversion (D100, v7): v6 percentile-ized its rsi_2/rsi_14 directional so
+# firing now passes signal_density, but its high-n pre-v6 bucket (absolute
+# thresholds, ~0-trade) kept it in empirical-prior mode and killed 100% at
+# expected_trades (first v6 batch: 923 rejected, 0 submitted) — the same poisoned-
+# prior deadlock, from changing the firing behavior out from under the old prior.
+#
 # Remove an entry once the hypothesis has a representative current-version
 # cohort — the D081 down-weighting path then suffices.
-COLD_START_HYPOTHESES: frozenset[str] = frozenset({"relative_value"})
+COLD_START_HYPOTHESES: frozenset[str] = frozenset({"relative_value", "mean_reversion"})
 
 
 BucketKey = tuple[str, str, str]  # (hypothesis, dte_bucket, directional_family)
