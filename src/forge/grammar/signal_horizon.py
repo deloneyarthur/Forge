@@ -23,6 +23,17 @@ NOT a *measurement/warmup window*. They differ for slow regime measures:
 horizon here is 30, not 252. Likewise the dealer-positioning / event-proximity
 indicators are near-instantaneous reads, horizon ~1-5.
 
+Confirmed by Crucible (`FORGE_horizon_dte_response.md`, 2026-06-05):
+``IndicatorMetadata.lookback`` IS a warmup/measurement window by contract (the
+rows masked NaN before the indicator is computable), NOT a signal horizon — so
+it was never the right §3.5 S4 input, and this Forge-owned table is the
+**permanent** end state. **Do NOT migrate S4 back onto the registry field** — it
+would be a category error (e.g. ``iv_rank`` warmup 252 vs its ~30-day mean-
+reversion horizon). The registry's populated values are correct warmups read
+wrong (``ema_50=200`` is EWM convergence, ``rsi_2=14`` is the RSI warmup); the 0s
+are benign under-population (``compute()`` self-masks the true, param-dependent
+warmup), not a live bug.
+
 Operator-owned in spirit (it parameterises §3.5 S4): change values with a
 ``grammar_version`` bump and a Decision Log entry, as with the threshold table.
 """
