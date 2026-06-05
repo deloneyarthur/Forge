@@ -79,7 +79,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # the 21 `rules:` are again textually unchanged).
     # D100 bumped v6 -> v7 (hurst regime-op fix + mean_reversion cold-start;
     # again enumeration-layer/feedback, the 21 `rules:` unchanged).
-    assert grammar.grammar_version == "v7"  # type: ignore[attr-defined]
+    # D102 bumped v7 -> v8 (horizon-matched DTE: §3.5 S4's horizon input moves
+    # from registry lookback to the Forge-owned signal_horizon table + the
+    # sampler derives DTE from it; enumeration-layer only, the 21 `rules:`
+    # unchanged).
+    assert grammar.grammar_version == "v8"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

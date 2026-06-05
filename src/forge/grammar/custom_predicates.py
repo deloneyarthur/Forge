@@ -33,6 +33,11 @@ from crucible_contracts import (
 )
 
 from forge.grammar.models import PredicateResult
+from forge.grammar.signal_horizon import (
+    buckets_for_horizon_class,
+    horizon_class_for_days,
+    signal_horizon_days,
+)
 
 if TYPE_CHECKING:
     from crucible_contracts import IndicatorMetadata, RegistrySnapshot, StrategyConfig
@@ -45,15 +50,11 @@ CustomPredicateFn = Callable[["StrategyConfig", "RegistrySnapshot"], PredicateRe
 # Module-level tables and thresholds — operator-readable single source
 # ---------------------------------------------------------------------------
 
-# D010 lookback bucketing — max-over-indicators of IndicatorMetadata.lookback.
-_LOOKBACK_SHORT_MAX = 6
-_LOOKBACK_MEDIUM_MAX = 89  # long_lookback is anything >= 90
-
-_LOOKBACK_DTE_TABLE: dict[str, tuple[str, ...]] = {
-    "short_lookback": ("swing_short",),
-    "medium_lookback": ("swing_short", "swing_mid"),
-    "long_lookback": ("swing_mid", "swing_long"),
-}
+# §3.5 S4 horizon bucketing (D010 classes; D102 v8 input change) now lives in
+# `forge.grammar.signal_horizon`: the class thresholds, the Forge-owned
+# per-indicator horizon table, and the horizon-class -> allowed-DTE-bucket map.
+# It replaced `IndicatorMetadata.lookback` (0 for 34/43 live indicators) as the
+# S4 input so the rule stops collapsing to "everything -> swing_short".
 
 # §3.5 S5 hypothesis → exit composition (D071 / Phase 4 multi-exit schema).
 #
@@ -265,23 +266,23 @@ def _lookback_class_for_indicators(
     indicators: tuple[str, ...],
     registry: RegistrySnapshot,
 ) -> str | None:
-    """D010 bucketing: max over indicators' lookback → short / medium /
-    long lookback class. Returns ``None`` if any indicator isn't in the
-    registry (caller's job to report)."""
-    lookbacks: list[int] = []
+    """§3.5 S4 / D010 bucketing: max over the signal's indicators' Forge-owned
+    *signal horizons* → short / medium / long lookback class. Returns ``None``
+    if any indicator isn't in the registry (caller's job to report).
+
+    D102 (v8): the horizon now comes from ``forge.grammar.signal_horizon``,
+    not ``IndicatorMetadata.lookback`` — the live registry reports 0 for most
+    indicators, which collapsed this to "everything is short_lookback". Registry
+    *membership* is still required (a grammar-valid config must reference real
+    indicators); only the horizon *value* moved to the Forge-owned table."""
+    horizons: list[int] = []
     for ind_id in indicators:
-        im = _indicator_by_id(ind_id, registry)
-        if im is None:
+        if _indicator_by_id(ind_id, registry) is None:
             return None
-        lookbacks.append(im.lookback)
-    if not lookbacks:
+        horizons.append(signal_horizon_days(ind_id))
+    if not horizons:
         return None
-    max_lb = max(lookbacks)
-    if max_lb <= _LOOKBACK_SHORT_MAX:
-        return "short_lookback"
-    if max_lb <= _LOOKBACK_MEDIUM_MAX:
-        return "medium_lookback"
-    return "long_lookback"
+    return horizon_class_for_days(max(horizons))
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +309,7 @@ def _s4_lookback_class_matches_dte_bucket(
                 f"{directional.indicators!r} not present in registry"  # type: ignore[attr-defined]
             ),
         )
-    allowed = _LOOKBACK_DTE_TABLE.get(klass, ())
+    allowed = buckets_for_horizon_class(klass)
     if config.dte_bucket in allowed:
         return PredicateResult(passed=True)
     return PredicateResult(
@@ -369,17 +370,16 @@ def _s5_exits_match_hypothesis(
     if required_set and len(chosen_from_set) != 1:
         if not chosen_from_set:
             parts.append(
-                f"required_from_set: none of {sorted(required_set)} present "
-                f"(must pick exactly 1)",
+                f"required_from_set: none of {sorted(required_set)} present (must pick exactly 1)",
             )
         else:
             parts.append(
-                f"required_from_set: {sorted(chosen_from_set)} present "
-                f"(must pick exactly 1)",
+                f"required_from_set: {sorted(chosen_from_set)} present (must pick exactly 1)",
             )
 
     # (3) any exits beyond E1 + required_always + chosen_required must be optional_additions
     from crucible_contracts import MANDATORY_EXIT_IDS  # noqa: PLC0415
+
     allowed_set = MANDATORY_EXIT_IDS | required_always | chosen_from_set | optional_pool
     foreign = sorted(exit_ids - allowed_set)
     if foreign:

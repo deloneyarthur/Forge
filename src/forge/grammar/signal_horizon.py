@@ -1,0 +1,175 @@
+"""Forge-owned signal-horizon table — the input to §3.5 S4 and the v8
+horizon-matched DTE derivation (D102).
+
+WHY this exists (and why the horizon is not read from the registry):
+Crucible's published ``RegistrySnapshot`` does not carry a usable
+``IndicatorMetadata.lookback``. On the live snapshot the service loads,
+**34 of 43 indicators report ``lookback=0``** and the 9 that are populated
+are not signal horizons (``rsi_2`` reports 14, ``ema_50`` reports 200, while
+``adx``/``hurst``/``macd``/``bb_pct``/``zscore_returns`` all report 0). Used
+directly that field collapses §3.5 S4 to "almost everything -> swing_short"
+and actively produces horizon-*mismatched* configs (a MACD trend signal at a
+2-3 week DTE).
+
+So Forge owns the horizon the same way it already owns per-indicator
+threshold ranges in ``forge.enumeration.indicator_thresholds`` — as
+auditable enumeration-policy domain knowledge keyed by indicator id. The
+period is encoded in the indicator's identity (``rsi_2`` vs ``rsi_14`` vs
+``momentum_252``), which is exactly what this table recovers.
+
+The number is a *signal horizon* (how long the thesis takes to play out),
+NOT a *measurement/warmup window*. They differ for slow regime measures:
+``iv_rank`` summarises 252 days but its level mean-reverts over ~weeks, so its
+horizon here is 30, not 252. Likewise the dealer-positioning / event-proximity
+indicators are near-instantaneous reads, horizon ~1-5.
+
+Operator-owned in spirit (it parameterises §3.5 S4): change values with a
+``grammar_version`` bump and a Decision Log entry, as with the threshold table.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+# §3.5 S4 / D010 horizon-class thresholds, in trading days. A signal whose
+# (max-over-indicators) horizon is <= SHORT_MAX is "short_lookback"; <=
+# MEDIUM_MAX is "medium_lookback"; otherwise "long_lookback". These mirror the
+# operator-confirmed D010 bucketing (Phase 1 kickoff Q2, 2026-05-13) — only the
+# *input* moves from registry lookback to this table (D102).
+HORIZON_SHORT_MAX = 6
+HORIZON_MEDIUM_MAX = 89  # long_lookback is anything >= 90
+
+# Fallback for indicators not yet in the table (a future registry addition).
+# Medium keeps a newcomer explorable across swing_short/swing_mid rather than
+# pinning it; the coverage invariant test forbids real threshold-eligible
+# indicators from relying on it.
+_DEFAULT_HORIZON_DAYS = 20
+
+# indicator_id -> signal horizon in trading days. Grouped by family/role.
+_SIGNAL_HORIZON_TABLE: dict[str, int] = {
+    # ----- mean_reversion family directionals (oscillator period) -----
+    "rsi_2": 2,  # 2-day RSI — the fast reversion read
+    "rsi_14": 14,
+    "rsi": 14,  # default RSI period
+    "bb_pct": 20,  # %B over the default 20-bar band
+    "keltner_pct": 20,
+    "zscore_returns": 20,  # ~1-month return z-score
+    # ----- trend family directionals (trend lookback) -----
+    "macd": 26,  # slow-EMA leg of MACD(12,26,9)
+    "momentum_252": 252,  # 12-month momentum
+    "returns_12m_skip1": 252,
+    "ema_cross": 50,  # slow leg of the cross
+    "ema_50": 50,
+    "ema": 20,
+    "sma": 50,
+    "supertrend": 10,  # ATR(10) trailing trend
+    "rolling_sharpe": 60,  # ~quarter rolling Sharpe
+    "donchian": 20,  # 20-bar channel breakout
+    # ----- trend_strength regimes -----
+    "adx": 14,  # ADX(14)
+    "hurst": 100,  # Hurst exponent needs a long window
+    "rv_rank": 252,  # realized-vol rank over 1y
+    # ----- volatility family (regime / X1 chain) -----
+    "realized_vol": 20,  # 21-day realized vol
+    "parkinson_vol": 20,
+    "garman_klass_vol": 20,
+    "yang_zhang_vol": 20,
+    "atr_pct": 14,
+    "atr": 14,
+    "vol_regime": 20,
+    "amihud": 20,
+    # ----- iv_structure / event directional + regime -----
+    # Signal horizon (level mean-reverts over ~weeks), NOT the 252-day window.
+    "iv_rank": 30,
+    "vix_level": 1,  # spot VIX
+    # ----- flow / calendar (event proximity — near-instant reads) -----
+    "put_call_flow": 5,
+    "days_to_earnings": 5,
+    "days_to_fomc": 5,
+    "days_to_cpi": 5,
+    "days_to_nfp": 5,
+    "days_to_opex": 5,
+    # ----- dealer_positioning (instantaneous gamma/wall geometry) -----
+    "call_wall_distance_pct": 1,
+    "put_wall_distance_pct": 1,
+    "gamma_flip_distance_pct": 1,
+    "gex": 1,
+    "vex": 1,
+    "cex": 1,
+    # ----- smart_money / pairs -----
+    "expected_value_estimator": 60,  # X2 kelly chain feature
+    "pairs_zscore": 60,  # cointegration spread ~quarter
+}
+
+# §3.5 S4: horizon class -> allowed DTE buckets. Replaces the registry-driven
+# ``custom_predicates._LOOKBACK_DTE_TABLE`` as the single source of truth (D102).
+BUCKETS_FOR_HORIZON_CLASS: dict[str, tuple[str, ...]] = {
+    "short_lookback": ("swing_short",),
+    "medium_lookback": ("swing_short", "swing_mid"),
+    "long_lookback": ("swing_mid", "swing_long"),
+}
+
+# Midpoints of the §3.5 P2 entry-DTE windows (14-21 / 30-45 / 60-90). The v8
+# derivation snaps a continuous ``k * horizon`` target to the nearest bucket by
+# these midpoints. Kept as literals to avoid a grammar<-enumeration import
+# cycle; ``test_signal_horizon.test_bucket_midpoints_match_p2_windows`` guards
+# them against ``custom_predicates._P2_ENTRY_DTE`` drift.
+_BUCKET_MIDPOINTS: dict[str, float] = {
+    "swing_short": 17.5,
+    "swing_mid": 37.5,
+    "swing_long": 75.0,
+}
+
+# Canonical order for deterministic nearest-bucket tie-breaking (#6): a target
+# equidistant from two buckets resolves to the shorter (lower-DTE) one.
+_BUCKET_ORDER: dict[str, int] = {"swing_short": 0, "swing_mid": 1, "swing_long": 2}
+
+
+def signal_horizon_days(indicator_id: str) -> int:
+    """Signal horizon for ``indicator_id`` in trading days (table or default)."""
+    return _SIGNAL_HORIZON_TABLE.get(indicator_id, _DEFAULT_HORIZON_DAYS)
+
+
+def horizon_class_for_days(days: int) -> str:
+    """Bucket a horizon (trading days) into the §3.5 S4 lookback class."""
+    if days <= HORIZON_SHORT_MAX:
+        return "short_lookback"
+    if days <= HORIZON_MEDIUM_MAX:
+        return "medium_lookback"
+    return "long_lookback"
+
+
+def horizon_class(indicator_id: str) -> str:
+    """The §3.5 S4 lookback class of a single indicator, by its horizon."""
+    return horizon_class_for_days(signal_horizon_days(indicator_id))
+
+
+def buckets_for_horizon_class(klass: str) -> tuple[str, ...]:
+    """DTE buckets §3.5 S4 permits for a horizon class (``()`` if unknown)."""
+    return BUCKETS_FOR_HORIZON_CLASS.get(klass, ())
+
+
+def nearest_bucket(allowed: Sequence[str], target_days: float) -> str:
+    """Snap a continuous DTE target to the nearest bucket in ``allowed`` (#8).
+
+    "Nearest" is by the §3.5 P2 window midpoint. Ties resolve to the shorter
+    bucket via the canonical order, so the choice is fully deterministic (#6).
+    ``allowed`` must be non-empty (callers pass a horizon-class-permitted set
+    that is guaranteed non-empty for any real horizon).
+    """
+    return min(
+        allowed,
+        key=lambda b: (abs(_BUCKET_MIDPOINTS[b] - target_days), _BUCKET_ORDER[b]),
+    )
+
+
+__all__ = [
+    "BUCKETS_FOR_HORIZON_CLASS",
+    "HORIZON_MEDIUM_MAX",
+    "HORIZON_SHORT_MAX",
+    "buckets_for_horizon_class",
+    "horizon_class",
+    "horizon_class_for_days",
+    "nearest_bucket",
+    "signal_horizon_days",
+]

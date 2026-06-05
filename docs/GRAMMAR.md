@@ -46,10 +46,23 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 ### S4: DTE bucket matches the directional signal's lookback class
 
-**What.** The directional signal's lookback class (computed by taking the max `IndicatorMetadata.lookback` across its indicators and bucketing into `short_lookback` ≤ 6 days, `medium_lookback` 7-89, `long_lookback` ≥ 90) must be compatible with `dte_bucket` per the table:
+**What.** The directional signal's lookback class (computed by taking the max *signal horizon* across its indicators and bucketing into `short_lookback` ≤ 6 days, `medium_lookback` 7-89, `long_lookback` ≥ 90) must be compatible with `dte_bucket` per the table:
 - `short_lookback`: `swing_short` only
 - `medium_lookback`: `swing_short` or `swing_mid`
 - `long_lookback`: `swing_mid` or `swing_long`
+
+> **v8 (D102, 2026-06-04).** The horizon is read from the Forge-owned table in
+> `forge.grammar.signal_horizon`, **not** `IndicatorMetadata.lookback`. The live
+> Crucible registry reports `lookback=0` for 34 of 43 indicators (and wrong
+> values for most of the rest — `rsi_2`→14, `adx`/`hurst`/`macd`→0), which had
+> collapsed this rule to "almost everything → `swing_short`" and produced
+> horizon-*mismatched* configs. v8 also makes the bucket *derived* from the
+> directional horizon at generation (`DTE_target = k·horizon`, snapped to the
+> nearest permitted bucket) rather than sampled blind, and stops the regime gate
+> from constraining the bucket (S4 was always about the directional signal). No
+> change to this rule's *intent* or text — only its horizon input and the
+> generation-time selection that honors it. See `IMPLEMENTATION_DECISIONS.md`
+> D102.
 
 **Why.** A signal's lookback is its hypothesis about the time scale at which information matters. A 2-day RSI is making a 2-day claim; a 252-day momentum is making a multi-month claim. Pairing a 252-day signal with a 14-21 DTE position means the trade closes long before the signal's underlying thesis can play out. The match enforces that signal time-scale and position time-scale agree.
 

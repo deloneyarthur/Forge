@@ -1,15 +1,22 @@
 """Stratified hypothesis-first sampler for grammar-valid ``StrategyConfig``.
 
 §4.2's CSP-style algorithm with the D7 amendment (sizer mode picked second so
-§3.5 X1/X2 indicator chaining can complete):
+§3.5 X1/X2 indicator chaining can complete) and the v8 / D102 reorder
+(directional picked BEFORE the DTE bucket, so the bucket can be DERIVED from
+the directional signal's horizon instead of sampled blind):
 
 1. Pick hypothesis (only those with non-empty directional + regime pools).
 2. Pick sizer mode (only those in ``samplable_sizer_modes``).
-3. Pick DTE bucket (filtered for compat with the X1/X2 chain indicator's
-   §3.5 S4 lookback class, if a chain is required).
-4. Pick directional indicator from §3.5 C2 pool, S4-compatible with bucket.
-5. Pick regime indicator from §3.5 R-rule pool, S4-compatible, C4-disjoint
-   in id, C1-disjoint in family from directional.
+3. Pick the directional indicator (§3.5 C2 pool) that has a §3.5-S4-permitted
+   DTE bucket (chain-compat aware) AND a C1/C4/R-valid regime partner.
+4. Derive the DTE bucket from the directional's signal horizon (v8 / D102):
+   ``DTE_target = k * horizon`` for mean_reversion / trend_continuation, an
+   event-bracket window for volatility_event, snapped to the nearest
+   §3.5-S4-permitted bucket; relative_value picks uniformly (its per-trade DTE
+   is a Crucible runtime choice off the live spread half-life).
+5. Pick the regime indicator from the §3.5 R-rule pool, C4-disjoint in id,
+   C1-disjoint in family from directional. §3.5 S4 gates the directional
+   horizon only, so the regime no longer constrains the bucket.
 6. Sample selector params: ``delta_target`` in §3.5 P3 band; ``dte_min`` /
    ``dte_max`` from the §3.5 P2 entry window for the bucket.
 7. Sample sizer: ``per_trade_risk_pct`` in §3.5 P4 range; mode-specific
@@ -49,9 +56,11 @@ from forge.enumeration.indicator_thresholds import (
     sample_threshold_params,
 )
 from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES
-from forge.grammar.custom_predicates import (
-    _LOOKBACK_MEDIUM_MAX,
-    _LOOKBACK_SHORT_MAX,
+from forge.grammar.signal_horizon import (
+    buckets_for_horizon_class,
+    horizon_class,
+    nearest_bucket,
+    signal_horizon_days,
 )
 
 if TYPE_CHECKING:
@@ -76,23 +85,25 @@ class SamplerError(Exception):
     grammar + registry slice (empty pool at some CSP step)."""
 
 
-# Bucket → S4-allowed lookback classes. Mirror of
-# ``forge.grammar.custom_predicates._LOOKBACK_DTE_TABLE`` inverted: that
-# table maps lookback_class → allowed buckets; here we want bucket →
-# allowed classes. Keep semantics aligned with §3.5 S4 + D010.
-_LOOKBACK_CLASSES_FOR_BUCKET: dict[str, frozenset[str]] = {
-    "swing_short": frozenset({"short_lookback", "medium_lookback"}),
-    "swing_mid": frozenset({"medium_lookback", "long_lookback"}),
-    "swing_long": frozenset({"long_lookback"}),
-}
+# v8 (D102) — horizon-matched DTE. The directional signal's Forge-owned signal
+# horizon (forge.grammar.signal_horizon) drives the DTE bucket: DTE_target =
+# k * horizon, snapped to the nearest §3.5-S4-permitted bucket. `k` is the
+# exploration knob the grammar now varies instead of raw DTE — it spans "just
+# enough time for the thesis" (2x) to "generous" (4x). Per the Crucible
+# horizon-matched-DTE handoff (2026-06-04).
+_K_MULTIPLIERS: tuple[int, ...] = (2, 3, 4)
 
-# Inverse: lookback_class → allowed buckets. Used to pick a bucket that is
-# compatible with an already-chosen indicator (the X1/X2 chain case).
-_BUCKETS_FOR_LOOKBACK_CLASS: dict[str, tuple[str, ...]] = {
-    "short_lookback": ("swing_short",),
-    "medium_lookback": ("swing_short", "swing_mid"),
-    "long_lookback": ("swing_mid", "swing_long"),
-}
+# Hypotheses whose DTE is k*horizon off the DIRECTIONAL oscillator/trend period.
+_HORIZON_MATCHED_HYPOTHESES: frozenset[str] = frozenset({"mean_reversion", "trend_continuation"})
+
+# volatility_event brackets the event instead: DTE_target = (entry lead before
+# the event) + (post-event realization window). Events don't want a k multiple
+# of an oscillator period — they want enough DTE to reach the event and capture
+# the move. Lead is the exploration knob; the window is fixed at the midpoint of
+# the handoff's 10-15 td. Targets {17, 22, 32} -> swing_short / swing_short /
+# swing_mid, matching the handoff's "brackets the event -> swing_short/mid".
+_VOL_EVENT_LEAD_DAYS: tuple[int, ...] = (5, 10, 20)
+_VOL_EVENT_POST_WINDOW_TD: int = 12
 
 # D033 fallback — used when the Crucible universe export is absent.
 _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
@@ -210,14 +221,6 @@ def _pick_underlying(
     return rng.choice(underlyings)
 
 
-def _lookback_class(lookback: int) -> str:
-    if lookback <= _LOOKBACK_SHORT_MAX:
-        return "short_lookback"
-    if lookback <= _LOOKBACK_MEDIUM_MAX:
-        return "medium_lookback"
-    return "long_lookback"
-
-
 def sample_config(
     space: SearchSpace,
     registry: RegistrySnapshot,
@@ -281,27 +284,14 @@ def sample_config(
     mode = rng.choice(space.samplable_sizer_modes)
     chain_id = space.sizer_required_indicator.get(mode)
 
-    viable = _viable_buckets(space, by_id, hypothesis, chain_id)
-    if not viable:
-        msg = (
-            f"no DTE bucket has a (directional, regime) pair satisfying §3.5 "
-            f"S4 + C1/C4 + R-rules for hypothesis={hypothesis} mode={mode}"
-        )
-        raise SamplerError(msg)
-    bucket = rng.choice(viable)
-
-    # `viable` guarantees at least one valid (directional, regime) pair
-    # exists for this bucket; we now make the random pick. The directional
-    # pick can in principle land on an indicator family that blocks every
-    # regime via C1; in that case we fall back to the deterministic-by-rng
-    # `_pair_for_bucket` search to keep path (a) intact.
-    directional_id, regime_id = _pick_directional_regime_pair(
-        space,
-        by_id,
-        hypothesis,
-        bucket,
-        rng,
-        chain_id=chain_id,
+    # v8 (D102): horizon-matched DTE. Pick the directional first, derive the
+    # DTE target from its signal horizon (k*horizon, or the event-bracket for
+    # volatility_event), and snap to the nearest §3.5-S4-permitted bucket. The
+    # regime is then chosen by C1/C4/R-rules only — its horizon no longer gates
+    # the bucket (that was the degenerate-registry artifact v8 removes; the S4
+    # validator only ever checked the directional signal).
+    bucket, directional_id, regime_id = _select_bucket_directional_regime(
+        space, by_id, hypothesis, chain_id, rng
     )
 
     signals = [
@@ -322,10 +312,10 @@ def sample_config(
     ]
     # Belt-and-suspenders: a `type='threshold'` signal with no `threshold`
     # key in params bypasses Crucible's predicate (`lambda _v: False`) and
-    # silently gate-rejects on min_oos_trade_count. The `_viable_buckets`
-    # + `_pick_directional_regime_pair` filters call `is_threshold_skippable`
-    # to exclude indicators without audited threshold ranges; this assert
-    # catches any future regression where an indicator slips through.
+    # silently gate-rejects on min_oos_trade_count. The `_directional_candidates`
+    # + `_compatible_regimes` filters call `is_threshold_skippable` to exclude
+    # indicators without audited threshold ranges; this assert catches any
+    # future regression where an indicator slips through.
     for sig in signals:
         if sig.type == "threshold" and "threshold" not in sig.params:
             msg = (
@@ -377,117 +367,127 @@ def sample_config(
     )
 
 
-def _viable_buckets(
+def _chain_compatible_buckets(
     space: SearchSpace,
-    by_id: dict[str, IndicatorMetadata],
-    hypothesis: str,
     chain_id: str | None,
 ) -> tuple[str, ...]:
-    """Buckets compatible with (a) the X1/X2 chain indicator's §3.5 S4
-    lookback class, if any, AND (b) at least one (directional, regime)
-    pair that satisfies §3.5 S4 + C1 + C4 + R-rules. The actual pick
-    happens inside the bucket; this only certifies existence."""
+    """DTE buckets compatible with the X1/X2 chain indicator's §3.5 S4 horizon
+    class (all buckets when the sizer mode requires no chained indicator)."""
     if chain_id is None:
-        chain_compat_buckets = space.dte_buckets
-    else:
-        chain_cls = _lookback_class(by_id[chain_id].lookback)
-        chain_compat_buckets = _BUCKETS_FOR_LOOKBACK_CLASS[chain_cls]
-
-    directional_pool = space.directional_indicators_by_hypothesis[hypothesis]
-    regime_pool = space.regime_indicators_by_hypothesis[hypothesis]
-
-    viable: list[str] = []
-    for bucket in space.dte_buckets:
-        if bucket not in chain_compat_buckets:
-            continue
-        allowed_cls = _LOOKBACK_CLASSES_FOR_BUCKET[bucket]
-        compat_directionals = [
-            i
-            for i in directional_pool
-            if i in by_id
-            and _lookback_class(by_id[i].lookback) in allowed_cls
-            and not is_threshold_skippable(i, "directional")
-        ]
-        chain_family = by_id[chain_id].family if chain_id is not None else None
-        compat_regimes = [
-            i
-            for i in regime_pool
-            if i in by_id
-            and _lookback_class(by_id[i].lookback) in allowed_cls
-            and not is_threshold_skippable(i, "regime_filter")
-            and (chain_family is None or by_id[i].family != chain_family)
-        ]
-        if _has_valid_pair(compat_directionals, compat_regimes, by_id):
-            viable.append(bucket)
-    return tuple(viable)
+        return space.dte_buckets
+    return buckets_for_horizon_class(horizon_class(chain_id))
 
 
-def _has_valid_pair(
-    directionals: list[str],
-    regimes: list[str],
-    by_id: dict[str, IndicatorMetadata],
-) -> bool:
-    """True iff some (d, r) pair from the inputs has different ids (C4)
-    AND different families (C1)."""
-    return any(d != r and by_id[d].family != by_id[r].family for d in directionals for r in regimes)
-
-
-def _pick_directional_regime_pair(
+def _compatible_regimes(
     space: SearchSpace,
     by_id: dict[str, IndicatorMetadata],
     hypothesis: str,
-    bucket: str,
-    rng: random.Random,
-    *,
-    chain_id: str | None = None,
-) -> tuple[str, str]:
-    """Pick a (directional, regime) pair satisfying §3.5 S4 + C1 + C4 for
-    the given bucket. Precondition: ``bucket`` is in ``_viable_buckets``,
-    so at least one valid pair exists. The pick is rng-driven; if the
-    rng-chosen directional has no compatible regime, fall back to the
-    first valid pair by canonical id order (still deterministic).
+    directional_id: str,
+    chain_family: str | None,
+) -> tuple[str, ...]:
+    """Regime indicators that pair with ``directional_id`` under §3.5 C1
+    (different family), C4 (different id) and the R-rules, are threshold-able,
+    and (D077) don't share the X1/X2 chain indicator's family.
 
-    D077: when a sizer-required chain indicator is present, regime
-    indicators whose family matches the chain's family are excluded to
-    prevent C1 violations (e.g., rv_rank + realized_vol both volatility).
-    """
-    allowed_cls = _LOOKBACK_CLASSES_FOR_BUCKET[bucket]
-    chain_family = by_id[chain_id].family if chain_id is not None else None
-    compat_directionals = tuple(
-        i
-        for i in space.directional_indicators_by_hypothesis[hypothesis]
-        if i in by_id
-        and _lookback_class(by_id[i].lookback) in allowed_cls
-        and not is_threshold_skippable(i, "directional")
-    )
-    compat_regimes = tuple(
+    v8 (D102): NO horizon constraint vs the bucket. §3.5 S4 governs the
+    *directional* signal's horizon only (as the validator always has), so the
+    regime gate is free to pair with any bucket. Dropping the constraint also
+    undoes the degenerate-registry artifact (every lookback 0) that forced
+    trend regimes onto rv_rank — adx/hurst can now gate swing_mid/long."""
+    directional_family = by_id[directional_id].family
+    return tuple(
         i
         for i in space.regime_indicators_by_hypothesis[hypothesis]
         if i in by_id
-        and _lookback_class(by_id[i].lookback) in allowed_cls
+        and i != directional_id
+        and by_id[i].family != directional_family
         and not is_threshold_skippable(i, "regime_filter")
         and (chain_family is None or by_id[i].family != chain_family)
     )
 
-    directional_id = rng.choice(compat_directionals)
-    directional_family = by_id[directional_id].family
-    regimes = tuple(
-        i for i in compat_regimes if i != directional_id and by_id[i].family != directional_family
-    )
-    if regimes:
-        return directional_id, rng.choice(regimes)
 
-    # Fall back: scan compat_directionals in id order for one with a valid
-    # regime partner. Guaranteed by ``_viable_buckets`` precondition.
-    for d_id in compat_directionals:
-        d_family = by_id[d_id].family
-        candidate_regimes = tuple(
-            i for i in compat_regimes if i != d_id and by_id[i].family != d_family
+def _directional_candidates(
+    space: SearchSpace,
+    by_id: dict[str, IndicatorMetadata],
+    hypothesis: str,
+    chain_compat_buckets: tuple[str, ...],
+    chain_family: str | None,
+) -> tuple[str, ...]:
+    """Directional indicators that can anchor a config for this hypothesis:
+    threshold-able, in the registry, with at least one §3.5-S4-permitted DTE
+    bucket (after chain-compat) AND at least one compatible regime partner.
+    Canonical (sorted) order is preserved from the search space for #6."""
+    chain_compat = set(chain_compat_buckets)
+    return tuple(
+        d
+        for d in space.directional_indicators_by_hypothesis[hypothesis]
+        if d in by_id
+        and not is_threshold_skippable(d, "directional")
+        and chain_compat.intersection(buckets_for_horizon_class(horizon_class(d)))
+        and _compatible_regimes(space, by_id, hypothesis, d, chain_family)
+    )
+
+
+def _dte_target(
+    hypothesis: str,
+    directional_id: str,
+    rng: random.Random,
+) -> float | None:
+    """The v8 (D102) DTE target in trading days, or ``None`` to pick uniformly.
+
+    - mean_reversion / trend_continuation: ``k * signal_horizon(directional)``,
+      k ∈ {2, 3, 4} — DTE matches the directional oscillator/trend period.
+    - volatility_event: ``entry_lead + post_event_window`` — enough DTE to
+      bracket the event and capture the realized move.
+    - relative_value: ``None``. Its per-pair DTE is a Crucible *runtime* choice
+      (k * the live spread half-life), so Forge can't fix one at generation;
+      it samples a bucket uniformly among the S4-permitted set and lets Crucible
+      adapt per trade. See the horizon-matched-DTE handoff (2026-06-04)."""
+    if hypothesis in _HORIZON_MATCHED_HYPOTHESES:
+        return float(rng.choice(_K_MULTIPLIERS) * signal_horizon_days(directional_id))
+    if hypothesis == "volatility_event":
+        return float(rng.choice(_VOL_EVENT_LEAD_DAYS) + _VOL_EVENT_POST_WINDOW_TD)
+    return None
+
+
+def _select_bucket_directional_regime(
+    space: SearchSpace,
+    by_id: dict[str, IndicatorMetadata],
+    hypothesis: str,
+    chain_id: str | None,
+    rng: random.Random,
+) -> tuple[str, str, str]:
+    """v8 (D102) horizon-matched selection. Returns ``(bucket, directional_id,
+    regime_id)``.
+
+    Draw order is fixed for determinism (#6): directional → DTE target →
+    bucket → regime. The directional is picked first because the DTE bucket is
+    DERIVED from its signal horizon (vs the pre-v8 bucket-first CSP). Valid by
+    construction: ``_directional_candidates`` guarantees a non-empty allowed
+    bucket set and a non-empty regime set, so no fallback scan is needed."""
+    chain_compat = _chain_compatible_buckets(space, chain_id)
+    chain_compat_set = set(chain_compat)
+    chain_family = by_id[chain_id].family if chain_id is not None else None
+
+    candidates = _directional_candidates(space, by_id, hypothesis, chain_compat, chain_family)
+    if not candidates:
+        msg = (
+            f"no directional indicator has a §3.5 S4-permitted DTE bucket with a "
+            f"C1/C4/R-valid regime partner for hypothesis={hypothesis} chain={chain_id}"
         )
-        if candidate_regimes:
-            return d_id, rng.choice(candidate_regimes)
-    msg = f"_viable_buckets precondition violated for hypothesis={hypothesis} bucket={bucket}"
-    raise SamplerError(msg)
+        raise SamplerError(msg)
+    directional_id = rng.choice(candidates)
+
+    target = _dte_target(hypothesis, directional_id, rng)
+    allowed = tuple(
+        b for b in buckets_for_horizon_class(horizon_class(directional_id)) if b in chain_compat_set
+    )
+    bucket = nearest_bucket(allowed, target) if target is not None else rng.choice(allowed)
+
+    regime_id = rng.choice(
+        _compatible_regimes(space, by_id, hypothesis, directional_id, chain_family)
+    )
+    return bucket, directional_id, regime_id
 
 
 def _build_selector(
