@@ -92,6 +92,8 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     rejection_counter: Counter[str] | None = None,
     hypothesis_weights: Mapping[str, float] | None = None,
     regime_weights: Mapping[str, float] | None = None,
+    bucket_weights: Mapping[tuple[str, str], float] | None = None,
+    underlying_class_weights: Mapping[str, float] | None = None,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
@@ -111,6 +113,15 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     ``regime_weights`` (D103) is forwarded to the sampler to bias the
     relative_value regime-gate pick toward feedback-learned-good gates;
     None/empty preserves the pre-D103 uniform pick.
+
+    ``bucket_weights`` (D105) is forwarded to the sampler to bias the joint
+    (directional, DTE-bucket) pick toward feedback-learned-good
+    (hypothesis, dte_bucket) cells; None/empty preserves the pre-D105
+    two-step draw byte-identically.
+
+    ``underlying_class_weights`` (D105) is forwarded to the sampler to bias
+    the underlying pick by learned class (high-idio-vol vs diversified);
+    None/empty preserves the uniform pick byte-identically.
 
     Set ``min_hypothesis_fraction=0.0`` to disable stratification
     (legacy / test path).
@@ -198,6 +209,8 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
                 rng,
                 hypothesis_weights=hypothesis_weights,
                 regime_weights=regime_weights,
+                bucket_weights=bucket_weights,
+                underlying_class_weights=underlying_class_weights,
                 forced_hypothesis=forced_hypothesis,
             )
         except SamplerError as exc:

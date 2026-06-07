@@ -513,3 +513,21 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 **Why not now:** Crucible-side stages are the ones that gate, and they already cohort correctly; the D104 hygiene rule (clean live tree) makes recurrence unlikely. Revisit if a third labeling incident happens or if Crucible upgrades the ask from "optional."
 
 **Tag:** `funnel`, `exports`, `relates-to-D104`, `relates-to-D096`, `low`
+
+## 2026-06-07 — Q28 — vol_event x swing_mid (the 9.7%-yield cell) is structurally capped by §3.5 S4: only `iv_rank` among vol_event directionals is medium-horizon-class — **MEDIUM SEVERITY, LOOSENING-CLASS**
+
+**Symptom:** the D105 emission proof showed the bucket-weighted sampler can only push vol_event's swing_mid share to ~9% (5.1% cold → 9.2% weighted) even with the cell weighted hot. Mechanically: the DTE bucket is derived from the DIRECTIONAL's horizon (D102), and every vol_event directional except `iv_rank` (horizon 30 → medium class) is short-class (put_call_flow 5, vix_level 1, dealer family 1, days_to_* 5 → S4 permits swing_short only), so all three event-lead options snap to swing_short. The highest-yield cell in Crucible's map (9.7% on 31 decided) is reachable only via `iv_rank` + lead-20 draws.
+
+**Why surfaced not fixed:** any widening — e.g. re-classing an indicator's horizon, adding a medium-horizon vol_event directional to C2, or letting the event bracket extend (longer post-event window) — ENLARGES enumeration scope = a loosening. Hard rule #4: loosenings go to `OPEN_PROPOSALS.md` and wait; they cannot ship with D105. Also genuinely uncertain: the 9.7% may partly BE the iv_rank+long-lead structure rather than the bucket per se — more decided volume in the cell (which D105's allocation shift will produce) settles that before any grammar change is worth proposing.
+
+**Resolve by:** let D105 run ≥1 yield-map refresh (≥1,500 newly-decided). If ve x swing_mid yield holds ≥2x ve x swing_short on materially more volume AND its share stays pinned ~9%, write the OPEN_PROPOSALS entry (options: extend `_VOL_EVENT_POST_WINDOW_TD` variants, or audit whether any existing vol-family indicator legitimately carries a 7-89d horizon). Otherwise close as working-as-intended.
+
+**Tag:** `grammar`, `S4`, `dte-buckets`, `relates-to-D105`, `relates-to-D102`, `loosening-candidate`, `operator-decision`
+
+## 2026-06-07 — Q29 — Deferred D105 mechanisms: (a) threshold-DRAW adaptation for the 75-83% zero-trade composables; (b) general parameter-band bounds-learning — **LOW/MEDIUM SEVERITY**
+
+**(a) Threshold-draw adaptation.** The yield-map handoff asked whether `trade_rate_priors` reaches the composable threshold draws. Answer (D105): it is wired and BINDING — as the `expected_trades` prefilter (713-737 trend + 448-516 mean_rev kills per batch in empirical mode), not as a sampler input. So the sampler keeps drawing thresholds in the dead region and burns battery compute, and the survivors still go ~75-83% zero-trade at gate (vol_event legitimately passes the prior via its fat trading tail). A real fix feeds zero-trade feedback into the PERCENTILE-RANGE draws (`indicator_thresholds`' directional/regime ranges) — per-(indicator, role, band) attribution, a substantially new mechanism. Deferred: D105's allocation re-aim shrinks the waste organically (mr/trend/rv draw share falls toward their yield), and the prefilter already blocks most dead submissions. Revisit if post-D105 zero-trade share stays >70% on the up-weighted classes.
+
+**(b) General bounds-learning.** The handoff's proposed mechanism — any sampled parameter band with N ≥ ~100 decided and 0 components becomes a floor-weight/drop candidate — needs per-band outcome attribution over `submissions.config_json` params x gated outcomes, plus proposer integration (auto-tighten path for drops, OPEN_PROPOSALS for widenings). D105 ships only the one decisive instance by hand (rv lookback 378: 155/0). Build the general mechanism when a second instance shows up — one data point doesn't justify the machinery.
+
+**Tag:** `feedback`, `prefilters`, `thresholds`, `relates-to-D105`, `relates-to-D076`, `relates-to-D099`, `deferred`

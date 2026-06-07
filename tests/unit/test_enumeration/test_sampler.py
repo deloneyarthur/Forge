@@ -479,6 +479,23 @@ def test_d103_pairs_quality_bias_tightens_pvalue_and_zscore_entry() -> None:
         assert float(params["pvalue_max"]) <= 0.12, params
 
 
+def test_d105_pairs_lookback_capped_at_280() -> None:
+    """v10/D105: the rv lookback > 280 band is confirmed dead — post-rv-fix
+    those configs run and trade properly and went 0-for-155 with best WF 0.19,
+    while all 7 rv components sit at lookback <= 252. The 378 option (25% of
+    rv enumeration) is dropped; the surviving choices stay un-renormalized
+    otherwise."""
+    from forge.enumeration.sampler import _sample_pairs_template_params
+
+    seen: set[int] = set()
+    for seed in range(300):
+        params = _sample_pairs_template_params(random.Random(seed))
+        lookback = int(params["lookback"])  # type: ignore[call-overload]
+        assert lookback <= 280, params
+        seen.add(lookback)
+    assert seen == {126, 189, 252}
+
+
 def _count_picks(hypothesis: str, regimes: tuple[str, ...], weights, *, seed: int, n: int) -> dict:
     from forge.enumeration.sampler import _pick_regime
 
@@ -503,13 +520,14 @@ def test_d103_pick_regime_favors_high_weight_for_relative_value() -> None:
 
 
 def test_d103_pick_regime_floor_keeps_zeroed_regime_explorable() -> None:
-    """An observed-but-zero-reward regime is floored (~0.05), so it keeps a
-    minimum sampling budget rather than collapsing to never-sampled."""
+    """An observed-but-zero-reward regime is floored, so it keeps a minimum
+    sampling budget rather than collapsing to never-sampled. Weights here are
+    on the D105 component-rate scale (a learned-good gate posterior ~0.04)."""
     regimes = ("a", "b")
-    weights = {"a": 1.0, "b": 0.0}
+    weights = {"a": 0.04, "b": 0.0}
     counts = _count_picks("relative_value", regimes, weights, seed=1, n=3000)
-    # b floored to 0.05 vs a's 1.0 -> ~0.05/1.05 ≈ 4.8% of 3000 ≈ 140
-    assert counts.get("b", 0) > 50
+    # b floored to 0.01 vs a's 0.04 -> 0.01/0.05 = 20% of 3000 ≈ 600
+    assert counts.get("b", 0) > 300
 
 
 def test_d103_pick_regime_uniform_and_byte_identical_for_non_curated() -> None:
@@ -536,6 +554,222 @@ def test_d103_pick_regime_cold_start_byte_identical_for_relative_value() -> None
     seq_pick = [_pick_regime("relative_value", regimes, r1, None) for _ in range(40)]
     seq_choice = [r2.choice(regimes) for _ in range(40)]
     assert seq_pick == seq_choice
+
+
+# ---------------------------------------------------------------------------
+# D105 — hypothesis x dte_bucket weights drive a JOINT (directional, bucket)
+# draw. The DTE bucket is derived from the directional's horizon (D102), and
+# for most indicators every k lands in ONE bucket (macd → all swing_mid,
+# momentum_252 → all swing_long), so a k-only reweight could never move the
+# mix; the joint draw steers the directional pick too.
+# ---------------------------------------------------------------------------
+
+
+def _bucket_distribution(
+    grammar: Grammar,
+    registry: RegistrySnapshot,
+    hypothesis: str,
+    bucket_weights: dict[tuple[str, str], float] | None,
+    *,
+    n: int = 300,
+) -> dict[str, int]:
+    space = build_search_space(grammar, registry)
+    counts: dict[str, int] = {}
+    for seed in range(n):
+        cfg = sample_config(
+            space,
+            registry,
+            random.Random(seed),
+            forced_hypothesis=hypothesis,
+            bucket_weights=bucket_weights,
+        )
+        counts[cfg.dte_bucket] = counts.get(cfg.dte_bucket, 0) + 1
+    return counts
+
+
+def test_d105_bucket_weights_cold_start_byte_identical(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Hard rule #6: bucket_weights is an ADDED input — absent (None) or empty
+    ({}) must reproduce the pre-D105 sequence exactly."""
+    space = build_search_space(grammar, registry)
+    for seed in range(60):
+        base = sample_config(space, registry, random.Random(seed))
+        none_w = sample_config(space, registry, random.Random(seed), bucket_weights=None)
+        empty_w = sample_config(space, registry, random.Random(seed), bucket_weights={})
+        assert base.config_hash == none_w.config_hash == empty_w.config_hash, f"seed={seed}"
+
+
+def test_d105_bucket_options_are_locked_per_directional() -> None:
+    """WHY the draw is joint: most directionals are bucket-locked across k —
+    momentum_252's k·252 targets all snap to swing_long, rsi_14's k·14 all to
+    swing_mid — so a k-only reweight could never move a hypothesis's bucket
+    mix. relative_value (no k) lists its S4-permitted buckets directly."""
+    from forge.enumeration.sampler import _directional_bucket_options
+
+    all_buckets = {"swing_short", "swing_mid", "swing_long"}
+    assert _directional_bucket_options("trend_continuation", "momentum_252", all_buckets) == (
+        "swing_long",
+        "swing_long",
+        "swing_long",
+    )
+    assert _directional_bucket_options("mean_reversion", "rsi_14", all_buckets) == (
+        "swing_mid",
+        "swing_mid",
+        "swing_mid",
+    )
+    # vol_event's knob is the event lead: {5, 10} -> swing_short, 20 -> swing_mid.
+    assert _directional_bucket_options("volatility_event", "iv_rank", all_buckets) == (
+        "swing_short",
+        "swing_short",
+        "swing_mid",
+    )
+    # relative_value: S4-permitted buckets for pairs_zscore (horizon 60, medium).
+    assert _directional_bucket_options("relative_value", "pairs_zscore", all_buckets) == (
+        "swing_short",
+        "swing_mid",
+    )
+
+
+def test_d105_bucket_weights_steer_directional_choice(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The load-bearing joint-draw property: weighting (mean_reversion,
+    swing_mid) must steer the DIRECTIONAL pick toward the mid-locked indicator
+    (rsi_14) and away from the short-locked ones (rsi_2 / call_wall), because
+    the bucket is derived from the directional — there is no other path to the
+    cell."""
+    space = build_search_space(grammar, registry)
+
+    def _directional_counts(weights: dict[tuple[str, str], float] | None) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for seed in range(300):
+            cfg = sample_config(
+                space,
+                registry,
+                random.Random(seed),
+                forced_hypothesis="mean_reversion",
+                bucket_weights=weights,
+            )
+            directional = next(s for s in cfg.signals if s.role == "directional")
+            counts[directional.indicators[0]] = counts.get(directional.indicators[0], 0) + 1
+        return counts
+
+    cold = _directional_counts(None)
+    weighted = _directional_counts({("mean_reversion", "swing_mid"): 0.05})
+    assert weighted.get("rsi_14", 0) > cold.get("rsi_14", 0) * 1.5
+    assert weighted.get("rsi_14", 0) > 150  # dominant share of 300
+    # The short-locked directionals stay explorable (floor), just rarer.
+    assert weighted.get("rsi_2", 0) + weighted.get("call_wall_distance_pct", 0) > 0
+
+
+def test_d105_bucket_weights_tilt_volatility_event_toward_mid(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """vol_event x swing_mid (9.7% yield, starved ~20:1) — weighting the cell
+    must raise the mid share (the lead-20 event bracket)."""
+    cold = _bucket_distribution(grammar, registry, "volatility_event", None)
+    hot = {("volatility_event", "swing_mid"): 0.05}
+    weighted = _bucket_distribution(grammar, registry, "volatility_event", hot)
+    cold_mid = cold.get("swing_mid", 0)
+    assert weighted.get("swing_mid", 0) > cold_mid * 1.5
+    assert weighted.get("swing_short", 0) > 0  # floor keeps short explorable
+
+
+def test_d105_bucket_weights_starve_low_yield_cell_but_not_to_zero(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The converse: weighting one cell hot starves the others toward the floor
+    but never to zero (D067 analogue at the bucket level)."""
+    hot = {("mean_reversion", "swing_short"): 0.05}
+    weighted = _bucket_distribution(grammar, registry, "mean_reversion", hot)
+    assert weighted.get("swing_short", 0) > weighted.get("swing_mid", 0)
+    assert weighted.get("swing_mid", 0) > 0
+
+
+# ---------------------------------------------------------------------------
+# D105 — underlying-class weighted pick. High-idio-vol single names minted
+# 12.8-27.9% in the yield map; diversified ETF/index sat at 0/~390. The class
+# weight tilts `_pick_underlying`'s draw; cold start stays byte-identical.
+# ---------------------------------------------------------------------------
+
+
+def _pick_underlyings_against_fallback(
+    weights: dict[str, float] | None, *, n: int = 2000, with_earnings_gate: bool = False
+) -> dict[str, int]:
+    """Run `_pick_underlying` n times against the offline fallback pool."""
+    import forge.enumeration.sampler as sampler_mod
+    from forge.enumeration.sampler import _load_underlyings, _pick_underlying
+
+    original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
+    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d105_test_dir")
+    try:
+        _load_underlyings.cache_clear()
+        rng = random.Random(0xD105)
+        counts: dict[str, int] = {}
+        regimes = ("days_to_earnings",) if with_earnings_gate else ()
+        for _ in range(n):
+            u = _pick_underlying(rng, "volatility_event", regimes, underlying_class_weights=weights)
+            assert u is not None
+            counts[u] = counts.get(u, 0) + 1
+        return counts
+    finally:
+        sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
+        _load_underlyings.cache_clear()
+
+
+def test_d105_underlying_cold_start_byte_identical() -> None:
+    """Hard rule #6: class weights are an ADDED input — absent (None) and empty
+    ({}) must reproduce the pre-D105 `rng.choice` sequence exactly."""
+    import forge.enumeration.sampler as sampler_mod
+    from forge.enumeration.sampler import _load_underlyings, _pick_underlying
+
+    original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
+    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d105_test_dir")
+    try:
+        _load_underlyings.cache_clear()
+        pool = _load_underlyings()
+        r1, r2, r3 = random.Random(9), random.Random(9), random.Random(9)
+        seq_none = [
+            _pick_underlying(r1, "mean_reversion", (), underlying_class_weights=None)
+            for _ in range(40)
+        ]
+        seq_empty = [
+            _pick_underlying(r2, "mean_reversion", (), underlying_class_weights={})
+            for _ in range(40)
+        ]
+        seq_choice = [r3.choice(pool) for _ in range(40)]
+        assert seq_none == seq_empty == seq_choice
+    finally:
+        sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
+        _load_underlyings.cache_clear()
+
+
+def test_d105_underlying_class_weights_tilt_toward_high_idio_vol() -> None:
+    """A learned high_idio_vol class (component-rate scale ~0.04) must pull the
+    draw strongly toward single names while the floor keeps the diversified
+    ETFs explorable (evidence keeps flowing to revise the wall-of-zeros)."""
+    from forge.enumeration.underlying_class import DIVERSIFIED, HIGH_IDIO_VOL, underlying_class
+
+    weights = {HIGH_IDIO_VOL: 0.04, DIVERSIFIED: 0.002}
+    counts = _pick_underlyings_against_fallback(weights)
+    div = sum(n for t, n in counts.items() if underlying_class(t) == DIVERSIFIED)
+    high = sum(n for t, n in counts.items() if underlying_class(t) == HIGH_IDIO_VOL)
+    # Fallback pool: 4 diversified / 20 high. Uniform would put ~17% on
+    # diversified; the tilt must crush that below 5% but NOT to zero.
+    assert div > 0
+    assert div / (div + high) < 0.05
+
+
+def test_d105_underlying_weights_respect_earnings_etf_exclusion() -> None:
+    """T1.4 invariant survives the weighted path: with days_to_earnings in the
+    regime, Tier-1 ETFs stay out of the pool regardless of class weights."""
+    from forge.enumeration.sampler import _TIER_1_ETF_UNDERLYINGS
+    from forge.enumeration.underlying_class import DIVERSIFIED, HIGH_IDIO_VOL
+
+    weights = {HIGH_IDIO_VOL: 0.002, DIVERSIFIED: 0.04}  # even tilted TOWARD ETFs
+    counts = _pick_underlyings_against_fallback(weights, with_earnings_gate=True)
+    assert not set(counts) & _TIER_1_ETF_UNDERLYINGS
 
 
 def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySnapshot) -> None:

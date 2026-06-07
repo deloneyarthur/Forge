@@ -86,7 +86,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D103 bumped v8 -> v9 (relative_value quality-bias: pairs pvalue/zscore
     # sampling ranges tightened; enumeration-policy only, the 21 `rules:`
     # again textually unchanged).
-    assert grammar.grammar_version == "v9"  # type: ignore[attr-defined]
+    # D105 bumped v9 -> v10 (pairs lookback drops the dead >280 band per
+    # Crucible's yield map; enumeration-policy only, the 21 `rules:`
+    # again textually unchanged).
+    assert grammar.grammar_version == "v10"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

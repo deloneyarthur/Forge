@@ -27,8 +27,10 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from forge.enumeration.underlying_class import underlying_class
+
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 
     import duckdb
     from crucible_contracts import GatedRun
@@ -247,7 +249,287 @@ def compute_hypothesis_reward_weights(
 
 
 # ---------------------------------------------------------------------------
-# Dynamic relative_value regime-gate curation (D103 / v9).
+# Component-rate reward family (D105; Crucible yield-map handoff 2026-06-07).
+#
+# The D094/D101 graded reward made TRADE PRODUCTION the dominant term because,
+# in the zero-trade cold-start era it was designed in, "does this class fire at
+# all" was the highest-information signal available. That rationale expired the
+# moment Crucible's rv lookback fix (5fd485a, 2026-06-07) flipped
+# relative_value to ~100% trading: the trade term became a Goodhart proxy —
+# the live loop weighted relative_value 0.567 at 0.7-1.0% component yield while
+# volatility_event sat at 0.169 yielding 3.9-9.7%. With 41 v9 components in the
+# pool, the scarce-but-real signal is now WHICH CLASSES CRUCIBLE ACCEPTS.
+#
+# Estimand: Beta-smoothed posterior of P(decision ∈ {component, promote}) per
+# key, with an epsilon-scale tiebreak from gate-progress + Sharpe-proximity so
+# zero-component classes still order (the D094 gradient survives, demoted to
+# tiebreak). A blend cannot do this job: any material weight on gate_fraction
+# or traded re-instates the Goodhart, because both are themselves
+# trade-correlated (e.g. 0.7·component + 0.2·gate still ranks the heavy trader
+# above the component minter on live numbers).
+#
+# Scale design (why these constants differ from DEFAULT_ALPHA/BETA):
+#   - COMPONENT_BETA = 50: prior mean 1/51 ≈ 2.0% sits AT the observed marginal
+#     component rate (17/1,000 and 84/5,000 in the live export windows), so an
+#     unobserved key samples like an average one and ~50 observations halve the
+#     prior's pull. The old Beta(1,10) prior mean (~9%) was calibrated for
+#     rewards in the 0.1-0.6 range and would let any unobserved key dominate.
+#   - COMPONENT_TIEBREAK_WEIGHT: sized so the maximum tiebreak mass across the
+#     whole feedback window (FEEDBACK_GATED_RUNS_LIMIT x ε ≤ 0.5) stays below
+#     one component event's reward — trading volume can never outrank a single
+#     real component. Invariant pinned in tests.
+#   - Version scoping mirrors trade_rate_priors (D081/D098): the gated export
+#     carries no grammar_version field and its tail reaches weeks back
+#     (pre-v5 re-gate pollution, D103), so rows resolve their version through
+#     Forge's own submissions → batch_summaries join; prior-version rows weigh
+#     0.25 and cold-start hypotheses drop them entirely.
+#
+# Consumers and scale: `compute_hypothesis_component_weights` NORMALIZES by the
+# max over the (closed, always-filled) enumerable-hypothesis set so the result
+# flows through the untouched D067 `apply_exploration_floor(floor=0.05)`
+# pipeline — raw component-rate posteriors (~0.005-0.05) would otherwise all
+# sit at/below the floor and flatten. The per-regime / finer-grained maps stay
+# RAW posteriors instead: their key sets are open (registry-dependent), so
+# normalizing would inflate a sparsely-observed key against the prior fallback
+# at the draw site; the sampler's prior/floor constants are rescaled to this
+# family's scale instead (same floor-to-prior ratio as D067).
+# ---------------------------------------------------------------------------
+
+COMPONENT_ALPHA: float = 1.0
+COMPONENT_BETA: float = 50.0
+COMPONENT_TIEBREAK_WEIGHT: float = 5e-5
+# D081 semantics at the reward layer; one current-version run ≈ 4 prior ones.
+COMPONENT_PRIOR_VERSION_WEIGHT: float = 0.25
+# The gated-runs window every feedback weight loader requests. Shared here (not
+# in the CLI) so the tiebreak-vs-window invariant is checkable next to ε.
+FEEDBACK_GATED_RUNS_LIMIT: int = 10_000
+
+_COMPONENT_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
+
+
+def component_prior_mean(*, alpha: float = COMPONENT_ALPHA, beta: float = COMPONENT_BETA) -> float:
+    """Beta(alpha, beta) prior mean — the weight given to unseen keys."""
+    return alpha / (alpha + beta)
+
+
+def _component_run_reward(gated_run: GatedRun, *, tiebreak_weight: float) -> float:
+    """1.0 for a component/promote decision, else an epsilon-scale tiebreak.
+
+    Promote counts as a component event — a promoted run cleared component-level
+    screening on the way (contracts: 'component' = passed component screening
+    but not the full portfolio gate). The tiebreak reuses the D094/D101 quality
+    signals (gate-progress + Sharpe-proximity) at a scale that can order
+    zero-component keys but can never outrank a real component (see the section
+    comment's sizing invariant).
+    """
+    if gated_run.decision.decision in _COMPONENT_DECISIONS:
+        return 1.0
+    gates = gated_run.decision.gate_results
+    gate_fraction = sum(1 for g in gates.values() if g.passed) / len(gates) if gates else 0.0
+    traded = gated_run.run.trade_count >= DEFAULT_TRADE_FLOOR
+    return tiebreak_weight * (gate_fraction + _sharpe_reward(gated_run, traded=traded)) / 2.0
+
+
+def _component_rate_posteriors[K](
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    key_of: Callable[[Mapping[str, object]], K | None],
+    *,
+    alpha: float,
+    beta: float,
+    tiebreak_weight: float,
+    current_grammar_version: str | None,
+    prior_version_weight: float,
+    cold_start_hypotheses: frozenset[str],
+) -> dict[K, float]:
+    """Beta-smoothed component-rate posterior per ``key_of(config)`` key.
+
+    The shared engine behind the hypothesis / regime / bucket / underlying-class
+    weighters: one join (submissions → batch_summaries for the D081 version
+    resolution, restricted to the gated hashes), one estimand, one smoothing
+    rule — so every granularity stays on a single coherent scale. Rows whose
+    ``key_of`` returns None are skipped (wrong hypothesis for a scoped key,
+    corrupt config_json, missing fields). Same determinism property as the rest
+    of the module (hard rule #6): a pure function of the snapshot inputs.
+    """
+    if not gated_runs:
+        return {}
+    run_by_hash: dict[str, GatedRun] = {gr.run.config_hash: gr for gr in gated_runs}
+    # LEFT JOIN so legacy/orphan submissions still contribute; their NULL
+    # grammar_version counts as a prior version when scoping is active
+    # (trade_rate_priors precedent). Restricting to the gated hashes avoids the
+    # full-table scan the D094-era iterator performs.
+    rows = db.execute(
+        """
+        SELECT s.config_hash, s.config_json, b.grammar_version
+        FROM submissions s
+        LEFT JOIN batch_summaries b ON s.forge_batch_id = b.forge_batch_id
+        WHERE s.config_hash IN (SELECT UNNEST(?))
+        """,
+        [list(run_by_hash.keys())],
+    ).fetchall()
+
+    acc: dict[K, list[float]] = {}  # key → [weighted_total, weighted_reward_sum]
+    for config_hash, config_json_raw, grammar_version in rows:
+        gr = run_by_hash.get(config_hash)
+        if gr is None:
+            continue
+        cfg = json.loads(config_json_raw) if isinstance(config_json_raw, str) else config_json_raw
+        if not isinstance(cfg, dict):
+            continue
+        key = key_of(cfg)
+        if key is None:
+            continue
+        is_current = current_grammar_version is None or grammar_version == current_grammar_version
+        if not is_current and cfg.get("hypothesis") in cold_start_hypotheses:
+            continue
+        weight = 1.0 if is_current else prior_version_weight
+        bucket = acc.setdefault(key, [0.0, 0.0])
+        bucket[0] += weight
+        bucket[1] += weight * _component_run_reward(gr, tiebreak_weight=tiebreak_weight)
+    return {
+        key: (alpha + reward_sum) / (alpha + beta + total)
+        for key, (total, reward_sum) in acc.items()
+    }
+
+
+def compute_hypothesis_component_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    hypotheses: Iterable[str],
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
+) -> dict[str, float]:
+    """Per-hypothesis component-rate weights, normalized to max = 1.0.
+
+    Every requested hypothesis is present in the result: observed ones carry
+    their posterior, unobserved ones the prior mean (an average-class weight —
+    neither dominant nor starved). Normalization restores the D067 floor's
+    intended bite ("the worst class still gets ~5% of the best class's share")
+    without touching the floor constant; `rng.choices` only consumes ratios, so
+    the sampling distribution is unchanged by the rescale. Empty ``gated_runs``
+    → ``{}`` (the caller's cold-start contract, same as every weighter here).
+    """
+    if not gated_runs:
+        return {}
+
+    def _hypothesis_of(cfg: Mapping[str, object]) -> str | None:
+        hyp = cfg.get("hypothesis")
+        return hyp if isinstance(hyp, str) else None
+
+    posteriors = _component_rate_posteriors(
+        db,
+        gated_runs,
+        _hypothesis_of,
+        alpha=alpha,
+        beta=beta,
+        tiebreak_weight=tiebreak_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
+    pm = component_prior_mean(alpha=alpha, beta=beta)
+    filled = {h: posteriors.get(h, pm) for h in hypotheses}
+    if not filled:
+        return {}
+    mx = max(filled.values())
+    if mx <= 0.0:  # unreachable with alpha > 0; defensive against knob abuse
+        return dict.fromkeys(filled, 1.0)
+    return {h: v / mx for h, v in filled.items()}
+
+
+def compute_hypothesis_bucket_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
+) -> dict[tuple[str, str], float]:
+    """Component-rate posterior per ``(hypothesis, dte_bucket)`` cell (D105).
+
+    The yield structure Crucible reported (2026-06-07) lives BELOW hypothesis
+    granularity — volatility_event x swing_mid yielded 9.7% on 31 decided while
+    mean_reversion x swing_mid sat at 0/628 — and per-hypothesis weights cannot
+    express that. These cells feed the sampler's joint (directional, bucket)
+    draw: the DTE bucket is derived from the directional's horizon (D102), and
+    for most indicators every k lands in ONE bucket, so steering the bucket mix
+    necessarily steers the directional pick too. Returns RAW posteriors (the
+    sampler compares against its own prior/floor on this scale — see the
+    section comment). Empty gated_runs → ``{}`` (cold start, uniform draw).
+    """
+
+    def _hyp_bucket_of(cfg: Mapping[str, object]) -> tuple[str, str] | None:
+        hyp = cfg.get("hypothesis")
+        bucket = cfg.get("dte_bucket")
+        if isinstance(hyp, str) and isinstance(bucket, str):
+            return (hyp, bucket)
+        return None
+
+    return _component_rate_posteriors(
+        db,
+        gated_runs,
+        _hyp_bucket_of,
+        alpha=alpha,
+        beta=beta,
+        tiebreak_weight=tiebreak_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
+
+
+def compute_underlying_class_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
+) -> dict[str, float]:
+    """Component-rate posterior per underlying CLASS (D105).
+
+    The yield map's strongest structure: high-idio-vol single names minted
+    12.8-27.9% (AAPL 17/61, NVDA 8/36, TSLA 6/47) while every diversified
+    ETF/index underlying with >=30 decided sat at 0 components. Two learned
+    classes (the curated `forge.enumeration.underlying_class` table) capture
+    most of that signal; per-name smoothing can come later. relative_value
+    rows are naturally excluded — their ``underlying`` is None (pairs legs are
+    Crucible-resolved, D098). Returns RAW posteriors for the sampler's
+    class-weighted underlying draw. Empty gated_runs → ``{}`` (cold start).
+    """
+
+    def _class_of(cfg: Mapping[str, object]) -> str | None:
+        underlying = cfg.get("underlying")
+        return underlying_class(underlying) if isinstance(underlying, str) else None
+
+    return _component_rate_posteriors(
+        db,
+        gated_runs,
+        _class_of,
+        alpha=alpha,
+        beta=beta,
+        tiebreak_weight=tiebreak_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dynamic relative_value regime-gate curation (D103 / v9; estimand re-aimed by
+# D105).
 #
 # relative_value has no §3.5 R-rule, so the sampler draws its mandatory regime
 # gate near-uniformly from the WHOLE registry (search_space._build_regime_pool),
@@ -257,11 +539,13 @@ def compute_hypothesis_reward_weights(
 # just subsets a pairs-convergence signal's entry dates with noise, yielding the
 # negative-Sharpe runs that fail walk_forward_sharpe_median / cpcv_sharpe_p25.
 # Rather than a static hand-curated subset (overfit to a thin n~49 sample), this
-# LEARNS the same Sharpe-aware reward the hypothesis weighter uses, per regime
-# indicator, scoped to relative_value, so the sampler tilts toward gates that
-# actually yield gate-passing components. The regime POOL is unchanged (hard
-# rule #1 — no rule edit); only the SELECTION weight changes, floored by the
-# sampler (D067 analogue) so no regime is starved out of exploration.
+# LEARNS which gates yield accepted components, scoped to relative_value, so the
+# sampler tilts toward them. D105 note: the original D103 estimand (the D094
+# trade-biased reward) collapsed once the rv fix made every gate trade — the
+# live journal showed all 34 gates compressed into 0.33-0.40 — so it now uses
+# the component-rate engine above. The regime POOL is unchanged (hard rule #1 —
+# no rule edit); only the SELECTION weight changes, floored by the sampler
+# (D067 analogue) so no regime is starved out of exploration.
 # ---------------------------------------------------------------------------
 
 _REGIME_CURATED_HYPOTHESIS: str = "relative_value"
@@ -285,72 +569,46 @@ def _regime_indicator_of(cfg: Mapping[str, object]) -> str | None:
     return None
 
 
-def _iter_relative_value_regime_outcomes(
-    db: duckdb.DuckDBPyConnection,
-    gated_runs: Sequence[GatedRun],
-) -> Iterator[tuple[str, GatedRun]]:
-    """Yield ``(regime_indicator, gated_run)`` per ``relative_value`` submission
-    with a matching gated run and a readable regime gate.
-
-    The within-hypothesis analogue of `_iter_hypothesis_outcomes`: the same
-    config_hash join, restricted to ``hypothesis == 'relative_value'`` and keyed
-    by the regime-gate indicator (the lever D103 curates).
-    """
-    run_by_hash: dict[str, GatedRun] = {gr.run.config_hash: gr for gr in gated_runs}
-    rows = db.execute("SELECT config_hash, config_json FROM submissions").fetchall()
-    for config_hash, config_json_raw in rows:
-        gr = run_by_hash.get(config_hash)
-        if gr is None:
-            continue
-        cfg = json.loads(config_json_raw) if isinstance(config_json_raw, str) else config_json_raw
-        if not isinstance(cfg, dict) or cfg.get("hypothesis") != _REGIME_CURATED_HYPOTHESIS:
-            continue
-        regime = _regime_indicator_of(cfg)
-        if regime is None:
-            continue
-        yield regime, gr
-
-
 def compute_relative_value_regime_weights(
     db: duckdb.DuckDBPyConnection,
     gated_runs: Sequence[GatedRun],
     *,
-    alpha: float = DEFAULT_ALPHA,
-    beta: float = DEFAULT_BETA,
-    trade_floor: int = DEFAULT_TRADE_FLOOR,
-    trade_production_weight: float = DEFAULT_TRADE_PRODUCTION_WEIGHT,
-    gate_progress_weight: float = DEFAULT_GATE_PROGRESS_WEIGHT,
-    sharpe_weight: float = DEFAULT_SHARPE_WEIGHT,
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
 ) -> dict[str, float]:
-    """Per-regime-indicator Beta-smoothed reward, WITHIN ``relative_value`` (D103).
+    """Per-regime-indicator component-rate posterior, WITHIN ``relative_value``
+    (D103, estimand re-aimed by D105).
 
-    Generalizes `compute_hypothesis_reward_weights` to the regime-gate
-    granularity for the one hypothesis whose regime pool is unconstrained: each
-    gated ``relative_value`` run contributes the same graded reward
-    (trade-production + gate-progress + Sharpe-proximity, promotion = 1.0),
-    bucketed by its regime-gate indicator. Same empty -> ``{}`` cold-start
-    contract (the sampler falls back to uniform) and the same determinism
-    property (hard rule #6: a pure function of the ``submissions`` table + the
-    ``gated_runs`` snapshot). Returns ``regime_indicator -> posterior mean`` in
-    (0, 1). See the module section above for the rationale.
+    Each gated ``relative_value`` run contributes the component-rate reward
+    (component/promote = 1.0, epsilon tiebreak otherwise), bucketed by its
+    regime-gate indicator. Returns RAW posteriors — the regime key set is open
+    (registry-dependent), so the sampler compares against its own prior/floor
+    constants rather than a normalized scale (see the D105 section comment).
+    Same empty -> ``{}`` cold-start contract (the sampler falls back to
+    uniform) and the same determinism property (hard rule #6: a pure function
+    of the ``submissions`` table + the ``gated_runs`` snapshot).
     """
-    if not gated_runs:
-        return {}
-    acc: dict[str, list[float]] = {}  # regime indicator → [total, reward_sum]
-    for regime, gr in _iter_relative_value_regime_outcomes(db, gated_runs):
-        bucket = acc.setdefault(regime, [0.0, 0.0])
-        bucket[0] += 1.0
-        bucket[1] += _run_reward(
-            gr,
-            trade_floor=trade_floor,
-            trade_production_weight=trade_production_weight,
-            gate_progress_weight=gate_progress_weight,
-            sharpe_weight=sharpe_weight,
-        )
-    return {
-        regime: (alpha + reward_sum) / (alpha + beta + total)
-        for regime, (total, reward_sum) in acc.items()
-    }
+
+    def _rv_regime_of(cfg: Mapping[str, object]) -> str | None:
+        if cfg.get("hypothesis") != _REGIME_CURATED_HYPOTHESIS:
+            return None
+        return _regime_indicator_of(cfg)
+
+    return _component_rate_posteriors(
+        db,
+        gated_runs,
+        _rv_regime_of,
+        alpha=alpha,
+        beta=beta,
+        tiebreak_weight=tiebreak_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
 
 
 # D067 — minimum exploration weight applied across all canonical
@@ -403,6 +661,10 @@ def apply_exploration_floor(
 
 
 __all__ = [
+    "COMPONENT_ALPHA",
+    "COMPONENT_BETA",
+    "COMPONENT_PRIOR_VERSION_WEIGHT",
+    "COMPONENT_TIEBREAK_WEIGHT",
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
     "DEFAULT_EXPLORATION_FLOOR",
@@ -413,9 +675,14 @@ __all__ = [
     "DEFAULT_SHARPE_WEIGHT",
     "DEFAULT_TRADE_FLOOR",
     "DEFAULT_TRADE_PRODUCTION_WEIGHT",
+    "FEEDBACK_GATED_RUNS_LIMIT",
     "apply_exploration_floor",
+    "component_prior_mean",
+    "compute_hypothesis_bucket_weights",
+    "compute_hypothesis_component_weights",
     "compute_hypothesis_reward_weights",
     "compute_hypothesis_weights",
     "compute_relative_value_regime_weights",
+    "compute_underlying_class_weights",
     "prior_mean",
 ]

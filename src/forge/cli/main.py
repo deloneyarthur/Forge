@@ -499,18 +499,24 @@ def _format_hypothesis_weights_line(weights: Mapping[str, float]) -> str:
     return f"hypothesis_weights: {', '.join(parts)} (*=prior, no data)"
 
 
-def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
-    """Compute per-hypothesis multi-class reward weights for failure-biased sampling.
+def _load_hypothesis_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[str, float]:
+    """Compute per-hypothesis component-rate weights for failure-biased sampling.
 
     Reads Crucible's gated_runs export (file-based to avoid the writer's
-    exclusive DuckDB lock; see contracts v1.8.0) and joins against
-    Forge's `submissions` table on config_hash. The weight blends
-    trade-production and gate-progress with promotion as the ceiling
-    (D094 / improvement-plan Phase 2), so the enumerator keeps a gradient
-    even at zero promotions — `compute_hypothesis_weights`' promotion-only
-    signal is flat in that regime. Empty result (no exports, no overlap
-    with submissions) is the normal cold-start path — the sampler treats
-    `{}` as "use uniform `rng.choice`".
+    exclusive DuckDB lock; see contracts v1.8.0) and joins against Forge's
+    `submissions` table on config_hash. D105 re-aim (Crucible yield-map
+    handoff, 2026-06-07): the weight is the Beta-smoothed COMPONENT RATE
+    (decision ∈ {component, promote}), normalized to max=1.0, replacing the
+    D094/D101 trade-production blend that the rv lookback fix turned into a
+    Goodhart proxy (rv weighted 0.567 at ~1% yield vs vol_event 0.169 at
+    4-10%). `current_grammar_version` version-scopes the window through the
+    D081 batch_summaries join — the export carries no version field and its
+    tail reaches into stale re-gated cohorts. Empty result (no exports, no
+    overlap with submissions) is the normal cold-start path — the sampler
+    treats `{}` as "use uniform `rng.choice`".
 
     Exceptions on the export read are caught and converted to `{}` so
     a missing/corrupt export file never crashes the iteration loop. The
@@ -522,10 +528,12 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
 
     from forge.enumeration.search_space import _HYPOTHESES, NON_ENUMERABLE_HYPOTHESES
     from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
         apply_exploration_floor,
-        compute_hypothesis_reward_weights,
+        compute_hypothesis_component_weights,
         prior_mean,
     )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
     from forge.persistence.db import db_connection
 
     # D067 — sampling hypotheses: canonical minus non-enumerable (D066
@@ -544,7 +552,9 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
         )
     exports_dir = Path.home() / "optbt_data" / "exports"
     try:
-        gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=1000)
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
     except (QueryError, OSError) as exc:
         global _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
         if not _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED:
@@ -567,12 +577,18 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
             fallback=prior_mean(),
         )
     with db_connection(forge_db_path) as conn:
-        raw = compute_hypothesis_reward_weights(conn, gated_runs)
-    # D067: floor every canonical sampling hypothesis at
-    # DEFAULT_EXPLORATION_FLOOR so observed-but-low ones (regime_arbitrage
-    # at 0.004, relative_value at 0.003) still get measurable exploration
-    # budget. Unobserved hypotheses fall back to the Beta prior (~0.091),
-    # which is already above the floor.
+        raw = compute_hypothesis_component_weights(
+            conn,
+            gated_runs,
+            hypotheses=sampling_hypotheses,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+    # D067: the floor is unchanged — `compute_hypothesis_component_weights`
+    # normalizes to max=1.0 precisely so the 0.05 floor keeps its intended
+    # bite on the component-rate scale ("the worst class still gets ~5% of
+    # the best class's share"). Every sampling hypothesis is present in
+    # `raw`, so the fallback only covers the defensive empty-map path.
     return apply_exploration_floor(
         raw,
         hypotheses=sampling_hypotheses,
@@ -580,28 +596,39 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     )
 
 
-def _load_regime_weights(forge_db_path: Path) -> dict[str, float]:
-    """D103 — per-regime-indicator reward weights for the relative_value
-    regime-gate pick.
+def _load_regime_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[str, float]:
+    """D103 — per-regime-indicator weights for the relative_value regime-gate
+    pick (estimand re-aimed to component-rate by D105; same version scoping as
+    the hypothesis weights).
 
     Mirrors `_load_hypothesis_weights` (file-based gated export read to dodge
     the writer's exclusive DuckDB lock; QueryError / OSError → {}). Returns the
-    RAW posterior (regime_indicator → reward); the sampler floors it (D067
-    analogue via `_pick_regime`) and falls back to uniform on `{}` (cold start),
-    so no CLI-side flooring is needed. Scoped to relative_value — the one
-    hypothesis whose regime pool is the whole registry (no §3.5 R-rule).
+    RAW component-rate posterior (regime_indicator → score); the sampler floors
+    it on that scale (D067 analogue via `_pick_regime`) and falls back to
+    uniform on `{}` (cold start), so no CLI-side flooring is needed. Scoped to
+    relative_value — the one hypothesis whose regime pool is the whole registry
+    (no §3.5 R-rule).
     """
     from crucible_contracts import load_recent_gated_runs_from_export
     from crucible_contracts.exceptions import QueryError
 
-    from forge.feedback.rejection_weights import compute_relative_value_regime_weights
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_relative_value_regime_weights,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
     from forge.persistence.db import db_connection
 
     if forge_db_path == Path(":memory:") or not forge_db_path.exists():
         return {}
     exports_dir = Path.home() / "optbt_data" / "exports"
     try:
-        gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=1000)
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
     except (QueryError, OSError):
         # The hypothesis-weights loader already logs export failures loudly
         # once per process; degrade silently here to avoid duplicate spam.
@@ -609,7 +636,12 @@ def _load_regime_weights(forge_db_path: Path) -> dict[str, float]:
     if not gated_runs:
         return {}
     with db_connection(forge_db_path) as conn:
-        return compute_relative_value_regime_weights(conn, gated_runs)
+        return compute_relative_value_regime_weights(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
 
 
 def _format_regime_weights_line(weights: Mapping[str, float]) -> str:
@@ -618,6 +650,103 @@ def _format_regime_weights_line(weights: Mapping[str, float]) -> str:
     top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:5]
     parts = ", ".join(f"{name}={w:.3f}" for name, w in top)
     return f"regime_weights(relative_value): {len(weights)} gates learned; top: {parts}"
+
+
+def _load_bucket_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[tuple[str, str], float]:
+    """D105 — (hypothesis, dte_bucket) component-rate cells for the sampler's
+    joint (directional, bucket) draw.
+
+    Mirrors `_load_regime_weights` (file-based gated export read; QueryError /
+    OSError → {} with the hypothesis-weights loader carrying the loud warn-once;
+    same version scoping). Returns RAW posteriors; the sampler floors them on
+    the component-rate scale and falls back to uniform on `{}` (cold start).
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_hypothesis_bucket_weights,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_hypothesis_bucket_weights(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+
+
+def _format_bucket_weights_line(weights: Mapping[tuple[str, str], float]) -> str:
+    """One-line journal summary of the learned (hypothesis, dte_bucket) cells:
+    count + the top cells by component rate (highest-signal for the operator)."""
+    top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    parts = ", ".join(f"{hyp}x{bucket}={w:.3f}" for (hyp, bucket), w in top)
+    return f"bucket_weights: {len(weights)} cells learned; top: {parts}"
+
+
+def _load_underlying_class_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[str, float]:
+    """D105 — learned underlying-class weights (high-idio-vol vs diversified)
+    for the sampler's class-weighted underlying draw.
+
+    Mirrors `_load_bucket_weights` (file-based export read, silent degrade to
+    {}; same version scoping). Returns RAW component-rate posteriors; the
+    sampler floors them and falls back to uniform on `{}` (cold start).
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_underlying_class_weights,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_underlying_class_weights(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+
+
+def _format_underlying_class_weights_line(weights: Mapping[str, float]) -> str:
+    """One-line journal summary of the learned underlying-class weights."""
+    parts = ", ".join(f"{name}={w:.3f}" for name, w in sorted(weights.items()))
+    return f"underlying_class_weights: {parts}"
 
 
 def _load_trade_rate_priors(
@@ -805,6 +934,8 @@ def _run_battery_for_seed(
     *,
     hypothesis_weights: Mapping[str, float] | None = None,
     regime_weights: Mapping[str, float] | None = None,
+    bucket_weights: Mapping[tuple[str, str], float] | None = None,
+    underlying_class_weights: Mapping[str, float] | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
@@ -870,6 +1001,8 @@ def _run_battery_for_seed(
             max_candidates=max_candidates,
             hypothesis_weights=hypothesis_weights,
             regime_weights=regime_weights,
+            bucket_weights=bucket_weights,
+            underlying_class_weights=underlying_class_weights,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
@@ -1216,15 +1349,36 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
             return "blocked"
 
     promoted = _fetch_promoted_configs(forge_db_path, crucible_db)
-    hypothesis_weights = _load_hypothesis_weights(forge_db_path)
+    # D105 — both weight families are component-rate and version-scoped: the
+    # gated export's tail reaches into stale re-gated cohorts and carries no
+    # grammar_version field, so each run resolves its version through Forge's
+    # own submissions → batch_summaries join (D081 pattern).
+    hypothesis_weights = _load_hypothesis_weights(
+        forge_db_path, current_grammar_version=grammar.grammar_version
+    )
     if hypothesis_weights:
         typer.echo(_format_hypothesis_weights_line(hypothesis_weights))
-    # D103 — dynamic relative_value regime-gate weights (Sharpe-aware feedback).
-    # Cold start (no exports / no relative_value overlap) returns {}; the sampler
-    # then draws the regime gate uniformly, identical to pre-D103.
-    regime_weights = _load_regime_weights(forge_db_path)
+    # D103 — dynamic relative_value regime-gate weights (component-rate per
+    # D105). Cold start (no exports / no relative_value overlap) returns {};
+    # the sampler then draws the regime gate uniformly, identical to pre-D103.
+    regime_weights = _load_regime_weights(
+        forge_db_path, current_grammar_version=grammar.grammar_version
+    )
     if regime_weights:
         typer.echo(_format_regime_weights_line(regime_weights))
+    # D105 — (hypothesis, dte_bucket) cells for the joint (directional, bucket)
+    # draw. Cold start returns {}; the sampler keeps the pre-D105 two-step draw.
+    bucket_weights = _load_bucket_weights(
+        forge_db_path, current_grammar_version=grammar.grammar_version
+    )
+    if bucket_weights:
+        typer.echo(_format_bucket_weights_line(bucket_weights))
+    # D105 — underlying-class weights (high-idio-vol vs diversified ETF/index).
+    underlying_class_weights = _load_underlying_class_weights(
+        forge_db_path, current_grammar_version=grammar.grammar_version
+    )
+    if underlying_class_weights:
+        typer.echo(_format_underlying_class_weights_line(underlying_class_weights))
     # D076 / Q16 — empirical-prior bucket stats for `expected_trades`.
     # Cold start (no exports / no overlap with submissions) returns {};
     # filter falls back to the activations heuristic for every config.
@@ -1258,6 +1412,8 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
             calibration,
             hypothesis_weights=hypothesis_weights,
             regime_weights=regime_weights,
+            bucket_weights=bucket_weights,
+            underlying_class_weights=underlying_class_weights,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
             timings=timings,

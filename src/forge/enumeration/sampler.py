@@ -56,6 +56,7 @@ from forge.enumeration.indicator_thresholds import (
     sample_threshold_params,
 )
 from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES
+from forge.enumeration.underlying_class import underlying_class
 from forge.grammar.signal_horizon import (
     buckets_for_horizon_class,
     horizon_class,
@@ -73,22 +74,50 @@ if TYPE_CHECKING:
 _logger = structlog.get_logger(__name__)
 
 
-# Prior mean for hypotheses absent from the rejection-weights map.
-# Mirrors `forge.feedback.rejection_weights.prior_mean` to avoid a
-# circular import between enumeration and feedback. Kept local but
-# semantically tied to DEFAULT_ALPHA / DEFAULT_BETA there.
+# Fallback for hypotheses absent from the rejection-weights map. Production
+# never hits it: the CLI fills every samplable hypothesis (D105 —
+# `compute_hypothesis_component_weights` returns a complete, max-normalized
+# map, so a missing key only occurs in direct sampler calls with partial
+# maps). On that normalized scale 1/11 reads as ~9% of the best class — the
+# same explore share the old Beta(1,10) prior-mean fallback gave. Kept local
+# to avoid a circular import between enumeration and feedback.
 _HYPOTHESIS_WEIGHT_PRIOR_MEAN: float = 1.0 / 11.0
 
 # D103 (v9) — dynamic relative_value regime-gate weighting. The sampler tilts the
 # regime pick toward gates that `forge.feedback.rejection_weights` has learned
-# yield gate-passing relative_value components. Prior + floor mirror the
-# hypothesis-weight knobs (Beta(1,10) mean ~0.091; D067 floor 0.05) and are kept
-# local to avoid an enumeration→feedback import cycle. Scoped to relative_value
-# (the one hypothesis with no §3.5 R-rule, so its regime pool is the whole
-# registry); every other hypothesis keeps its uniform `rng.choice` pick.
-_REGIME_WEIGHT_PRIOR_MEAN: float = _HYPOTHESIS_WEIGHT_PRIOR_MEAN
-_REGIME_EXPLORATION_FLOOR: float = 0.05
+# yield accepted relative_value components. Kept local to avoid an
+# enumeration→feedback import cycle. Scoped to relative_value (the one
+# hypothesis with no §3.5 R-rule, so its regime pool is the whole registry);
+# every other hypothesis keeps its uniform `rng.choice` pick.
+#
+# D105 rescale: the weights are now RAW component-rate posteriors
+# (rejection_weights COMPONENT_ALPHA/BETA — Beta(1,50), prior mean 1/51 ≈ 0.02,
+# typical learned-good gate ~0.04), so the prior fallback and exploration floor
+# sit on that scale: an unseen gate samples at ~half a good gate's weight, and
+# a learned-bad gate keeps ~a quarter of a good gate's draw probability
+# (~2% per gate across the ~34-gate registry pool — the same per-gate
+# exploration share the D067-scale constants produced under the old estimand).
+_REGIME_WEIGHT_PRIOR_MEAN: float = 1.0 / 51.0
+_REGIME_EXPLORATION_FLOOR: float = 0.01
 _REGIME_CURATED_HYPOTHESIS: str = "relative_value"
+
+# D105 — hypothesis x dte_bucket weighting. Same component-rate scale and
+# prior/floor rationale as the regime constants above: an unseen cell samples
+# at ~half a learned-good cell's weight, a learned-bad cell keeps ~a quarter of
+# a good cell's draw probability. Consumed by the joint (directional, bucket)
+# draw in `_select_bucket_directional_regime` — the bucket is DERIVED from the
+# directional's horizon (D102), and for most indicators every k lands in one
+# bucket, so steering the bucket mix necessarily steers the directional pick.
+_BUCKET_WEIGHT_PRIOR_MEAN: float = 1.0 / 51.0
+_BUCKET_EXPLORATION_FLOOR: float = 0.01
+
+# D105 — underlying-class weighting, same component-rate scale and rationale.
+# Per-ticker weight = its class's learned weight, so the high-idio-vol class
+# (the minting cohort: AAPL/NVDA/TSLA at 12.8-27.9% yield) outdraws the
+# diversified ETF/index class (0 components / ~390 decided), while the floor
+# keeps diversified evidence flowing to revise the zero.
+_UNDERLYING_CLASS_PRIOR_MEAN: float = 1.0 / 51.0
+_UNDERLYING_CLASS_EXPLORATION_FLOOR: float = 0.01
 
 
 class SamplerError(Exception):
@@ -202,6 +231,7 @@ def _pick_underlying(
     rng: random.Random,
     hypothesis: str,
     regime_indicators: tuple[str, ...] = (),
+    underlying_class_weights: Mapping[str, float] | None = None,
 ) -> str | None:
     """Per-config underlying selection from the Tier 1+2 pool.
 
@@ -222,14 +252,29 @@ def _pick_underlying(
     constrained to single-names only — preserves grammar R3's ETF-aware
     compatibility constraint at sample time so the validator doesn't have
     to reject the config downstream.
+
+    D105: ``underlying_class_weights`` tilts the draw by each ticker's learned
+    class (`forge.enumeration.underlying_class`) — the pool itself never
+    changes, only the draw probability, and the T1.4 exclusion applies before
+    weighting. None/empty keeps the uniform `rng.choice` byte-identical.
     """
     if hypothesis == "relative_value":
         return None
     underlyings = _load_underlyings()
     if any(ind == "days_to_earnings" for ind in regime_indicators):
-        single_names = tuple(u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS)
-        return rng.choice(single_names)
-    return rng.choice(underlyings)
+        pool = tuple(u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS)
+    else:
+        pool = underlyings
+    if underlying_class_weights:
+        weights = [
+            max(
+                underlying_class_weights.get(underlying_class(u), _UNDERLYING_CLASS_PRIOR_MEAN),
+                _UNDERLYING_CLASS_EXPLORATION_FLOOR,
+            )
+            for u in pool
+        ]
+        return rng.choices(pool, weights=weights, k=1)[0]
+    return rng.choice(pool)
 
 
 def sample_config(
@@ -239,6 +284,8 @@ def sample_config(
     *,
     hypothesis_weights: Mapping[str, float] | None = None,
     regime_weights: Mapping[str, float] | None = None,
+    bucket_weights: Mapping[tuple[str, str], float] | None = None,
+    underlying_class_weights: Mapping[str, float] | None = None,
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -252,11 +299,21 @@ def sample_config(
     the prior-mean weight so they remain explorable.
 
     ``regime_weights`` (D103) biases the relative_value regime-gate pick
-    toward indicators that feedback has learned yield gate-passing
+    toward indicators that feedback has learned yield accepted
     components. Applied ONLY to relative_value (the one hypothesis with no
     §3.5 R-rule); every other hypothesis keeps its uniform pick. When None /
     empty, relative_value also falls back to uniform — so the pre-D103
     sequence is preserved at cold-start and for all other hypotheses.
+
+    ``bucket_weights`` (D105) biases the joint (directional, DTE-bucket) pick
+    toward ``(hypothesis, dte_bucket)`` cells that feedback has learned yield
+    accepted components. When None / empty, the pre-D105 two-step draw
+    (uniform directional → k/lead-derived bucket) is preserved byte-identically
+    (hard rule #6: weights are an additional input).
+
+    ``underlying_class_weights`` (D105) biases the underlying pick by each
+    ticker's learned class (high-idio-vol vs diversified ETF/index). None /
+    empty keeps the uniform pick byte-identical.
 
     ``forced_hypothesis`` (D037) overrides the weighted pick when set —
     use it from the iterator to enforce a per-hypothesis stratified
@@ -310,7 +367,13 @@ def sample_config(
     # the bucket (that was the degenerate-registry artifact v8 removes; the S4
     # validator only ever checked the directional signal).
     bucket, directional_id, regime_id = _select_bucket_directional_regime(
-        space, by_id, hypothesis, chain_id, rng, regime_weights=regime_weights
+        space,
+        by_id,
+        hypothesis,
+        chain_id,
+        rng,
+        regime_weights=regime_weights,
+        bucket_weights=bucket_weights,
     )
 
     signals = [
@@ -375,6 +438,7 @@ def sample_config(
             regime_indicators=tuple(
                 ind for sig in signals if sig.role == "regime_filter" for ind in sig.indicators
             ),
+            underlying_class_weights=underlying_class_weights,
         ),
         tier=2,
         signals=tuple(signals),
@@ -469,6 +533,35 @@ def _dte_target(
     return None
 
 
+def _directional_bucket_options(
+    hypothesis: str,
+    directional_id: str,
+    chain_compat_set: set[str],
+) -> tuple[str, ...]:
+    """The DTE buckets one directional can induce, WITH multiplicity (D105).
+
+    Mirrors the cold-path derivation exactly: each k (horizon-matched
+    hypotheses) or event lead (volatility_event) maps to its
+    ``nearest_bucket``; relative_value lists its S4-permitted buckets directly
+    (its target is a Crucible runtime concern — see `_dte_target`). Repeats are
+    deliberate: a bucket reachable by 2 of 3 knob values carries 2x the
+    structural mass, exactly as the cold path's uniform knob draw does, so the
+    learned weight composes WITH the structural prior instead of replacing it.
+    """
+    allowed = tuple(
+        b for b in buckets_for_horizon_class(horizon_class(directional_id)) if b in chain_compat_set
+    )
+    if hypothesis in _HORIZON_MATCHED_HYPOTHESES:
+        horizon = signal_horizon_days(directional_id)
+        return tuple(nearest_bucket(allowed, float(k * horizon)) for k in _K_MULTIPLIERS)
+    if hypothesis == "volatility_event":
+        return tuple(
+            nearest_bucket(allowed, float(lead + _VOL_EVENT_POST_WINDOW_TD))
+            for lead in _VOL_EVENT_LEAD_DAYS
+        )
+    return allowed
+
+
 def _select_bucket_directional_regime(
     space: SearchSpace,
     by_id: dict[str, IndicatorMetadata],
@@ -477,6 +570,7 @@ def _select_bucket_directional_regime(
     rng: random.Random,
     *,
     regime_weights: Mapping[str, float] | None = None,
+    bucket_weights: Mapping[tuple[str, str], float] | None = None,
 ) -> tuple[str, str, str]:
     """v8 (D102) horizon-matched selection. Returns ``(bucket, directional_id,
     regime_id)``.
@@ -485,7 +579,17 @@ def _select_bucket_directional_regime(
     bucket → regime. The directional is picked first because the DTE bucket is
     DERIVED from its signal horizon (vs the pre-v8 bucket-first CSP). Valid by
     construction: ``_directional_candidates`` guarantees a non-empty allowed
-    bucket set and a non-empty regime set, so no fallback scan is needed."""
+    bucket set and a non-empty regime set, so no fallback scan is needed.
+
+    With ``bucket_weights`` (D105) the directional + bucket are drawn JOINTLY
+    over every (candidate, induced-bucket) pair, weighted by the pair's
+    ``(hypothesis, bucket)`` cell. The joint draw is load-bearing: most
+    directionals are bucket-locked across k (macd → all swing_mid,
+    momentum_252 → all swing_long), so a k-only reweight could not move the
+    bucket mix at all — the cell weight must steer WHICH directional anchors
+    the config. Cold start (None/empty) keeps the two-step draw above,
+    byte-identical to pre-D105.
+    """
     chain_compat = _chain_compatible_buckets(space, chain_id)
     chain_compat_set = set(chain_compat)
     chain_family = by_id[chain_id].family if chain_id is not None else None
@@ -497,13 +601,30 @@ def _select_bucket_directional_regime(
             f"C1/C4/R-valid regime partner for hypothesis={hypothesis} chain={chain_id}"
         )
         raise SamplerError(msg)
-    directional_id = rng.choice(candidates)
 
-    target = _dte_target(hypothesis, directional_id, rng)
-    allowed = tuple(
-        b for b in buckets_for_horizon_class(horizon_class(directional_id)) if b in chain_compat_set
-    )
-    bucket = nearest_bucket(allowed, target) if target is not None else rng.choice(allowed)
+    if bucket_weights:
+        options = tuple(
+            (d, b)
+            for d in candidates
+            for b in _directional_bucket_options(hypothesis, d, chain_compat_set)
+        )
+        weights = [
+            max(
+                bucket_weights.get((hypothesis, b), _BUCKET_WEIGHT_PRIOR_MEAN),
+                _BUCKET_EXPLORATION_FLOOR,
+            )
+            for _, b in options
+        ]
+        directional_id, bucket = rng.choices(options, weights=weights, k=1)[0]
+    else:
+        directional_id = rng.choice(candidates)
+        target = _dte_target(hypothesis, directional_id, rng)
+        allowed = tuple(
+            b
+            for b in buckets_for_horizon_class(horizon_class(directional_id))
+            if b in chain_compat_set
+        )
+        bucket = nearest_bucket(allowed, target) if target is not None else rng.choice(allowed)
 
     regimes = _compatible_regimes(space, by_id, hypothesis, directional_id, chain_family)
     regime_id = _pick_regime(hypothesis, regimes, rng, regime_weights)
@@ -737,13 +858,21 @@ def _sample_pairs_template_params(rng: random.Random) -> dict[str, object]:
     (fewer, higher-quality firings) — the converse trade of D072, made now
     that firing no longer binds.
 
+    **D105 (v10, 2026-06-07)** — drop `lookback` 378. Crucible's yield map:
+    post-rv-fix (5fd485a) the lookback > 280 band runs and trades properly
+    and is **0-for-155 decided with best WF 0.19**, vs 135/135 traded <= 280
+    historically and ALL 7 rv components at lookback <= 252. One choice of
+    four = ~25% of rv enumeration provably wasted. Same tightening direction
+    as D103 (hard rule #4: tightenings can ship); 504 was dropped by D072 on
+    the same one-step-at-a-time basis.
+
     Hard rule #3 check (never lower Crucible's gate): unaffected.
     Crucible's gauntlet (Sharpe, profit_factor, etc.) is the same;
     we're just biasing WHICH configs Forge submits toward the region the
     gate rewards.
     """
     return {
-        "lookback": rng.choice((126, 189, 252, 378)),
+        "lookback": rng.choice((126, 189, 252)),
         "pvalue_max": round(rng.uniform(0.02, 0.12), 3),
         "zscore_entry": round(rng.uniform(1.0, 2.0), 3),
         "halflife_min": rng.choice((1, 2, 3, 5)),

@@ -23,6 +23,7 @@ from crucible_contracts import (
 )
 
 from forge.feedback.rejection_weights import (
+    COMPONENT_TIEBREAK_WEIGHT,
     DEFAULT_ALPHA,
     DEFAULT_BETA,
     DEFAULT_EXPLORATION_FLOOR,
@@ -756,12 +757,14 @@ def test_d103_regime_weights_empty_returns_empty(tmp_path: Path) -> None:
         assert compute_relative_value_regime_weights(conn, []) == {}
 
 
-def test_d103_regime_weights_higher_reward_gate_outweighs(tmp_path: Path) -> None:
-    """A regime gate whose relative_value runs trade + score high Sharpe must
-    outweigh one whose runs zero-trade — the sampler learns toward it."""
+def test_d103_regime_weights_component_gate_outweighs_trading_gate(tmp_path: Path) -> None:
+    """D105 re-aim: a regime gate that yields an accepted COMPONENT must outweigh
+    one whose runs merely trade. (The original D103 estimand — the D094
+    trade-biased reward — collapsed once Crucible's rv fix made every gate
+    trade: the live journal showed all 34 gates compressed into 0.33-0.40.)"""
     with db_connection(tmp_path / "forge.db") as conn:
         gated: list[GatedRun] = []
-        for i in range(10):  # good regime: trades, high sharpe
+        for i in range(10):  # good regime: 1 component + 9 trading rejects
             ch = f"good_{i:04d}"
             _insert_submission(
                 conn,
@@ -770,10 +773,15 @@ def test_d103_regime_weights_higher_reward_gate_outweighs(tmp_path: Path) -> Non
             )
             gated.append(
                 _gated_run_graded(
-                    config_hash=ch, trade_count=80, gates_passed=3, gates_failed=1, wf_sharpe=1.5
+                    config_hash=ch,
+                    trade_count=80,
+                    gates_passed=4 if i == 0 else 3,
+                    gates_failed=0 if i == 0 else 1,
+                    decision="component" if i == 0 else "reject",
+                    wf_sharpe=1.5,
                 )
             )
-        for i in range(10):  # bad regime: zero-trade
+        for i in range(10):  # bad regime: all trade, none accepted (the live mode)
             ch = f"bad_{i:04d}"
             _insert_submission(
                 conn,
@@ -781,14 +789,17 @@ def test_d103_regime_weights_higher_reward_gate_outweighs(tmp_path: Path) -> Non
                 config_hash=ch,
             )
             gated.append(
-                _gated_run_graded(config_hash=ch, trade_count=0, gates_passed=0, gates_failed=2)
+                _gated_run_graded(
+                    config_hash=ch, trade_count=150, gates_passed=3, gates_failed=1, wf_sharpe=1.5
+                )
             )
         weights = compute_relative_value_regime_weights(conn, gated)
     assert weights["put_call_flow"] > weights["rsi_2"]
-    # good reward = 0.5 + 0.2*0.75 + 0.3*clamp(1.5/2)=0.5+0.15+0.225=0.875 → (1+8.75)/21
-    assert weights["put_call_flow"] == pytest.approx((1 + 8.75) / 21, rel=1e-6)
-    # bad reward = 0 → (1+0)/21
-    assert weights["rsi_2"] == pytest.approx(1 / 21, rel=1e-6)
+    # Component-rate scale (alpha=1, beta=50): per-run tiebreak for a trading
+    # reject at 3/4 gates + sharpe 0.75 is eps*(0.75+0.75)/2 = 0.75*eps.
+    tb = COMPONENT_TIEBREAK_WEIGHT * 0.75
+    assert weights["put_call_flow"] == pytest.approx((1 + 1 + 9 * tb) / 61, rel=1e-9)
+    assert weights["rsi_2"] == pytest.approx((1 + 10 * tb) / 61, rel=1e-9)
 
 
 def test_d103_regime_weights_scoped_to_relative_value(tmp_path: Path) -> None:
@@ -804,11 +815,12 @@ def test_d103_regime_weights_scoped_to_relative_value(tmp_path: Path) -> None:
             config_hash="tc_hash",
         )
         gated = [
-            # relative_value: traded, 2/4 gates, no sharpe → reward 0.6
+            # relative_value: traded reject, 2/4 gates, no sharpe → tiebreak only
             _gated_run_graded(
                 config_hash="rv_hash", trade_count=50, gates_passed=2, gates_failed=2
             ),
-            # trend promote (reward 1.0) — must be EXCLUDED from the adx bucket
+            # trend promote (a full component event) — must be EXCLUDED from the
+            # adx bucket: the curation is scoped to relative_value
             _gated_run_graded(
                 config_hash="tc_hash",
                 decision="promote",
@@ -819,8 +831,9 @@ def test_d103_regime_weights_scoped_to_relative_value(tmp_path: Path) -> None:
         ]
         weights = compute_relative_value_regime_weights(conn, gated)
     assert set(weights) == {"adx"}
-    # only the rv run contributes: (1+0.6)/(1+10+1) = 1.6/12 (NOT inflated by the trend promote)
-    assert weights["adx"] == pytest.approx(1.6 / 12, rel=1e-6)
+    # only the rv run contributes (component-rate scale, alpha=1 beta=50):
+    # (1 + eps*(0.5+0)/2) / (51+1) — NOT inflated by the trend promote
+    assert weights["adx"] == pytest.approx((1 + COMPONENT_TIEBREAK_WEIGHT * 0.25) / 52, rel=1e-9)
 
 
 def test_d103_regime_weights_deterministic_and_orphans_skipped(tmp_path: Path) -> None:
