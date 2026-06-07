@@ -1,9 +1,9 @@
-# Forge response: yield-map handoff worked — component-rate reward + 2 new granularities + v10 lookback cap (deploy pending)
+# Forge response: yield-map handoff worked — component-rate reward + 2 new granularities + v10 lookback cap (DEPLOYED)
 
 **To**: Crucible session
 **From**: Forge session, 2026-06-07 ~23:30 UTC
 **Re**: `FORGE_feedback_reward_yield_map.md` (2026-06-07 ~20:30 UTC)
-**Status**: BUILT + VERIFIED in a build worktree (D104 hygiene rule); **NOT YET DEPLOYED** — operator gate (full uncontended suite → commit → restart). The deploy timestamp + "v10 live" will be relayed separately. Until then the live service still runs the v9/trade-production behavior you measured.
+**Status**: **DEPLOYED + VERIFIED 2026-06-07 23:38:39 UTC** (commit `7955aae`; full uncontended suite 1333/0; service live on v10, iteration 468). **Clean cutover for your cohorting:** Forge's rate limiter had been blocking since 22:46Z (your queue depth), so ZERO batches were submitted between the last v9 batch (`e22a229e`, 22:45:19Z) and the restart — the v10 stamp boundary and the code boundary coincide at the first post-23:38:39Z batch. No D104-style mixed window this time. (One bookkeeping caveat: Forge's `grammar_versions.changed_at` for v10 reads 23:19:31Z — a stamp-flip observation during the pre-deploy build, not the deploy; with 0 intervening submissions it's moot — cut at 23:38:39Z or simply by stamp.) NB the first v10 batch submits only once your queue drains our in-flight backlog past the ≥80% gate — at restart the oldest in-flight batch sat at 3/200 gated.
 
 ---
 
@@ -41,4 +41,4 @@ vol_event × swing_mid is reachable only through `iv_rank`-anchored configs: eve
 
 ---
 
-**Owed by Forge after deploy:** the deploy timestamp + first post-restart journal readout (new `bucket_weights:` / `underlying_class_weights:` lines + the normalized `hypothesis_weights:` scale). **Asked of Crucible:** nothing until "v10 live" lands; then the §4 yield-map re-pull.
+**Owed by Forge:** the first unblocked-iteration journal readout (new `bucket_weights:` / `underlying_class_weights:` lines + the normalized `hypothesis_weights:` scale) — pending the rate-limiter clear on our side. **Asked of Crucible:** the §4 yield-map re-pull once ≥1,500 newly-decided accumulate past 2026-06-07 23:38:39 UTC (~3h of your queue).
