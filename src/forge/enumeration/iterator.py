@@ -91,6 +91,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     max_candidates: int,
     rejection_counter: Counter[str] | None = None,
     hypothesis_weights: Mapping[str, float] | None = None,
+    regime_weights: Mapping[str, float] | None = None,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
@@ -106,6 +107,10 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     ``ceil(max_candidates * min_hypothesis_fraction)`` configs.
     After the floor is satisfied, the remaining yields follow
     ``hypothesis_weights`` (or uniform if None).
+
+    ``regime_weights`` (D103) is forwarded to the sampler to bias the
+    relative_value regime-gate pick toward feedback-learned-good gates;
+    None/empty preserves the pre-D103 uniform pick.
 
     Set ``min_hypothesis_fraction=0.0`` to disable stratification
     (legacy / test path).
@@ -192,6 +197,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
                 registry,
                 rng,
                 hypothesis_weights=hypothesis_weights,
+                regime_weights=regime_weights,
                 forced_hypothesis=forced_hypothesis,
             )
         except SamplerError as exc:

@@ -79,6 +79,17 @@ _logger = structlog.get_logger(__name__)
 # semantically tied to DEFAULT_ALPHA / DEFAULT_BETA there.
 _HYPOTHESIS_WEIGHT_PRIOR_MEAN: float = 1.0 / 11.0
 
+# D103 (v9) — dynamic relative_value regime-gate weighting. The sampler tilts the
+# regime pick toward gates that `forge.feedback.rejection_weights` has learned
+# yield gate-passing relative_value components. Prior + floor mirror the
+# hypothesis-weight knobs (Beta(1,10) mean ~0.091; D067 floor 0.05) and are kept
+# local to avoid an enumeration→feedback import cycle. Scoped to relative_value
+# (the one hypothesis with no §3.5 R-rule, so its regime pool is the whole
+# registry); every other hypothesis keeps its uniform `rng.choice` pick.
+_REGIME_WEIGHT_PRIOR_MEAN: float = _HYPOTHESIS_WEIGHT_PRIOR_MEAN
+_REGIME_EXPLORATION_FLOOR: float = 0.05
+_REGIME_CURATED_HYPOTHESIS: str = "relative_value"
+
 
 class SamplerError(Exception):
     """Raised when the sampler cannot construct a config from the current
@@ -227,6 +238,7 @@ def sample_config(
     rng: random.Random,
     *,
     hypothesis_weights: Mapping[str, float] | None = None,
+    regime_weights: Mapping[str, float] | None = None,
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -238,6 +250,13 @@ def sample_config(
     higher posterior promotion rates (long-term #1). When None, falls
     back to uniform `rng.choice`. Hypotheses missing from the map get
     the prior-mean weight so they remain explorable.
+
+    ``regime_weights`` (D103) biases the relative_value regime-gate pick
+    toward indicators that feedback has learned yield gate-passing
+    components. Applied ONLY to relative_value (the one hypothesis with no
+    §3.5 R-rule); every other hypothesis keeps its uniform pick. When None /
+    empty, relative_value also falls back to uniform — so the pre-D103
+    sequence is preserved at cold-start and for all other hypotheses.
 
     ``forced_hypothesis`` (D037) overrides the weighted pick when set —
     use it from the iterator to enforce a per-hypothesis stratified
@@ -291,7 +310,7 @@ def sample_config(
     # the bucket (that was the degenerate-registry artifact v8 removes; the S4
     # validator only ever checked the directional signal).
     bucket, directional_id, regime_id = _select_bucket_directional_regime(
-        space, by_id, hypothesis, chain_id, rng
+        space, by_id, hypothesis, chain_id, rng, regime_weights=regime_weights
     )
 
     signals = [
@@ -456,6 +475,8 @@ def _select_bucket_directional_regime(
     hypothesis: str,
     chain_id: str | None,
     rng: random.Random,
+    *,
+    regime_weights: Mapping[str, float] | None = None,
 ) -> tuple[str, str, str]:
     """v8 (D102) horizon-matched selection. Returns ``(bucket, directional_id,
     regime_id)``.
@@ -484,10 +505,33 @@ def _select_bucket_directional_regime(
     )
     bucket = nearest_bucket(allowed, target) if target is not None else rng.choice(allowed)
 
-    regime_id = rng.choice(
-        _compatible_regimes(space, by_id, hypothesis, directional_id, chain_family)
-    )
+    regimes = _compatible_regimes(space, by_id, hypothesis, directional_id, chain_family)
+    regime_id = _pick_regime(hypothesis, regimes, rng, regime_weights)
     return bucket, directional_id, regime_id
+
+
+def _pick_regime(
+    hypothesis: str,
+    regimes: tuple[str, ...],
+    rng: random.Random,
+    regime_weights: Mapping[str, float] | None,
+) -> str:
+    """Pick the §3.5 S3 regime gate from the compatible pool.
+
+    For the curated hypothesis (relative_value) WITH feedback ``regime_weights``,
+    draw weighted toward learned-good gates (D103) — each weight floored (D067
+    analogue) so no regime is starved out of exploration, and missing gates get
+    the Beta prior so unseen regimes stay explorable. Every other hypothesis —
+    and the cold-start (no weights) case — draws uniform via ``rng.choice``,
+    byte-identical to the pre-D103 sequence (hard rule #6: weights are an
+    additional input, like ``hypothesis_weights``)."""
+    if hypothesis == _REGIME_CURATED_HYPOTHESIS and regime_weights:
+        weights = [
+            max(regime_weights.get(r, _REGIME_WEIGHT_PRIOR_MEAN), _REGIME_EXPLORATION_FLOOR)
+            for r in regimes
+        ]
+        return rng.choices(regimes, weights=weights, k=1)[0]
+    return rng.choice(regimes)
 
 
 def _build_selector(
@@ -676,15 +720,32 @@ def _sample_pairs_template_params(rng: random.Random) -> dict[str, object]:
     `halflife_min` (1..5) and `halflife_max` (20..90) remain disjoint
     so `halflife_min < halflife_max` holds by construction.
 
+    **D103 (v9, 2026-06-05)** — quality-bias. D068/D072 chased FIRING
+    (zero-trade was the binding constraint then). By v8 firing is solved:
+    current-grammar `relative_value` fires ~77% (was 99% zero-trade on the
+    pre-v5 pairs-loading-bug cohort), but the gap shifted to per-component
+    Sharpe — median traded Sharpe ~-0.085, rejects fail
+    `walk_forward_sharpe_median` / `cpcv_sharpe_p25`. So the ranges tighten
+    back toward the higher-Sharpe region (now affordable):
+      - `pvalue_max` 0.10-0.25 -> **0.02-0.12** (require stronger
+        cointegration; weak cointegration = the spread doesn't converge =
+        negative Sharpe). Across current gated runs pvalue_max <= 0.14 ->
+        median Sharpe +0.023 vs -0.086 above.
+      - `zscore_entry` 0.5-1.5 -> **1.0-2.0** (enter on a larger divergence,
+        more convergence edge). zscore_entry >= 1.0 -> +0.072 vs -0.177 below.
+    `lookback` / `halflife_*` unchanged. This TIGHTENS enumeration scope
+    (fewer, higher-quality firings) — the converse trade of D072, made now
+    that firing no longer binds.
+
     Hard rule #3 check (never lower Crucible's gate): unaffected.
     Crucible's gauntlet (Sharpe, profit_factor, etc.) is the same;
-    we're just letting Forge submit configs that more often produce
-    SOMETHING for the gauntlet to evaluate.
+    we're just biasing WHICH configs Forge submits toward the region the
+    gate rewards.
     """
     return {
         "lookback": rng.choice((126, 189, 252, 378)),
-        "pvalue_max": round(rng.uniform(0.10, 0.25), 3),
-        "zscore_entry": round(rng.uniform(0.5, 1.5), 3),
+        "pvalue_max": round(rng.uniform(0.02, 0.12), 3),
+        "zscore_entry": round(rng.uniform(1.0, 2.0), 3),
         "halflife_min": rng.choice((1, 2, 3, 5)),
         "halflife_max": rng.choice((20, 45, 60, 90)),
     }

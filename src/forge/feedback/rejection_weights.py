@@ -246,6 +246,113 @@ def compute_hypothesis_reward_weights(
     }
 
 
+# ---------------------------------------------------------------------------
+# Dynamic relative_value regime-gate curation (D103 / v9).
+#
+# relative_value has no §3.5 R-rule, so the sampler draws its mandatory regime
+# gate near-uniformly from the WHOLE registry (search_space._build_regime_pool),
+# unlike R1/R2/R3-constrained mean_reversion / trend_continuation /
+# volatility_event. In the live gated cohort the two most-sampled relative_value
+# gates (rsi_2, rv_rank) are among the WORST performers — an incoherent gate
+# just subsets a pairs-convergence signal's entry dates with noise, yielding the
+# negative-Sharpe runs that fail walk_forward_sharpe_median / cpcv_sharpe_p25.
+# Rather than a static hand-curated subset (overfit to a thin n~49 sample), this
+# LEARNS the same Sharpe-aware reward the hypothesis weighter uses, per regime
+# indicator, scoped to relative_value, so the sampler tilts toward gates that
+# actually yield gate-passing components. The regime POOL is unchanged (hard
+# rule #1 — no rule edit); only the SELECTION weight changes, floored by the
+# sampler (D067 analogue) so no regime is starved out of exploration.
+# ---------------------------------------------------------------------------
+
+_REGIME_CURATED_HYPOTHESIS: str = "relative_value"
+
+
+def _regime_indicator_of(cfg: Mapping[str, object]) -> str | None:
+    """The regime-gate indicator id of a serialized config, or ``None``.
+
+    The §3.5 S3 ``regime_filter`` signal carries the gate; its first indicator
+    id is the regime concept D103 curates. Returns ``None`` when the signal or
+    indicator list is absent/malformed (the caller then skips that run).
+    """
+    signals = cfg.get("signals")
+    if not isinstance(signals, list):
+        return None
+    for sig in signals:
+        if isinstance(sig, dict) and sig.get("role") == "regime_filter":
+            inds = sig.get("indicators")
+            if isinstance(inds, (list, tuple)) and inds and isinstance(inds[0], str):
+                return inds[0]
+    return None
+
+
+def _iter_relative_value_regime_outcomes(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+) -> Iterator[tuple[str, GatedRun]]:
+    """Yield ``(regime_indicator, gated_run)`` per ``relative_value`` submission
+    with a matching gated run and a readable regime gate.
+
+    The within-hypothesis analogue of `_iter_hypothesis_outcomes`: the same
+    config_hash join, restricted to ``hypothesis == 'relative_value'`` and keyed
+    by the regime-gate indicator (the lever D103 curates).
+    """
+    run_by_hash: dict[str, GatedRun] = {gr.run.config_hash: gr for gr in gated_runs}
+    rows = db.execute("SELECT config_hash, config_json FROM submissions").fetchall()
+    for config_hash, config_json_raw in rows:
+        gr = run_by_hash.get(config_hash)
+        if gr is None:
+            continue
+        cfg = json.loads(config_json_raw) if isinstance(config_json_raw, str) else config_json_raw
+        if not isinstance(cfg, dict) or cfg.get("hypothesis") != _REGIME_CURATED_HYPOTHESIS:
+            continue
+        regime = _regime_indicator_of(cfg)
+        if regime is None:
+            continue
+        yield regime, gr
+
+
+def compute_relative_value_regime_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = DEFAULT_ALPHA,
+    beta: float = DEFAULT_BETA,
+    trade_floor: int = DEFAULT_TRADE_FLOOR,
+    trade_production_weight: float = DEFAULT_TRADE_PRODUCTION_WEIGHT,
+    gate_progress_weight: float = DEFAULT_GATE_PROGRESS_WEIGHT,
+    sharpe_weight: float = DEFAULT_SHARPE_WEIGHT,
+) -> dict[str, float]:
+    """Per-regime-indicator Beta-smoothed reward, WITHIN ``relative_value`` (D103).
+
+    Generalizes `compute_hypothesis_reward_weights` to the regime-gate
+    granularity for the one hypothesis whose regime pool is unconstrained: each
+    gated ``relative_value`` run contributes the same graded reward
+    (trade-production + gate-progress + Sharpe-proximity, promotion = 1.0),
+    bucketed by its regime-gate indicator. Same empty -> ``{}`` cold-start
+    contract (the sampler falls back to uniform) and the same determinism
+    property (hard rule #6: a pure function of the ``submissions`` table + the
+    ``gated_runs`` snapshot). Returns ``regime_indicator -> posterior mean`` in
+    (0, 1). See the module section above for the rationale.
+    """
+    if not gated_runs:
+        return {}
+    acc: dict[str, list[float]] = {}  # regime indicator → [total, reward_sum]
+    for regime, gr in _iter_relative_value_regime_outcomes(db, gated_runs):
+        bucket = acc.setdefault(regime, [0.0, 0.0])
+        bucket[0] += 1.0
+        bucket[1] += _run_reward(
+            gr,
+            trade_floor=trade_floor,
+            trade_production_weight=trade_production_weight,
+            gate_progress_weight=gate_progress_weight,
+            sharpe_weight=sharpe_weight,
+        )
+    return {
+        regime: (alpha + reward_sum) / (alpha + beta + total)
+        for regime, (total, reward_sum) in acc.items()
+    }
+
+
 # D067 — minimum exploration weight applied across all canonical
 # hypotheses to prevent the cold-start death spiral: a hypothesis with
 # zero gated history gets prior weight (~0.091), but once a single
@@ -309,5 +416,6 @@ __all__ = [
     "apply_exploration_floor",
     "compute_hypothesis_reward_weights",
     "compute_hypothesis_weights",
+    "compute_relative_value_regime_weights",
     "prior_mean",
 ]

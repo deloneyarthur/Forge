@@ -83,7 +83,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # from registry lookback to the Forge-owned signal_horizon table + the
     # sampler derives DTE from it; enumeration-layer only, the 21 `rules:`
     # unchanged).
-    assert grammar.grammar_version == "v8"  # type: ignore[attr-defined]
+    # D103 bumped v8 -> v9 (relative_value quality-bias: pairs pvalue/zscore
+    # sampling ranges tightened; enumeration-policy only, the 21 `rules:`
+    # again textually unchanged).
+    assert grammar.grammar_version == "v9"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

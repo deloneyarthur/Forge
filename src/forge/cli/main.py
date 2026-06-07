@@ -580,6 +580,46 @@ def _load_hypothesis_weights(forge_db_path: Path) -> dict[str, float]:
     )
 
 
+def _load_regime_weights(forge_db_path: Path) -> dict[str, float]:
+    """D103 — per-regime-indicator reward weights for the relative_value
+    regime-gate pick.
+
+    Mirrors `_load_hypothesis_weights` (file-based gated export read to dodge
+    the writer's exclusive DuckDB lock; QueryError / OSError → {}). Returns the
+    RAW posterior (regime_indicator → reward); the sampler floors it (D067
+    analogue via `_pick_regime`) and falls back to uniform on `{}` (cold start),
+    so no CLI-side flooring is needed. Scoped to relative_value — the one
+    hypothesis whose regime pool is the whole registry (no §3.5 R-rule).
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import compute_relative_value_regime_weights
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=1000)
+    except (QueryError, OSError):
+        # The hypothesis-weights loader already logs export failures loudly
+        # once per process; degrade silently here to avoid duplicate spam.
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_relative_value_regime_weights(conn, gated_runs)
+
+
+def _format_regime_weights_line(weights: Mapping[str, float]) -> str:
+    """One-line journal summary of the learned relative_value regime weights:
+    the count + the top gates by reward (highest-signal for the operator)."""
+    top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    parts = ", ".join(f"{name}={w:.3f}" for name, w in top)
+    return f"regime_weights(relative_value): {len(weights)} gates learned; top: {parts}"
+
+
 def _load_trade_rate_priors(
     forge_db_path: Path,
     registry: RegistrySnapshot,
@@ -764,6 +804,7 @@ def _run_battery_for_seed(
     calibration: Calibration,
     *,
     hypothesis_weights: Mapping[str, float] | None = None,
+    regime_weights: Mapping[str, float] | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
@@ -828,6 +869,7 @@ def _run_battery_for_seed(
             seed=seed,
             max_candidates=max_candidates,
             hypothesis_weights=hypothesis_weights,
+            regime_weights=regime_weights,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
@@ -1177,6 +1219,12 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     hypothesis_weights = _load_hypothesis_weights(forge_db_path)
     if hypothesis_weights:
         typer.echo(_format_hypothesis_weights_line(hypothesis_weights))
+    # D103 — dynamic relative_value regime-gate weights (Sharpe-aware feedback).
+    # Cold start (no exports / no relative_value overlap) returns {}; the sampler
+    # then draws the regime gate uniformly, identical to pre-D103.
+    regime_weights = _load_regime_weights(forge_db_path)
+    if regime_weights:
+        typer.echo(_format_regime_weights_line(regime_weights))
     # D076 / Q16 — empirical-prior bucket stats for `expected_trades`.
     # Cold start (no exports / no overlap with submissions) returns {};
     # filter falls back to the activations heuristic for every config.
@@ -1209,6 +1257,7 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
             max_candidates,
             calibration,
             hypothesis_weights=hypothesis_weights,
+            regime_weights=regime_weights,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
             timings=timings,
@@ -1227,11 +1276,17 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     typer.echo(f"enumerated={len(reports)} passed_prefilter={passed}")
 
     _t_rank = _time.monotonic()
+    from forge.ranking.queue import _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS
+
     ranked = rank_batch(
         ranker,
         reports,
         promoted_strategies=tuple(promoted),
         n=batch_size,
+        # D103 — guarantee each enumerable hypothesis a minimum batch share so
+        # the orthogonal relative_value sleeve can't be starved by a feedback
+        # oscillation (the midday mean_reversion flood).
+        min_per_hypothesis=_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
     )
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")

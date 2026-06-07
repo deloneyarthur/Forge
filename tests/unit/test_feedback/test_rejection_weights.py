@@ -29,6 +29,7 @@ from forge.feedback.rejection_weights import (
     apply_exploration_floor,
     compute_hypothesis_reward_weights,
     compute_hypothesis_weights,
+    compute_relative_value_regime_weights,
     prior_mean,
 )
 from forge.persistence.db import db_connection
@@ -694,3 +695,151 @@ def test_reward_weights_sharpe_clamped_to_unit(tmp_path: Path) -> None:
     # 0.5 + 0.2*0.75 + 0.3*clamp(5/2)=0.5+0.15+0.3=0.95 → (1+0.95)/12
     assert reward["volatility_event"] == pytest.approx(1.95 / 12, rel=1e-6)
     assert 0.0 < reward["volatility_event"] < 1.0
+
+
+# ---------------------------------------------------------------------------
+# D103 (v9) — dynamic relative_value regime-gate curation. relative_value has no
+# §3.5 R-rule, so the sampler draws its mandatory regime gate near-uniformly from
+# the whole registry — and the most-sampled gates (rsi_2, rv_rank) are among the
+# WORST for pairs convergence. `compute_relative_value_regime_weights` learns,
+# per regime indicator, the same Sharpe-aware reward the hypothesis weighter uses,
+# scoped to relative_value, so the sampler tilts toward gates that yield
+# gate-passing components. The regime POOL is unchanged (no rule edit).
+# ---------------------------------------------------------------------------
+
+
+def _cfg_with_regime(
+    hypothesis: str,
+    regime_indicator: str,
+    name: str,
+    *,
+    directional: str = "pairs_zscore",
+) -> StrategyConfig:
+    """A config of `hypothesis` whose regime_filter gate is `regime_indicator`."""
+    return StrategyConfig(
+        name=name,
+        hypothesis=hypothesis,  # type: ignore[arg-type]
+        dte_bucket="swing_mid",
+        underlying=None if hypothesis == "relative_value" else "SPY",
+        tier=2,
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=(directional,),
+                params={"threshold": -0.6, "op": "<"},
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=(regime_indicator,),
+                params={"threshold": 40.0, "op": "<"},
+            ),
+        ),
+        combiner=CombinerSpec(),
+        selector=SelectorSpec(
+            delta_target=0.45,
+            delta_tolerance=0.05,
+            dte_min=33,
+            dte_max=45,
+        ),
+        sizer=SizerSpec(mode="fixed_risk_pct"),
+        exits=_MANDATORY_EXITS,
+    )
+
+
+def test_d103_regime_weights_empty_returns_empty(tmp_path: Path) -> None:
+    """Cold start: no gated_runs → empty → sampler falls back to uniform."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        assert compute_relative_value_regime_weights(conn, []) == {}
+
+
+def test_d103_regime_weights_higher_reward_gate_outweighs(tmp_path: Path) -> None:
+    """A regime gate whose relative_value runs trade + score high Sharpe must
+    outweigh one whose runs zero-trade — the sampler learns toward it."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated: list[GatedRun] = []
+        for i in range(10):  # good regime: trades, high sharpe
+            ch = f"good_{i:04d}"
+            _insert_submission(
+                conn,
+                config=_cfg_with_regime("relative_value", "put_call_flow", f"g_{i}"),
+                config_hash=ch,
+            )
+            gated.append(
+                _gated_run_graded(
+                    config_hash=ch, trade_count=80, gates_passed=3, gates_failed=1, wf_sharpe=1.5
+                )
+            )
+        for i in range(10):  # bad regime: zero-trade
+            ch = f"bad_{i:04d}"
+            _insert_submission(
+                conn,
+                config=_cfg_with_regime("relative_value", "rsi_2", f"b_{i}"),
+                config_hash=ch,
+            )
+            gated.append(
+                _gated_run_graded(config_hash=ch, trade_count=0, gates_passed=0, gates_failed=2)
+            )
+        weights = compute_relative_value_regime_weights(conn, gated)
+    assert weights["put_call_flow"] > weights["rsi_2"]
+    # good reward = 0.5 + 0.2*0.75 + 0.3*clamp(1.5/2)=0.5+0.15+0.225=0.875 → (1+8.75)/21
+    assert weights["put_call_flow"] == pytest.approx((1 + 8.75) / 21, rel=1e-6)
+    # bad reward = 0 → (1+0)/21
+    assert weights["rsi_2"] == pytest.approx(1 / 21, rel=1e-6)
+
+
+def test_d103_regime_weights_scoped_to_relative_value(tmp_path: Path) -> None:
+    """A non-relative_value config with the SAME regime indicator does NOT
+    contribute — the curation is scoped to relative_value only."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(
+            conn, config=_cfg_with_regime("relative_value", "adx", "rv1"), config_hash="rv_hash"
+        )
+        _insert_submission(
+            conn,
+            config=_cfg_with_regime("trend_continuation", "adx", "tc1", directional="rsi_2"),
+            config_hash="tc_hash",
+        )
+        gated = [
+            # relative_value: traded, 2/4 gates, no sharpe → reward 0.6
+            _gated_run_graded(
+                config_hash="rv_hash", trade_count=50, gates_passed=2, gates_failed=2
+            ),
+            # trend promote (reward 1.0) — must be EXCLUDED from the adx bucket
+            _gated_run_graded(
+                config_hash="tc_hash",
+                decision="promote",
+                trade_count=100,
+                gates_passed=4,
+                gates_failed=0,
+            ),
+        ]
+        weights = compute_relative_value_regime_weights(conn, gated)
+    assert set(weights) == {"adx"}
+    # only the rv run contributes: (1+0.6)/(1+10+1) = 1.6/12 (NOT inflated by the trend promote)
+    assert weights["adx"] == pytest.approx(1.6 / 12, rel=1e-6)
+
+
+def test_d103_regime_weights_deterministic_and_orphans_skipped(tmp_path: Path) -> None:
+    """Hard rule #6 determinism + orphan/un-gated submissions ignored."""
+    with db_connection(tmp_path / "forge.db") as conn:
+        _insert_submission(
+            conn, config=_cfg_with_regime("relative_value", "iv_rank", "rv1"), config_hash="rv_hash"
+        )
+        # un-gated relative_value submission contributes nothing
+        _insert_submission(
+            conn, config=_cfg_with_regime("relative_value", "hurst", "rv2"), config_hash="ungated"
+        )
+        gated = [
+            _gated_run_graded(
+                config_hash="rv_hash", trade_count=40, gates_passed=2, gates_failed=2
+            ),
+            _gated_run_graded(config_hash="orphan", trade_count=99, gates_passed=4, gates_failed=0),
+        ]
+        first = compute_relative_value_regime_weights(conn, gated)
+        second = compute_relative_value_regime_weights(conn, gated)
+    assert first == second
+    assert set(first) == {"iv_rank"}  # hurst (un-gated) + orphan both excluded

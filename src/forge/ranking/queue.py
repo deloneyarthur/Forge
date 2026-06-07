@@ -27,6 +27,14 @@ if TYPE_CHECKING:
     from forge.ranking.scorer import Ranker
 
 
+# D103 — production per-hypothesis submission floor. Guarantees each enumerable
+# hypothesis at least this many of the batch's submitted slots so the orthogonal
+# (relative_value) sleeve can't be starved to ~0 by a feedback oscillation (the
+# midday mean_reversion flood). ~7.5% of a 200-config batch; binds only during a
+# crowding event — a safety net, not a target. Tunable.
+_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS: int = 15
+
+
 def rank_batch(
     ranker: Ranker,
     reports: Iterable[PreFilterReport],
@@ -34,6 +42,7 @@ def rank_batch(
     n: int,
     *,
     similarity_fn: Callable[[StrategyConfig, StrategyConfig], float] = jaccard_signal_ids,
+    min_per_hypothesis: int = 0,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
 
@@ -61,7 +70,9 @@ def rank_batch(
                 composite_score=composite,
             ),
         )
-    return select_top_n(scored, n, similarity_fn=similarity_fn)
+    return select_top_n(
+        scored, n, similarity_fn=similarity_fn, min_per_hypothesis=min_per_hypothesis
+    )
 
 
 __all__ = ["rank_batch"]

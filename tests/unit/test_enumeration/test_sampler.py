@@ -415,10 +415,13 @@ def test_d068_pairs_template_params_ranges() -> None:
 
     for seed in range(50):
         params = _directional_signal_params("pairs_zscore", random.Random(seed))
-        # D072 shifted ranges toward the permissive end of D068's sweep.
+        # D072 shifted ranges toward the permissive end of D068's sweep to
+        # solve zero-trade firing; D103 (v9) tightens pvalue_max + zscore_entry
+        # back toward the quality region now that firing is solved (see
+        # _sample_pairs_template_params).
         assert params["lookback"] in (126, 189, 252, 378)
-        assert 0.10 <= float(params["pvalue_max"]) <= 0.25
-        assert 0.5 <= float(params["zscore_entry"]) <= 1.5
+        assert 0.02 <= float(params["pvalue_max"]) <= 0.12
+        assert 1.0 <= float(params["zscore_entry"]) <= 2.0
         assert params["halflife_min"] in (1, 2, 3, 5)
         assert params["halflife_max"] in (20, 45, 60, 90)
         # The disjoint-range design must hold by construction.
@@ -446,6 +449,93 @@ def test_d068_non_pairs_indicator_does_not_get_template_params() -> None:
             assert forbidden_key not in params, (
                 f"unexpected pairs key {forbidden_key!r} on {indicator_id!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# D103 (v9) — pairs quality-bias: tighten cointegration + divergence entry
+# ---------------------------------------------------------------------------
+
+
+def test_d103_pairs_quality_bias_tightens_pvalue_and_zscore_entry() -> None:
+    """v9/D103 biases relative_value enumeration toward the higher-Sharpe
+    region of its config space, now that v5-v8 solved firing (current-grammar
+    relative_value fires ~77%, but median traded Sharpe was ~-0.085, failing
+    walk_forward_sharpe_median / cpcv_sharpe_p25).
+
+    Evidence (current-grammar gated relative_value, 2026-06-04):
+      - zscore_entry >= 1.0 -> median Sharpe +0.072 vs -0.177 below 1.0;
+      - pvalue_max <= 0.14 -> +0.023 vs -0.086 above.
+
+    So every sampled pairs config must enter on a larger divergence
+    (zscore_entry >= 1.0) and require stronger cointegration
+    (pvalue_max <= 0.12) than D072's fire-chasing ranges. This is a
+    TIGHTENING of enumeration scope (hard rule #3/#4: never loosens
+    Crucible's gate)."""
+    from forge.enumeration.sampler import _sample_pairs_template_params
+
+    for seed in range(200):
+        params = _sample_pairs_template_params(random.Random(seed))
+        assert float(params["zscore_entry"]) >= 1.0, params
+        assert float(params["pvalue_max"]) <= 0.12, params
+
+
+def _count_picks(hypothesis: str, regimes: tuple[str, ...], weights, *, seed: int, n: int) -> dict:
+    from forge.enumeration.sampler import _pick_regime
+
+    rng = random.Random(seed)
+    counts: dict[str, int] = {}
+    for _ in range(n):
+        r = _pick_regime(hypothesis, regimes, rng, weights)
+        counts[r] = counts.get(r, 0) + 1
+    return counts
+
+
+def test_d103_pick_regime_favors_high_weight_for_relative_value() -> None:
+    """The curated hypothesis tilts toward the high-weight regime gate but the
+    D067 floor keeps the low-weight gates explorable (never starved to zero)."""
+    regimes = ("rsi_2", "put_call_flow", "amihud")
+    weights = {"put_call_flow": 0.9, "rsi_2": 0.01, "amihud": 0.01}
+    counts = _count_picks("relative_value", regimes, weights, seed=0, n=2000)
+    assert counts["put_call_flow"] > counts["rsi_2"]
+    assert counts["put_call_flow"] > counts["amihud"]
+    assert counts.get("rsi_2", 0) > 0  # exploration floor keeps it sampled
+    assert counts.get("amihud", 0) > 0
+
+
+def test_d103_pick_regime_floor_keeps_zeroed_regime_explorable() -> None:
+    """An observed-but-zero-reward regime is floored (~0.05), so it keeps a
+    minimum sampling budget rather than collapsing to never-sampled."""
+    regimes = ("a", "b")
+    weights = {"a": 1.0, "b": 0.0}
+    counts = _count_picks("relative_value", regimes, weights, seed=1, n=3000)
+    # b floored to 0.05 vs a's 1.0 -> ~0.05/1.05 ≈ 4.8% of 3000 ≈ 140
+    assert counts.get("b", 0) > 50
+
+
+def test_d103_pick_regime_uniform_and_byte_identical_for_non_curated() -> None:
+    """regime_weights present but hypothesis != relative_value -> uniform pick,
+    byte-identical to the pre-D103 `rng.choice` draw (other hypotheses' R-rule
+    pools are already coherent; D103 must not touch them or their determinism)."""
+    from forge.enumeration.sampler import _pick_regime
+
+    regimes = ("adx", "hurst", "rv_rank")
+    weights = {"adx": 0.99, "hurst": 0.005, "rv_rank": 0.005}
+    r1, r2 = random.Random(7), random.Random(7)
+    seq_pick = [_pick_regime("trend_continuation", regimes, r1, weights) for _ in range(40)]
+    seq_choice = [r2.choice(regimes) for _ in range(40)]
+    assert seq_pick == seq_choice  # weights ignored -> identical rng consumption
+
+
+def test_d103_pick_regime_cold_start_byte_identical_for_relative_value() -> None:
+    """relative_value with NO weights (cold start) -> uniform, byte-identical to
+    the pre-D103 `rng.choice` path (hard rule #6: weights are an added input)."""
+    from forge.enumeration.sampler import _pick_regime
+
+    regimes = ("a", "b", "c", "d")
+    r1, r2 = random.Random(123), random.Random(123)
+    seq_pick = [_pick_regime("relative_value", regimes, r1, None) for _ in range(40)]
+    seq_choice = [r2.choice(regimes) for _ in range(40)]
+    assert seq_pick == seq_choice
 
 
 def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySnapshot) -> None:

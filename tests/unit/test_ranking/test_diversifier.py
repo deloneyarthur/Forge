@@ -233,3 +233,113 @@ def test_select_does_not_repeat_candidates() -> None:
     out = select_top_n(cands, n=5)
     names = [r.report.config.name for r in out]
     assert len(names) == len(set(names))
+
+
+# ---------------------------------------------------------------------------
+# D103 (v9) — per-hypothesis submission-diversity floor. Guarantees each
+# enumerable hypothesis a minimum number of submitted slots so the orthogonal
+# (relative_value) sleeve can't be starved to ~0 by a feedback oscillation
+# (the midday mean_reversion flood). The greedy §6.3 diversity rule is preserved
+# both within the floor and in the fill phase.
+# ---------------------------------------------------------------------------
+
+
+def _candidate_h(
+    name: str,
+    hypothesis: str,
+    signals: tuple[str, ...],
+    composite_score: float,
+) -> RankedCandidate:
+    cfg = _named_config(name, signals).model_copy(update={"hypothesis": hypothesis})
+    rep = PreFilterReport(
+        config=cfg,
+        passed=True,
+        filter_results=MappingProxyType(
+            {"structural_redundancy": FilterResult(passed=True, score=1.0)}
+        ),
+        diagnostic_notes=(),
+    )
+    return RankedCandidate(
+        report=rep,
+        prior_promotion_score=0.0,
+        composite_score=composite_score,
+    )
+
+
+def test_d103_floor_rescues_starved_hypothesis() -> None:
+    """A high-scoring hypothesis monopolizes the unfloored top-N; the floor
+    guarantees the low-scoring orthogonal sleeve a minimum slot count."""
+    cands = [
+        _candidate_h(f"mr_{i}", "mean_reversion", (f"mrd{i}", f"mrr{i}"), 0.9) for i in range(30)
+    ]
+    cands += [
+        _candidate_h(f"rv_{i}", "relative_value", (f"rvd{i}", f"rvr{i}"), 0.2) for i in range(5)
+    ]
+    no_floor = select_top_n(cands, 20)
+    n_rv_nofloor = sum(1 for c in no_floor if c.report.config.hypothesis == "relative_value")
+    floored = select_top_n(cands, 20, min_per_hypothesis=3)
+    n_rv_floored = sum(1 for c in floored if c.report.config.hypothesis == "relative_value")
+    assert n_rv_nofloor == 0  # starved without the floor
+    assert n_rv_floored >= 3  # rescued by the floor
+    assert len(floored) == 20
+
+
+def test_d103_floor_degrades_when_few_survivors() -> None:
+    """A hypothesis with fewer than `min_per_hypothesis` survivors contributes
+    all it has — no crash, no over-reservation."""
+    cands = [
+        _candidate_h(f"mr_{i}", "mean_reversion", (f"mrd{i}", f"mrr{i}"), 0.9) for i in range(10)
+    ]
+    cands += [_candidate_h("rv_0", "relative_value", ("rvd0", "rvr0"), 0.1)]  # only 1 available
+    floored = select_top_n(cands, 8, min_per_hypothesis=3)
+    n_rv = sum(1 for c in floored if c.report.config.hypothesis == "relative_value")
+    assert n_rv == 1
+    assert len(floored) == 8
+
+
+def test_d103_floor_zero_is_legacy_identical() -> None:
+    """min_per_hypothesis=0 reproduces the legacy greedy selection byte-for-byte."""
+    cands = [
+        _candidate_h(
+            f"c_{i}",
+            "mean_reversion" if i % 2 else "relative_value",
+            (f"d{i}", f"r{i}"),
+            1.0 - i * 0.01,
+        )
+        for i in range(15)
+    ]
+    legacy = select_top_n(cands, 8)
+    explicit_zero = select_top_n(cands, 8, min_per_hypothesis=0)
+    assert [c.report.config.name for c in legacy] == [c.report.config.name for c in explicit_zero]
+
+
+def test_d103_floor_never_exceeds_n() -> None:
+    """Σ floors > n must not over-select; the floor phase stops at n."""
+    cands = []
+    for hyp in (
+        "mean_reversion",
+        "trend_continuation",
+        "volatility_event",
+        "relative_value",
+        "regime_arbitrage",
+    ):
+        cands += [
+            _candidate_h(f"{hyp}_{i}", hyp, (f"{hyp}d{i}", f"{hyp}r{i}"), 0.5) for i in range(10)
+        ]
+    floored = select_top_n(cands, 12, min_per_hypothesis=5)  # 5*5=25 reserved > 12
+    assert len(floored) == 12
+
+
+def test_d103_floor_deterministic() -> None:
+    cands = [
+        _candidate_h(
+            f"c_{i}",
+            "mean_reversion" if i % 3 else "relative_value",
+            (f"d{i}", f"r{i}"),
+            1.0 - i * 0.005,
+        )
+        for i in range(20)
+    ]
+    a = select_top_n(cands, 10, min_per_hypothesis=2)
+    b = select_top_n(cands, 10, min_per_hypothesis=2)
+    assert [c.report.config.name for c in a] == [c.report.config.name for c in b]

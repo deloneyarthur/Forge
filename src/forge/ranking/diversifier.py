@@ -58,6 +58,7 @@ def select_top_n(
     n: int,
     *,
     similarity_fn: Callable[[StrategyConfig, StrategyConfig], float] = jaccard_signal_ids,
+    min_per_hypothesis: int = 0,
 ) -> list[RankedCandidate]:
     """Greedy DPP-style selection of `n` candidates from `candidates`.
 
@@ -70,12 +71,21 @@ def select_top_n(
     Returns up to `n` candidates in selection order. If `n` exceeds the
     pool size, all candidates are returned. Raises `ValueError` if
     `n < 0`.
+
+    ``min_per_hypothesis`` (D103) reserves a per-hypothesis floor of the
+    `n` slots so an orthogonal sleeve (relative_value) can't be starved to
+    ~0 by a higher-scoring hypothesis monopolizing the composite (the
+    midday mean_reversion-flood failure mode). `0` (default) keeps the
+    legacy unfloored greedy exactly.
     """
     if n < 0:
         msg = f"n must be >= 0; got {n}"
         raise ValueError(msg)
     if n == 0 or not candidates:
         return []
+
+    if min_per_hypothesis > 0:
+        return _select_top_n_floored(candidates, n, similarity_fn, min_per_hypothesis)
 
     # Default-path fast variant: precompute signal-key sets once per
     # candidate so the inner loop is set-arithmetic on cached frozensets
@@ -150,6 +160,86 @@ def _select_top_n_generic(
         selected.append(remaining.pop(best_index))
 
     return selected
+
+
+def _select_top_n_floored(
+    candidates: Sequence[RankedCandidate],
+    n: int,
+    similarity_fn: Callable[[StrategyConfig, StrategyConfig], float],
+    min_per_hypothesis: int,
+) -> list[RankedCandidate]:
+    """Greedy selection with a per-hypothesis floor (D103).
+
+    Two phases, both using the same §6.3 greedy rule (highest
+    ``composite_score * (1 - max_similarity_to_selected)``, strict-``>``
+    tie-break so earlier candidates win):
+
+      1. **Floor** — for each hypothesis in deterministic (sorted) order,
+         greedily reserve up to ``min_per_hypothesis`` of its candidates (or
+         all of them if fewer), scored against the running global selection so
+         cross-hypothesis diversity still applies. Stops early once ``n`` fills.
+      2. **Fill** — greedily take the remaining ``n - selected`` from the whole
+         unselected pool.
+
+    Determinism (hard rule #6) holds: sorted hypothesis order + strict-``>``
+    greedy tie-break. Uses cached signal-key frozensets on the default Jaccard
+    path (production); falls back to ``similarity_fn`` for a custom metric.
+    """
+    use_jaccard = similarity_fn is jaccard_signal_ids
+    keys = [_signal_keys(c.report.config) for c in candidates] if use_jaccard else []
+
+    selected_idx: list[int] = []
+    selected_set: set[int] = set()
+
+    def _penalty(idx: int) -> float:
+        if not selected_idx:
+            return 0.0
+        if use_jaccard:
+            k_idx = keys[idx]
+            if not k_idx:
+                return 0.0
+            best = 0.0
+            for sidx in selected_idx:
+                k_sidx = keys[sidx]
+                if not k_sidx:
+                    continue
+                sim = len(k_idx & k_sidx) / len(k_idx | k_sidx)
+                best = max(best, sim)
+            return best
+        return max(
+            similarity_fn(candidates[idx].report.config, candidates[s].report.config)
+            for s in selected_idx
+        )
+
+    def _take(pool: Sequence[int], count: int) -> None:
+        for _ in range(count):
+            if len(selected_idx) >= n:
+                return
+            best_idx = -1
+            best_adjusted = -1.0
+            for idx in pool:
+                if idx in selected_set:
+                    continue
+                adjusted = candidates[idx].composite_score * (1.0 - _penalty(idx))
+                # Strict `>` mirrors §6.3 — earlier candidates win ties.
+                if adjusted > best_adjusted:
+                    best_adjusted = adjusted
+                    best_idx = idx
+            if best_idx < 0:
+                return
+            selected_idx.append(best_idx)
+            selected_set.add(best_idx)
+
+    by_hyp: dict[str, list[int]] = {}
+    for idx, cand in enumerate(candidates):
+        by_hyp.setdefault(cand.report.config.hypothesis, []).append(idx)
+    for hyp in sorted(by_hyp):
+        if len(selected_idx) >= n:
+            break
+        _take(by_hyp[hyp], min(min_per_hypothesis, len(by_hyp[hyp])))
+
+    _take(range(len(candidates)), n - len(selected_idx))
+    return [candidates[i] for i in selected_idx]
 
 
 __all__ = ["jaccard_signal_ids", "select_top_n"]
