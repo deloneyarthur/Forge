@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
 from typer.testing import CliRunner
 
 from forge.cli.main import app
+from forge.core.clock import utc_now
 from forge.persistence.db import db_connection
 from forge.submission.rate_limiter import check_rate_limit
 from tests.fixtures.strategy_configs import minimal_strategy_config
@@ -32,8 +33,18 @@ from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
 runner = CliRunner()
 
 
-def _gate_one_in_crucible(crucible_db: Path, *, config_hash: str) -> None:
-    """Add a gated_run row + matching PromotionDecision to the Crucible DB."""
+def _gate_one_in_crucible(
+    crucible_db: Path, *, config_hash: str, decided_at: datetime | None = None
+) -> None:
+    """Add a gated_run row + matching PromotionDecision to the Crucible DB.
+
+    `decided_at` is stored tz-naive: this helper opens a raw `duckdb.connect`
+    (not `open_db`), so the D061 session-TZ pin does not apply and an aware
+    datetime would be converted via the *system* timezone — which made the
+    D052 flush watermark (min decided_at) box-dependent (masked on the old
+    PDT box, exposed on a UTC box).
+    """
+    stamp = (decided_at or utc_now()).replace(tzinfo=None)
     conn = duckdb.connect(str(crucible_db))
     try:
         run_id = str(uuid.uuid4())
@@ -59,7 +70,7 @@ def _gate_one_in_crucible(crucible_db: Path, *, config_hash: str) -> None:
                 run_id,
                 "reject",
                 json.dumps(gate_body),
-                datetime(2026, 5, 13, 14, tzinfo=UTC),
+                stamp,
                 "gate_v1",
             ],
         )
@@ -70,7 +81,9 @@ def _gate_one_in_crucible(crucible_db: Path, *, config_hash: str) -> None:
 def _seed_prior_batch(forge_db: Path, *, batch_size: int) -> tuple[uuid.UUID, list[str]]:
     """Insert N submitted submissions sharing a forge_batch_id; return ids."""
     batch_id = uuid.uuid4()
-    submitted_at = datetime(2026, 5, 13, 12, tzinfo=UTC)
+    # Now-relative, not hardcoded: a fixed date eventually drifts relative to
+    # the decision stamps and silently flips the D052 flush behavior.
+    submitted_at = utc_now()
     hashes: list[str] = []
     with db_connection(forge_db) as conn:
         conn.execute(
@@ -147,6 +160,16 @@ def test_forge_run_exits_cleanly_with_partial_prior_batch(tmp_path: Path) -> Non
     # Only gate 3/10 -> 30%, well below the 80% threshold.
     for h in hashes[:3]:
         _gate_one_in_crucible(crucible_db, config_hash=h)
+    # Watermark anchor — model Crucible's rolling export window faithfully:
+    # real exports always carry older, unrelated-config decisions, so
+    # min(decided_at) sits BELOW any fresh submitted_at. Without it the 3
+    # decisions above ARE the whole window, the D052 flush sentinels the 7
+    # pending rows, and the limiter sees an empty in-flight set (no block).
+    _gate_one_in_crucible(
+        crucible_db,
+        config_hash="deadbeef00000000",
+        decided_at=utc_now() - timedelta(days=1),
+    )
 
     # Count submissions before the next forge-run attempt.
     with db_connection(forge_db) as conn:
@@ -200,6 +223,12 @@ def test_forge_run_unblocks_after_threshold_reached(tmp_path: Path) -> None:
     _, hashes = _seed_prior_batch(forge_db, batch_size=10)
     for h in hashes[:3]:
         _gate_one_in_crucible(crucible_db, config_hash=h)
+    # Watermark anchor — see test_forge_run_exits_cleanly_with_partial_prior_batch.
+    _gate_one_in_crucible(
+        crucible_db,
+        config_hash="deadbeef00000000",
+        decided_at=utc_now() - timedelta(days=1),
+    )
 
     blocked = runner.invoke(
         app,
