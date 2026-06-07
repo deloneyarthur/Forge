@@ -503,3 +503,13 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 **Resolution (2026-06-03, D100/v7):** operator confirmed the trending-regime thesis — `hurst`'s `trend_continuation` regime gate should allow when TRENDING. Flipped `op_regime` to `>` + set `regime_percentile_range=(0.25, 0.50)` (allow ~top 50-75%, mirroring `adx`) on the `hurst` table entry. `hurst`'s separate `mean_reversion` **directional** use (`op_directional="<"`, fire when mean-reverting) is correct and untouched — only the regime op moved. Shipped in the v7 bump alongside the mean_reversion cold-start (orthogonal by hypothesis). Test: `test_hurst_regime_op_is_trending_but_directional_unchanged`.
 
 **Tag:** `grammar`, `firing-rate`, `relates-to-D099`, `relates-to-D100`, `operator-decision`, `resolved`
+
+## 2026-06-07 — Q27 — `forge_funnel.json` buckets by grammar-version STAMP, so the v9 bucket contains v8-code batches — re-bucket by the D104 cutover? — **LOW SEVERITY**
+
+**Symptom:** `funnel/aggregate.build_funnel_export` groups `batch_summaries` purely on `grammar_version`, and `build_version_map` likewise labels each `config_hash` by stamp. Per D104, 27 v9-stamped batches (06-05 07:52 → 06-06 04:40Z) ran v8 code, so the export's v9 upstream stages (enumerated / survived / rejection breakdown) blend two code generations. Crucible flagged it (`FORGE_v9_timecut_response.md` §2, "optional ask") and currently annotates around it — their gating stages cohort correctly via their own `grammar_cutovers.yaml` relabel.
+
+**Proposed fix (if/when wanted):** a Forge-side cutover config (mirroring Crucible's: `version`, `live_at`, `effective_prior`) consumed by `build_funnel_export`/`build_version_map` as a read-time relabel on `batch_summaries.submitted_at` — never rewriting stored stamps, always reporting the relabel count in `coverage`. Needs TDD (unit tests on the relabel + the never-silent count) + a schema_version note for the export consumers. ~Half-day.
+
+**Why not now:** Crucible-side stages are the ones that gate, and they already cohort correctly; the D104 hygiene rule (clean live tree) makes recurrence unlikely. Revisit if a third labeling incident happens or if Crucible upgrades the ask from "optional."
+
+**Tag:** `funnel`, `exports`, `relates-to-D104`, `relates-to-D096`, `low`
