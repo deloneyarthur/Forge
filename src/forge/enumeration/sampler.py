@@ -925,6 +925,12 @@ def _regime_signal_params(
     params = sample_threshold_params(regime_id, "regime_filter", rng)
     if regime_id == "rv_rank":
         params.update(_sample_rv_rank_params(rng))
+    # D107 (v11 / H3): mean_reversion uses the LONG-gamma side of the flip
+    # (op "<", flip below spot -> dealers long gamma -> dampening -> ranging);
+    # the indicator_thresholds default op ">" is the trend / short-gamma side.
+    # The regime "switch" lives here -- same gate, opposite side per hypothesis.
+    if hypothesis == "mean_reversion" and regime_id == "gamma_flip_distance_pct":
+        params["op"] = "<"
     return params
 
 

@@ -178,7 +178,21 @@ _P3_DELTA_BAND: dict[str, tuple[float, float]] = {
 # §3.5 R2 regime-gate indicator requirements.
 # D077: expanded from (adx, hurst) to include rv_rank — PTS thesis
 # "enter trend-following when realized vol is cheap" (Crucible rv_rank.py).
-_R2_TREND_CONTINUATION_REGIME_INDICATORS = ("adx", "hurst", "rv_rank")
+# D107 (v11 / H3): expanded to include gamma_flip_distance_pct — the
+# dealer-gamma regime switch. Trend pays in the SHORT-gamma / vol-amplifying
+# regime: per indicator_thresholds, "Positive = flip above spot -> dealers
+# short gamma -> vol amplifying", so the gate fires when
+# gamma_flip_distance_pct > threshold (op_regime ">", which the threshold
+# table already sets — no sampler change). Web-grounded (SpotGamma/SqueezeMetrics
+# negative-gamma = trending) and data-grounded (trend's 0.62% component rate is
+# the weakest archetype; gating it to its productive regime is the lever).
+# The mean_reversion side (long-gamma / op "<") ships as the next increment.
+_R2_TREND_CONTINUATION_REGIME_INDICATORS = (
+    "adx",
+    "hurst",
+    "rv_rank",
+    "gamma_flip_distance_pct",
+)
 # T1.4 (PROMPT_5_FORGE_V1_1_REVISED, grammar v2): expanded from
 # (days_to_earnings, days_to_fomc) to include macro-event indicators
 # (days_to_cpi, days_to_nfp, days_to_opex) that Crucible Prompt 6 added
@@ -202,6 +216,12 @@ _R3_ETF_UNDERLYINGS = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 # §3.5 R1 IV-rank gate parameters.
 _R1_IV_RANK_INDICATOR = "iv_rank"
 _R1_IV_RANK_MAX_THRESHOLD = 50.0
+# D107 (v11 / H3, MR side): the dealer-gamma regime gate is an accepted
+# ALTERNATIVE to the iv_rank cheap-IV gate for mean_reversion — MR pays in the
+# LONG-gamma / dampening / ranging regime (flip below spot → op_regime "<", which
+# the sampler sets; the indicator_thresholds default ">" is the trend / short-gamma
+# side). The "switch": same indicator, opposite side per hypothesis.
+_R1_GAMMA_REGIME_INDICATOR = "gamma_flip_distance_pct"
 
 # §3.5 X1 / X2 sizer-mode → required indicator id.
 _X1_VOL_TARGET_INDICATOR = "realized_vol"
@@ -710,12 +730,22 @@ def _r1_mean_reversion_requires_iv_rank_gate(
     registry: RegistrySnapshot,
 ) -> PredicateResult:
     """D013 collapsed the second clause of R1 (it was tautological given
-    C2): the rule fires whenever hypothesis == mean_reversion."""
+    C2): the rule fires whenever hypothesis == mean_reversion.
+
+    D107 (v11 / H3, MR side): a dealer-gamma regime gate
+    (`gamma_flip_distance_pct`) is an accepted ALTERNATIVE to the iv_rank
+    cheap-IV gate — MR pays in the long-gamma / dampening / ranging regime.
+    Either gate satisfies R1."""
     del registry
     if config.hypothesis != "mean_reversion":
         return PredicateResult(passed=True)
     for regime in _regime_filter_signals(config):
-        if _R1_IV_RANK_INDICATOR not in regime.indicators:  # type: ignore[attr-defined]
+        inds = regime.indicators  # type: ignore[attr-defined]
+        # D107: a gamma-flip regime gate satisfies R1 on its own (the side is
+        # set by the sampler's op, not constrained here — like adx/hurst in R2).
+        if _R1_GAMMA_REGIME_INDICATOR in inds:
+            return PredicateResult(passed=True)
+        if _R1_IV_RANK_INDICATOR not in inds:
             continue
         threshold = regime.params.get("threshold")  # type: ignore[attr-defined]
         if (
@@ -727,9 +757,9 @@ def _r1_mean_reversion_requires_iv_rank_gate(
     return PredicateResult(
         passed=False,
         detail=(
-            f"R1: hypothesis=mean_reversion requires a regime_filter "
-            f"signal with indicator {_R1_IV_RANK_INDICATOR!r} and "
-            f"params.threshold ≤ {_R1_IV_RANK_MAX_THRESHOLD}"
+            f"R1: hypothesis=mean_reversion requires a regime_filter signal with "
+            f"{_R1_IV_RANK_INDICATOR!r} (params.threshold ≤ {_R1_IV_RANK_MAX_THRESHOLD}) "
+            f"or {_R1_GAMMA_REGIME_INDICATOR!r} (the D107 dealer-gamma regime gate)"
         ),
     )
 

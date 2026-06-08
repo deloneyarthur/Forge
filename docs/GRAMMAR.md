@@ -254,25 +254,25 @@ is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.)
 
 ## Regime coherence rules
 
-### R1: Mean-reversion requires IV-rank gate
+### R1: Mean-reversion requires IV-rank gate (v1, D013; v11, D107)
 
-**What.** When `hypothesis == "mean_reversion"`, at least one `regime_filter` signal must reference indicator `iv_rank` with `params.threshold ≤ 50`. (D013 collapsed the second clause about directional-family alignment — redundant given C2.)
+**What.** When `hypothesis == "mean_reversion"`, at least one `regime_filter` signal must reference either `iv_rank` with `params.threshold ≤ 50`, **or** `gamma_flip_distance_pct` (v11, D107 — the dealer-gamma regime switch, MR side). (D013 collapsed the second clause about directional-family alignment — redundant given C2.)
 
-**Why.** Mean-reversion strategies make money by selling rich premium that mean-reverts. Selling premium when IV is already low (cheap premium) is selling lottery tickets — there's no premium to capture, and any IV expansion hurts. The gate forces strategies to declare "fire only when IV is cheap enough that the reversion has room to work."
+**Why.** Mean-reversion strategies make money by selling rich premium that mean-reverts. Selling premium when IV is already low (cheap premium) is selling lottery tickets — there's no premium to capture, and any IV expansion hurts. The `iv_rank` gate forces "fire only when IV is cheap enough that the reversion has room to work." `gamma_flip_distance_pct` (v11, D107) is the alternative dealer-gamma regime gate: MR pays in the **long-gamma / dampening / ranging** regime (flip below spot → dealers long gamma → mean-reverting price action), the op `"<"` side set by the sampler — the complement of R2's trend-side gamma gate (op `">"`, short-gamma). Same indicator, opposite side per hypothesis: the regime "switch."
 
-**Cost.** Medium. Excludes mean-reversion strategies that don't explicitly gate on IV.
+**Cost.** Medium. Excludes mean-reversion strategies that don't explicitly gate on IV or the dealer-gamma regime.
 
-**Evidence to relax.** Promoted mean-reversion strategies that use a non-`iv_rank` IV-percentile proxy (e.g., `iv_zscore`, custom realized-vs-implied ratio).
+**Evidence to relax.** Promoted mean-reversion strategies that use a non-`iv_rank`, non-`gamma_flip_distance_pct` regime proxy (e.g., `iv_zscore`, custom realized-vs-implied ratio).
 
-### R2: Trend strategies require regime gate (v2, D077)
+### R2: Trend strategies require regime gate (v2, D077; v11, D107)
 
-**What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx`, `hurst`, or `rv_rank`.
+**What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx`, `hurst`, `rv_rank`, or `gamma_flip_distance_pct`.
 
-**Why.** Trend-continuation strategies presume there *is* a trend to continue. Firing in range-bound markets is dead-weight risk. `adx` gates on trend strength, `hurst` on trend persistence. `rv_rank` (v2, D077) gates on realized-vol regime — PTS thesis: "enter trend-following long calls when realized vol is cheap" (`rv_rank < threshold`, `op: "<"`).
+**Why.** Trend-continuation strategies presume there *is* a trend to continue. Firing in range-bound markets is dead-weight risk. `adx` gates on trend strength, `hurst` on trend persistence. `rv_rank` (v2, D077) gates on realized-vol regime — PTS thesis: "enter trend-following long calls when realized vol is cheap" (`rv_rank < threshold`, `op: "<"`). `gamma_flip_distance_pct` (v11, D107 — the dealer-gamma regime switch, H3) gates on the dealer-gamma regime: trend pays when dealers are SHORT gamma and amplifying moves (flip above spot → `gamma_flip_distance_pct > threshold`, `op: ">"`), per the GEX literature (SpotGamma/SqueezeMetrics: negative-gamma = trending) and Forge's own gated cohort (trend is the weakest archetype; gating it to its productive regime is the lever).
 
 **Cost.** Medium. Excludes trend strategies without an explicit regime filter from the accepted set.
 
-**Evidence to relax.** Promoted trend strategies that use a regime gate outside `{adx, hurst, rv_rank}`.
+**Evidence to relax.** Promoted trend strategies that use a regime gate outside `{adx, hurst, rv_rank, gamma_flip_distance_pct}`.
 
 ### R3: Volatility-event strategies require event-proximity gate
 

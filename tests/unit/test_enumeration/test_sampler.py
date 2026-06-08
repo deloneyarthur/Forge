@@ -1096,3 +1096,29 @@ def test_d106_triple_cold_start_byte_identical(
             underlying_name_weights={},
         )
         assert base.config_hash == full_none.config_hash, f"seed={seed}"
+
+
+def test_regime_signal_params_gamma_flip_op_is_hypothesis_aware() -> None:
+    """D107 (v11 / H3): the dealer-gamma regime gate fires on opposite sides of
+    the flip per hypothesis. mean_reversion uses the LONG-gamma / dampening side
+    (op '<', flip below spot); trend_continuation uses the SHORT-gamma /
+    amplifying side (op '>', the indicator_thresholds default). Same indicator,
+    opposite regime selection — the 'switch'."""
+    from forge.enumeration.sampler import _regime_signal_params
+
+    rng = random.Random(20260608)
+    mr = _regime_signal_params("mean_reversion", "gamma_flip_distance_pct", rng)
+    trend = _regime_signal_params("trend_continuation", "gamma_flip_distance_pct", rng)
+    assert mr["op"] == "<"
+    assert trend["op"] == ">"
+
+
+def test_regime_signal_params_gamma_op_flip_scoped_to_gamma_only() -> None:
+    """The MR op-flip is scoped to gamma_flip_distance_pct — iv_rank (MR's other
+    R1 gate) is byte-identical to the raw threshold sampler, no override leaked."""
+    from forge.enumeration.indicator_thresholds import sample_threshold_params
+    from forge.enumeration.sampler import _regime_signal_params
+
+    via_regime = _regime_signal_params("mean_reversion", "iv_rank", random.Random(7))
+    via_raw = sample_threshold_params("iv_rank", "regime_filter", random.Random(7))
+    assert via_regime == via_raw

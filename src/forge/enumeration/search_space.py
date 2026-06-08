@@ -34,6 +34,7 @@ from forge.grammar.custom_predicates import (
     _C2_HYPOTHESIS_FAMILIES,
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
+    _R1_GAMMA_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
@@ -246,7 +247,11 @@ def _build_regime_pool(
         if hyp == "trend_continuation":
             pool[hyp] = tuple(sorted(set(_R2_TREND_CONTINUATION_REGIME_INDICATORS) & registry_ids))
         elif hyp == "mean_reversion":
-            pool[hyp] = (_R1_IV_RANK_INDICATOR,) if _R1_IV_RANK_INDICATOR in registry_ids else ()
+            # D107 (v11 / H3, MR side): gamma_flip_distance_pct joins iv_rank as
+            # an accepted R1 regime gate (the long-gamma / ranging regime).
+            pool[hyp] = tuple(
+                sorted({_R1_IV_RANK_INDICATOR, _R1_GAMMA_REGIME_INDICATOR} & registry_ids)
+            )
         elif hyp == "volatility_event":
             pool[hyp] = tuple(sorted(set(_R3_EVENT_PROXIMITY_INDICATORS) & registry_ids))
         else:

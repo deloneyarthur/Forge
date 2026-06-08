@@ -21,6 +21,7 @@ from crucible_contracts import (
 
 from forge.enumeration.search_space import (
     SearchSpace,
+    _build_regime_pool,
     build_search_space,
 )
 from forge.grammar import load_grammar
@@ -189,7 +190,10 @@ def test_directional_pool_regime_arbitrage_is_any_family(
 
 
 def test_regime_pool_trend_continuation_is_r2(space: SearchSpace) -> None:
-    """R2: trend_continuation regime gate is adx, hurst, or rv_rank (D077)."""
+    """R2: trend_continuation regime gate is adx, hurst, or rv_rank (D077).
+    (The minimal fixture registry omits gamma_flip_distance_pct; D107's
+    gamma-gate pool membership is covered directly in
+    `test_regime_pool_trend_continuation_includes_gamma_flip`.)"""
     assert space.regime_indicators_by_hypothesis["trend_continuation"] == (
         "adx",
         "hurst",
@@ -197,9 +201,35 @@ def test_regime_pool_trend_continuation_is_r2(space: SearchSpace) -> None:
     )
 
 
+def test_regime_pool_trend_continuation_includes_gamma_flip() -> None:
+    """D107 (v11 / H3): when the registry carries `gamma_flip_distance_pct` (it
+    does live — enumerated 3.4k+ times), it joins the trend_continuation regime
+    pool via R2, sorted second. Tested directly on `_build_regime_pool` so the
+    shared minimal fixture (and its golden sampler-sequence tests) stays stable."""
+    pool = _build_regime_pool({"adx", "hurst", "rv_rank", "gamma_flip_distance_pct"})
+    assert pool["trend_continuation"] == (
+        "adx",
+        "gamma_flip_distance_pct",
+        "hurst",
+        "rv_rank",
+    )
+
+
 def test_regime_pool_mean_reversion_is_iv_rank(space: SearchSpace) -> None:
-    """R1: mean_reversion regime gate is iv_rank."""
+    """R1: mean_reversion regime gate is iv_rank. (The minimal fixture omits
+    gamma_flip_distance_pct; the D107 gamma-gate pool membership is covered in
+    `test_regime_pool_mean_reversion_includes_gamma_flip`.)"""
     assert space.regime_indicators_by_hypothesis["mean_reversion"] == ("iv_rank",)
+
+
+def test_regime_pool_mean_reversion_includes_gamma_flip() -> None:
+    """D107 (v11 / H3, MR side): when the registry carries
+    `gamma_flip_distance_pct`, it joins mean_reversion's R1 regime pool as an
+    alternative to `iv_rank` (the long-gamma / ranging regime). Pool is sorted →
+    gamma_flip first. Tested directly on `_build_regime_pool` so the shared
+    minimal fixture (and its golden sampler-sequence tests) stays stable."""
+    pool = _build_regime_pool({"iv_rank", "gamma_flip_distance_pct"})
+    assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "iv_rank")
 
 
 def test_regime_pool_volatility_event_is_event_proximity(

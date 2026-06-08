@@ -113,9 +113,7 @@ def test_m15_grammar_md_s5_documents_every_exit_in_source_table() -> None:
 
     from forge.grammar.custom_predicates import _S5_HYPOTHESIS_EXITS
 
-    grammar_md = (
-        Path(__file__).resolve().parents[3] / "docs" / "GRAMMAR.md"
-    ).read_text()
+    grammar_md = (Path(__file__).resolve().parents[3] / "docs" / "GRAMMAR.md").read_text()
     match = re.search(r"### S5:.*?(?=\n### |\n## |\Z)", grammar_md, re.DOTALL)
     assert match, "GRAMMAR.md is missing the ### S5 section"
     s5 = match.group(0)
@@ -232,11 +230,15 @@ def test_d071_volatility_event_missing_required_always_fails() -> None:
         hypothesis="volatility_event",
         signals=(
             SignalSpec(
-                id="sig_directional", type="threshold", role="directional",
+                id="sig_directional",
+                type="threshold",
+                role="directional",
                 indicators=("put_call_flow",),
             ),
             SignalSpec(
-                id="sig_regime", type="threshold", role="regime_filter",
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
                 indicators=("days_to_earnings",),
             ),
         ),
@@ -934,6 +936,54 @@ def test_r1_iv_rank_threshold_above_50_fails() -> None:
     assert not result.passed
 
 
+def test_r1_mean_reversion_accepts_gamma_flip_gate() -> None:
+    """D107 (v11 / H3): a dealer-gamma regime gate is an accepted alternative to
+    the iv_rank cheap-IV gate for mean_reversion — MR pays in the long-gamma /
+    dampening / ranging regime (flip below spot → op_regime '<'). No iv_rank
+    present, yet R1 passes."""
+    cfg = grammar_valid_baseline(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("rsi_2",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("gamma_flip_distance_pct",),
+                params={"threshold": 0.0, "op": "<"},
+            ),
+        ),
+    )
+    result = evaluate(_predicate("mean_reversion_requires_iv_rank_gate"), cfg, _registry())
+    assert result.passed
+
+
+def test_r1_mean_reversion_without_iv_rank_or_gamma_fails() -> None:
+    """D107: with neither iv_rank nor a gamma gate, R1 still fires and fails."""
+    cfg = grammar_valid_baseline(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("rsi_2",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("adx",),  # neither iv_rank nor gamma_flip_distance_pct
+            ),
+        ),
+    )
+    result = evaluate(_predicate("mean_reversion_requires_iv_rank_gate"), cfg, _registry())
+    assert not result.passed
+
+
 # ---------------------------------------------------------------------------
 # R2 — trend_continuation → adx/hurst regime gate
 # ---------------------------------------------------------------------------
@@ -995,6 +1045,40 @@ def test_r2_trend_with_rv_rank_passes() -> None:
                 role="regime_filter",
                 indicators=("rv_rank",),
                 params={"threshold": 50, "op": "<", "rv_window": 21, "window": 252},
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="trailing_atr", params={"activate_after_gain_pct": 0.30}),
+        ),
+    )
+    result = evaluate(_predicate("trend_requires_trend_strength_gate"), cfg, _registry())
+    assert result.passed
+
+
+def test_r2_trend_with_gamma_flip_passes() -> None:
+    """D107 (v11 / H3): gamma_flip_distance_pct is an accepted regime gate for
+    trend_continuation — the dealer-gamma regime switch. Trend pays in the
+    short-gamma / vol-amplifying regime (flip above spot → dealers short gamma),
+    so the gate fires when gamma_flip_distance_pct > threshold (op_regime '>')."""
+    cfg = grammar_valid_baseline(
+        hypothesis="trend_continuation",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("ema_50",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("gamma_flip_distance_pct",),
+                params={"threshold": 0.0, "op": ">"},
             ),
         ),
         exits=(

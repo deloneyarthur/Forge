@@ -89,7 +89,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D105 bumped v9 -> v10 (pairs lookback drops the dead >280 band per
     # Crucible's yield map; enumeration-policy only, the 21 `rules:`
     # again textually unchanged).
-    assert grammar.grammar_version == "v10"  # type: ignore[attr-defined]
+    # D107 bumped v10 -> v11 (H3 dealer-gamma regime switch — R2's predicate
+    # constant adds gamma_flip_distance_pct; the 21 `rules:` again unchanged).
+    assert grammar.grammar_version == "v11"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
