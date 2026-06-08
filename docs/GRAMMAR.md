@@ -103,12 +103,13 @@ is a "foreign" exit and rejects.
 | `relative_value` | — | `convergence_exit` / `zscore_reversion_exit` | `time_stop` | — |
 | `volatility_event` | `iv_crush_exit`, `event_passed_exit` | — | `time_stop` | — |
 | `tail_hedge` | `roll_on_schedule_exit` | — | — | `hard_profit_target` |
+| `event_momentum` (v12, D109) | — | `time_stop` | `trailing_atr` / `chandelier_exit` | `hard_profit_target` |
 
 (`tail_hedge` is overlay-only and filtered at the sampler via D066's
 `OVERLAY_ONLY_HYPOTHESES`; its row is retained for parity. `hard_profit_target`
 is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.)
 
-**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — a trailing/chandelier/parabolic stop captures that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — a time stop or target/zscore exit bounds exposure. Volatility-event strategies have a discrete event in mind — exits must reference it (`event_passed_exit`) and the IV collapse (`iv_crush_exit`). The `required_from_set` choice lets Forge enumerate equivalent exit framings without contradicting the hypothesis; the `K_MAX_OPTIONAL` cap keeps the optional tail from bloating the stack.
+**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — a trailing/chandelier/parabolic stop captures that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — a time stop or target/zscore exit bounds exposure. Volatility-event strategies have a discrete event in mind — exits must reference it (`event_passed_exit`) and the IV collapse (`iv_crush_exit`). `event_momentum` (v12, D109) rides the post-earnings drift, which decays over ~5–20 td: a `time_stop` is the primary exit (the drift window closing), momentum trailing (`trailing_atr`/`chandelier_exit`) optionally lets a strong drift run, and `hard_profit_target` is forbidden — the payoff is convex/positive-skew (long optionality on the drift), the same profile as the vol_event winners. The `required_from_set` choice lets Forge enumerate equivalent exit framings without contradicting the hypothesis; the `K_MAX_OPTIONAL` cap keeps the optional tail from bloating the stack.
 
 **Cost.** Medium. Excludes most internally-inconsistent exit stacks; the surviving candidates have well-shaped exits.
 
@@ -120,7 +121,7 @@ is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.)
 
 ### C1: No two indicators from the same family
 
-**What.** Across all signals in the strategy, no two indicators share the same `IndicatorMetadata.family` (the 12 canonical families: `trend`, `trend_strength`, `mean_reversion`, `volatility`, `iv_structure`, `dealer_positioning`, `flow`, `macro`, `calendar`, `fundamental`, `smart_money`, `pairs`). The check reads `IndicatorMetadata.family` dynamically — the canonical list is `crucible_contracts._INDICATOR_FAMILIES` (12 since D019 added `trend_strength`); this prose count is informational only.
+**What.** Across all signals in the strategy, no two indicators share the same `IndicatorMetadata.family` (the 13 canonical families: `trend`, `trend_strength`, `mean_reversion`, `volatility`, `iv_structure`, `dealer_positioning`, `flow`, `macro`, `calendar`, `fundamental`, `smart_money`, `pairs`, `post_event_drift`). The check reads `IndicatorMetadata.family` dynamically — the canonical list is `crucible_contracts._INDICATOR_FAMILIES` (13 since v12/D109 added `post_event_drift` for H2 event_momentum; `trend_strength` was added by D019); this prose count is informational only. **This is the §2.1 fact H2 depends on:** `sue` is `post_event_drift` and `days_since_earnings` is `calendar` (Crucible reclassified it from `post_event_drift`), so the PEAD pair — surprise directional + post-event timing gate — is C1-legal in one config.
 
 **Why.** Two same-family indicators correlate by construction — they're measuring the same latent variable through different statistics. RSI(2) and RSI(14) are both mean-reversion family; using both is redundancy that inflates apparent confluence. The rule forces signal diversity: confluence comes from independent information sources, not parameter variations.
 
@@ -135,8 +136,9 @@ is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.)
 - `mean_reversion` → `mean_reversion`
 - `regime_arbitrage` → any family
 - `relative_value` → `pairs`
-- `volatility_event` → `iv_structure` or `flow`
+- `volatility_event` → `iv_structure`, `flow`, or `dealer_positioning` (D062)
 - `tail_hedge` → `macro`
+- `event_momentum` → `post_event_drift` (v12, D109 — the directional is `sue`, the standardized earnings surprise driving the drift)
 
 **Why.** A trend-continuation strategy that takes direction from a `pairs` indicator is taking direction from a relationship test, not from a trend signal — the hypothesis label and the signal disagree. Forcing the match keeps hypothesis labels honest. `regime_arbitrage` is the deliberate exception: by definition the strategy switches regimes, so any family that drives the switch is admissible.
 

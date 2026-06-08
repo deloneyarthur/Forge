@@ -196,6 +196,7 @@ def test_loop_exits_on_max_iterations_even_when_blocked(tmp_path: Path) -> None:
     # config's hypothesis/structure doesn't matter for rate-limiter blocking;
     # it just needs to deserialize cleanly.
     from tests.fixtures.strategy_configs import minimal_strategy_config
+
     valid_cfg_json = minimal_strategy_config().model_dump_json()
     with db_connection(forge_db) as conn:
         conn.execute(
@@ -305,17 +306,29 @@ def test_d063_hypothesis_weights_line_uses_canonical_order() -> None:
     order. Stable ordering keeps the line greppable and diff-friendly."""
     from forge.cli.main import _format_hypothesis_weights_line
 
-    weights = {h: 0.1 for h in (
-        "trend_continuation", "mean_reversion", "regime_arbitrage",
-        "relative_value", "volatility_event", "tail_hedge",
-    )}
+    weights = {
+        h: 0.1
+        for h in (
+            "trend_continuation",
+            "mean_reversion",
+            "regime_arbitrage",
+            "relative_value",
+            "volatility_event",
+            "tail_hedge",
+        )
+    }
     line = _format_hypothesis_weights_line(weights)
     # Strip the prefix so we can check raw order.
     body = line.removeprefix("hypothesis_weights: ").split(" (")[0]
     names = [seg.split("=")[0] for seg in body.split(", ")]
     assert names == [
-        "trend_continuation", "mean_reversion", "regime_arbitrage",
-        "relative_value", "volatility_event", "tail_hedge",
+        "trend_continuation",
+        "mean_reversion",
+        "regime_arbitrage",
+        "relative_value",
+        "volatility_event",
+        "tail_hedge",
+        "event_momentum",  # v12 / D109
     ]
 
 
@@ -339,10 +352,68 @@ def test_d065_phase_timings_line_renders_in_pipeline_order() -> None:
     body = line.removeprefix("phase_timings: ")
     names = [seg.split("=")[0] for seg in body.split(", ")]
     assert names == [
-        "reconcile", "enumeration", "prefetch", "battery", "rank", "submit",
+        "reconcile",
+        "enumeration",
+        "prefetch",
+        "battery",
+        "rank",
+        "submit",
     ]
     # Sanity: prefetch is rendered with two-decimal seconds.
     assert "prefetch=12345.00s" in line
+
+
+def test_h1_rank_combiner_share_default_and_line() -> None:
+    """H1 (v12 / D109): the modest ~1/3 exploration share covers exactly the
+    breadth-starved directional archetypes, and journals greppably."""
+    from forge.cli.main import (
+        _DEFAULT_RANK_COMBINER_SHARE,
+        _format_rank_combiner_share_line,
+    )
+    from forge.enumeration.search_space import RANK_COMBINER_HYPOTHESES
+
+    assert 0.0 < _DEFAULT_RANK_COMBINER_SHARE < 1.0
+    share = {h: _DEFAULT_RANK_COMBINER_SHARE for h in RANK_COMBINER_HYPOTHESES}
+    line = _format_rank_combiner_share_line(share)
+    assert line.startswith("rank_combiner_share: ")
+    # Only the eligible directional archetypes — never vol_event / relative_value.
+    assert "event_momentum" in line
+    assert "trend_continuation" in line
+    assert "mean_reversion" in line
+    assert "volatility_event" not in line
+    assert "relative_value" not in line
+
+
+def test_h1_rank_on_by_default_kill_switch_off(tmp_path: Path) -> None:
+    """H1 (v12 / D109): rank emission is ON by default — `forge run` with no flag
+    journals the share line; `--no-cross-sectional-rank` is the kill switch."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    crucible_db = tmp_path / "crucible.db"
+    build_synthetic_crucible_db(crucible_db).close()
+    base = [
+        "run",
+        "--no-config",
+        "--seed",
+        "0",
+        "--batch-size",
+        "2",
+        "--max",
+        "200",
+        "--forge-db",
+        str(forge_db),
+        "--inbox",
+        str(inbox),
+        "--crucible-db",
+        str(crucible_db),
+    ]
+    on = runner.invoke(app, base)
+    assert on.exit_code == 0, on.stdout
+    assert "rank_combiner_share:" in on.stdout  # default ON
+
+    off = runner.invoke(app, [*base, "--no-cross-sectional-rank"])
+    assert off.exit_code == 0, off.stdout
+    assert "rank_combiner_share:" not in off.stdout  # kill switch
 
 
 def test_d065_phase_timings_line_skips_missing_phases() -> None:
@@ -371,8 +442,13 @@ def test_d065_hypothesis_distribution_line_uses_canonical_order() -> None:
     names = [p[0] for p in pairs]
     counts = {p[0]: int(p[1]) for p in pairs}
     assert names == [
-        "trend_continuation", "mean_reversion", "regime_arbitrage",
-        "relative_value", "volatility_event", "tail_hedge",
+        "trend_continuation",
+        "mean_reversion",
+        "regime_arbitrage",
+        "relative_value",
+        "volatility_event",
+        "tail_hedge",
+        "event_momentum",  # v12 / D109
     ]
     assert counts == {
         "trend_continuation": 0,
@@ -381,6 +457,7 @@ def test_d065_hypothesis_distribution_line_uses_canonical_order() -> None:
         "relative_value": 0,
         "volatility_event": 100,
         "tail_hedge": 50,
+        "event_momentum": 0,
     }
 
 
@@ -407,8 +484,12 @@ def test_d065_run_battery_for_seed_populates_timings(tmp_path: Path) -> None:
     # Tiny max_candidates keeps the test fast; the cache will be
     # synthetic (no socket present in test env) so prefetch is cheap.
     _run_battery_for_seed(
-        grammar, registry, seed=42, max_candidates=2,
-        calibration=calibration, timings=timings,
+        grammar,
+        registry,
+        seed=42,
+        max_candidates=2,
+        calibration=calibration,
+        timings=timings,
     )
     assert set(timings) == {"enumeration", "prefetch", "battery"}
     for k, v in timings.items():
@@ -469,8 +550,16 @@ def test_loop_continues_after_failing_iteration(
     monkeypatch.setattr(_time, "sleep", lambda *_a, **_k: None)
     result = runner.invoke(
         app,
-        ["run", "--no-config", "--loop", "--max-iterations", "2", "--dry-run",
-         "--inbox", str(tmp_path / "ib")],
+        [
+            "run",
+            "--no-config",
+            "--loop",
+            "--max-iterations",
+            "2",
+            "--dry-run",
+            "--inbox",
+            str(tmp_path / "ib"),
+        ],
     )
     assert result.exit_code == 0, result.stdout
     # The first iteration raised; the loop logged it and ran the second anyway.
@@ -493,8 +582,16 @@ def test_loop_does_not_swallow_schema_version_mismatch(
     monkeypatch.setattr(_time, "sleep", lambda *_a, **_k: None)
     result = runner.invoke(
         app,
-        ["run", "--no-config", "--loop", "--max-iterations", "2", "--dry-run",
-         "--inbox", str(tmp_path / "ib")],
+        [
+            "run",
+            "--no-config",
+            "--loop",
+            "--max-iterations",
+            "2",
+            "--dry-run",
+            "--inbox",
+            str(tmp_path / "ib"),
+        ],
     )
     # §13.5: a contracts mismatch is a hard halt — it must propagate, not be
     # caught-and-continued like a transient error.

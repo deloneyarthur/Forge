@@ -32,6 +32,7 @@ from crucible_contracts import MANDATORY_EXIT_IDS
 # `forge.grammar.tables` module without semantic change.
 from forge.grammar.custom_predicates import (
     _C2_HYPOTHESIS_FAMILIES,
+    _EVENT_MOMENTUM_REGIME_INDICATORS,
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
     _R1_GAMMA_REGIME_INDICATOR,
@@ -52,6 +53,8 @@ if TYPE_CHECKING:
 _DTE_BUCKETS: tuple[str, ...] = ("swing_short", "swing_mid", "swing_long")
 
 # Canonical hypothesis order — mirrors `StrategyConfig.hypothesis` Literal.
+# event_momentum (v12 / D109) is appended last, matching the contracts 1.16.0
+# Literal order (so by-feature joins and golden orderings stay aligned).
 _HYPOTHESES: tuple[str, ...] = (
     "trend_continuation",
     "mean_reversion",
@@ -59,6 +62,7 @@ _HYPOTHESES: tuple[str, ...] = (
     "relative_value",
     "volatility_event",
     "tail_hedge",
+    "event_momentum",
 )
 
 # D066 — hypotheses Forge must NOT enumerate as a standalone StrategyConfig.
@@ -90,6 +94,20 @@ DISABLED_HYPOTHESES: frozenset[str] = frozenset({"regime_arbitrage"})
 # The union Forge never enumerates as a standalone StrategyConfig: overlay-only
 # (D066) + disabled-by-policy (D098). Every enumeration-path filter reads this.
 NON_ENUMERABLE_HYPOTHESES: frozenset[str] = OVERLAY_ONLY_HYPOTHESES | DISABLED_HYPOTHESES
+
+# H1 (v12 / D109) — hypotheses that may use the cross_sectional_rank combiner as
+# a breadth-manufacturing OPTION (vs the default confluence). Scoped to the
+# breadth-starved DIRECTIONAL archetypes: trend_continuation + mean_reversion
+# (single-name firing ≈ 1 trade → killed at the 100-trade floor) plus
+# event_momentum (§2.4 — PEAD's productive form is cross-sectional). vol_event
+# (event-single-name, already clears breadth via recurring events) and
+# relative_value (pairs) keep confluence. The rank draw is gated on
+# `rank_combiner_share`; with no share the combiner is always confluence
+# (byte-identical cold path, hard rule #6). The runner routes a rank config to
+# the composable rank-top-K template by combiner.type, regardless of hypothesis.
+RANK_COMBINER_HYPOTHESES: frozenset[str] = frozenset(
+    {"trend_continuation", "mean_reversion", "event_momentum"}
+)
 
 # Fallback if no §3.5 P4 numerical_range rule is present in the grammar
 # (won't happen with v1; defended in `build_search_space`).
@@ -237,10 +255,13 @@ def _build_regime_pool(
 ) -> Mapping[str, tuple[str, ...]]:
     """Per-hypothesis regime-gate options.
 
-    §3.5 R1/R2/R3 pin specific indicator ids for three hypotheses; the
-    remaining three (regime_arbitrage, relative_value, tail_hedge) have no
-    R-rule constraint, so any registry indicator may serve. The sampler
-    enforces §3.5 C4 (regime disjoint from directional) at sample time.
+    §3.5 R1/R2/R3 pin specific indicator ids for three hypotheses; event_momentum
+    (v12 / D109) is pinned to its post-event timing gate the same way but via
+    sampler-side policy rather than a grammar.yaml rule (hard rule #1 — see
+    `_EVENT_MOMENTUM_REGIME_INDICATORS`). The remaining three (regime_arbitrage,
+    relative_value, tail_hedge) have no constraint, so any registry indicator may
+    serve. The sampler enforces §3.5 C4 (regime disjoint from directional) at
+    sample time.
     """
     pool: dict[str, tuple[str, ...]] = {}
     for hyp in _HYPOTHESES:
@@ -254,6 +275,11 @@ def _build_regime_pool(
             )
         elif hyp == "volatility_event":
             pool[hyp] = tuple(sorted(set(_R3_EVENT_PROXIMITY_INDICATORS) & registry_ids))
+        elif hyp == "event_momentum":
+            # H2 (v12 / D109): post-event TIMING gate only (days_since_earnings).
+            # Sampler-side policy, not a grammar.yaml rule (hard rule #1) — see
+            # `_EVENT_MOMENTUM_REGIME_INDICATORS` in custom_predicates.
+            pool[hyp] = tuple(sorted(set(_EVENT_MOMENTUM_REGIME_INDICATORS) & registry_ids))
         else:
             pool[hyp] = tuple(sorted(registry_ids))
     return MappingProxyType(pool)

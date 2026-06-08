@@ -47,6 +47,15 @@ _HOLD_DAYS_BY_BUCKET: dict[str, int] = {
 # every strategy into the same shape.
 _MAX_CONCURRENT_POSITIONS = 5
 
+# H1 (v12 / D109) — cross_sectional_rank rebalance cadence in CALENDAR days
+# (the runner rebalances on the calendar). A rank config opens ~rank_k names
+# (x2 for long_short) every rebalance, so trades ≈ directions * rank_k *
+# (window / period) — deterministic, by construction ≫ the 100-trade floor.
+_REBALANCE_PERIOD_DAYS: dict[str, int] = {"weekly": 7, "monthly": 30}
+# Defensive default if rebalance_frequency is unset on a rank combiner (the
+# sampler always sets it); the denser cadence is the conservative assumption.
+_DEFAULT_REBALANCE_PERIOD_DAYS = 7
+
 
 def _bucket_key_for_config(
     config: StrategyConfig,
@@ -116,6 +125,53 @@ def _apply_activations_heuristic(
     )
 
 
+def _apply_structural_rank_estimate(
+    config: StrategyConfig,
+    ctx: FilterContext,
+) -> FilterResult:
+    """H1 (v12 / D109) — expected trades for a ``cross_sectional_rank`` config.
+
+    A rank config does NOT fire per-name booleans; the runner ranks the universe
+    each rebalance and trades the top ``rank_k`` (plus the bottom ``rank_k`` for
+    ``long_short``). So the trade count is DETERMINISTIC —
+    ``directions * rank_k * (window / rebalance_period)`` — and ≫ the 100-trade
+    floor by construction (that is the entire point of the combiner).
+
+    Routing a rank config through the empirical-prior / activations paths would
+    key it on the stale SINGLE-NAME trade history of its (hypothesis, bucket,
+    family) bucket — exactly the ~1-trade firing the rank combiner exists to
+    escape — and wrongly kill it. So estimate structurally instead.
+    """
+    combiner = config.combiner
+    period = _REBALANCE_PERIOD_DAYS.get(
+        combiner.rebalance_frequency or "",
+        _DEFAULT_REBALANCE_PERIOD_DAYS,
+    )
+    n_rebalances = max(1, ctx.registry.data_history_days // period)
+    directions = 2 if combiner.direction_mode == "long_short" else 1
+    estimated = directions * combiner.rank_k * n_rebalances
+
+    min_required = ctx.calibration.expected_trade_count.min_trades
+    passed = estimated >= min_required
+    denominator = math.log1p(10 * min_required)
+    score = min(1.0, math.log1p(estimated) / denominator) if passed and denominator > 0 else 0.0
+    return FilterResult(
+        passed=passed,
+        score=score,
+        details=MappingProxyType(
+            {
+                "mode": "structural_rank",
+                "rank_k": combiner.rank_k,
+                "rebalance_frequency": combiner.rebalance_frequency,
+                "direction_mode": combiner.direction_mode,
+                "rebalances": n_rebalances,
+                "estimated_trades": estimated,
+                "min_trades": min_required,
+            },
+        ),
+    )
+
+
 class ExpectedTradesFilter:
     """§5.3.4 — reject configs unlikely to produce enough real trades."""
 
@@ -123,6 +179,11 @@ class ExpectedTradesFilter:
     cost_tier = 4
 
     def apply(self, config: StrategyConfig, ctx: FilterContext) -> FilterResult:
+        # H1 (v12): a cross_sectional_rank config has a deterministic, structural
+        # trade count (rank_k x rebalances) — the per-name empirical/activations
+        # paths below would mis-key it on stale single-name firing and kill it.
+        if config.combiner.type == "cross_sectional_rank":
+            return _apply_structural_rank_estimate(config, ctx)
         directional = _directional_signal(config)
         bucket_key = _bucket_key_for_config(config, ctx.registry, directional)
         cal = ctx.calibration.expected_trade_count

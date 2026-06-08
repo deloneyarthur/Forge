@@ -137,6 +137,18 @@ _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
         # KNOWN_EXIT_IDS).
         "forbidden": ("hard_profit_target",),
     },
+    # H2 (v12 / D109): the post-earnings drift decays over ~5-20 td, so the
+    # primary exit is a drift-decay `time_stop` (required). Momentum trailing
+    # (trailing_atr / chandelier_exit) optionally lets a strong drift run.
+    # `hard_profit_target` is forbidden — the payoff is convex/positive-skew
+    # (long optionality into the drift), exactly the profile of the vol_event
+    # winners, so capping the upside is counter-thesis.
+    "event_momentum": {
+        "required_always": (),
+        "required_from_set": ("time_stop",),
+        "optional_additions": ("trailing_atr", "chandelier_exit"),
+        "forbidden": ("hard_profit_target",),
+    },
 }
 
 # §3.5 C2 hypothesis → allowed directional-signal families.
@@ -157,6 +169,12 @@ _C2_HYPOTHESIS_FAMILIES: dict[str, tuple[str, ...] | None] = {
     # 5af63ad which adds the 6 dealer indicators. See D062.
     "volatility_event": ("iv_structure", "flow", "dealer_positioning"),
     "tail_hedge": ("macro",),
+    # H2 (v12 / D109): event_momentum is a directional post-earnings-drift
+    # (PEAD) thesis. Its directional is the earnings surprise itself (`sue`,
+    # family `post_event_drift`); the drift's sign/magnitude is the edge. The
+    # post-event TIMING gate (`days_since_earnings`) is a different family
+    # (`calendar`, post-§2.1) so C1 admits both in one config.
+    "event_momentum": ("post_event_drift",),
 }
 
 # §3.5 P2 entry DTE windows per bucket. (Exit DTE thresholds are tracked
@@ -222,6 +240,17 @@ _R1_IV_RANK_MAX_THRESHOLD = 50.0
 # the sampler sets; the indicator_thresholds default ">" is the trend / short-gamma
 # side). The "switch": same indicator, opposite side per hypothesis.
 _R1_GAMMA_REGIME_INDICATOR = "gamma_flip_distance_pct"
+
+# H2 (v12 / D109): event_momentum's post-event TIMING gate. Unlike R1/R2/R3
+# this is NOT a grammar.yaml rule — adding a 22nd operator-owned rule would
+# touch the rule set (hard rule #1). Instead the constraint lives entirely in
+# the regime-pool builder (search_space._build_regime_pool), exactly like the
+# R-rule pools: event_momentum's regime pool IS this tuple, so the sampler can
+# only ever draw days_since_earnings as the gate. C1/C2/C4 (which run
+# generically) enforce the rest. `days_since_earnings` is the calendar-family
+# countdown "N days AFTER the print" — op "<" (from the threshold table) fires
+# inside the post-event drift window.
+_EVENT_MOMENTUM_REGIME_INDICATORS = ("days_since_earnings",)
 
 # §3.5 X1 / X2 sizer-mode → required indicator id.
 _X1_VOL_TARGET_INDICATOR = "realized_vol"

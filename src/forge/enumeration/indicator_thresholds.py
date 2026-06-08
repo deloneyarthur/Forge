@@ -208,6 +208,29 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         directional_range=(3.0, 10.0),  # OPEX is monthly — tighter imminence window
         regime_range=(5.0, 30.0),
     ),
+    # ----- H2 (v12 / D109): event_momentum / PEAD -----
+    # `sue` (standardized unexpected earnings) is event_momentum's DIRECTIONAL:
+    # a strong positive surprise predicts upward drift -> long calls. Fires when
+    # sue > threshold; the range targets a meaningful 1-2 sigma beat (SUE is unit-
+    # standardized, so these are sigmas, not native units). Directional-only —
+    # the post-event TIMING is the days_since_earnings regime gate below.
+    # NB: provisional calibration (operator-reviewable, like every table entry);
+    # no live SUE distribution audit yet — see docs/INDICATOR_THRESHOLDS.md.
+    "sue": IndicatorThresholdSpec(
+        directional_range=(1.0, 2.0),
+        regime_range=None,
+        op_directional=">",
+    ),
+    # `days_since_earnings` is the post-event WINDOW gate: "fire within N td
+    # AFTER the print" → op "<", threshold in {3..10} td. This is the PEAD edge —
+    # entering after the print sidesteps the pre-print IV crush the vol_event
+    # sleeves ride, so the component is structurally orthogonal to them.
+    # Regime-only (calendar family, post-§2.1) — never a directional.
+    "days_since_earnings": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=(3.0, 10.0),
+        op_regime="<",
+    ),
     # ----- IV / event / pairs / macro (post-D031 real Crucible v2 implementations) -----
     # iv_rank: §3.5 R1 demands threshold <= 50 on mean_reversion regime; honored here.
     "iv_rank": IndicatorThresholdSpec(

@@ -779,7 +779,9 @@ def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySn
     D066: ``tail_hedge`` is excluded — it's overlay-only.
     D098 (v5): ``regime_arbitrage`` is excluded — dropped from enumeration as
     a low-yield-by-construction grammar-iteration decision. Both are in
-    ``NON_ENUMERABLE_HYPOTHESES``; see the D098 invariants for the leak guard."""
+    ``NON_ENUMERABLE_HYPOTHESES``; see the D098 invariants for the leak guard.
+    D109 (v12): ``event_momentum`` joins the enumerable set (PEAD directional;
+    the minimal fixture registers sue + days_since_earnings)."""
     seen: set[str] = set()
     for seed in range(300):
         cfg = _sample(grammar, registry, seed=seed)
@@ -789,6 +791,7 @@ def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySn
         "mean_reversion",
         "relative_value",
         "volatility_event",
+        "event_momentum",
     }
 
 

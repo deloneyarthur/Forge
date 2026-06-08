@@ -287,6 +287,90 @@ def test_relative_value_pairs_bucket_q16_smoke() -> None:
     assert result.details["bucket_n_zero_trade"] == 596
 
 
+# ---------------------------------------------------------------------------
+# H1 (v12 / D109) — cross_sectional_rank structural estimate (the load-bearing fix)
+# ---------------------------------------------------------------------------
+
+
+def _rank_combiner(rank_k: int = 5, rebalance: str = "monthly", direction: str = "long_only"):
+    from crucible_contracts import CombinerSpec
+
+    return CombinerSpec(
+        type="cross_sectional_rank",
+        rank_k=rank_k,
+        rebalance_frequency=rebalance,  # type: ignore[arg-type]
+        direction_mode=direction,  # type: ignore[arg-type]
+    )
+
+
+def test_rank_config_passes_despite_poisoned_single_name_prior() -> None:
+    """THE load-bearing H1 correctness point. A cross_sectional_rank config trades
+    a DETERMINISTIC ~rank_k*rebalances (≫100) by construction, so it must NOT be
+    killed on the stale SINGLE-NAME empirical prior of its (hypothesis, bucket,
+    family) bucket. The identical confluence config IS killed by that prior — which
+    proves the structural branch is exactly what saves the rank config (and that
+    defeating the single-name trade floor is the whole point of the rank combiner)."""
+    f = ExpectedTradesFilter()
+    # A prior that kills the single-name (confluence) mean_reversion config.
+    priors = {_MR_BUCKET: _stats(n_total=50, n_pass=1, posterior=0.02, n_zero=40)}
+
+    confluence = minimal_strategy_config(dte_bucket="swing_short")
+    killed = f.apply(confluence, _ctx(n_activations=0, trade_rate_priors=priors))
+    assert not killed.passed
+    assert killed.details["mode"] == "empirical_prior"
+
+    rank = minimal_strategy_config(
+        dte_bucket="swing_short", combiner=_rank_combiner(), underlying=None
+    )
+    result = f.apply(rank, _ctx(n_activations=0, trade_rate_priors=priors))
+    assert result.passed
+    assert result.details["mode"] == "structural_rank"
+    assert result.details["estimated_trades"] >= result.details["min_trades"]
+
+
+def test_rank_structural_estimate_scales_with_k_and_direction() -> None:
+    """expected ~= directions x rank_k x rebalances; long_short doubles long_only,
+    and 2*rank_k doubles again. The estimate is honest (bounded by the window),
+    not a blanket pass."""
+    f = ExpectedTradesFilter()
+    ctx = _ctx(n_activations=0)
+
+    base = f.apply(
+        minimal_strategy_config(
+            combiner=_rank_combiner(rank_k=5, direction="long_only"), underlying=None
+        ),
+        ctx,
+    )
+    long_short = f.apply(
+        minimal_strategy_config(
+            combiner=_rank_combiner(rank_k=5, direction="long_short"), underlying=None
+        ),
+        ctx,
+    )
+    double_k = f.apply(
+        minimal_strategy_config(
+            combiner=_rank_combiner(rank_k=10, direction="long_only"), underlying=None
+        ),
+        ctx,
+    )
+    assert base.details["mode"] == "structural_rank"
+    assert long_short.details["estimated_trades"] == 2 * base.details["estimated_trades"]
+    assert double_k.details["estimated_trades"] == 2 * base.details["estimated_trades"]
+
+
+def test_rank_weekly_rebalances_more_than_monthly() -> None:
+    """Denser rebalancing → more rebalances → more trades (deterministic)."""
+    f = ExpectedTradesFilter()
+    ctx = _ctx(n_activations=0)
+    weekly = f.apply(
+        minimal_strategy_config(combiner=_rank_combiner(rebalance="weekly"), underlying=None), ctx
+    )
+    monthly = f.apply(
+        minimal_strategy_config(combiner=_rank_combiner(rebalance="monthly"), underlying=None), ctx
+    )
+    assert weekly.details["estimated_trades"] > monthly.details["estimated_trades"]
+
+
 def test_unknown_directional_indicator_falls_back_to_activations() -> None:
     """Directional points at an indicator not in the registry → no bucket
     key → activations heuristic, but `bucket_key` in details is None."""

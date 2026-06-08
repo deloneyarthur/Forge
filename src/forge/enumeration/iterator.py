@@ -97,6 +97,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
     orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
+    rank_combiner_share: Mapping[str, float] | None = None,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
@@ -226,6 +227,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
                 underlying_class_weights=underlying_class_weights,
                 underlying_name_weights=underlying_name_weights,
                 orthogonal_yield_discounts=orthogonal_yield_discounts,
+                rank_combiner_share=rank_combiner_share,
                 forced_hypothesis=forced_hypothesis,
             )
         except SamplerError as exc:

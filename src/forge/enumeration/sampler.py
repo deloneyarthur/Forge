@@ -55,7 +55,10 @@ from forge.enumeration.indicator_thresholds import (
     is_threshold_skippable,
     sample_threshold_params,
 )
-from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES
+from forge.enumeration.search_space import (
+    NON_ENUMERABLE_HYPOTHESES,
+    RANK_COMBINER_HYPOTHESES,
+)
 from forge.enumeration.underlying_class import underlying_class
 from forge.grammar.signal_horizon import (
     buckets_for_horizon_class,
@@ -134,7 +137,12 @@ class SamplerError(Exception):
 _K_MULTIPLIERS: tuple[int, ...] = (2, 3, 4)
 
 # Hypotheses whose DTE is k*horizon off the DIRECTIONAL oscillator/trend period.
-_HORIZON_MATCHED_HYPOTHESES: frozenset[str] = frozenset({"mean_reversion", "trend_continuation"})
+# H2 (v12 / D109): event_momentum joins — DTE = k * the sue drift window
+# (horizon 10 td) → {20,30,40} td → swing_short/swing_mid, enough DTE to ride the
+# 5-20 td post-earnings drift without forcing a blind uniform bucket pick.
+_HORIZON_MATCHED_HYPOTHESES: frozenset[str] = frozenset(
+    {"mean_reversion", "trend_continuation", "event_momentum"}
+)
 
 # volatility_event brackets the event instead: DTE_target = (entry lead before
 # the event) + (post-event realization window). Events don't want a k multiple
@@ -144,6 +152,16 @@ _HORIZON_MATCHED_HYPOTHESES: frozenset[str] = frozenset({"mean_reversion", "tren
 # swing_mid, matching the handoff's "brackets the event -> swing_short/mid".
 _VOL_EVENT_LEAD_DAYS: tuple[int, ...] = (5, 10, 20)
 _VOL_EVENT_POST_WINDOW_TD: int = 12
+
+# H1 (v12 / D109) — cross_sectional_rank combiner option (the breadth lever).
+# rank_k = how many top-ranked names to trade per rebalance; trade count ≈
+# rank_k * rebalances (x2 for long_short), deterministic and ≫ the 100-trade
+# floor. These are the enumerated knobs; the gate on whether to draw a rank
+# combiner at all is the per-hypothesis `rank_combiner_share` (None/empty → never,
+# byte-identical cold path, hard rule #6).
+_RANK_K_CHOICES: tuple[int, ...] = (5, 10, 20)
+_RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
+_RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 
 # D033 fallback — used when the Crucible universe export is absent.
 _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
@@ -226,6 +244,17 @@ def universe_fingerprint() -> str:
 
 _TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 
+# Earnings-calendar regime indicators return a sentinel on ETF underlyings (no
+# earnings), so the gate never fires → 0 trades. A config gating on either the
+# forward (days_to_earnings; R3 / T1.4) or the backward (days_since_earnings;
+# H2 / event_momentum) countdown must therefore be single-name. T1.4 added the
+# forward one to the exclusion; v12 adds the backward twin so event_momentum is
+# single-name by construction (only event_momentum draws days_since_earnings, so
+# this leaves every pre-v12 hypothesis's underlying draw byte-identical — #6).
+_EARNINGS_CALENDAR_ETF_INCOMPATIBLE: frozenset[str] = frozenset(
+    {"days_to_earnings", "days_since_earnings"}
+)
+
 
 def _pick_underlying(
     rng: random.Random,
@@ -281,7 +310,7 @@ def _pick_underlying(
     if hypothesis == "relative_value":
         return None
     underlyings = _load_underlyings()
-    if any(ind == "days_to_earnings" for ind in regime_indicators):
+    if any(ind in _EARNINGS_CALENDAR_ETF_INCOMPATIBLE for ind in regime_indicators):
         pool = tuple(u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS)
     else:
         pool = underlyings
@@ -313,6 +342,7 @@ def sample_config(
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
     orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
+    rank_combiner_share: Mapping[str, float] | None = None,
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -356,6 +386,17 @@ def sample_config(
     ``{underlying-name: discount}`` map and forwarded to the underlying pick,
     which multiplies each ticker's weight by its own discount (over-mined names
     < 1.0). None/empty preserves the draw byte-identically (hard rule #6).
+
+    ``rank_combiner_share`` (H1, v12) is the per-hypothesis probability of
+    emitting a ``cross_sectional_rank`` combiner (the breadth lever) instead of
+    the default confluence — applied ONLY to the breadth-starved directional
+    archetypes in ``RANK_COMBINER_HYPOTHESES``. On a rank draw the combiner
+    carries ``rank_k`` / ``rebalance_frequency`` / ``direction_mode`` and the
+    underlying is set to None (the runner ranks ``universe.tickers``). None/empty
+    — and any hypothesis not in the map or mapped to 0.0 — draws NO rng and keeps
+    the confluence path byte-identical (hard rule #6); the draw is the LAST
+    decision so it never perturbs the signal/selector/sizer/exit/underlying
+    sequence of a same-seed config.
 
     ``forced_hypothesis`` (D037) overrides the weighted pick when set —
     use it from the iterator to enforce a per-hypothesis stratified
@@ -478,29 +519,53 @@ def sample_config(
     exits = _build_exits(space, hypothesis, rng)
 
     config_name = f"forge_{hypothesis}_{bucket}_{rng.getrandbits(32):08x}"
+
+    # D033 — per-config underlying from Tier 1+2 pool.
+    # D098 — relative_value returns None (pairs strategy; Crucible loads the legs).
+    # T1.4: pass regime indicator IDs so the picker can constrain to single-names
+    # when the regime contains an ETF-incompatible indicator (e.g.,
+    # days_to_earnings / days_since_earnings — sentinel on ETFs, no earnings).
+    underlying = _pick_underlying(
+        rng,
+        hypothesis,
+        regime_indicators=tuple(
+            ind for sig in signals if sig.role == "regime_filter" for ind in sig.indicators
+        ),
+        underlying_class_weights=underlying_class_weights,
+        underlying_name_weights=underlying_name_weights,
+        factor_cell_discounts=factor_cell_discounts,
+    )
+
+    # H1 (v12 / D109) — cross_sectional_rank combiner, the breadth lever. Drawn
+    # LAST and gated on `rank_combiner_share` so the confluence cold path is
+    # byte-identical (hard rule #6): no share for this hypothesis (or share 0.0,
+    # short-circuited before rng) → no rng draw, combiner stays confluence. On a
+    # rank draw the runner ranks `universe.tickers(asof, tier)` by the directional
+    # score and trades top-rank_k (+ bottom for long_short) each rebalance, so the
+    # underlying is None (a single name is meaningless). The directional + regime
+    # signals are unchanged — the runner routes role=="regime_filter" to its gates
+    # and the directional to the rank score. Routing to Crucible's composable
+    # rank runner is by combiner.type on the forge_-prefixed config name.
+    combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
+    if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
+        share = rank_combiner_share.get(hypothesis, 0.0)
+        if share > 0.0 and rng.random() < share:
+            combiner = CombinerSpec(
+                type="cross_sectional_rank",
+                rank_k=rng.choice(_RANK_K_CHOICES),
+                rebalance_frequency=rng.choice(_RANK_REBALANCE_CHOICES),  # type: ignore[arg-type]
+                direction_mode=rng.choice(_RANK_DIRECTION_MODES),  # type: ignore[arg-type]
+            )
+            underlying = None
+
     return StrategyConfig(
         name=config_name,
         hypothesis=hypothesis,  # type: ignore[arg-type]
         dte_bucket=bucket,  # type: ignore[arg-type]
-        # D033 — per-config underlying from Tier 1+2 pool.
-        # D079 — relative_value now also gets a real ticker (was None → 99%
-        # zero-trade because pairs_convergence needs a concrete primary).
-        # T1.4: pass regime indicator IDs so the picker can constrain to
-        # single-names when the regime contains an ETF-incompatible
-        # indicator (e.g., days_to_earnings — sentinel 999 on ETFs).
-        underlying=_pick_underlying(
-            rng,
-            hypothesis,
-            regime_indicators=tuple(
-                ind for sig in signals if sig.role == "regime_filter" for ind in sig.indicators
-            ),
-            underlying_class_weights=underlying_class_weights,
-            underlying_name_weights=underlying_name_weights,
-            factor_cell_discounts=factor_cell_discounts,
-        ),
+        underlying=underlying,
         tier=2,
         signals=tuple(signals),
-        combiner=CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1),
+        combiner=combiner,
         selector=selector,
         sizer=sizer,
         exits=exits,

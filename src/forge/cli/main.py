@@ -900,6 +900,19 @@ def _format_orthogonal_yield_discounts_line(
     return f"orthogonal_yield_discounts: {len(discounts)} cells discounted; most-mined: {parts}"
 
 
+# H1 (v12 / D109) — the modest exploration share at which the breadth-starved
+# directional archetypes draw a cross_sectional_rank combiner when the operator
+# enables --cross-sectional-rank. Fixed for now (~1/3); feedback can rebalance it
+# later, like the D105/D106 weights.
+_DEFAULT_RANK_COMBINER_SHARE = 1.0 / 3.0
+
+
+def _format_rank_combiner_share_line(share: Mapping[str, float]) -> str:
+    """One-line journal summary of the active cross_sectional_rank share map."""
+    parts = ", ".join(f"{h}={s:.2f}" for h, s in sorted(share.items()))
+    return f"rank_combiner_share: {parts}"
+
+
 def _load_trade_rate_priors(
     forge_db_path: Path,
     registry: RegistrySnapshot,
@@ -1090,6 +1103,7 @@ def _run_battery_for_seed(
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
     orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
+    rank_combiner_share: Mapping[str, float] | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
@@ -1160,6 +1174,7 @@ def _run_battery_for_seed(
             underlying_class_weights=underlying_class_weights,
             underlying_name_weights=underlying_name_weights,
             orthogonal_yield_discounts=orthogonal_yield_discounts,
+            rank_combiner_share=rank_combiner_share,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
@@ -1427,6 +1442,13 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # (hypothesis, directional, underlying-class) factor cells in the underlying
     # draw. Operator flips it on the systemd unit, like --consume-feedback.
     orthogonal_yield: bool = False,
+    # H1 (v12 / D109) cross_sectional_rank — the breadth lever, ON by default at
+    # the ~1/3 exploration share (the point of v12; "like every prior weight
+    # addition" per the spec — production passes the share, the sampler-core
+    # None-default keeps tests/determinism byte-identical, #6). --no-cross-sectional-rank
+    # is an operational kill switch (configs revert to confluence) for the first-
+    # time-new-runner path; not a gate.
+    cross_sectional_rank: bool = True,
     # H-4: §7.3 throttle; mirrors rate_limiter._DEFAULT_THRESHOLD (0.80).
     inflight_threshold: float = 0.80,
 ) -> str:
@@ -1565,6 +1587,19 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         )
         if orthogonal_yield_discounts:
             typer.echo(_format_orthogonal_yield_discounts_line(orthogonal_yield_discounts))
+    # H1 (v12 / D109) — cross_sectional_rank combiner, the breadth lever, ON by
+    # default: each breadth-starved directional archetype (RANK_COMBINER_HYPOTHESES)
+    # draws a rank combiner with probability _DEFAULT_RANK_COMBINER_SHARE, making
+    # trade count deterministic (rank_k * rebalances ≫ the 100-trade floor). A fixed
+    # exploration share for now; feedback can rebalance it later. The
+    # --no-cross-sectional-rank kill switch passes {} → the sampler's combiner draw
+    # is skipped and every config stays confluence (byte-identical, hard rule #6).
+    rank_combiner_share: dict[str, float] = {}
+    if cross_sectional_rank:
+        from forge.enumeration.search_space import RANK_COMBINER_HYPOTHESES
+
+        rank_combiner_share = {h: _DEFAULT_RANK_COMBINER_SHARE for h in RANK_COMBINER_HYPOTHESES}
+        typer.echo(_format_rank_combiner_share_line(rank_combiner_share))
     # D076 / Q16 — empirical-prior bucket stats for `expected_trades`.
     # Cold start (no exports / no overlap with submissions) returns {};
     # filter falls back to the activations heuristic for every config.
@@ -1603,6 +1638,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             underlying_class_weights=underlying_class_weights,
             underlying_name_weights=underlying_name_weights,
             orthogonal_yield_discounts=orthogonal_yield_discounts,
+            rank_combiner_share=rank_combiner_share,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
             timings=timings,
@@ -1893,6 +1929,18 @@ def cmd_run(
             "orthogonal components. Off (default) is byte-identical to D105/D106."
         ),
     ),
+    cross_sectional_rank: bool = typer.Option(
+        True,
+        "--cross-sectional-rank/--no-cross-sectional-rank",
+        help=(
+            "H1 (v12) breadth lever: emit cross_sectional_rank combiners for the "
+            "breadth-starved directional archetypes (trend/mean_reversion/"
+            "event_momentum) at a ~1/3 exploration share — trade count becomes "
+            "deterministic (rank_k * rebalances), defeating the 100-trade floor. "
+            "ON by default (the point of v12); pass --no-cross-sectional-rank as an "
+            "operational kill switch (configs revert to confluence)."
+        ),
+    ),
     open_proposals: Path = typer.Option(
         Path("OPEN_PROPOSALS.md"),
         "--open-proposals",
@@ -1989,6 +2037,7 @@ def cmd_run(
             prefilter_yaml=prefilter_yaml,
             require_real_cache=require_real_cache,
             orthogonal_yield=orthogonal_yield,
+            cross_sectional_rank=cross_sectional_rank,
             inflight_threshold=inflight_threshold,
         )
         return
@@ -2020,6 +2069,7 @@ def cmd_run(
                     prefilter_yaml=prefilter_yaml,
                     require_real_cache=require_real_cache,
                     orthogonal_yield=orthogonal_yield,
+                    cross_sectional_rank=cross_sectional_rank,
                     inflight_threshold=inflight_threshold,
                 )
             except (KeyboardInterrupt, SchemaVersionMismatch):

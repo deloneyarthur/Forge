@@ -148,6 +148,29 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
                 lookback=0,
                 params_schema={},
             ),
+            # H2 (v12 / D109) — event_momentum / PEAD pair. `days_since_earnings`
+            # is the post-event TIMING gate ("fire within N days AFTER the
+            # print"); Crucible reclassified it to the `calendar` family (the
+            # backward twin of days_to_earnings, override exports.py:207), so it
+            # is C1-distinct from the `sue` directional below.
+            IndicatorMetadata(
+                id="days_since_earnings",
+                version=1,
+                family="calendar",
+                lookback=0,
+                params_schema={},
+            ),
+            # `sue` (standardized unexpected earnings) is event_momentum's
+            # DIRECTIONAL — the surprise drives post-earnings drift. Its own
+            # `post_event_drift` family, so C1 lets it coexist with the
+            # calendar-family days_since_earnings gate in one config.
+            IndicatorMetadata(
+                id="sue",
+                version=1,
+                family="post_event_drift",
+                lookback=0,
+                params_schema={},
+            ),
             # Sizer-mode required indicators (X1, X2)
             IndicatorMetadata(
                 id="realized_vol",

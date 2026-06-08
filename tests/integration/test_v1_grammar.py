@@ -91,7 +91,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # again textually unchanged).
     # D107 bumped v10 -> v11 (H3 dealer-gamma regime switch — R2's predicate
     # constant adds gamma_flip_distance_pct; the 21 `rules:` again unchanged).
-    assert grammar.grammar_version == "v11"  # type: ignore[attr-defined]
+    # D109 bumped v11 -> v12 (H1 cross_sectional_rank combiner + H2 event_momentum
+    # hypothesis; both are Python-side enumeration policy — S1 is `cardinality`,
+    # the hypothesis Literal + CombinerSpec live in contracts — so the 21 `rules:`
+    # are again textually unchanged).
+    assert grammar.grammar_version == "v12"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

@@ -88,6 +88,7 @@ def test_hypotheses_in_canonical_order(space: SearchSpace) -> None:
         "relative_value",
         "volatility_event",
         "tail_hedge",
+        "event_momentum",  # v12 / D109 — appended, matches contracts Literal order
     )
 
 

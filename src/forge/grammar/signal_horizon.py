@@ -100,6 +100,15 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     "days_to_cpi": 5,
     "days_to_nfp": 5,
     "days_to_opex": 5,
+    # H2 (v12 / D109): days_since_earnings is the calendar countdown AFTER the
+    # print (backward twin of days_to_earnings) — a near-instant read, horizon 5.
+    "days_since_earnings": 5,
+    # ----- post_event_drift (H2 / PEAD directional) -----
+    # `sue` (standardized unexpected earnings): the surprise is known instantly,
+    # but its DRIFT — the tradeable edge — plays out over ~5-20 td. The signal
+    # horizon is that drift window (10 td → medium_lookback → swing_short/mid),
+    # NOT the instant the number prints.
+    "sue": 10,
     # ----- dealer_positioning (instantaneous gamma/wall geometry) -----
     "call_wall_distance_pct": 1,
     "put_wall_distance_pct": 1,
