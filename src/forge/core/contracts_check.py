@@ -17,7 +17,11 @@ from crucible_contracts import (
     validate_schema_version,
 )
 
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.14.0"
+# 1.15.0 (D106): RunResult.grammar_version rides the gated export (Crucible
+# 9995f81, shipped 2026-06-08 00:10Z in response to the D105 yield-map reply's
+# "export carries no version field" note). extra="forbid" makes this a
+# REQUIRED adoption: pre-1.15.0 readers reject the new export rows outright.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.15.0"
 
 
 def check_contracts_version() -> str:

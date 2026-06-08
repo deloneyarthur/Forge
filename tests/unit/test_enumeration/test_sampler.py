@@ -977,3 +977,122 @@ def test_m13_unreadable_export_logs_drift_warning(
     finally:
         sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
         _load_underlyings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# D106 — hierarchical draw chains: underlying name -> class -> prior, and
+# (hypothesis, directional, bucket) triple -> (hypothesis, bucket) pair ->
+# prior. Cold start (all maps empty) stays byte-identical to pre-D105.
+# ---------------------------------------------------------------------------
+
+
+def test_d106_name_weights_override_class_within_pool() -> None:
+    """A learned-hot name (AAPL-like) must outdraw its class peers; names
+    without a name-level weight keep the class weight (the fallback chain)."""
+    import forge.enumeration.sampler as sampler_mod
+    from forge.enumeration.sampler import _load_underlyings, _pick_underlying
+    from forge.enumeration.underlying_class import DIVERSIFIED, HIGH_IDIO_VOL
+
+    original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
+    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d106_test_dir")
+    try:
+        _load_underlyings.cache_clear()
+        class_w = {HIGH_IDIO_VOL: 0.02, DIVERSIFIED: 0.002}
+        name_w = {"AAPL": 0.25}  # ~12x its class
+        rng = random.Random(0xD106)
+        counts: dict[str, int] = {}
+        for _ in range(3000):
+            u = _pick_underlying(
+                rng,
+                "volatility_event",
+                (),
+                underlying_class_weights=class_w,
+                underlying_name_weights=name_w,
+            )
+            assert u is not None
+            counts[u] = counts.get(u, 0) + 1
+        # AAPL weight 0.25 vs 19 high-class names at 0.02 + 4 diversified at
+        # floor(0.01): AAPL share ~ 0.25/(0.25 + 19*0.02 + 4*0.01) ~ 37%.
+        assert counts["AAPL"] > 800
+        # the chain still samples un-named peers via the class weight
+        assert counts.get("NVDA", 0) > 0
+    finally:
+        sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
+        _load_underlyings.cache_clear()
+
+
+def test_d106_name_weights_cold_start_byte_identical() -> None:
+    """Both underlying maps empty -> the pre-D105 uniform rng.choice sequence."""
+    import forge.enumeration.sampler as sampler_mod
+    from forge.enumeration.sampler import _load_underlyings, _pick_underlying
+
+    original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
+    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d106_test_dir")
+    try:
+        _load_underlyings.cache_clear()
+        pool = _load_underlyings()
+        r1, r2 = random.Random(11), random.Random(11)
+        seq = [
+            _pick_underlying(
+                r1,
+                "mean_reversion",
+                (),
+                underlying_class_weights={},
+                underlying_name_weights={},
+            )
+            for _ in range(30)
+        ]
+        ref = [r2.choice(pool) for _ in range(30)]
+        assert seq == ref
+    finally:
+        sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
+        _load_underlyings.cache_clear()
+
+
+def test_d106_triple_cell_overrides_pair_cell_in_joint_draw(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The (hypothesis, directional, bucket) triple outranks the pair fallback:
+    with the PAIR (mean_reversion, swing_mid) hot but the rsi_14 triple cell
+    learned-DEAD, the draw must avoid rsi_14 (the only mid-locked mr
+    directional in the fixture) relative to the pair-only baseline."""
+    space = build_search_space(grammar, registry)
+
+    def _mid_share(triples: dict[tuple[str, str, str], float] | None) -> int:
+        mid = 0
+        for seed in range(300):
+            cfg = sample_config(
+                space,
+                registry,
+                random.Random(seed),
+                forced_hypothesis="mean_reversion",
+                bucket_weights={("mean_reversion", "swing_mid"): 0.05},
+                directional_bucket_weights=triples,
+            )
+            if cfg.dte_bucket == "swing_mid":
+                mid += 1
+        return mid
+
+    pair_only = _mid_share(None)
+    dead_triple = _mid_share({("mean_reversion", "rsi_14", "swing_mid"): 0.001})
+    assert pair_only > 150  # hot pair pulls toward rsi_14/swing_mid
+    assert dead_triple < pair_only * 0.5  # triple evidence overrides the pair
+
+
+def test_d106_triple_cold_start_byte_identical(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """All weight maps empty/None -> byte-identical configs to the bare call."""
+    space = build_search_space(grammar, registry)
+    for seed in range(40):
+        base = sample_config(space, registry, random.Random(seed))
+        full_none = sample_config(
+            space,
+            registry,
+            random.Random(seed),
+            bucket_weights={},
+            directional_bucket_weights={},
+            underlying_class_weights={},
+            underlying_name_weights={},
+        )
+        assert base.config_hash == full_none.config_hash, f"seed={seed}"

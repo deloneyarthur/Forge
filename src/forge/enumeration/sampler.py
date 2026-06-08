@@ -232,6 +232,7 @@ def _pick_underlying(
     hypothesis: str,
     regime_indicators: tuple[str, ...] = (),
     underlying_class_weights: Mapping[str, float] | None = None,
+    underlying_name_weights: Mapping[str, float] | None = None,
 ) -> str | None:
     """Per-config underlying selection from the Tier 1+2 pool.
 
@@ -257,6 +258,13 @@ def _pick_underlying(
     class (`forge.enumeration.underlying_class`) — the pool itself never
     changes, only the draw probability, and the T1.4 exclusion applies before
     weighting. None/empty keeps the uniform `rng.choice` byte-identical.
+
+    D106: ``underlying_name_weights`` (per-name posteriors anchored on the
+    class — `compute_underlying_name_weights`) take precedence per ticker;
+    names the feedback hasn't observed fall through to their class weight,
+    then the prior. The chain keeps every ticker on one coherent
+    component-rate scale, so AAPL-grade evidence concentrates draws without
+    starving the unobserved remainder of its class.
     """
     if hypothesis == "relative_value":
         return None
@@ -265,15 +273,17 @@ def _pick_underlying(
         pool = tuple(u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS)
     else:
         pool = underlyings
-    if underlying_class_weights:
-        weights = [
-            max(
-                underlying_class_weights.get(underlying_class(u), _UNDERLYING_CLASS_PRIOR_MEAN),
-                _UNDERLYING_CLASS_EXPLORATION_FLOOR,
-            )
-            for u in pool
-        ]
-        return rng.choices(pool, weights=weights, k=1)[0]
+    if underlying_class_weights or underlying_name_weights:
+        names = underlying_name_weights or {}
+        classes = underlying_class_weights or {}
+
+        def _ticker_weight(ticker: str) -> float:
+            weight = names.get(ticker)
+            if weight is None:
+                weight = classes.get(underlying_class(ticker), _UNDERLYING_CLASS_PRIOR_MEAN)
+            return max(weight, _UNDERLYING_CLASS_EXPLORATION_FLOOR)
+
+        return rng.choices(pool, weights=[_ticker_weight(u) for u in pool], k=1)[0]
     return rng.choice(pool)
 
 
@@ -285,7 +295,9 @@ def sample_config(
     hypothesis_weights: Mapping[str, float] | None = None,
     regime_weights: Mapping[str, float] | None = None,
     bucket_weights: Mapping[tuple[str, str], float] | None = None,
+    directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     underlying_class_weights: Mapping[str, float] | None = None,
+    underlying_name_weights: Mapping[str, float] | None = None,
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -314,6 +326,14 @@ def sample_config(
     ``underlying_class_weights`` (D105) biases the underlying pick by each
     ticker's learned class (high-idio-vol vs diversified ETF/index). None /
     empty keeps the uniform pick byte-identical.
+
+    ``directional_bucket_weights`` (D106) refines the joint pick with
+    ``(hypothesis, directional, dte_bucket)`` cells, falling back to the
+    ``bucket_weights`` pair cell per option (the triple is pair-anchored, so
+    the chain is scale-coherent). ``underlying_name_weights`` (D106) refines
+    the underlying pick per ticker, falling back to the class weight. Both
+    None/empty preserve the respective D105 (and, transitively, pre-D105)
+    behaviour byte-identically.
 
     ``forced_hypothesis`` (D037) overrides the weighted pick when set —
     use it from the iterator to enforce a per-hypothesis stratified
@@ -374,6 +394,7 @@ def sample_config(
         rng,
         regime_weights=regime_weights,
         bucket_weights=bucket_weights,
+        directional_bucket_weights=directional_bucket_weights,
     )
 
     signals = [
@@ -439,6 +460,7 @@ def sample_config(
                 ind for sig in signals if sig.role == "regime_filter" for ind in sig.indicators
             ),
             underlying_class_weights=underlying_class_weights,
+            underlying_name_weights=underlying_name_weights,
         ),
         tier=2,
         signals=tuple(signals),
@@ -571,6 +593,7 @@ def _select_bucket_directional_regime(
     *,
     regime_weights: Mapping[str, float] | None = None,
     bucket_weights: Mapping[tuple[str, str], float] | None = None,
+    directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
 ) -> tuple[str, str, str]:
     """v8 (D102) horizon-matched selection. Returns ``(bucket, directional_id,
     regime_id)``.
@@ -587,8 +610,12 @@ def _select_bucket_directional_regime(
     directionals are bucket-locked across k (macd → all swing_mid,
     momentum_252 → all swing_long), so a k-only reweight could not move the
     bucket mix at all — the cell weight must steer WHICH directional anchors
-    the config. Cold start (None/empty) keeps the two-step draw above,
-    byte-identical to pre-D105.
+    the config. ``directional_bucket_weights`` (D106) refines each option with
+    its (hypothesis, directional, bucket) triple when learned — the triple is
+    anchored on the pair cell (`compute_hypothesis_directional_bucket_weights`),
+    so the triple → pair → prior fallback chain stays on one scale and a flat
+    multiplication's double-counting is avoided. Cold start (None/empty for
+    both) keeps the two-step draw above, byte-identical to pre-D105.
     """
     chain_compat = _chain_compatible_buckets(space, chain_id)
     chain_compat_set = set(chain_compat)
@@ -602,19 +629,22 @@ def _select_bucket_directional_regime(
         )
         raise SamplerError(msg)
 
-    if bucket_weights:
+    if bucket_weights or directional_bucket_weights:
+        triples = directional_bucket_weights or {}
+        pairs = bucket_weights or {}
+
+        def _option_weight(directional: str, bucket_name: str) -> float:
+            weight = triples.get((hypothesis, directional, bucket_name))
+            if weight is None:
+                weight = pairs.get((hypothesis, bucket_name), _BUCKET_WEIGHT_PRIOR_MEAN)
+            return max(weight, _BUCKET_EXPLORATION_FLOOR)
+
         options = tuple(
             (d, b)
             for d in candidates
             for b in _directional_bucket_options(hypothesis, d, chain_compat_set)
         )
-        weights = [
-            max(
-                bucket_weights.get((hypothesis, b), _BUCKET_WEIGHT_PRIOR_MEAN),
-                _BUCKET_EXPLORATION_FLOOR,
-            )
-            for _, b in options
-        ]
+        weights = [_option_weight(d, b) for d, b in options]
         directional_id, bucket = rng.choices(options, weights=weights, k=1)[0]
     else:
         directional_id = rng.choice(candidates)

@@ -28,7 +28,11 @@ CRUCIBLE_READ_SCHEMA: tuple[str, ...] = (
         period_start    TIMESTAMP,
         period_end      TIMESTAMP,
         started_at      TIMESTAMP,
-        finished_at     TIMESTAMP
+        finished_at     TIMESTAMP,
+        -- contracts 1.15.0 (Crucible 9995f81): the gated query selects
+        -- r.grammar_version for the funnel's version axis; nullable so the
+        -- suite's explicit-column INSERTs are untouched (D106 adoption).
+        grammar_version VARCHAR(20)
     )
     """,
     """

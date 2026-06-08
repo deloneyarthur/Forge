@@ -173,12 +173,21 @@ def _sharpe_reward(gated_run: GatedRun, *, traded: bool) -> float:
     Linear ramp from `DEFAULT_SHARPE_FLOOR` (0.0 reward) to
     `DEFAULT_SHARPE_CEILING` (1.0 reward = the WF-Sharpe-median gate threshold),
     clamped. Credited only for runs that traded — a non-trading strategy's
-    Sharpe is meaningless — and 0.0 when the metric is absent (no crash, no
+    Sharpe is meaningless — and 0.0 when the value is absent (no crash, no
     credit), so missing data never inflates the reward.
+
+    D106 source fix: the live gated export carries walk_forward_sharpe_median
+    in ``gate_results[...].value`` — NOT in ``run.metrics``, whose keys are the
+    base backtest stats only — so the D101 metrics-only read silently scored 0
+    for every run. The gate row's measured value is authoritative; the metrics
+    key is retained as a fallback for export shapes that do carry it.
     """
     if not traded:
         return 0.0
-    raw = gated_run.run.metrics.get(DEFAULT_SHARPE_METRIC)
+    gate_row = gated_run.decision.gate_results.get(DEFAULT_SHARPE_METRIC)
+    raw = gate_row.value if gate_row is not None and gate_row.value is not None else None
+    if raw is None:
+        raw = gated_run.run.metrics.get(DEFAULT_SHARPE_METRIC)
     if raw is None:
         return 0.0
     span = DEFAULT_SHARPE_CEILING - DEFAULT_SHARPE_FLOOR
@@ -300,6 +309,12 @@ COMPONENT_BETA: float = 50.0
 COMPONENT_TIEBREAK_WEIGHT: float = 5e-5
 # D081 semantics at the reward layer; one current-version run ≈ 4 prior ones.
 COMPONENT_PRIOR_VERSION_WEIGHT: float = 0.25
+# D106 — empirical-Bayes anchor strength for the hierarchical weighters
+# (underlying name ← class; (hypothesis, directional, bucket) ← (hypothesis,
+# bucket)). Matches the COMPONENT_ALPHA+BETA scale: ~50 observations halve the
+# coarse anchor's pull, so AAPL-grade evidence (37/101) escapes its class while
+# a 1-run name stays pinned to it.
+COMPONENT_HIER_PRIOR_STRENGTH: float = 50.0
 # The gated-runs window every feedback weight loader requests. Shared here (not
 # in the CLI) so the tiebreak-vs-window invariant is checkable next to ε.
 FEEDBACK_GATED_RUNS_LIMIT: int = 10_000
@@ -330,27 +345,20 @@ def _component_run_reward(gated_run: GatedRun, *, tiebreak_weight: float) -> flo
     return tiebreak_weight * (gate_fraction + _sharpe_reward(gated_run, traded=traded)) / 2.0
 
 
-def _component_rate_posteriors[K](
+def _component_rate_sums[K](
     db: duckdb.DuckDBPyConnection,
     gated_runs: Sequence[GatedRun],
     key_of: Callable[[Mapping[str, object]], K | None],
     *,
-    alpha: float,
-    beta: float,
     tiebreak_weight: float,
     current_grammar_version: str | None,
     prior_version_weight: float,
     cold_start_hypotheses: frozenset[str],
-) -> dict[K, float]:
-    """Beta-smoothed component-rate posterior per ``key_of(config)`` key.
-
-    The shared engine behind the hypothesis / regime / bucket / underlying-class
-    weighters: one join (submissions → batch_summaries for the D081 version
-    resolution, restricted to the gated hashes), one estimand, one smoothing
-    rule — so every granularity stays on a single coherent scale. Rows whose
-    ``key_of`` returns None are skipped (wrong hypothesis for a scoped key,
-    corrupt config_json, missing fields). Same determinism property as the rest
-    of the module (hard rule #6): a pure function of the snapshot inputs.
+) -> dict[K, list[float]]:
+    """Version-weighted ``[total, reward_sum]`` per key — the engine's raw
+    evidence, pre-smoothing (D106 split: the hierarchical weighters aggregate
+    fine-key sums into coarse priors before smoothing, so they need the sums,
+    not the posteriors).
     """
     if not gated_runs:
         return {}
@@ -387,9 +395,78 @@ def _component_rate_posteriors[K](
         bucket = acc.setdefault(key, [0.0, 0.0])
         bucket[0] += weight
         bucket[1] += weight * _component_run_reward(gr, tiebreak_weight=tiebreak_weight)
+    return acc
+
+
+def _component_rate_posteriors[K](
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    key_of: Callable[[Mapping[str, object]], K | None],
+    *,
+    alpha: float,
+    beta: float,
+    tiebreak_weight: float,
+    current_grammar_version: str | None,
+    prior_version_weight: float,
+    cold_start_hypotheses: frozenset[str],
+) -> dict[K, float]:
+    """Beta-smoothed component-rate posterior per ``key_of(config)`` key.
+
+    The shared engine behind the hypothesis / regime / bucket / underlying
+    weighters: one join (submissions → batch_summaries for the D081 version
+    resolution, restricted to the gated hashes), one estimand, one smoothing
+    rule — so every granularity stays on a single coherent scale. Rows whose
+    ``key_of`` returns None are skipped (wrong hypothesis for a scoped key,
+    corrupt config_json, missing fields). Same determinism property as the rest
+    of the module (hard rule #6): a pure function of the snapshot inputs.
+    """
+    sums = _component_rate_sums(
+        db,
+        gated_runs,
+        key_of,
+        tiebreak_weight=tiebreak_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
     return {
         key: (alpha + reward_sum) / (alpha + beta + total)
-        for key, (total, reward_sum) in acc.items()
+        for key, (total, reward_sum) in sums.items()
+    }
+
+
+def _hierarchical_posteriors[F, C](
+    fine_sums: Mapping[F, Sequence[float]],
+    coarse_of: Callable[[F], C],
+    *,
+    alpha: float,
+    beta: float,
+    prior_strength: float,
+) -> dict[F, float]:
+    """Empirical-Bayes shrinkage: fine-key posteriors anchored on their coarse
+    cell (D106).
+
+    Coarse posteriors come from the AGGREGATED fine sums (Beta(alpha, beta)
+    against the global prior — identical to the flat weighter's output for the
+    same key, by construction). Each fine key then gets
+    ``(S * coarse + fine_reward_sum) / (S + fine_n)``: zero fine evidence →
+    exactly the coarse posterior; ~S observations halve the coarse anchor's
+    pull. This is what stops a thin fine cell from riding its own noise while
+    letting an AAPL-grade outlier escape its class.
+    """
+    coarse_sums: dict[C, list[float]] = {}
+    for fine_key, (total, reward_sum) in fine_sums.items():
+        bucket = coarse_sums.setdefault(coarse_of(fine_key), [0.0, 0.0])
+        bucket[0] += total
+        bucket[1] += reward_sum
+    coarse_post = {
+        c: (alpha + reward_sum) / (alpha + beta + total)
+        for c, (total, reward_sum) in coarse_sums.items()
+    }
+    return {
+        fine_key: (prior_strength * coarse_post[coarse_of(fine_key)] + reward_sum)
+        / (prior_strength + total)
+        for fine_key, (total, reward_sum) in fine_sums.items()
     }
 
 
@@ -524,6 +601,112 @@ def compute_underlying_class_weights(
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
+    )
+
+
+def compute_underlying_name_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
+    prior_strength: float = COMPONENT_HIER_PRIOR_STRENGTH,
+) -> dict[str, float]:
+    """Per-NAME component-rate posterior, shrunk toward the name's class (D106).
+
+    The two-class prior (D105) is leaky in both directions — inside the
+    high-idio class, AAPL minted 36.6% (37/101) while SHOP sat at 0/85 — and
+    pre-D105 sampling drew underlyings uniformly, so those per-name reads are
+    quasi-randomized. Each observed name's posterior anchors on its class
+    posterior (identical to `compute_underlying_class_weights` for the same
+    inputs, by construction) and moves with its own evidence. Unobserved names
+    are ABSENT: the sampler falls through to the class weight, then the prior.
+    Empty gated_runs → ``{}``.
+    """
+
+    def _name_of(cfg: Mapping[str, object]) -> str | None:
+        underlying = cfg.get("underlying")
+        return underlying if isinstance(underlying, str) else None
+
+    name_sums = _component_rate_sums(
+        db,
+        gated_runs,
+        _name_of,
+        tiebreak_weight=tiebreak_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
+    return _hierarchical_posteriors(
+        name_sums,
+        underlying_class,
+        alpha=alpha,
+        beta=beta,
+        prior_strength=prior_strength,
+    )
+
+
+def compute_hypothesis_directional_bucket_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
+    prior_strength: float = COMPONENT_HIER_PRIOR_STRENGTH,
+) -> dict[tuple[str, str, str], float]:
+    """``(hypothesis, directional, dte_bucket)`` component-rate posterior,
+    shrunk toward its ``(hypothesis, dte_bucket)`` pair (D106).
+
+    The directional structure is real — vol_event x iv_rank 17.9% vs
+    gamma_flip 0/147; mean_reversion x put_wall 7.7% vs every classic
+    oscillator at 0/~1,100 — but a FLAT directional weight multiplied into the
+    D105 bucket cell would double-count correlated effects (iv_rank's edge is
+    partly its swing_mid reach, which the bucket cell already prices). Keying
+    the full triple and anchoring on the pair separates "this directional
+    mints" from "this bucket mints": zero triple evidence reproduces the pair
+    cell exactly, so the joint draw's fallback chain (triple → pair → prior)
+    is scale-coherent. Empty gated_runs → ``{}``.
+    """
+
+    def _hyp_dir_bucket_of(cfg: Mapping[str, object]) -> tuple[str, str, str] | None:
+        hyp = cfg.get("hypothesis")
+        bucket = cfg.get("dte_bucket")
+        directional = None
+        signals = cfg.get("signals")
+        if isinstance(signals, list):
+            for sig in signals:
+                if isinstance(sig, dict) and sig.get("role") == "directional":
+                    inds = sig.get("indicators")
+                    if isinstance(inds, (list, tuple)) and inds and isinstance(inds[0], str):
+                        directional = inds[0]
+                    break
+        if isinstance(hyp, str) and isinstance(bucket, str) and directional is not None:
+            return (hyp, directional, bucket)
+        return None
+
+    triple_sums = _component_rate_sums(
+        db,
+        gated_runs,
+        _hyp_dir_bucket_of,
+        tiebreak_weight=tiebreak_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
+    return _hierarchical_posteriors(
+        triple_sums,
+        lambda key: (key[0], key[2]),
+        alpha=alpha,
+        beta=beta,
+        prior_strength=prior_strength,
     )
 
 
@@ -663,6 +846,7 @@ def apply_exploration_floor(
 __all__ = [
     "COMPONENT_ALPHA",
     "COMPONENT_BETA",
+    "COMPONENT_HIER_PRIOR_STRENGTH",
     "COMPONENT_PRIOR_VERSION_WEIGHT",
     "COMPONENT_TIEBREAK_WEIGHT",
     "DEFAULT_ALPHA",
@@ -680,9 +864,11 @@ __all__ = [
     "component_prior_mean",
     "compute_hypothesis_bucket_weights",
     "compute_hypothesis_component_weights",
+    "compute_hypothesis_directional_bucket_weights",
     "compute_hypothesis_reward_weights",
     "compute_hypothesis_weights",
     "compute_relative_value_regime_weights",
     "compute_underlying_class_weights",
+    "compute_underlying_name_weights",
     "prior_mean",
 ]

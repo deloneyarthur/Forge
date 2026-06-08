@@ -643,3 +643,191 @@ def test_deterministic_and_orphans_and_corrupt_skipped(tmp_path: Path) -> None:
     assert first == second
     # Only the real submission contributes: posterior (1+1)/(51+1), alone → 1.0.
     assert first["mean_reversion"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# D106 — hierarchical granularities. Two findings drove these:
+# (1) per-name yield is extreme INSIDE the high-idio class (AAPL 36.6% vs
+#     SHOP 0/85 at comparable n) — the two-class prior is leaky both ways;
+# (2) a flat directional weight multiplied into the bucket cell would
+#     double-count correlated effects (iv_rank's edge is partly its
+#     swing_mid reach), so the directional signal lives in a
+#     (hypothesis, directional, bucket) cell shrunk toward its
+#     (hypothesis, bucket) pair.
+# Both use the same empirical-Bayes shrinkage: fine posterior =
+# (S * coarse_posterior + fine_reward_sum) / (S + fine_n).
+# ---------------------------------------------------------------------------
+
+
+def test_name_weights_strong_evidence_escapes_class_prior(tmp_path: Path) -> None:
+    """A heavily-minting name (AAPL-like) must rise far above its class
+    posterior; a well-sampled dead name (SHOP-like) must sink below it;
+    and unseen names are ABSENT (the sampler falls back to the class)."""
+    from forge.feedback.rejection_weights import (
+        COMPONENT_HIER_PRIOR_STRENGTH,
+        compute_underlying_class_weights,
+        compute_underlying_name_weights,
+    )
+
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated: list[GatedRun] = []
+        for i in range(20):  # AAPL: 8/20 components
+            ch = f"aapl_{i}"
+            _insert_submission(
+                conn, config=_config("volatility_event", f"a{i}", underlying="AAPL"), config_hash=ch
+            )
+            gated.append(
+                _gated_run(
+                    config_hash=ch,
+                    decision="component" if i < 8 else "reject",
+                    trade_count=80,
+                    gates_passed=4 if i < 8 else 2,
+                    gates_failed=0 if i < 8 else 2,
+                )
+            )
+        for i in range(20):  # SHOP: 0/20, all trading rejects
+            ch = f"shop_{i}"
+            _insert_submission(
+                conn, config=_config("volatility_event", f"s{i}", underlying="SHOP"), config_hash=ch
+            )
+            gated.append(_gated_run(config_hash=ch, trade_count=60, gates_passed=2, gates_failed=2))
+        names = compute_underlying_name_weights(conn, gated)
+        classes = compute_underlying_class_weights(conn, gated)
+
+    from forge.enumeration.underlying_class import HIGH_IDIO_VOL
+
+    p_class = classes[HIGH_IDIO_VOL]
+    assert set(names) == {"AAPL", "SHOP"}
+    assert names["AAPL"] > p_class > names["SHOP"]
+    # Exact shrinkage math: S*p_class anchors, evidence moves.
+    s = COMPONENT_HIER_PRIOR_STRENGTH
+    tb = COMPONENT_TIEBREAK_WEIGHT * 0.25
+    assert names["AAPL"] == pytest.approx((s * p_class + 8.0 + 12 * tb) / (s + 20), rel=1e-9)
+    assert names["SHOP"] == pytest.approx((s * p_class + 20 * tb) / (s + 20), rel=1e-9)
+
+
+def test_name_weights_thin_name_stays_near_class(tmp_path: Path) -> None:
+    """One observation barely moves a name off its class posterior — the
+    hierarchy protects thin names from their own noise."""
+    from forge.feedback.rejection_weights import (
+        compute_underlying_class_weights,
+        compute_underlying_name_weights,
+    )
+
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated: list[GatedRun] = []
+        for i in range(30):  # class context: NVDA minting
+            ch = f"nvda_{i}"
+            _insert_submission(
+                conn, config=_config("volatility_event", f"n{i}", underlying="NVDA"), config_hash=ch
+            )
+            gated.append(
+                _gated_run(
+                    config_hash=ch,
+                    decision="component" if i < 3 else "reject",
+                    trade_count=70,
+                    gates_passed=3 if i < 3 else 1,
+                    gates_failed=0 if i < 3 else 3,
+                )
+            )
+        # F: a single zero-trade reject
+        _insert_submission(
+            conn, config=_config("trend_continuation", "f0", underlying="F"), config_hash="f_0"
+        )
+        gated.append(_gated_run(config_hash="f_0", trade_count=0, gates_passed=0, gates_failed=4))
+        names = compute_underlying_name_weights(conn, gated)
+        classes = compute_underlying_class_weights(conn, gated)
+
+    from forge.enumeration.underlying_class import HIGH_IDIO_VOL
+
+    p_class = classes[HIGH_IDIO_VOL]
+    # F moved less than 3% off the class posterior by a single observation.
+    assert abs(names["F"] - p_class) / p_class < 0.03
+
+
+def test_directional_bucket_weights_shrink_toward_pair_cell(tmp_path: Path) -> None:
+    """The (hypothesis, directional, bucket) triple shrinks toward its
+    (hypothesis, bucket) pair — so a minting directional rises above the
+    pair cell and a dead one sinks below, WITHOUT double-counting the
+    bucket effect."""
+    from forge.feedback.rejection_weights import (
+        COMPONENT_HIER_PRIOR_STRENGTH,
+        compute_hypothesis_bucket_weights,
+        compute_hypothesis_directional_bucket_weights,
+    )
+
+    def _cfg_dir(name: str, directional: str) -> StrategyConfig:
+        base = _config("mean_reversion", name, dte_bucket="swing_short")
+        sigs = list(base.signals)
+        sigs[0] = SignalSpec(
+            id="sig_directional",
+            type="threshold",
+            role="directional",
+            indicators=(directional,),
+            params={"threshold": 30.0, "op": "<"},
+        )
+        return base.model_copy(update={"signals": tuple(sigs)})
+
+    with db_connection(tmp_path / "forge.db") as conn:
+        gated: list[GatedRun] = []
+        for i in range(10):  # put_wall: 2/10 components
+            ch = f"pw_{i}"
+            _insert_submission(
+                conn, config=_cfg_dir(f"pw{i}", "put_wall_distance_pct"), config_hash=ch
+            )
+            gated.append(
+                _gated_run(
+                    config_hash=ch,
+                    decision="component" if i < 2 else "reject",
+                    trade_count=60,
+                    gates_passed=4 if i < 2 else 2,
+                    gates_failed=0 if i < 2 else 2,
+                )
+            )
+        for i in range(10):  # rsi_2: 0/10
+            ch = f"rs_{i}"
+            _insert_submission(conn, config=_cfg_dir(f"rs{i}", "rsi_2"), config_hash=ch)
+            gated.append(_gated_run(config_hash=ch, trade_count=40, gates_passed=2, gates_failed=2))
+        triples = compute_hypothesis_directional_bucket_weights(conn, gated)
+        pairs = compute_hypothesis_bucket_weights(conn, gated)
+
+    pair = pairs[("mean_reversion", "swing_short")]
+    hot = triples[("mean_reversion", "put_wall_distance_pct", "swing_short")]
+    cold = triples[("mean_reversion", "rsi_2", "swing_short")]
+    assert hot > pair > cold
+    s = COMPONENT_HIER_PRIOR_STRENGTH
+    tb = COMPONENT_TIEBREAK_WEIGHT * 0.25
+    assert hot == pytest.approx((s * pair + 2.0 + 8 * tb) / (s + 10), rel=1e-9)
+    assert cold == pytest.approx((s * pair + 10 * tb) / (s + 10), rel=1e-9)
+
+
+def test_sharpe_reward_reads_gate_value_with_metrics_fallback(tmp_path: Path) -> None:
+    """D106 fix: the live export carries walk_forward_sharpe_median in
+    gate_results[].value, NOT in run.metrics — D101's metrics-only read made
+    the sharpe term silently 0 for every run. Gate value wins; metrics is
+    the fallback; zero-trade still gets no credit."""
+    from crucible_contracts import GateResult
+
+    from forge.feedback.rejection_weights import _sharpe_reward
+
+    def _run_with(wf_gate: float | None, wf_metric: float | None, trades: int) -> GatedRun:
+        gr = _gated_run(config_hash="x", trade_count=trades, gates_passed=1, gates_failed=1)
+        if wf_metric is not None:
+            gr.run.metrics["walk_forward_sharpe_median"] = wf_metric
+        if wf_gate is not None:
+            gr.decision.gate_results["walk_forward_sharpe_median"] = GateResult(
+                gate_name="walk_forward_sharpe_median",
+                passed=False,
+                value=wf_gate,
+                threshold=2.0,
+            )
+        return gr
+
+    # gate value only (the live-export shape): half the 2.0 ceiling -> 0.5
+    assert _sharpe_reward(_run_with(1.0, None, trades=50), traded=True) == pytest.approx(0.5)
+    # gate value wins over a stale metrics entry
+    assert _sharpe_reward(_run_with(2.0, 0.0, trades=50), traded=True) == pytest.approx(1.0)
+    # metrics fallback when the gate row is absent
+    assert _sharpe_reward(_run_with(None, 1.0, trades=50), traded=True) == pytest.approx(0.5)
+    # zero-trade: no credit regardless of source
+    assert _sharpe_reward(_run_with(2.0, 2.0, trades=0), traded=False) == 0.0

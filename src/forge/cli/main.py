@@ -749,6 +749,103 @@ def _format_underlying_class_weights_line(weights: Mapping[str, float]) -> str:
     return f"underlying_class_weights: {parts}"
 
 
+def _load_underlying_name_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[str, float]:
+    """D106 — per-name component-rate weights (class-anchored shrinkage) for
+    the sampler's name -> class -> prior underlying chain.
+
+    Mirrors `_load_underlying_class_weights` (file-based export read, silent
+    degrade to {}; same version scoping). Returns observed names only; the
+    sampler falls through to the class weight for unseen tickers.
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_underlying_name_weights,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_underlying_name_weights(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+
+
+def _format_underlying_name_weights_line(weights: Mapping[str, float]) -> str:
+    """One-line journal summary: count + the top names by component rate."""
+    top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:6]
+    parts = ", ".join(f"{name}={w:.3f}" for name, w in top)
+    return f"underlying_name_weights: {len(weights)} names learned; top: {parts}"
+
+
+def _load_directional_bucket_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[tuple[str, str, str], float]:
+    """D106 — (hypothesis, directional, dte_bucket) triple cells (pair-anchored
+    shrinkage) for the joint draw's triple -> pair -> prior chain.
+
+    Mirrors `_load_bucket_weights` (file-based export read, silent degrade to
+    {}; same version scoping).
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_hypothesis_directional_bucket_weights,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_hypothesis_directional_bucket_weights(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+
+
+def _format_directional_bucket_weights_line(
+    weights: Mapping[tuple[str, str, str], float],
+) -> str:
+    """One-line journal summary: count + the top triples by component rate."""
+    top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:4]
+    parts = ", ".join(f"{h}x{d}x{b}={w:.3f}" for (h, d, b), w in top)
+    return f"directional_bucket_weights: {len(weights)} cells learned; top: {parts}"
+
+
 def _load_trade_rate_priors(
     forge_db_path: Path,
     registry: RegistrySnapshot,
@@ -935,7 +1032,9 @@ def _run_battery_for_seed(
     hypothesis_weights: Mapping[str, float] | None = None,
     regime_weights: Mapping[str, float] | None = None,
     bucket_weights: Mapping[tuple[str, str], float] | None = None,
+    directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     underlying_class_weights: Mapping[str, float] | None = None,
+    underlying_name_weights: Mapping[str, float] | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
@@ -1002,7 +1101,9 @@ def _run_battery_for_seed(
             hypothesis_weights=hypothesis_weights,
             regime_weights=regime_weights,
             bucket_weights=bucket_weights,
+            directional_bucket_weights=directional_bucket_weights,
             underlying_class_weights=underlying_class_weights,
+            underlying_name_weights=underlying_name_weights,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
@@ -1252,7 +1353,7 @@ def _effective_seed(root_seed: int, iteration: int) -> int:
     return SeedHierarchy(root_seed).derive(f"batch_{iteration:08d}")
 
 
-def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
+def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observability: one load+echo stanza per learned weight family
     *,
     seed: int,
     batch_size: int,
@@ -1379,6 +1480,18 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
     )
     if underlying_class_weights:
         typer.echo(_format_underlying_class_weights_line(underlying_class_weights))
+    # D106 — hierarchical refinements: per-name (class-anchored) and
+    # (hypothesis, directional, bucket) triples (pair-anchored).
+    underlying_name_weights = _load_underlying_name_weights(
+        forge_db_path, current_grammar_version=grammar.grammar_version
+    )
+    if underlying_name_weights:
+        typer.echo(_format_underlying_name_weights_line(underlying_name_weights))
+    directional_bucket_weights = _load_directional_bucket_weights(
+        forge_db_path, current_grammar_version=grammar.grammar_version
+    )
+    if directional_bucket_weights:
+        typer.echo(_format_directional_bucket_weights_line(directional_bucket_weights))
     # D076 / Q16 — empirical-prior bucket stats for `expected_trades`.
     # Cold start (no exports / no overlap with submissions) returns {};
     # filter falls back to the activations heuristic for every config.
@@ -1413,7 +1526,9 @@ def _run_one_iteration(  # noqa: PLR0915 — D065 observability statements
             hypothesis_weights=hypothesis_weights,
             regime_weights=regime_weights,
             bucket_weights=bucket_weights,
+            directional_bucket_weights=directional_bucket_weights,
             underlying_class_weights=underlying_class_weights,
+            underlying_name_weights=underlying_name_weights,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
             timings=timings,

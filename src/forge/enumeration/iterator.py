@@ -93,7 +93,9 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     hypothesis_weights: Mapping[str, float] | None = None,
     regime_weights: Mapping[str, float] | None = None,
     bucket_weights: Mapping[tuple[str, str], float] | None = None,
+    directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     underlying_class_weights: Mapping[str, float] | None = None,
+    underlying_name_weights: Mapping[str, float] | None = None,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
@@ -122,6 +124,11 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     ``underlying_class_weights`` (D105) is forwarded to the sampler to bias
     the underlying pick by learned class (high-idio-vol vs diversified);
     None/empty preserves the uniform pick byte-identically.
+
+    ``directional_bucket_weights`` / ``underlying_name_weights`` (D106) are
+    the hierarchical refinements of the two above — (hypothesis, directional,
+    bucket) triples anchored on the pair cell, and per-name weights anchored
+    on the class — forwarded to the sampler's fallback chains.
 
     Set ``min_hypothesis_fraction=0.0`` to disable stratification
     (legacy / test path).
@@ -210,7 +217,9 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
                 hypothesis_weights=hypothesis_weights,
                 regime_weights=regime_weights,
                 bucket_weights=bucket_weights,
+                directional_bucket_weights=directional_bucket_weights,
                 underlying_class_weights=underlying_class_weights,
+                underlying_name_weights=underlying_name_weights,
                 forced_hypothesis=forced_hypothesis,
             )
         except SamplerError as exc:

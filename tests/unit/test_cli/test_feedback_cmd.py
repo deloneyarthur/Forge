@@ -274,10 +274,14 @@ def test_d054_feedback_cmd_stamps_counterfactual_phase_into_proposals(
         [
             "feedback",
             "--no-config",
-            "--forge-db", str(forge_db),
-            "--crucible-db", str(crucible_db),
-            "--batch-id", str(batch_id),
-            "--open-proposals", str(open_proposals),
+            "--forge-db",
+            str(forge_db),
+            "--crucible-db",
+            str(crucible_db),
+            "--batch-id",
+            str(batch_id),
+            "--open-proposals",
+            str(open_proposals),
         ],
     )
     assert result.exit_code == 0
@@ -302,8 +306,9 @@ def test_d054_feedback_cmd_stamps_counterfactual_phase_into_proposals(
 
 
 def test_m12_feedback_checks_contracts_version_before_io(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    import forge.core.contracts_check as cc
     from crucible_contracts import SchemaVersionMismatch
+
+    import forge.core.contracts_check as cc
 
     forge_db = tmp_path / "forge.db"
     crucible_db = tmp_path / "crucible.db"
@@ -314,8 +319,7 @@ def test_m12_feedback_checks_contracts_version_before_io(tmp_path: Path, monkeyp
     monkeypatch.setattr(cc, "check_contracts_version", _raise)
     result = runner.invoke(
         app,
-        ["feedback", "--no-config", "--forge-db", str(forge_db),
-         "--crucible-db", str(crucible_db)],
+        ["feedback", "--no-config", "--forge-db", str(forge_db), "--crucible-db", str(crucible_db)],
     )
     assert result.exit_code != 0
     assert isinstance(result.exception, SchemaVersionMismatch)
