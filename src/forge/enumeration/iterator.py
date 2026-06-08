@@ -96,6 +96,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
+    orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
@@ -129,6 +130,10 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     the hierarchical refinements of the two above — (hypothesis, directional,
     bucket) triples anchored on the pair cell, and per-name weights anchored
     on the class — forwarded to the sampler's fallback chains.
+
+    ``orthogonal_yield_discounts`` (H4) is forwarded to the sampler to discount
+    over-mined ``(hypothesis, directional, underlying-class)`` factor cells in
+    the underlying pick; None/empty preserves the draw byte-identically.
 
     Set ``min_hypothesis_fraction=0.0`` to disable stratification
     (legacy / test path).
@@ -220,6 +225,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
                 directional_bucket_weights=directional_bucket_weights,
                 underlying_class_weights=underlying_class_weights,
                 underlying_name_weights=underlying_name_weights,
+                orthogonal_yield_discounts=orthogonal_yield_discounts,
                 forced_hypothesis=forced_hypothesis,
             )
         except SamplerError as exc:

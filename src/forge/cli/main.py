@@ -846,6 +846,60 @@ def _format_directional_bucket_weights_line(
     return f"directional_bucket_weights: {len(weights)} cells learned; top: {parts}"
 
 
+def _load_orthogonal_yield_discounts(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[tuple[str, str, str], float]:
+    """H4 — (hypothesis, directional, underlying-class) marginal-value discounts
+    for the sampler's underlying pick.
+
+    Mirrors `_load_directional_bucket_weights` (file-based export read, silent
+    degrade to {}; the hypothesis-weights loader carries the loud warn-once;
+    same version scoping). Returns over-mined cells only (discount < 1.0); the
+    sampler defaults absent cells to 1.0. Only called when the operator enables
+    the H4 A/B flag — when off, the loader is skipped entirely and the underlying
+    draw is byte-identical to D105/D106.
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_orthogonal_yield_discounts,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_orthogonal_yield_discounts(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+
+
+def _format_orthogonal_yield_discounts_line(
+    discounts: Mapping[tuple[str, str, str], float],
+) -> str:
+    """One-line journal summary: count + the most-discounted (most over-mined)
+    factor cells — sorted ascending so the smallest (hardest-bitten) lead."""
+    top = sorted(discounts.items(), key=lambda kv: kv[1])[:4]
+    parts = ", ".join(f"{h}x{d}x{c}={w:.3f}" for (h, d, c), w in top)
+    return f"orthogonal_yield_discounts: {len(discounts)} cells discounted; most-mined: {parts}"
+
+
 def _load_trade_rate_priors(
     forge_db_path: Path,
     registry: RegistrySnapshot,
@@ -1035,6 +1089,7 @@ def _run_battery_for_seed(
     directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
+    orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
@@ -1104,6 +1159,7 @@ def _run_battery_for_seed(
             directional_bucket_weights=directional_bucket_weights,
             underlying_class_weights=underlying_class_weights,
             underlying_name_weights=underlying_name_weights,
+            orthogonal_yield_discounts=orthogonal_yield_discounts,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
@@ -1366,6 +1422,11 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     open_proposals: Path,
     prefilter_yaml: Path,
     require_real_cache: bool = False,
+    # H4 (orthogonal-yield) A/B flag. Off (default) → byte-identical to D105/D106
+    # (the loader is skipped, the sampler gets {}); on → discount over-mined
+    # (hypothesis, directional, underlying-class) factor cells in the underlying
+    # draw. Operator flips it on the systemd unit, like --consume-feedback.
+    orthogonal_yield: bool = False,
     # H-4: §7.3 throttle; mirrors rate_limiter._DEFAULT_THRESHOLD (0.80).
     inflight_threshold: float = 0.80,
 ) -> str:
@@ -1492,6 +1553,18 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     )
     if directional_bucket_weights:
         typer.echo(_format_directional_bucket_weights_line(directional_bucket_weights))
+    # H4 (orthogonal-yield) — operator-gated A/B flag. Off (default): skip the
+    # load entirely so the underlying draw stays byte-identical to D105/D106
+    # (the sampler treats {} as no-op). On: discount over-mined
+    # (hypothesis, directional, underlying-class) factor cells so the generator
+    # spends breadth on orthogonal sleeves instead of the 37th AAPL long-vol clone.
+    orthogonal_yield_discounts: dict[tuple[str, str, str], float] = {}
+    if orthogonal_yield:
+        orthogonal_yield_discounts = _load_orthogonal_yield_discounts(
+            forge_db_path, current_grammar_version=grammar.grammar_version
+        )
+        if orthogonal_yield_discounts:
+            typer.echo(_format_orthogonal_yield_discounts_line(orthogonal_yield_discounts))
     # D076 / Q16 — empirical-prior bucket stats for `expected_trades`.
     # Cold start (no exports / no overlap with submissions) returns {};
     # filter falls back to the activations heuristic for every config.
@@ -1529,6 +1602,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             directional_bucket_weights=directional_bucket_weights,
             underlying_class_weights=underlying_class_weights,
             underlying_name_weights=underlying_name_weights,
+            orthogonal_yield_discounts=orthogonal_yield_discounts,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
             timings=timings,
@@ -1810,6 +1884,15 @@ def cmd_run(
         "--consume-feedback",
         help="after submit, run the feedback chain (consumer/analyzer/proposer/auto_tune)",
     ),
+    orthogonal_yield: bool = typer.Option(
+        False,
+        "--orthogonal-yield",
+        help=(
+            "H4 A/B flag: discount over-mined (hypothesis, directional, "
+            "underlying-class) factor cells in the underlying draw, rewarding "
+            "orthogonal components. Off (default) is byte-identical to D105/D106."
+        ),
+    ),
     open_proposals: Path = typer.Option(
         Path("OPEN_PROPOSALS.md"),
         "--open-proposals",
@@ -1905,6 +1988,7 @@ def cmd_run(
             open_proposals=open_proposals,
             prefilter_yaml=prefilter_yaml,
             require_real_cache=require_real_cache,
+            orthogonal_yield=orthogonal_yield,
             inflight_threshold=inflight_threshold,
         )
         return
@@ -1935,6 +2019,7 @@ def cmd_run(
                     open_proposals=open_proposals,
                     prefilter_yaml=prefilter_yaml,
                     require_real_cache=require_real_cache,
+                    orthogonal_yield=orthogonal_yield,
                     inflight_threshold=inflight_threshold,
                 )
             except (KeyboardInterrupt, SchemaVersionMismatch):
