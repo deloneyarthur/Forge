@@ -548,7 +548,9 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 
 **Tag:** `crucible-coordination`, `registry`, `relates-to-D109`, `event_momentum`, `operator-action`
 
-## 2026-06-09 — Q31 — event_momentum clears the grammar (post-Q30) but is 100% killed by the signal_density prefilter — **MEDIUM SEVERITY, H2 STILL EMITS ZERO LIVE**
+## 2026-06-09 — Q31 — event_momentum clears the grammar (post-Q30) but is 100% killed by the signal_density prefilter — **HYPOTHESIS 2 CONFIRMED 2026-06-09: `sue`/`days_since_earnings` series are EMPTY in the writer feature cache — Crucible-side; prompt ready**
+
+**Update 2026-06-09 (probe executed):** ran the resolve-by probe against the live db-writer (`FeatureCacheClient`, registry `a99e00d68567af59`). Existence-level specs (`sue > −1000`, `days_since_earnings > −1` — any non-NaN day activates) return **0 activation dates on every name probed** (AAPL/NVDA/AMD/TSLA/NFLX/COIN) while the control `rsi_2 < 10` returns 324–434; the sentinel check (`days_since_earnings > 500`) is also 0. The series are entirely NaN/absent in the cache — **hypothesis 2**; signal_density is doing its job and no Forge change is warranted yet. Outgoing prompt: `PROMPT_CRUCIBLE_SUE_FEATURE_CACHE_COVERAGE.md` (asks: wire the EPS ingest to the feature computations; give us the real post-fix activation distribution — if it lands under the `min_activations=30` floor, the event-cadence signal_density branch (hypothesis 1) becomes a live operator-gated calibration decision SECOND). Original entry below.
 
 **Symptom:** first post-v13 live iteration (batch `0e186240`, 2026-06-09 21:04Z): `sampler_attempts: event_momentum=783` (enumeration healthy after the Q30 registry republish) but `prefilter_rejections_by_hypothesis: event_momentum[signal_density=783]` — every em config rejected by §5.3.3, `ranked_top_n_by_hypothesis: event_momentum=0`. H2 has still never reached Crucible.
 
@@ -559,3 +561,23 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 **Resolve by:** check `ctx.feature_cache.activation_dates("sig_directional")` counts for a sampled em config against the real cache (the daemon computes this every iteration — a small probe via the prefilter battery path answers it). If (1): propose an event-strategy branch for signal_density (e.g., density floor scaled by the regime gate's event cadence, or count post-event windows instead of raw activations) — prefilter calibration change, operator-gated, likely v14 or versionless per change taxonomy. If (2): outgoing Crucible prompt re: cache coverage for `sue`/`days_since_earnings`. Note em is also rank-eligible (H1) — but the rank draw happens at the sampler, and signal_density kills the config regardless of combiner, so the rank path is equally dead until this clears.
 
 **Tag:** `prefilters`, `event_momentum`, `relates-to-D109`, `relates-to-Q30`, `signal-density`
+
+## 2026-06-09 — Q32 — Crucible began ENFORCING `regime_coverage` (§20) ~2026-06-08 09:00 PDT: the single-name composable path now admits 0% of components, and the only config ever to pass BOTH promotion-quality gates was rejected on coverage alone — **HIGH SEVERITY**
+
+**Found during a read-only "what are we missing" analysis of the new `verdicts` table (10,089 rows, /tmp snapshot 2026-06-09 14:42 PDT).**
+
+**Timeline (decided_at is PDT-naive per the documented trap):** components with `regime_coverage` FAIL were minted right up to 06-08 08:06 (29 that morning alone; 211 of the 241 all-time components have rc=FAIL — the gate was advisory). From 06-08 09:03 onward, **every** new component (30) passes rc only via the DEGRADED path (`coverage_unverified: no period/chain_floor supplied` — the rank/pairs runner paths); zero post-cut components have rc=FAIL.
+
+**Post-cut decisions (06-08 09:00 → 06-09 14:42, n≈1,072):**
+- Real-rc-evaluated path (single-name composable): **720 decisions → 0 components.** 716 fail rc; 4 pass rc but fail quality.
+- Degraded path (rank + pairs): 352 → 30 components (8.5%).
+- **66 rejects pass every gate except rc (+ at most the two promotion-quality gates)** — would-be components killed solely by coverage (49 on 06-08, 17 on 06-09; top directionals put_call_flow 20, returns_12m_skip1 15, put_wall_distance_pct 15; 3 of the 4 all-time joint near-misses are in this stream).
+- **`d964e908f9aea66e`** (v9 volatility_event × SOXL, put_wall_distance_pct > −0.0061 × days_to_cpi < 9.5, swing_short, 123 trades, decided 06-08 11:07): passed **all ten other gates including WF-median 2.225 (gate 2.0) AND CPCV-p25 1.537 (gate 1.5)** — the only config in the table ever to pass both — rejected on rc alone. (Corrects the 06-09 review's "no config has ever passed both": that read predated the verdicts backfill.)
+
+**Mechanism:** the gate demands window start ≤30 sessions after the data floor (2018-01-02) AND span ≥1460d. The dominant single-name runner window is 1825d starting **859 sessions (~3.4y) late** (~May 2021 → May 2026): 601/720 post-cut real evaluations show exactly 859. A handful of full-history runs (start=30) DO pass rc — so the runner can produce compliant windows but almost never does on this path. Meanwhile the composable-rank path supplies no period/chain_floor at all, so 100% of current component admission flows through an *unverified* gate.
+
+**Why it matters:** (a) **~52% of current emission (last 5 batches: 522/1,000 single-name confluence) routes to a path with an observed 0% admission rate** while Crucible decisions are the binding resource (D110); (b) the D105/D106/H4 weight engines learn P(component) — the post-cut cohort will teach them "single-name died" when the truth is "the gate changed" (same cohort-trap class as D104; era-split at 2026-06-08 09:00 PDT needed for any weight load or analysis spanning the cut); (c) it beheads the only promote-grade frontier ever observed (v9 vol_event × dealer-flow × macro-calendar on SOXL/high-idio names).
+
+**What I did instead:** read-only; logged here + STATUS; no code or weights change. **Needs a Crucible handoff** (operator-gated): (1) is rc enforcement on component admission intentional and permanent? (2) if yes, will single-name runs get full-history windows (the start=30 runs prove the data reaches the floor)? (3) should the rank/pairs path supply period/chain_floor so component admission isn't 100%-via-unverified-gate? **Forge contingency per answer:** intentional + windows stay 5y → emission to single-name confluence is dead weight; tightening it away is the auto-tighten path (hard rule #4 allows), or constrain to indicator sets with full-floor history; runner bug → no Forge change, but either way split cohorts at the enforcement boundary.
+
+**Tag:** `crucible-coordination`, `gates`, `regime-coverage`, `verdicts`, `cohort-hygiene`, `relates-to-D111`, `operator-action`

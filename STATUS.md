@@ -1,5 +1,11 @@
 # Forge — Status
 
+## 2026-06-09 — ⚠️ Q32 (HIGH): Crucible enforcing `regime_coverage` since ~06-08 09:00 PDT — single-name path 0% admission; first-ever both-quality-gates config rejected on coverage alone — read-only finding, no deploy
+
+**First real analysis off the D111 `verdicts` table (operator asked "what are we missing with strategy generation").** Headline: Crucible flipped `regime_coverage` (§20) from advisory to enforced ~2026-06-08 09:00 PDT. Since the cut: real-rc-evaluated (single-name composable) decisions **720 → 0 components** (716 fail rc — runner window starts 859 sessions/~3.4y after the 2018 data floor; gate demands ≤30); all 30 post-cut components come via the rank/pairs paths where the gate **degrades to unverified-pass**. 66 would-be components were killed on coverage alone in ~30h, including `d964e908` (v9 ve×SOXL put_wall×days_to_cpi, 123 tc) which passed **all ten other gates incl. WF 2.23 AND CPCV-p25 1.54** — the only config ever to pass both promotion-quality gates (corrects the 06-09 review's "none ever"; that read predated the backfill). ~52% of current emission (single-name confluence, last 5 batches) is structurally DOA under this regime while Crucible capacity is the binding constraint (D110); the P(component) weight engines will mislearn "single-name died" unless cohorts are era-split at the enforcement cut. Full evidence + Crucible-handoff asks + Forge contingencies: **OPEN_QUESTIONS.md Q32**. No code/weights/service change this session (read-only /tmp snapshot analysis). Secondary reads from the same pass: rank-arm quality ceiling (26 rank components top out WF 1.80 / CPCV-p25 1.03 vs gates 2.0/1.5 — breadth solved, consistency not), structure shallowness (90% of all verdict-covered configs = 1 threshold directional + 1 regime gate; combiner k=1 always), verdicts gate-VALUES still unused by feedback (continuous-score learning is the open Forge-side lever), H2/em still 0-emitted (Q31).
+
+---
+
 ## 2026-06-09 — D111 verdicts persistence + D113 prefilter-tightening REFUTED (no change) — D111 DEPLOYED + VERIFIED LIVE 2026-06-09T21:17:29Z
 
 **Review recommendations 2+3 executed (operator-approved bundle); D112/v13 deployed separately below — this block is the versionless D111 remainder.**
