@@ -545,3 +545,15 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 **Resolve by:** operator asks Crucible to republish the registry snapshot (restart `crucible-registry-publisher` or equivalent). No Forge restart needed — the run loop calls `load_registry()` fresh every iteration (`cli/main.py`), so the next batch picks up the new snapshot (registry_hash changes; expected under #6). Verify with the emission-proof recipe (event_momentum > 0) and the journal submission mix. Note H1 is unaffected for trend/mean_reversion rank draws; the event_momentum rank-eligible arm is dead until this clears. Outgoing prompt ready: `PROMPT_CRUCIBLE_REGISTRY_SNAPSHOT_REPUBLISH.md`.
 
 **Tag:** `crucible-coordination`, `registry`, `relates-to-D109`, `event_momentum`, `operator-action`
+
+## 2026-06-09 — Q31 — event_momentum clears the grammar (post-Q30) but is 100% killed by the signal_density prefilter — **MEDIUM SEVERITY, H2 STILL EMITS ZERO LIVE**
+
+**Symptom:** first post-v13 live iteration (batch `0e186240`, 2026-06-09 21:04Z): `sampler_attempts: event_momentum=783` (enumeration healthy after the Q30 registry republish) but `prefilter_rejections_by_hypothesis: event_momentum[signal_density=783]` — every em config rejected by §5.3.3, `ranked_top_n_by_hypothesis: event_momentum=0`. H2 has still never reached Crucible.
+
+**Two hypotheses (decide with data before fixing):**
+1. **`sue` activations are genuinely < 30 per name (likely).** PEAD is quarterly: ~20 earnings prints per single name in the data window, so a surprise-threshold directional structurally cannot reach `min_activations=30`. Same failure shape as the pre-D109 `expected_trades`-vs-rank mismatch — a prefilter calibrated on daily technical indicators mis-measures event strategies. The prefetch line `data_unavailable=[]` suggests the cache HAS the series (supports this hypothesis).
+2. **`sue` series missing/empty in the db-writer feature cache** (Polygon EPS ingest is new; the writer restarted 2026-06-08). Then activations=0 and the fix is Crucible-side.
+
+**Resolve by:** check `ctx.feature_cache.activation_dates("sig_directional")` counts for a sampled em config against the real cache (the daemon computes this every iteration — a small probe via the prefilter battery path answers it). If (1): propose an event-strategy branch for signal_density (e.g., density floor scaled by the regime gate's event cadence, or count post-event windows instead of raw activations) — prefilter calibration change, operator-gated, likely v14 or versionless per change taxonomy. If (2): outgoing Crucible prompt re: cache coverage for `sue`/`days_since_earnings`. Note em is also rank-eligible (H1) — but the rank draw happens at the sampler, and signal_density kills the config regardless of combiner, so the rank path is equally dead until this clears.
+
+**Tag:** `prefilters`, `event_momentum`, `relates-to-D109`, `relates-to-Q30`, `signal-density`
