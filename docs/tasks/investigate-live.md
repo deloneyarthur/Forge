@@ -50,6 +50,11 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
   `grammar_version=None` — exclude them or they dominate "recent" aggregates (the D103 trap).
 - v9's true code cutover is **2026-06-06T06:48:49Z** (reboot-deploy), not the 06-07 migration (D104).
 - Timestamps before 2026-06-07 are PDT; after, UTC. Convert before joining DB rows or journals.
+- **Exception:** the gated export's `decided_at` is tz-naive LOCAL (PDT) even post-migration
+  (verified 2026-06-09: run `7f5731b6` decided_at 11:37:46 vs its `runner_done` at 18:37:47Z).
+  `exported_at` in the same file IS UTC. Fix requested via
+  `PROMPT_CRUCIBLE_RUNNER_CAPACITY_STABILITY.md`; until it lands, add 7h before comparing
+  `decided_at` to journals or `utc_now()`.
 - Post-D105, the sampler is weighted — condition scans on the live weights (no more
   quasi-randomization).
 
