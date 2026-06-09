@@ -206,6 +206,24 @@ forge grammar revert --to-version v3 --initials AJ --forge-db ~/forge_data/forge
 
 Run via `.venv/bin/python scripts/NAME.py` from the Forge repo root.
 
+### backfill_verdicts.py
+
+One-time catch-up for the `verdicts` table (D111): ingest a gated-runs export
+snapshot through the production `record_verdicts` path so the current rolling
+window survives before it rolls off. Idempotent (PK `crucible_run_id`). Run
+while `forge.service` is STOPPED (single-writer DB) — slot into the deploy
+stop-window.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--export-json` | path | newest in `~/optbt_data/exports` | Specific export snapshot. |
+| `--forge-db` | path | `~/forge_data/forge.db` | Forge DB (service stopped). |
+| `--dry-run` | flag | off | Report would-insert count; write nothing. |
+
+```
+.venv/bin/python scripts/backfill_verdicts.py --dry-run
+```
+
 ### propose_threshold_tightenings.py
 
 Walk the latest `gated_runs_*.json` export, cross-reference config hashes against
@@ -282,6 +300,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 | `submissions` | One row per submitted config. `config_hash` is unique-indexed (idempotency). `status` ∈ submitted/gated/skipped. |
 | `batch_summaries` | Per-batch stats: size, grammar/registry version, promotion rate, prefilter rejections. |
 | `pre_filter_logs` | Per-(candidate, filter) pass/score/details. |
+| `verdicts` | Durable per-candidate Crucible decisions (D111): decision, decided_at, trade_count, grammar_version, full gate_results JSON. PK `crucible_run_id`, so re-gates append. Populated on every reconcile pass; survives the rolling export window. |
 | `grammar_versions` | Grammar change history (version, sha256, operator initials). |
 | `grammar_proposals` | Refinement proposals (pending/approved/rejected/applied). |
 | `promoted_patterns` | Discovered patterns across promoted strategies. |

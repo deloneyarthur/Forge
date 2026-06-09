@@ -3355,3 +3355,36 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 **References:** [[D062]] (dealer admission), [[D098]] (rv underlying=None), [[D107]] (gamma regime switch — single-name side kept), [[D109]] (H1 rank combiner), [[D110]] (Crucible capacity is the binding constraint). D111 is reserved by the pre-existing `d111-verdicts-expected-trades` branch (verdict-persistence / Q29 work, not started).
 
 **STATUS: code complete + green in `../Forge-build` (branch `d112-dealer-single-name`); awaiting the D104 deploy ritual (stop service → uncontended suite → merge to main → restart → verify → relay v13 + timestamp to Crucible for `funnel --compare v12 v13`).**
+
+---
+
+## D111 — 2026-06-09 — Durable per-candidate verdicts table (+ backfill script)
+
+**Spec section:** §8.2 feedback consumer (side-effect extension), §9.1 Forge DB; [[D052]]/[[D110]] (rolling-window flush — the data-loss mechanism this fixes). Origin: the 2026-06-09 data-driven pipeline review, recommendation 2 (operator-approved schema via AskUserQuestion). Numerically out of order in this log because D112 (begun by a parallel session the same afternoon) was committed first; chronological order preserved.
+
+**Context.** Crucible's gated export is a rolling top-10k window; Forge persisted only batch aggregates (`promotion_rate`, `common_failures`) plus the submissions status flag. Consequences measured in the review: per-candidate verdicts recoverable for only **13.2%** of 92,389 closed submissions (80,163 D110-flushed rows have none, their batches' `common_failures` are `{}`); every feedback weight load is hostage to window composition (the 06-07 re-gate spike was 70% of the window — the D110 wedge's root enabler); per-version cohort analysis impossible beyond the window's reach.
+
+**Decision.** New `verdicts` table — PK `crucible_run_id` (re-gates are new run_ids → append, never overwrite), `config_hash`, `decision`, `decided_at`, `trade_count`, `grammar_version`, `gate_results` JSON (full 11-gate values+thresholds), `recorded_at`. Written by new `forge.persistence.verdicts.record_verdicts`, called from `reconcile_all_pending` on every poll: sweeps the ENTIRE export against all known submission hashes (not just pending batches), so re-gates of completed batches are captured too. Idempotent via `INSERT OR IGNORE`. `decided_at`: aware → naive UTC; **naive passes through verbatim** — the export's PDT-naive skew (found in the same review; `PROMPT_CRUCIBLE_RUNNER_CAPACITY_STABILITY.md` asks for the fix) is not coerced client-side because a +7h shift would double-shift the moment Crucible emits aware UTC. One-time `scripts/backfill_verdicts.py` ingests an export snapshot through the same code path (deploy stop-window; verified against the saved 2026-06-09T185130Z snapshot: 10,000 rows, all matched).
+
+**Alternatives considered:** columns on `submissions` (rejected: ALTER on the hot table, one verdict per config — re-gates overwrite history, flushed rows conflated); recording only in `consume_batch_results` (rejected: misses re-gates of completed batches; the manual `forge feedback` path is covered anyway since the loop's sweep is global).
+
+**Verification (TDD RED→GREEN):** 9 tests in `tests/unit/test_feedback/test_verdicts.py` (schema, matched-insert, unknown-hash skip, idempotency, re-gate append, aware→naive-UTC, naive-verbatim, reconcile wiring, sentinel-flush exclusion) + 3 in `tests/integration/test_backfill_verdicts.py` (insert/idempotent/dry-run). Full suite 1,413/0 post-untangle on the branch; mypy --strict clean (83 files); ruff + format clean.
+
+**Files:** `src/forge/persistence/schemas.py` (DDL + TABLE_NAMES), `src/forge/persistence/verdicts.py` (new), `src/forge/feedback/consumer.py` (one call + docstring), `scripts/backfill_verdicts.py` (new), tests (2 new files), `docs/MANPAGE.md` (table + script), `STATUS.md`, this entry.
+
+---
+
+## D113 — 2026-06-09 — expected_trades tightening REFUTED by measurement — no code change
+
+**Spec section:** §5.3.4; [[Q29]](a), [[D076]]/[[Q16]] (the empirical-prior mode under test), [[D105]] (fat-tail pass-through note). Origin: the 2026-06-09 review, recommendation 3 — "~48% of Crucible's window decisions realized <10 trades; recalibrate the prefilter."
+
+**Decision: ship nothing.** Every candidate tightening was tested counterfactually against the D111 verdicts ⋈ `pre_filter_logs` join (10,130 rows — realized trade counts vs what the filter saw at evaluation time) and failed:
+
+1. **Raise `min_pass_probability` (0.10 → 0.25):** the posterior bands [0.15, 0.25) hold 63%/56% zero-trade waste AND 115 of the 140 empirical-mode components. The cut captures ~2,300 zero-trade configs at the cost of **82% of the component frontier**. The bucket posterior cannot separate waste from yield because vol_event's fat tail puts both in the same `(hyp, bucket, family)` cells — exactly D105's pass-through note, now quantified.
+2. **New P(zero-trade) bucket knob** (Beta-smoothed `n_zero_trade/n_total`, already logged): equally poisoned — its natural cut band [0.5, 0.6) contains 104 components.
+3. **Finer cells (+underlying):** safe by construction (cull only ≥80%-zero, 0-component, n≥20 cells) but captures just **14% of v9-era zero-trade waste** (539 configs, 24 cells — mr×swing_mid oscillator singles on ETFs, ve×dealer on low-vol names: shapes D105/D106 weights and the D112 dealer cut already starve).
+4. **The decisive baseline: the waste already collapsed upstream.** v12-cohort verdicts: **1% zero-trade / 10% sub-10-trade** vs v9's 40%/49%. The review's 48% headline was a v9-mix artifact; the allocation re-aim + H1 rank (structural trade counts) + D112 fixed it at the sampler, where Q29(a) said the real fix lives.
+
+**Monitoring (replaces the change):** per-version waste rate is now one query against `verdicts` — `SELECT grammar_version, AVG(CASE WHEN trade_count < 10 THEN 1.0 ELSE 0.0 END) FROM verdicts GROUP BY grammar_version`. Re-open Q29(a) if a post-v13 cohort (≥500 decided) shows sub-10-trade share back above ~25%; the verdicts table then supports the per-(indicator, role, band) attribution that a sampler-side threshold-draw fix needs.
+
+**Files:** `OPEN_QUESTIONS.md` (Q29 updated), `STATUS.md`, this entry. No production code touched.
