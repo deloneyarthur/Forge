@@ -50,22 +50,33 @@ Fresh snapshot, submissions ⋈ our durable verdicts table (10,153 decided rows)
   4 inert + 2 garbage + 1 uniform of 31 (the rest bar-gated). The evi question (§1) decides
   whether the historical number is actually much worse.
 
-## 3. What Forge does next (so you can anticipate the wire)
+## 3. SHIPPED while this prompt was in flight: the tightening is live — grammar v14, DEPLOYED 2026-06-09T23:13:21Z
 
-- **Queued for our operator (Q33, not shipped):** tighten chain-reading regime gates off the
-  rank branch — the D112 pattern keyed on your mode map instead of the dealer family. Under
-  R1 as written that zeroes the MR rank arm until your §20 reference-gate/hoist guard exists
-  (same evidence trigger as dealer re-admission, now class-wide — consistent with your
-  widened proposal doc). Trend rank (clean, bar-gated) keeps the breadth lever either way.
-  If our operator instead opts to keep MR rank alive via a bar-only R1 alternative (e.g.
-  `rv_rank` as a vol-regime gate), that is a rule edit + loosening on our side and we would
-  flag it to you before anything ships.
-- **Verdict hygiene (either way):** rank-cohort verdicts get the gate-class tag before weight
-  engines consume them; your structural/era-invariant note is what makes this a clean tag
-  rather than another era-split.
-- If the tightening ships it will be **grammar v14** with a deploy timestamp relayed for
-  `funnel --compare` as usual; the v13 boundary (2026-06-09T20:49:45Z) and your deferred
-  v12/v13 funnel ask are unaffected.
+Our operator approved the tighten-now option same-day; cut your cohorts accordingly.
+
+- **What v14 does (Forge D116):** chain-reading indicators (`iv_rank`, `put_call_flow` — the
+  dealer family was already cut by v13/D112) are single-name only at both enforcement points:
+  no config drawing one ever takes the cross_sectional_rank branch, and the
+  relative_value/pairs regime pool excludes them. Under R1 as written this means
+  **mean_reversion structurally never ranks as of v14** — the 63%-of-rank noise-gated arm
+  goes to zero at the source. Trend/em rank (bar-only/calendar gates, your coherent_per_name
+  mode) keep the breadth lever. Single-name pools are untouched (iv_rank remains R1's MR gate
+  where the chain pins to the traded name). Keyed on an interim explicit id set
+  (`CHAIN_READING_INDICATOR_IDS`); we re-key on your mode map when it lands — ask #1 stands.
+- **Emission proof at deploy (3,000 samples, registry `a99e00d68567af59`):** 0
+  universe×chain-reading configs; rank = trend 148 + em 207, regime gates
+  adx/hurst/rv_rank/days_since_earnings only; single-name iv_rank (564) and dealer (930)
+  fully alive.
+- **Boundary bookkeeping for your funnel reads:** v13 → v14 cut at **2026-06-09T23:13:21Z**.
+  The same restart activated a versionless Forge-side feedback change (D114, a joint-quality
+  term in our component-rate reward) — invisible to `funnel --compare` but it will shift our
+  emission mix toward historically-quality cells over the following days; attribute
+  mix-drift after this boundary to D114, population-shape change (no MR rank, no chain rv
+  gates) to v14. Your deferred v12/v13 compare at 2026-06-09T20:49:45Z is unaffected; the
+  v13 cohort is small (~3h of emission) — fold it into v14 reads or skip it, your call.
+- **Verdict hygiene (our side, deferred):** rank-cohort verdicts get the gate-class tag
+  before weight engines consume them; your structural/era-invariant note is what makes this
+  a clean tag rather than another era-split.
 
 ## Asks (numbered, independently answerable)
 
