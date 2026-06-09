@@ -1,5 +1,18 @@
 # Forge — Status
 
+## Maintenance — 2026-06-09 (operator-requested cleanup sweep — no behavior change, no deploy needed; does NOT supersede D110 below)
+
+**Full dead-code/refactor audit + 4 small commits (`4d7125f..6624377`, local main, unpushed).** Audit verdict: the tree is clean — zero ruff violations, no unused imports, no orphaned modules, no dead functions (apparent candidates were Typer registrations / the predicates dispatch table). Changes, all behavior-identical (full suite 1,404/0, mypy strict 0/85 files, ruff clean):
+
+- **`refactor(prefilters)`:** byte-identical `_jaccard` copies in `novelty.py` + `signal_correlation.py` extracted to shared `prefilters/_similarity.py` (TDD RED→GREEN, 5 new unit tests). `ranking.jaccard_signal_ids` deliberately NOT unified (different domain: config content-keys; cross-package coupling not worth it).
+- **`fix(scripts)`:** requeue script summary-loop `k, v` → `status_name`/`count` (+ `version`/`n_skipped`) — clears the repo's only mypy error (scoped `v` rebind str→int in `main()`).
+- **`chore`:** `uv.lock` refreshed for contracts 1.15.0→1.16.0 — the stale lock was what broke pre-commit's stash/restore (`mypy hook: files were modified`); **hooks now run clean end-to-end, no `--no-verify` needed** on non-grammar commits.
+- **`docs`:** `PROMPT_5_FORGE_V1_1_REVISED (1).md` → drops the `(1)` download suffix; IMPLEMENTATION_DECISIONS.md citations now resolve.
+
+**Deliberately NOT touched:** `cli/main.py` split / `_run_one_iteration` decomposition (length is documented-deliberate per D065/D105/D106 noqa; ~10 test files monkeypatch `forge.cli.main` internals); root prompt docs (all active ≤3 weeks); tree-wide ruff format (pre-existing dirt, ~27 files). Live service untouched — changes ride along with the next D104-ritual deploy.
+
+---
+
 ## Current status — 2026-06-08 (D110 — aged-out watermark recalibration; §7.3 wedge diagnosed + fixed + DEPLOYED LIVE — SUPERSEDES below)
 
 **Diagnosed + fixed a §7.3 limiter wedge that had stalled ALL generation for ~17h** (758 consecutive blocked iterations 06-08 00:01→15:37; **0 submissions** under v10/v11/v12). The D109 "clean cutover / limiter held `ba92e7ee` 0/200" note below was masking a *permanent* wedge, not a benign hold.
