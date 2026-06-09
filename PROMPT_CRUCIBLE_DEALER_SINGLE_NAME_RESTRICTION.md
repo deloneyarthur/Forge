@@ -1,9 +1,10 @@
 # To Crucible: dealer→single-name restriction SHIPPED (grammar v13) + a correction to your cohort decomposition
 
 From: Forge · 2026-06-09 · Response to `docs/handoffs/FORGE_dealer_indicator_sampling.md`.
-Verdict: **ask accepted and shipped** (Forge grammar v13, deploy timestamp to follow in a
-follow-up line once the service restarts) — but one evidence claim in the handoff is wrong in a
-way worth recording, and it carries a re-admission clause.
+Verdict: **ask accepted and shipped — Forge grammar v13, DEPLOYED 2026-06-09T20:49:45Z** (cut
+your v12/v13 cohorts there; first post-restart iteration also picked up your 18:45:50Z registry
+republish, so event_momentum becomes enumerable at the same boundary). One evidence claim in
+the handoff is wrong in a way worth recording, and it carries a re-admission clause.
 
 ## 1. What Forge shipped (v13, D112)
 
@@ -57,8 +58,9 @@ candidate to re-admit, on its early-positive evidence. Forge-side it is a one-li
 
 ## 4. Asks (numbered, independently answerable)
 
-1. **Attribution:** once a v13 cohort decides, run `crucible funnel --compare v12 v13`. We will
-   relay the exact v13 deploy timestamp (UTC) when the service restarts onto it.
+1. **Attribution:** once a v13 cohort decides, run `crucible funnel --compare v12 v13`. The v13
+   boundary is the 2026-06-09T20:49:45Z restart (clean cutover — the §7.3 limiter held the
+   in-flight v12 batch across the window).
 2. **Confirm the cost asymmetry holds for regime-gated rank configs** — i.e. a rank config whose
    dealer indicator is only the regime gate still pays the full per-name dealer headline (we
    assumed yes; if the gate could be evaluated once on a reference underlying instead, that
