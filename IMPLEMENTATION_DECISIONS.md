@@ -3287,3 +3287,45 @@ Also caught: Crucible's strategy-path `ThresholdSignal` does `indicator_params =
 **References:** [[D107]] (H3 — the new-hypotheses program's grammar-gated precedent + the breadth/component framing), [[D108]] (H4 — the `--orthogonal-yield` A/B-flag pattern `--cross-sectional-rank` mirrors), [[D105]]/[[D106]] (the weight-addition determinism-gating pattern the rank draw mirrors), [[D102]] (horizon-matched DTE + the Forge-owned signal_horizon table), [[D098]] (Python-side enumeration policy without a rules-text change; ETF/cold-start precedents), `H1_H2_V12_IMPLEMENTATION_SPEC.md`, Crucible `FORGE_days_since_earnings_family_response.md`, `NEW_HYPOTHESES_V11_PLAN.md` §4 H1/H2, hard rules #1/#2/#3/#4/#6/#10.
 
 **STATUS: DEPLOYED + VERIFIED LIVE 2026-06-08 (commit `30d628d`, pushed to origin). `grammar_version=v12` healthy (NRestarts=0, no errors); clean cutover (0 submissions leaked in the hot-YAML window — §7.3-blocked). H1 rank emission ON by default (~1/3 share; `--no-cross-sectional-rank` kill switch) — emits on the first unblocked iteration; H2 event_momentum always-on. A/B via `crucible funnel --compare v11 v12` once a v12 cohort gates.**
+
+
+## D110 — 2026-06-08 — Aged-out watermark recalibration (`min(decided_at)` → `max(decided_at) − STRANDED_AFTER`)
+
+**Spec section:** §7.3 rate limiter; §8.2 feedback consumer; [[D052]] (aged-out flush), [[D046]] (oldest-batch policy), [[D061]] (the prior flush-no-op wedge).
+
+**Context — production wedge.** `forge.service` generated **zero** candidates under v10/v11/v12: ~17h stalled, **758 consecutive blocked iterations** (06-08 00:01→15:37), every one logging `blocked: oldest in-flight batch ba92e7ee … 0.0% gated (0/200)`. The §7.3 limiter (D046 oldest-batch policy) was pinned on batch `ba92e7ee` (submitted 2026-05-29, 0/200 gated). Diagnosis of the live `forge.db` snapshot: **274 of 279 in-flight batches stranded** (48,198 `submitted` rows, May 29→Jun 07), none in Crucible's current export window. D052's `_flush_aged_out_submissions` — which exists precisely to clear such rows — was a silent no-op.
+
+**Root cause.** D052's watermark is `min(decided_at)` over the export, valid only when the export is a shallow, time-contiguous window (it was top-1000 at D052). The gated-runs publisher now exports **top-10000**, and a **re-gate spike** on 2026-06-07 (~7,056 decisions in one day — 70% of the window) compressed the window's time-span from a normal ~40-60 days to ~13 days, dragging `min(decided_at)` UP to **2026-05-26** — *just below* the entire May-29+ stranded backlog. So `submitted_at < min(decided_at)` matched nothing and the backlog never flushed. Same wedge *symptom* as D061, different *mechanism*: D061 was an aware-vs-naive tzinfo coercion; this is watermark **calibration** under a window-shape the original heuristic didn't anticipate.
+
+**Decision.** Recalibrate the watermark to `max(decided_at) − STRANDED_AFTER` (`STRANDED_AFTER = timedelta(days=8)`). It tracks Crucible's *newest* decision (its processing clock) minus a latency margin, and is immune to window-span compression. The D052 dual guard (`config_hash NOT IN export_hashes`) and the D061 naive-watermark conversion are retained.
+
+**Why each choice:**
+- **`max` not `min`:** `min` marks the window's *trailing* edge, which a re-gate spike moves arbitrarily; `max` marks Crucible's *leading* edge (processing frontier), which only advances with real progress.
+- **Margin, not bare `max`:** bare `max` would flush rows Crucible simply hasn't decided yet — voiding §7.3 backpressure. The margin must exceed real submit→decide latency.
+- **8 days:** above the observed p99 (~7.2d; itself biased *high* by window survivorship, so the true p99 is lower). Conservative — structurally cannot flush legitimately-pending work. **Tunable DOWN** once the true latency distribution is known (the paired Crucible-throughput investigation).
+- **`max(decided_at)` not `utc_now()`:** if Crucible dies, `max(decided_at)` freezes and the flush stops advancing — pending rows are preserved (safe). `utc_now()` would keep flushing through an outage, eventually voiding the throttle. Also keeps the function clock-free (hard rule #8).
+
+**Hard rules check:**
+- #2 (no Crucible internals): contracts `GatedRun` only; no new imports.
+- #6 (determinism): touches `submissions` rows only; no enumeration/seed dependency.
+- #8 (blessed clock): watermark derived from contracts `decided_at`, not `datetime.now()`.
+- #9 (submission idempotency): the sentinel UPDATE stays gated by `WHERE status = 'submitted'`; re-runs are no-ops.
+
+**Alternatives considered:**
+- **One-time manual SQL flush of the 48,198 rows, defer the code fix.** Rejected for the same reason as D061's parallel alt — the backlog regrows on the next window churn and the structural defect persists. (Operator may still apply it as a *convenience* for faster recovery; see below.)
+- **Bare `max(decided_at)` (no margin).** Rejected — flushes still-pending batches, voids §7.3.
+- **`utc_now() − margin`.** Rejected — keeps flushing during a Crucible outage; `max(decided_at)` freezes safely.
+- **Inbox-disposition-aware flush** (mark configs in `inbox/errors/` terminal immediately). Deferred — larger scope, folded into the Crucible-throughput investigation; the watermark fix alone restores self-healing.
+
+**Recovery profile (operator note).** The conservative 8d margin self-heals **gradually**: each stranded batch flushes as it ages past 8d behind `max(decided_at)`, so the May-29→Jun-07 backlog clears over ~1 week (sooner if Crucible gates the live backlog). After the dead head clears, the limiter correctly throttles on the *live* multi-day backlog — that is §7.3 working as designed, not a bug. v12 throughput remains bounded by Crucible's gating rate (the 67× produce-vs-gate mismatch of [[D070]]), which the paired investigation targets. For immediate full recovery the operator may one-time-flush the pre-`max−8d` `submitted` rows to the D052 sentinel.
+
+**Verification:**
+- 2 new unit tests in `tests/unit/test_feedback/test_consumer.py`: `test_d110_flushes_stranded_row_in_deep_export_window` (deep/compressed window — red on `min`, green on `max−margin`), `test_d110_does_not_flush_recent_row_within_stranded_margin` (margin safety boundary). Both confirmed red on the pre-fix watermark for the right reason.
+- 2 existing D052 tests updated (`…_flushes_predates_export_window`, `…_aged_out_flush_idempotent`): stranded `submitted_at` widened to 2026-05-01, beyond the new margin. Helper `_insert_crucible_gated` gained an optional `decided_at`.
+- 24/24 consumer tests; **517 passed** across `tests/{unit/test_feedback,unit/test_cli,unit/test_submission,integration,invariants}`. Ruff check + mypy strict clean on changed scope (test file format follows the repo's pre-existing hand-style; not reformatted — pre-commit format is bypassed tree-wide).
+
+**Files:** `src/forge/feedback/consumer.py` (`STRANDED_AFTER` constant + watermark line + docstring), `tests/unit/test_feedback/test_consumer.py` (2 new + 2 updated tests, helper param), `IMPLEMENTATION_DECISIONS.md` (this entry).
+
+**References:** [[D052]] (original aged-out flush + dual guard), [[D061]] (prior flush-no-op wedge; tzinfo), [[D046]] (oldest-batch limiter this protects), [[D070]] (67× produce-vs-gate mismatch — the throughput constraint), [[D083]] (sentinel exclusion from §7.3).
+
+**STATUS: code complete + green; awaiting operator restart of `forge.service` to deploy (self-heals on the first reconcile pass). Paired Crucible gating-throughput investigation pending.**

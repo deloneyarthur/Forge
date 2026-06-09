@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,7 +22,11 @@ from crucible_contracts import (
     StrategyConfig,
 )
 
-from forge.feedback.consumer import consume_batch_results, reconcile_all_pending
+from forge.feedback.consumer import (
+    STRANDED_AFTER,
+    consume_batch_results,
+    reconcile_all_pending,
+)
 from forge.persistence.db import db_connection
 from tests.fixtures.strategy_configs import minimal_strategy_config
 from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
@@ -84,6 +88,7 @@ def _insert_crucible_gated(
     config_hash: str,
     decision: str = "promote",
     failed_gate: str | None = None,
+    decided_at: datetime | None = None,
 ) -> str:
     conn = duckdb.connect(str(crucible_db))
     try:
@@ -115,7 +120,7 @@ def _insert_crucible_gated(
                 run_id,
                 decision,
                 json.dumps(gate_results),
-                datetime(2026, 5, 13, 14, tzinfo=UTC),
+                decided_at or datetime(2026, 5, 13, 14, tzinfo=UTC),
                 "gate_v1",
             ],
         )
@@ -590,10 +595,14 @@ def test_reconcile_all_pending_flushes_predates_export_window(tmp_path: Path) ->
     _insert_crucible_gated(crucible_db, config_hash=visible_cfg.config_hash)
     stranded_batch = uuid.uuid4()
     visible_batch = uuid.uuid4()
+    # D110: stranded submit is now 2026-05-01 — well beyond STRANDED_AFTER (8d)
+    # before the single decision (05-13 14:00), so it flushes under the
+    # max(decided_at)-margin watermark (05-05 14:00). The pre-D110 min-watermark
+    # equaled 05-13 14:00, so any date before it sufficed; the margin needs more.
     with db_connection(forge_db) as conn:
         _insert_batch_summary(
             conn, batch_id=stranded_batch, batch_size=1,
-            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+            submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         _insert_batch_summary(
             conn, batch_id=visible_batch, batch_size=1,
@@ -601,7 +610,7 @@ def test_reconcile_all_pending_flushes_predates_export_window(tmp_path: Path) ->
         )
         _insert_forge_submission(
             conn, config=stranded_cfg, batch_id=stranded_batch,
-            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+            submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         _insert_forge_submission(
             conn, config=visible_cfg, batch_id=visible_batch,
@@ -671,13 +680,15 @@ def test_reconcile_all_pending_aged_out_flush_idempotent(tmp_path: Path) -> None
     _insert_crucible_gated(crucible_db, config_hash=visible_cfg.config_hash)
     batch = uuid.uuid4()
     with db_connection(forge_db) as conn:
+        # D110: 05-01 is beyond STRANDED_AFTER (8d) before the decision so it
+        # flushes under the max(decided_at)-margin watermark.
         _insert_batch_summary(
             conn, batch_id=batch, batch_size=1,
-            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+            submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         _insert_forge_submission(
             conn, config=stranded_cfg, batch_id=batch,
-            submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
+            submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
         first_run_id = conn.execute(
@@ -716,4 +727,88 @@ def test_reconcile_all_pending_no_flush_when_export_empty(tmp_path: Path) -> Non
             "SELECT status, crucible_run_id FROM submissions"
         ).fetchone()
     assert row[0] == "submitted"  # no false flush on Crucible-offline
+    assert row[1] is None
+
+
+def test_d110_flushes_stranded_row_in_deep_export_window(tmp_path: Path) -> None:
+    """D110: a re-gate spike can compress the export window's time-span so its
+    oldest decision (`min(decided_at)`) sits just below a genuinely-stranded
+    backlog. The pre-D110 min-watermark then flushed nothing and D046's
+    oldest-batch limiter pinned forever. The fix keys the watermark off
+    `max(decided_at) - STRANDED_AFTER`, which is immune to window compression."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    # Wide window: an old in-window decision AND a recent one, 13 days apart
+    # (mirrors the 2026-06-07 production spike that compressed the window).
+    old_visible = minimal_strategy_config().model_copy(update={"name": "old_visible"})
+    recent_visible = minimal_strategy_config().model_copy(
+        update={"name": "recent_visible"}
+    )
+    recent_dec = datetime(2026, 6, 8, 16, tzinfo=UTC)
+    old_dec = recent_dec - timedelta(days=13)
+    _insert_crucible_gated(
+        crucible_db, config_hash=old_visible.config_hash, decided_at=old_dec
+    )
+    _insert_crucible_gated(
+        crucible_db, config_hash=recent_visible.config_hash, decided_at=recent_dec
+    )
+    # Stranded: submitted AFTER the window's oldest decision (so the pre-D110
+    # min-watermark leaves it pinned) but beyond STRANDED_AFTER before the
+    # newest decision (so it is genuinely rolled off / errored).
+    stranded = minimal_strategy_config().model_copy(update={"name": "stranded"})
+    stranded_at = recent_dec - STRANDED_AFTER - timedelta(days=2)
+    assert stranded_at > old_dec  # precondition: survives the old min-watermark
+    batch = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(
+            conn, batch_id=batch, batch_size=1, submitted_at=stranded_at
+        )
+        _insert_forge_submission(
+            conn, config=stranded, batch_id=batch, submitted_at=stranded_at
+        )
+        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
+        row = conn.execute(
+            "SELECT status, crucible_run_id FROM submissions WHERE config_hash = ?",
+            [stranded.config_hash],
+        ).fetchone()
+    assert row[0] == "gated"
+    assert str(row[1]) == AGED_OUT_SENTINEL
+
+
+def test_d110_does_not_flush_recent_row_within_stranded_margin(
+    tmp_path: Path,
+) -> None:
+    """D110 safety boundary: a row submitted within STRANDED_AFTER of the newest
+    decision is still plausibly pending (Crucible gating latency runs to days)
+    and must NOT be flushed — even though it predates max(decided_at) and is not
+    in the window. Flushing it would void §7.3 backpressure."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    recent_visible = minimal_strategy_config().model_copy(
+        update={"name": "recent_visible"}
+    )
+    recent_dec = datetime(2026, 6, 8, 16, tzinfo=UTC)
+    _insert_crucible_gated(
+        crucible_db, config_hash=recent_visible.config_hash, decided_at=recent_dec
+    )
+    # Pending: submitted just 1 day before the newest decision — inside the
+    # margin. Not in the window (Crucible may simply not have decided yet).
+    pending = minimal_strategy_config().model_copy(update={"name": "pending"})
+    pending_at = recent_dec - timedelta(days=1)
+    assert pending_at < recent_dec  # predates max(decided_at)...
+    assert pending_at > recent_dec - STRANDED_AFTER  # ...but inside the margin
+    batch = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(
+            conn, batch_id=batch, batch_size=1, submitted_at=pending_at
+        )
+        _insert_forge_submission(
+            conn, config=pending, batch_id=batch, submitted_at=pending_at
+        )
+        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
+        row = conn.execute(
+            "SELECT status, crucible_run_id FROM submissions WHERE config_hash = ?",
+            [pending.config_hash],
+        ).fetchone()
+    assert row[0] == "submitted"  # untouched — still legitimately in flight
     assert row[1] is None

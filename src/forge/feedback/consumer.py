@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -65,6 +65,27 @@ _DEFAULT_CRUCIBLE_LIMIT: int = 10_000
 # Audit queries filter aged-out rows via this sentinel; the column stays
 # typed `UUID` (real run_ids are RFC-4122 random).
 _AGED_OUT_SENTINEL_RUN_ID = "00000000-0000-0000-0000-000000000000"
+
+# D110 — aged-out watermark margin. A `submitted` row is "rolled off" when it
+# was submitted longer than this before Crucible's NEWEST known decision
+# (`max(decided_at)` in the current export). See `_flush_aged_out_submissions`.
+#
+# Why this replaces D052's `min(decided_at)` watermark: that watermark assumed
+# the export window is a shallow, time-contiguous slice (it was top-1000 at
+# D052), so its oldest decision marked the rolloff frontier. The publisher now
+# exports top-10000, and a re-gate spike (e.g. 2026-06-07: ~7k decisions in one
+# day) can fill most of the window with same-day decisions — compressing its
+# time-span and dragging `min(decided_at)` UP to just-below a genuinely-stranded
+# backlog. `min` then flushes nothing and D046's oldest-batch limiter pins
+# forever. `max(decided_at) - STRANDED_AFTER` is immune to window-span
+# compression: it tracks Crucible's decision clock directly.
+#
+# Sizing: must exceed real submit→decide latency so it never flushes a
+# still-pending batch (that would void §7.3 backpressure). 8d sits above the
+# observed p99 (~7.2d, itself biased high by window survivorship). Tunable DOWN
+# once the true latency distribution is known — smaller margin = faster recovery
+# of a stranded backlog.
+STRANDED_AFTER = timedelta(days=8)
 
 
 def _resolve_batch_id(
@@ -319,20 +340,27 @@ def _flush_aged_out_submissions(
     forge_db: duckdb.DuckDBPyConnection,
     runs: list[GatedRun],
 ) -> int:
-    """D052: flush `submitted` rows that predate the export's low-watermark.
+    """D052/D110: flush `submitted` rows whose decision has rolled off the export.
 
     Crucible's gated-runs export is a rolling top-N window. A `submitted` row
-    older than `MIN(decided_at)` in the current export AND not appearing in
-    the export by config_hash means Crucible's decision (if any) has rolled
-    off — the join via `consume_batch_results` cannot match. Without this
+    that has been waiting longer than Crucible's gating latency AND does not
+    appear in the export by config_hash means Crucible's decision (if any) has
+    rolled off — the join via `consume_batch_results` cannot match. Without this
     flush those rows persist forever and pin D046's oldest-batch rate-limit
     policy.
 
+    Watermark = `max(decided_at) - STRANDED_AFTER` (D110). It tracks Crucible's
+    newest decision (its processing clock) minus a latency margin. D052's
+    original `min(decided_at)` watermark assumed a shallow, time-contiguous
+    window; once the publisher grew to top-10000 a re-gate spike could compress
+    the window's span and push `min(decided_at)` up to just-below a stranded
+    backlog, so it flushed nothing. `max - margin` is immune to that compression.
+
     The `config_hash NOT IN` guard prevents false-flushing rows that ARE in
-    the current export but whose `submitted_at` happens to precede the
-    watermark (e.g., a row submitted at noon whose decision came at 2pm —
-    the watermark is the 2pm decision and the noon submitted_at falls below
-    it). Those rows reconcile via the normal join.
+    the current export but whose `submitted_at` precedes the watermark — those
+    reconcile via the normal join. The margin (`STRANDED_AFTER`) prevents
+    false-flushing rows Crucible simply hasn't decided yet; it must stay above
+    real submit->decide latency or it would void §7.3 backpressure.
 
     Returns the number of rows transitioned. Empty `runs` is a no-op
     (Crucible-offline condition: leaving rows alone is the safe choice).
@@ -347,12 +375,12 @@ def _flush_aged_out_submissions(
             d = d.replace(tzinfo=UTC)
         decided_ats.append(d)
         export_hashes.add(gr.run.config_hash)
-    # D061: strip tzinfo to match the naive `submitted_at` column convention.
-    # D061's primary defense is pinning the DuckDB session TZ to UTC in
-    # `open_db`, but a naive watermark is the canonical match for a naive
-    # column and survives any future caller that opens a connection without
-    # going through `db_connection`.
-    watermark = min(decided_ats).astimezone(UTC).replace(tzinfo=None)
+    # D110: watermark is Crucible's NEWEST decision minus the latency margin,
+    # not D052's `min(decided_ats)` (which broke under window-span compression —
+    # see docstring). D061: strip tzinfo to match the naive `submitted_at`
+    # column convention (session TZ is pinned UTC in `open_db`; a naive
+    # watermark also survives any caller that bypasses `db_connection`).
+    watermark = (max(decided_ats) - STRANDED_AFTER).astimezone(UTC).replace(tzinfo=None)
     # Inline the NOT IN list at Python level — DuckDB's bind-list semantics
     # for IN aren't always reliable across versions; a comma-joined literal
     # of single-quoted hashes is what every other call site does, and
