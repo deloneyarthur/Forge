@@ -23,23 +23,14 @@ import json
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from forge.prefilters._similarity import jaccard
 from forge.prefilters.signal_density import _directional_signal
 from forge.prefilters.types import FilterResult
 
 if TYPE_CHECKING:
-    from datetime import date
-
     from crucible_contracts import StrategyConfig
 
     from forge.prefilters.types import FilterContext
-
-
-def _jaccard(a: frozenset[date], b: frozenset[date]) -> float:
-    if not a or not b:
-        return 0.0
-    intersection = a & b
-    union = a | b
-    return len(intersection) / len(union)
 
 
 # D069 — per-key float bucket precision for the fingerprint. Default is
@@ -64,7 +55,8 @@ def _bucket_value(key: str, value: object) -> object:
         return value
     if isinstance(value, float):
         precision = _FINGERPRINT_FLOAT_PRECISION_BY_KEY.get(
-            key, _FINGERPRINT_FLOAT_PRECISION_DEFAULT,
+            key,
+            _FINGERPRINT_FLOAT_PRECISION_DEFAULT,
         )
         return round(value, precision)
     if isinstance(value, int) or value is None or isinstance(value, str):
@@ -81,10 +73,7 @@ def _canonical_params(params: object) -> list[list[object]]:
     """
     if not isinstance(params, dict):
         return []
-    return [
-        [k, _bucket_value(k, v)]
-        for k, v in sorted(params.items())
-    ]
+    return [[k, _bucket_value(k, v)] for k, v in sorted(params.items())]
 
 
 def compute_structural_fingerprint(config: StrategyConfig) -> str:
@@ -116,24 +105,15 @@ def compute_structural_fingerprint(config: StrategyConfig) -> str:
     """
     components = {
         "hypothesis": config.hypothesis,
-        "directional_indicators": sorted({
-            ind
-            for sig in config.signals
-            if sig.role == "directional"
-            for ind in sig.indicators
-        }),
-        "regime_indicators": sorted({
-            ind
-            for sig in config.signals
-            if sig.role == "regime_filter"
-            for ind in sig.indicators
-        }),
-        "confluence_indicators": sorted({
-            ind
-            for sig in config.signals
-            if sig.role == "confluence"
-            for ind in sig.indicators
-        }),
+        "directional_indicators": sorted(
+            {ind for sig in config.signals if sig.role == "directional" for ind in sig.indicators}
+        ),
+        "regime_indicators": sorted(
+            {ind for sig in config.signals if sig.role == "regime_filter" for ind in sig.indicators}
+        ),
+        "confluence_indicators": sorted(
+            {ind for sig in config.signals if sig.role == "confluence" for ind in sig.indicators}
+        ),
         "exit_ids": sorted({e.id for e in config.exits}),
         "dte_bucket": config.dte_bucket,
         "sizer_mode": config.sizer.mode,
@@ -143,8 +123,7 @@ def compute_structural_fingerprint(config: StrategyConfig) -> str:
             for sig in sorted(config.signals, key=lambda s: s.id)
         ],
         "exit_params": [
-            [e.id, _canonical_params(e.params)]
-            for e in sorted(config.exits, key=lambda e: e.id)
+            [e.id, _canonical_params(e.params)] for e in sorted(config.exits, key=lambda e: e.id)
         ],
         "selector": [
             ["delta_target", _bucket_value("delta_target", config.selector.delta_target)],
@@ -199,7 +178,7 @@ class NoveltyFilter:
         max_overlap = 0.0
         max_overlap_with: str | None = None
         for prior_hash, prior_dates in ctx.prior_firing_dates.items():
-            overlap = _jaccard(candidate, prior_dates)
+            overlap = jaccard(candidate, prior_dates)
             if overlap > max_overlap:
                 max_overlap = overlap
                 max_overlap_with = prior_hash

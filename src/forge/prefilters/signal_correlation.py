@@ -29,6 +29,7 @@ from itertools import combinations
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from forge.prefilters._similarity import jaccard
 from forge.prefilters.types import FilterResult
 
 if TYPE_CHECKING:
@@ -37,14 +38,6 @@ if TYPE_CHECKING:
     from crucible_contracts import StrategyConfig
 
     from forge.prefilters.types import FilterContext
-
-
-def _jaccard(a: frozenset[date], b: frozenset[date]) -> float:
-    if not a or not b:
-        return 0.0
-    intersection = a & b
-    union = a | b
-    return len(intersection) / len(union)
 
 
 class SignalCorrelationFilter:
@@ -73,7 +66,7 @@ class SignalCorrelationFilter:
         max_overlap = 0.0
         max_pair: tuple[str, str] | None = None
         for a, b in combinations(signals, 2):
-            j = _jaccard(activations[a.id], activations[b.id])
+            j = jaccard(activations[a.id], activations[b.id])
             if j > max_overlap:
                 max_overlap = j
                 max_pair = (a.id, b.id)
