@@ -224,6 +224,21 @@ stop-window.
 .venv/bin/python scripts/backfill_verdicts.py --dry-run
 ```
 
+### migrate_verdicts_decided_at.py
+
+One-time repair of mixed-era `verdicts.decided_at` values (D116): rows ingested
+before Crucible's 2026-06-09T22:55Z decided_at fix carry stale naive-local
+timestamps (+7h late). Sets matched rows from the corrected tz-aware export;
+shifts rolled-off rows +7h only when they provably equal the pre-fix snapshot
+value (idempotent — cannot double-shift). Run while `forge.service` is STOPPED.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--export-json` | path | newest in `~/optbt_data/exports` | Corrected (post-fix) export. |
+| `--prefix-snapshot` | path | `~/forge_data/backfill_source_gated_runs_20260609.json` | Pre-fix snapshot the backfill ingested. |
+| `--forge-db` | path | `~/forge_data/forge.db` | Forge DB (service stopped). |
+| `--dry-run` | flag | off | Report per-class counts; write nothing. |
+
 ### propose_threshold_tightenings.py
 
 Walk the latest `gated_runs_*.json` export, cross-reference config hashes against

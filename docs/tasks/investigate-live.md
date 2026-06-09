@@ -50,11 +50,11 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
   `grammar_version=None` — exclude them or they dominate "recent" aggregates (the D103 trap).
 - v9's true code cutover is **2026-06-06T06:48:49Z** (reboot-deploy), not the 06-07 migration (D104).
 - Timestamps before 2026-06-07 are PDT; after, UTC. Convert before joining DB rows or journals.
-- **Exception:** the gated export's `decided_at` is tz-naive LOCAL (PDT) even post-migration
-  (verified 2026-06-09: run `7f5731b6` decided_at 11:37:46 vs its `runner_done` at 18:37:47Z).
-  `exported_at` in the same file IS UTC. Fix requested via
-  `PROMPT_CRUCIBLE_RUNNER_CAPACITY_STABILITY.md`; until it lands, add 7h before comparing
-  `decided_at` to journals or `utc_now()`.
+- `decided_at` eras: exports published AFTER 2026-06-09T22:55Z emit tz-aware UTC (Crucible
+  fixed storage + export end-to-end, D116); on-disk export files from before then carry
+  naive LOCAL values (mixed eras — do not trust them without the +7h correction). The
+  `verdicts` table was repaired once via `scripts/migrate_verdicts_decided_at.py`; rows
+  written after the fix are correct at ingest.
 - Post-D105, the sampler is weighted — condition scans on the live weights (no more
   quasi-randomization).
 
@@ -64,6 +64,9 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
 - `crucible-ingest-daily` unit "failed" — rfr-only oneshot failure; bars/chains fine.
 - `skipped: real feature cache unavailable` — `--require-real-cache` correctly skipping an
   iteration while Crucible's db-writer is down/restarting.
+- Crucible runner/db-writer "Consumed … N G memory peak" on a CLEAN stop — a deploy restart,
+  not an OOM or leak; the systemd peak counts reclaimable page cache (D116). The
+  flag-worthy signal is an `oom-kill` line, nothing else.
 
 ## When "blocked" IS a wedge
 
