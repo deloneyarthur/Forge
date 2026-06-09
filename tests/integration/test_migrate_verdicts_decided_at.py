@@ -1,4 +1,4 @@
-"""D116 — `scripts/migrate_verdicts_decided_at.py` one-time era repair.
+"""D117 — `scripts/migrate_verdicts_decided_at.py` one-time era repair.
 
 Crucible's decided_at storage carried mixed timezone eras until their
 2026-06-09T22:55Z fix (FORGE_runner_capacity_stability_response.md §3);

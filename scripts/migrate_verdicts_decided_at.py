@@ -1,4 +1,4 @@
-"""D116 — one-time repair of mixed-era `verdicts.decided_at` values.
+"""D117 — one-time repair of mixed-era `verdicts.decided_at` values.
 
 Context: Crucible's decided_at storage carried mixed timezone eras (old-box
 PDT-naive; UTC-naive for half of 06-07; PDT-naive again) until their

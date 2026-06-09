@@ -226,7 +226,7 @@ stop-window.
 
 ### migrate_verdicts_decided_at.py
 
-One-time repair of mixed-era `verdicts.decided_at` values (D116): rows ingested
+One-time repair of mixed-era `verdicts.decided_at` values (D117): rows ingested
 before Crucible's 2026-06-09T22:55Z decided_at fix carry stale naive-local
 timestamps (+7h late). Sets matched rows from the corrected tz-aware export;
 shifts rolled-off rows +7h only when they provably equal the pre-fix snapshot
