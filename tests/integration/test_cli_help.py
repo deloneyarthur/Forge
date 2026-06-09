@@ -25,7 +25,9 @@ from typer import Typer
 
 from forge.cli.main import app
 
-_README = Path(__file__).resolve().parents[2] / "README.md"
+# 2026-06-09 docs restructure: the commands reference moved README → MANPAGE.md;
+# the CLI↔docs sync guards follow the content to its new owner.
+_MANPAGE = Path(__file__).resolve().parents[2] / "docs" / "MANPAGE.md"
 
 
 def _walk_commands(typer_app: Typer, prefix: str = "") -> Iterable[tuple[str, object]]:
@@ -83,19 +85,19 @@ def test_every_option_has_help_text() -> None:
     assert not offenders, f"options without help text: {offenders}"
 
 
-def test_every_command_is_mentioned_in_readme() -> None:
+def test_every_command_is_mentioned_in_manpage() -> None:
     """Each CLI command name (e.g. `forge feedback`, `forge grammar
-    list-proposals`) must appear at least once in ``README.md``. Keeps
-    the Commands / Operations sections in sync with the actual CLI.
+    list-proposals`) must appear at least once in ``docs/MANPAGE.md``. Keeps
+    the COMMANDS reference in sync with the actual CLI.
     """
-    readme_text = _README.read_text(encoding="utf-8")
+    manpage_text = _MANPAGE.read_text(encoding="utf-8")
     missing: list[str] = []
     for name in _registered_command_names():
         # Match either `forge <name>` or `forge <prefix> <suffix>`.
         needle = f"forge {name}"
-        if needle not in readme_text:
+        if needle not in manpage_text:
             missing.append(needle)
-    assert not missing, f"README.md missing references to: {missing}"
+    assert not missing, f"docs/MANPAGE.md missing references to: {missing}"
 
 
 def test_root_app_has_help_string() -> None:
@@ -104,12 +106,12 @@ def test_root_app_has_help_string() -> None:
     assert app.info.help, "top-level Typer app missing help= text"
 
 
-def test_each_top_level_command_appears_in_commands_table() -> None:
-    """The README's Commands table lists every top-level command in
-    pipe-table form. Sanity guard so the table doesn't go stale even
-    when individual mentions exist elsewhere."""
-    readme_text = _README.read_text(encoding="utf-8")
-    # Top-level commands only (skip sub-app commands which live in their own row).
+def test_each_top_level_command_has_manpage_heading() -> None:
+    """The MANPAGE's COMMANDS section gives every top-level command its own
+    `### forge <name>` heading. Sanity guard so the reference doesn't go
+    stale even when individual mentions exist elsewhere."""
+    manpage_text = _MANPAGE.read_text(encoding="utf-8")
+    # Top-level commands only (sub-app commands live under their own headings).
     top_level = [name for name, _ in _walk_commands(app) if " " not in name and name != "grammar"]
-    missing = [f"`forge {n}`" for n in top_level if f"`forge {n}`" not in readme_text]
-    assert not missing, f"README Commands table missing entries: {missing}"
+    missing = [f"### forge {n}" for n in top_level if f"### forge {n}" not in manpage_text]
+    assert not missing, f"MANPAGE COMMANDS section missing headings: {missing}"

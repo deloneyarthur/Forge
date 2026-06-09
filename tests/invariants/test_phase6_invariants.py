@@ -15,6 +15,12 @@ _README = _REPO_ROOT / "README.md"
 _OPEN_QUESTIONS = _REPO_ROOT / "OPEN_QUESTIONS.md"
 _GRAMMAR_CMD = _REPO_ROOT / "src" / "forge" / "cli" / "grammar_cmd.py"
 _DESIGN = _REPO_ROOT / "docs" / "DESIGN.md"
+# 2026-06-09 docs restructure: the README's Operations/Commands content moved
+# to the dedicated docs below (README is now a slim entry point). The D025
+# guardrails follow the content to its new owners.
+_HOWTO = _REPO_ROOT / "docs" / "HOW-TO.md"
+_MANPAGE = _REPO_ROOT / "docs" / "MANPAGE.md"
+_ARCHITECTURE = _REPO_ROOT / "docs" / "architecture.md"
 
 
 def _load_pyproject() -> dict[str, object]:
@@ -46,28 +52,35 @@ def test_networkx_mypy_override_is_removed() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_readme_has_operations_section() -> None:
-    text = _README.read_text(encoding="utf-8")
-    assert "## Operations" in text, "README.md missing the ## Operations section (D025/D5)"
+def test_howto_has_operations_content() -> None:
+    """D025/D5 — operating procedures exist (moved README → HOW-TO.md, 2026-06-09)."""
+    text = _HOWTO.read_text(encoding="utf-8")
+    assert "## Common situations" in text, (
+        "docs/HOW-TO.md missing the ## Common situations section (D025/D5)"
+    )
 
 
-def test_readme_has_commands_table() -> None:
-    text = _README.read_text(encoding="utf-8")
-    assert "## Commands" in text, "README.md missing the ## Commands section (D025/D4)"
+def test_manpage_has_commands_section() -> None:
+    """D025/D4 — the commands reference exists (moved README → MANPAGE.md, 2026-06-09)."""
+    text = _MANPAGE.read_text(encoding="utf-8")
+    assert "## COMMANDS" in text, "docs/MANPAGE.md missing the ## COMMANDS section (D025/D4)"
 
 
-def test_readme_operations_lists_recovery_procedures() -> None:
-    text = _README.read_text(encoding="utf-8")
-    # Three keywords that must appear under the recovery subsection.
-    for needle in ("Crucible offline", "Rate-limited", "yaml merge"):
-        assert needle in text, f"README.md Operations missing recovery topic: {needle!r}"
+def test_howto_lists_recovery_procedures() -> None:
+    text = _HOWTO.read_text(encoding="utf-8")
+    # Recovery topics that must stay documented (renamed with the 2026-06-09
+    # restructure: rate-limit recovery lives under the "blocked" situation,
+    # grammar.yaml repair under "Changing the grammar").
+    for needle in ("Crucible offline", "rate limiter", "Changing the grammar"):
+        assert needle in text, f"docs/HOW-TO.md missing recovery topic: {needle!r}"
 
 
-def test_readme_operations_maps_invariants_to_test_files() -> None:
-    text = _README.read_text(encoding="utf-8")
-    # The §13 invariant bookmarks table must call out each invariant by name.
+def test_architecture_maps_invariants_to_test_files() -> None:
+    text = _ARCHITECTURE.read_text(encoding="utf-8")
+    # The §13 invariant bookmarks table must call out each invariant by name
+    # (moved README → architecture.md, 2026-06-09).
     for needle in ("§13.1", "§13.2", "§13.3", "§13.4", "§13.5", "§13.6"):
-        assert needle in text, f"README.md Operations invariant table missing {needle}"
+        assert needle in text, f"docs/architecture.md invariant table missing {needle}"
 
 
 # ---------------------------------------------------------------------------
