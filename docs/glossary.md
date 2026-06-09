@@ -44,7 +44,8 @@ Scope: Forge/pipeline jargon. Code identifiers are findable by grep; this covers
 - **Anti-Goodhart** — feedback rewards must track what Crucible *accepts* (component rate, D105),
   never proxies like raw trade counts (the D094 reward got Goodharted; regression tests pin this).
 - **Emission proof** — before deploying enumeration changes: sample thousands of configs against
-  the live registry export and verify the emitted mix shows the intended change.
+  the live registry export and verify the emitted mix shows the intended change. Recipe:
+  `docs/tasks/grammar-change.md`.
 - **Uncontended suite** — full `pytest` with `forge.service` STOPPED. The deploy gate; a run with
   the service live is contended and doesn't count.
 - **D-number / Q-number** — entries in `IMPLEMENTATION_DECISIONS.md` / `OPEN_QUESTIONS.md`.

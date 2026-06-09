@@ -32,8 +32,7 @@ Scope: any change to what Forge enumerates. Classification first — it determin
 6. If rule ids changed: `docs/GRAMMAR.md` headings must match (doc-sync hook).
 7. Append the D-entry to `IMPLEMENTATION_DECISIONS.md`; update `STATUS.md`.
 8. Gates + commit (`quality-gates.md`) — both grammar pre-commit hooks fire on grammar paths.
-9. Run an emission proof (sample a few thousand configs against the live registry export; verify
-   the intended mix shift). Quick demo-registry check: `uv run forge enumerate --max 50 --summary`.
+9. Run an emission proof (recipe below). Quick smoke: `uv run forge enumerate --max 50 --summary`.
 10. Deploy (`deploy.md`). The service records the `manual_bump` row in `grammar_versions` at
     startup — do not insert one by hand.
 11. Relay the new version string + deploy timestamp to Crucible (`crucible-handoff.md`) for
@@ -45,6 +44,33 @@ Crucible's registry must advertise it first (contracts gap otherwise). Then Forg
 `indicator_thresholds.py` (real-data threshold ranges — distributions in
 `docs/INDICATOR_THRESHOLDS.md`), `signal_horizon.py` (horizon table), sampler regime pools
 (`_build_regime_pool`) and R-rule predicate eligibility if it can serve as a regime gate.
+
+## Emission proof (recipe)
+
+`load_registry()` reads the newest live export when one exists (demo fallback otherwise; the
+CLI's `(demo registry)` output suffix is a stale label — trust `registry_hash`). Sample the cold
+mix; swap the `Counter` key for the field your change targets:
+
+```bash
+uv run python - <<'EOF'
+from forge.core.logging import configure_logging
+configure_logging(level="WARNING")   # sampler rejections flood at debug otherwise
+from collections import Counter
+from pathlib import Path
+from forge.enumeration import enumerate_candidates
+from forge.grammar import load_grammar
+from forge.persistence.registry_loader import load_registry
+
+grammar = load_grammar(Path("config/grammar.yaml"), archive_dir=Path("config/grammar_archive"))
+registry = load_registry()
+mix = Counter(c.hypothesis for c in enumerate_candidates(grammar, registry, seed=0, max_candidates=3000))
+print(mix.most_common())
+EOF
+```
+
+A hypothesis at zero that shouldn't be usually means the live registry disagrees with what the
+change assumed — e.g. an indicator family Crucible hasn't republished yet (Q30): the §3.5 C1
+different-family pairing check then rejects every draw structurally.
 
 ## Gotchas
 

@@ -47,8 +47,11 @@ forge check
 
 ### forge enumerate
 
-Preview grammar-valid configs against the built-in demo registry (not wired to
-Crucible). Useful for eyeballing what the grammar produces.
+Preview grammar-valid configs against the newest registry snapshot in
+`~/optbt_data/exports/` (falls back to a built-in demo registry, with a warning,
+when no export exists). Useful for eyeballing what the grammar produces. The
+`(demo registry)` suffix in its output is a stale Phase-2 label either way —
+trust the printed `registry_hash`.
 
 | Option | Type | Default | Description |
 |---|---|---|---|

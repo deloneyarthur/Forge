@@ -49,7 +49,7 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
 - Split by `grammar_version` (in the export since contracts 1.15.0). Pre-v5 re-gated rows carry
   `grammar_version=None` — exclude them or they dominate "recent" aggregates (the D103 trap).
 - v9's true code cutover is **2026-06-06T06:48:49Z** (reboot-deploy), not the 06-07 migration (D104).
-- Timestamps before 2026-06-07 are PDT; after, UTC. Convert before joining/joining journals.
+- Timestamps before 2026-06-07 are PDT; after, UTC. Convert before joining DB rows or journals.
 - Post-D105, the sampler is weighted — condition scans on the live weights (no more
   quasi-randomization).
 
