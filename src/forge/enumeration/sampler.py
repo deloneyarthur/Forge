@@ -56,6 +56,7 @@ from forge.enumeration.indicator_thresholds import (
     sample_threshold_params,
 )
 from forge.enumeration.search_space import (
+    DEALER_POSITIONING_FAMILY,
     NON_ENUMERABLE_HYPOTHESES,
     RANK_COMBINER_HYPOTHESES,
 )
@@ -330,6 +331,19 @@ def _pick_underlying(
     return rng.choice(pool)
 
 
+def _uses_dealer_positioning(
+    signals: list[SignalSpec],
+    by_id: dict[str, IndicatorMetadata],
+) -> bool:
+    """D112 (v13): True when any drawn signal references a dealer_positioning-
+    family indicator. Such configs are single-name only — they never take the
+    cross_sectional_rank branch (the dealer headline x universe is Crucible's
+    ~100x runner-cost tail)."""
+    return any(
+        by_id[ind].family == DEALER_POSITIONING_FAMILY for sig in signals for ind in sig.indicators
+    )
+
+
 def sample_config(
     space: SearchSpace,
     registry: RegistrySnapshot,
@@ -546,10 +560,17 @@ def sample_config(
     # signals are unchanged — the runner routes role=="regime_filter" to its gates
     # and the directional to the rank score. Routing to Crucible's composable
     # rank runner is by combiner.type on the forge_-prefixed config name.
+    #
+    # D112 (v13): a config that drew ANY dealer_positioning signal never takes
+    # the rank branch — dealer indicators are single-name only (the dealer
+    # headline x universe is Crucible's ~100x runner tail; see
+    # `DEALER_POSITIONING_FAMILY`). The skip consumes no rng, so for non-dealer
+    # configs the v12 draw sequence is unchanged; the dealer config keeps its
+    # signals and pinned underlying — full single-name sampling weight.
     combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
     if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
         share = rank_combiner_share.get(hypothesis, 0.0)
-        if share > 0.0 and rng.random() < share:
+        if share > 0.0 and not _uses_dealer_positioning(signals, by_id) and rng.random() < share:
             combiner = CombinerSpec(
                 type="cross_sectional_rank",
                 rank_k=rng.choice(_RANK_K_CHOICES),

@@ -207,7 +207,12 @@ def test_regime_pool_trend_continuation_includes_gamma_flip() -> None:
     does live — enumerated 3.4k+ times), it joins the trend_continuation regime
     pool via R2, sorted second. Tested directly on `_build_regime_pool` so the
     shared minimal fixture (and its golden sampler-sequence tests) stays stable."""
-    pool = _build_regime_pool({"adx", "hurst", "rv_rank", "gamma_flip_distance_pct"})
+    # D112: gamma_flip stays in the trend (single-name) pool even though it is
+    # a dealer indicator — the exclusion targets universe templates only.
+    pool = _build_regime_pool(
+        {"adx", "hurst", "rv_rank", "gamma_flip_distance_pct"},
+        dealer_ids=frozenset({"gamma_flip_distance_pct"}),
+    )
     assert pool["trend_continuation"] == (
         "adx",
         "gamma_flip_distance_pct",
@@ -229,7 +234,12 @@ def test_regime_pool_mean_reversion_includes_gamma_flip() -> None:
     alternative to `iv_rank` (the long-gamma / ranging regime). Pool is sorted →
     gamma_flip first. Tested directly on `_build_regime_pool` so the shared
     minimal fixture (and its golden sampler-sequence tests) stays stable."""
-    pool = _build_regime_pool({"iv_rank", "gamma_flip_distance_pct"})
+    # D112: gamma_flip stays in the MR (single-name) pool even though it is a
+    # dealer indicator — the exclusion targets universe templates only.
+    pool = _build_regime_pool(
+        {"iv_rank", "gamma_flip_distance_pct"},
+        dealer_ids=frozenset({"gamma_flip_distance_pct"}),
+    )
     assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "iv_rank")
 
 
@@ -247,11 +257,28 @@ def test_regime_pool_unconstrained_hypothesis_uses_full_registry(
     space: SearchSpace,
     registry: RegistrySnapshot,
 ) -> None:
-    """No R-rule for regime_arbitrage/relative_value/tail_hedge → any
-    registry indicator may serve. C4 is enforced at sample time."""
+    """No R-rule for regime_arbitrage/tail_hedge → any registry indicator may
+    serve. C4 is enforced at sample time. (relative_value lost its unconstrained
+    pool to the D112 dealer exclusion — next test.)"""
     expected = tuple(sorted(ind.id for ind in registry.indicators))
-    for hyp in ("regime_arbitrage", "relative_value", "tail_hedge"):
+    for hyp in ("regime_arbitrage", "tail_hedge"):
         assert space.regime_indicators_by_hypothesis[hyp] == expected, hyp
+
+
+def test_regime_pool_relative_value_excludes_dealer_positioning(
+    space: SearchSpace,
+    registry: RegistrySnapshot,
+) -> None:
+    """D112 (v13): relative_value is the universe template (underlying=None —
+    Crucible scans the universe for legs), so a dealer regime gate multiplies
+    the per-bar greek grid by every name: the 5-14 min headline tail. The
+    decided universe x dealer cohort (n=199) cleared no §8.7 gate (mean WF
+    -0.129). Dealer indicators are single-name only."""
+    dealer = {ind.id for ind in registry.indicators if ind.family == "dealer_positioning"}
+    assert dealer, "fixture registry must carry dealer indicators for this test"
+    pool = set(space.regime_indicators_by_hypothesis["relative_value"])
+    assert not pool & dealer
+    assert pool == {ind.id for ind in registry.indicators} - dealer
 
 
 # ---------------------------------------------------------------------------

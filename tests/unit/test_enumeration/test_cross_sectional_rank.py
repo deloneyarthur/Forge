@@ -20,7 +20,7 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from crucible_contracts import CombinerSpec
+from crucible_contracts import CombinerSpec, RegistrySnapshot
 
 from forge.enumeration.sampler import sample_config
 from forge.enumeration.search_space import RANK_COMBINER_HYPOTHESES, build_search_space
@@ -60,6 +60,7 @@ def test_rank_combiner_emitted_when_forced() -> None:
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
+    dealer = _dealer_ids(reg)
     share = {"mean_reversion": 1.0}  # force the rank branch
     ks: set[int] = set()
     rebs: set[str | None] = set()
@@ -72,6 +73,10 @@ def test_rank_combiner_emitted_when_forced() -> None:
             forced_hypothesis="mean_reversion",
             rank_combiner_share=share,
         )
+        if any(ind in dealer for s in cfg.signals for ind in s.indicators):
+            # D112 (v13): dealer-signal draws never take the rank branch —
+            # covered by test_rank_draw_skipped_for_dealer_signal_configs.
+            continue
         assert cfg.combiner.type == "cross_sectional_rank"
         assert cfg.combiner.rank_k in (5, 10, 20)
         assert cfg.combiner.rebalance_frequency in ("weekly", "monthly")
@@ -107,6 +112,52 @@ def test_rank_combiner_emitted_for_event_momentum() -> None:
     assert cfg.combiner.type == "cross_sectional_rank"
     assert cfg.underlying is None
     assert validate(cfg, grammar, reg).valid  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# D112 (v13) — dealer indicators are single-name only: no rank draw carries one
+# ---------------------------------------------------------------------------
+
+
+def _dealer_ids(reg: RegistrySnapshot) -> frozenset[str]:
+    return frozenset(ind.id for ind in reg.indicators if ind.family == "dealer_positioning")
+
+
+def test_rank_draw_skipped_for_dealer_signal_configs() -> None:
+    """D112 (v13): a config that drew ANY dealer_positioning signal must not
+    take the rank branch even at share 1.0 — it stays single-name confluence.
+
+    Cross-sectional x dealer is Crucible's ~100x headline-cost runner tail
+    (5-14 min vs 1-3 s single-name), and the decided universe-wide dealer
+    cohort cleared no §8.7 gate. The single-name dealer frontier is untouched:
+    the config keeps its signals and a pinned underlying — it just never
+    multiplies a per-bar greek grid across the universe."""
+    grammar = _grammar()
+    reg = minimal_registry_snapshot()
+    space = build_search_space(grammar, reg)
+    dealer = _dealer_ids(reg)
+    assert dealer, "fixture registry must carry dealer indicators for this test"
+    share = {"mean_reversion": 1.0}
+    seen_dealer = seen_rank = 0
+    for seed in range(300):
+        cfg = sample_config(
+            space,
+            reg,
+            random.Random(seed),
+            forced_hypothesis="mean_reversion",
+            rank_combiner_share=share,
+        )
+        if any(ind in dealer for s in cfg.signals for ind in s.indicators):
+            seen_dealer += 1
+            assert cfg.combiner.type == "confluence", cfg.name
+            assert cfg.underlying is not None, cfg.name
+        else:
+            seen_rank += 1
+            assert cfg.combiner.type == "cross_sectional_rank", cfg.name
+            assert cfg.underlying is None, cfg.name
+    # Both branches must actually be exercised, or the test is vacuous.
+    assert seen_dealer > 0
+    assert seen_rank > 0
 
 
 # ---------------------------------------------------------------------------

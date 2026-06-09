@@ -84,5 +84,7 @@ different-family pairing check then rejects every draw structurally.
 
 ```bash
 uv run pytest tests/unit/test_grammar tests/unit/test_enumeration tests/invariants
-uv run pre-commit run grammar-version-bump grammar-doc-sync --all-files
+# pre-commit takes ONE hook id per run (two ids in one call is a usage error):
+uv run pre-commit run grammar-version-bump --all-files
+uv run pre-commit run grammar-doc-sync --all-files
 ```

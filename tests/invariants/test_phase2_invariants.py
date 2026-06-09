@@ -82,6 +82,40 @@ def test_h4_orthogonal_yield_flag_off_byte_identical(grammar: Grammar) -> None:
 
 
 # ---------------------------------------------------------------------------
+# D112 (v13) — dealer_positioning indicators are single-name only
+# ---------------------------------------------------------------------------
+
+
+def test_dealer_indicators_are_single_name_only(grammar: Grammar) -> None:
+    """D112 (v13): no enumerated config may pair a dealer_positioning-family
+    indicator with a universe-wide template — neither the H1 cross_sectional_rank
+    combiner nor relative_value's underlying=None universe scan. The dealer
+    headline series costs ~100x per-name on Crucible's serial runner (the 5-14
+    min throughput tail), and the decided universe x dealer cohort cleared no §8.7
+    gate. Single-name dealer configs remain fully enumerable (the promotion
+    frontier — the only CPCV-gate clearers in the decided pool)."""
+    registry = demo_registry()
+    dealer = {ind.id for ind in registry.indicators if ind.family == "dealer_positioning"}
+    assert dealer, "demo registry must carry dealer indicators for this invariant"
+    share = {"trend_continuation": 1.0, "mean_reversion": 1.0, "event_momentum": 1.0}
+    seen_universe = seen_dealer_single = 0
+    for cfg in enumerate_candidates(
+        grammar, registry, 11, max_candidates=400, rank_combiner_share=share
+    ):
+        uses_dealer = any(ind in dealer for sig in cfg.signals for ind in sig.indicators)
+        universe_wide = cfg.combiner.type == "cross_sectional_rank" or cfg.underlying is None
+        if universe_wide:
+            assert not uses_dealer, cfg.name
+            seen_universe += 1
+        elif uses_dealer:
+            seen_dealer_single += 1
+    assert seen_universe > 0
+    # The keep-side guard: the cut must not over-reach — single-name dealer
+    # configs (the frontier) must still be emitted.
+    assert seen_dealer_single > 0
+
+
+# ---------------------------------------------------------------------------
 # CLAUDE.md hard rule #7 — no equity-family signal in any yielded config
 # ---------------------------------------------------------------------------
 

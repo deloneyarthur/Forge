@@ -532,7 +532,9 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 
 **Tag:** `feedback`, `prefilters`, `thresholds`, `relates-to-D105`, `relates-to-D076`, `relates-to-D099`, `deferred`
 
-## 2026-06-09 — Q30 — v12's H2 arm emits ZERO event_momentum configs live: the published registry snapshot predates Crucible's `days_since_earnings` family reclassification — **MEDIUM/HIGH SEVERITY, CRUCIBLE-COORDINATION**
+## 2026-06-09 — Q30 — v12's H2 arm emits ZERO event_momentum configs live: the published registry snapshot predates Crucible's `days_since_earnings` family reclassification — **RESOLVED 2026-06-09**
+
+**RESOLVED (verified during the D112 emission proof):** Crucible republished the registry snapshot at 2026-06-09T18:45:50Z (`registry_snapshot_2026-06-09T184550Z.json`, hash `a99e00d68567af59`); `days_since_earnings` is now `family='calendar'`. A 3,000-sample emission proof on the new snapshot draws event_momentum 610 (vs 0 before) with a healthy 5-way mix. No Forge change was needed, as predicted — the run loop re-loads the registry each iteration. Original entry kept below for the mechanism record.
 
 **Symptom:** a 3,000-config emission proof against the live export (seed 0, cold weights) yields 0 `event_momentum` configs; every draw is structurally rejected with `no directional indicator has a §3.5 S4-permitted DTE bucket with a C1/C4/R-valid regime partner`. Mix: trend_continuation 788 / volatility_event 747 / mean_reversion 742 / relative_value 723 / event_momentum 0.
 

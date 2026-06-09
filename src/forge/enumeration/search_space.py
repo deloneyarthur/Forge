@@ -109,6 +109,17 @@ RANK_COMBINER_HYPOTHESES: frozenset[str] = frozenset(
     {"trend_continuation", "mean_reversion", "event_momentum"}
 )
 
+# D112 (v13) — dealer_positioning indicators are SINGLE-NAME ONLY. Their
+# headline series (per-bar greek grid) costs ~100x a single-name headline on
+# Crucible's serial runner (5-14 min vs 1-3 s — the throughput tail), and the
+# decided universe-wide dealer cohort cleared no §8.7 gate. So no dealer
+# indicator may appear in a universe-wide config: the H1 cross_sectional_rank
+# combiner (sampler skips the rank draw for dealer-signal configs) or
+# relative_value's underlying=None universe scan (`_build_regime_pool` excludes
+# the family). Single-name dealer enumeration is untouched — it is the
+# promotion frontier (the only CPCV-p25-gate clearers in the decided pool).
+DEALER_POSITIONING_FAMILY: str = "dealer_positioning"
+
 # Fallback if no §3.5 P4 numerical_range rule is present in the grammar
 # (won't happen with v1; defended in `build_search_space`).
 _P4_DEFAULT_RISK_PCT_RANGE: tuple[float, float] = (0.005, 0.02)
@@ -173,7 +184,10 @@ def build_search_space(
 
     indicators_by_family = _build_indicators_by_family(registry)
     directional = _build_directional_pool(indicators_by_family)
-    regime = _build_regime_pool(registry_ids)
+    regime = _build_regime_pool(
+        registry_ids,
+        dealer_ids=frozenset(indicators_by_family.get(DEALER_POSITIONING_FAMILY, ())),
+    )
     samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
     risk_pct_range = _resolve_p4_risk_pct_range(grammar)
 
@@ -252,16 +266,20 @@ def _build_directional_pool(
 
 def _build_regime_pool(
     registry_ids: set[str],
+    *,
+    dealer_ids: frozenset[str],
 ) -> Mapping[str, tuple[str, ...]]:
     """Per-hypothesis regime-gate options.
 
     §3.5 R1/R2/R3 pin specific indicator ids for three hypotheses; event_momentum
     (v12 / D109) is pinned to its post-event timing gate the same way but via
     sampler-side policy rather than a grammar.yaml rule (hard rule #1 — see
-    `_EVENT_MOMENTUM_REGIME_INDICATORS`). The remaining three (regime_arbitrage,
-    relative_value, tail_hedge) have no constraint, so any registry indicator may
-    serve. The sampler enforces §3.5 C4 (regime disjoint from directional) at
-    sample time.
+    `_EVENT_MOMENTUM_REGIME_INDICATORS`). regime_arbitrage and tail_hedge have no
+    constraint, so any registry indicator may serve. relative_value is also
+    R-rule-free but runs as the universe template (underlying=None), so D112
+    excludes ``dealer_ids`` from its pool — dealer indicators are single-name
+    only (see `DEALER_POSITIONING_FAMILY`). The sampler enforces §3.5 C4 (regime
+    disjoint from directional) at sample time.
     """
     pool: dict[str, tuple[str, ...]] = {}
     for hyp in _HYPOTHESES:
@@ -280,6 +298,9 @@ def _build_regime_pool(
             # Sampler-side policy, not a grammar.yaml rule (hard rule #1) — see
             # `_EVENT_MOMENTUM_REGIME_INDICATORS` in custom_predicates.
             pool[hyp] = tuple(sorted(set(_EVENT_MOMENTUM_REGIME_INDICATORS) & registry_ids))
+        elif hyp == "relative_value":
+            # D112 (v13): the universe template never carries a dealer gate.
+            pool[hyp] = tuple(sorted(registry_ids - dealer_ids))
         else:
             pool[hyp] = tuple(sorted(registry_ids))
     return MappingProxyType(pool)

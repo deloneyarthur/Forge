@@ -95,7 +95,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # hypothesis; both are Python-side enumeration policy — S1 is `cardinality`,
     # the hypothesis Literal + CombinerSpec live in contracts — so the 21 `rules:`
     # are again textually unchanged).
-    assert grammar.grammar_version == "v12"  # type: ignore[attr-defined]
+    # D112 bumped v12 -> v13 (dealer_positioning indicators single-name only —
+    # rank-branch skip + relative_value regime-pool exclusion; enumeration-policy
+    # only, the 21 `rules:` again textually unchanged).
+    assert grammar.grammar_version == "v13"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
