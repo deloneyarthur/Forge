@@ -3368,7 +3368,7 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 
 **Alternatives considered:** columns on `submissions` (rejected: ALTER on the hot table, one verdict per config — re-gates overwrite history, flushed rows conflated); recording only in `consume_batch_results` (rejected: misses re-gates of completed batches; the manual `forge feedback` path is covered anyway since the loop's sweep is global).
 
-**Verification (TDD RED→GREEN):** 9 tests in `tests/unit/test_feedback/test_verdicts.py` (schema, matched-insert, unknown-hash skip, idempotency, re-gate append, aware→naive-UTC, naive-verbatim, reconcile wiring, sentinel-flush exclusion) + 3 in `tests/integration/test_backfill_verdicts.py` (insert/idempotent/dry-run). Full suite 1,413/0 post-untangle on the branch; mypy --strict clean (83 files); ruff + format clean.
+**Verification (TDD RED→GREEN):** 9 tests in `tests/unit/test_feedback/test_verdicts.py` (schema, matched-insert, unknown-hash skip, idempotency, re-gate append, aware→naive-UTC, naive-verbatim, reconcile wiring, sentinel-flush exclusion) + 3 in `tests/integration/test_backfill_verdicts.py` (insert/idempotent/dry-run). Full suite 1,413/0 post-untangle on the branch; mypy --strict clean (82 files); ruff + format clean.
 
 **Files:** `src/forge/persistence/schemas.py` (DDL + TABLE_NAMES), `src/forge/persistence/verdicts.py` (new), `src/forge/feedback/consumer.py` (one call + docstring), `scripts/backfill_verdicts.py` (new), tests (2 new files), `docs/MANPAGE.md` (table + script), `STATUS.md`, this entry.
 
