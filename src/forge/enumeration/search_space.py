@@ -120,6 +120,20 @@ RANK_COMBINER_HYPOTHESES: frozenset[str] = frozenset(
 # promotion frontier (the only CPCV-p25-gate clearers in the decided pool).
 DEALER_POSITIONING_FAMILY: str = "dealer_positioning"
 
+# D116 (v14) — chain-reading indicators beyond the dealer family are ALSO
+# single-name only, widening D112's cut to the whole class. Crucible's
+# fail-open sweep (2026-06-09, `probe_results/rank_gate_failopen_sweep.json`;
+# Forge Q33) showed every chain-reading indicator evaluated per-name on the
+# rank/pairs paths reads the REFERENCE chain — `params["underlying"]` defaults
+# to "SPY", decoupled from the ranked sym — so the declared per-name regime
+# never computes: iv_rank fires on noise (SPY's chain IV interpolated at the
+# name's spot, garbage_mismatch mode), put_call_flow returns SPY's value for
+# every name (hidden_uniform_reference mode). Bar-only indicators compute on
+# the name's own bars and are unaffected. Explicit id set as an interim key —
+# superseded by Crucible's indicator→mode map when it lands
+# (PROMPT_CRUCIBLE_RANK_GATE_CLASS_MAP.md ask #1).
+CHAIN_READING_INDICATOR_IDS: frozenset[str] = frozenset({"iv_rank", "put_call_flow"})
+
 # Fallback if no §3.5 P4 numerical_range rule is present in the grammar
 # (won't happen with v1; defended in `build_search_space`).
 _P4_DEFAULT_RISK_PCT_RANGE: tuple[float, float] = (0.005, 0.02)
@@ -186,7 +200,10 @@ def build_search_space(
     directional = _build_directional_pool(indicators_by_family)
     regime = _build_regime_pool(
         registry_ids,
-        dealer_ids=frozenset(indicators_by_family.get(DEALER_POSITIONING_FAMILY, ())),
+        single_name_only_ids=(
+            frozenset(indicators_by_family.get(DEALER_POSITIONING_FAMILY, ()))
+            | (CHAIN_READING_INDICATOR_IDS & registry_ids)
+        ),
     )
     samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
     risk_pct_range = _resolve_p4_risk_pct_range(grammar)
@@ -267,7 +284,7 @@ def _build_directional_pool(
 def _build_regime_pool(
     registry_ids: set[str],
     *,
-    dealer_ids: frozenset[str],
+    single_name_only_ids: frozenset[str],
 ) -> Mapping[str, tuple[str, ...]]:
     """Per-hypothesis regime-gate options.
 
@@ -276,10 +293,12 @@ def _build_regime_pool(
     sampler-side policy rather than a grammar.yaml rule (hard rule #1 — see
     `_EVENT_MOMENTUM_REGIME_INDICATORS`). regime_arbitrage and tail_hedge have no
     constraint, so any registry indicator may serve. relative_value is also
-    R-rule-free but runs as the universe template (underlying=None), so D112
-    excludes ``dealer_ids`` from its pool — dealer indicators are single-name
-    only (see `DEALER_POSITIONING_FAMILY`). The sampler enforces §3.5 C4 (regime
-    disjoint from directional) at sample time.
+    R-rule-free but runs as the universe template (underlying=None), so it
+    excludes ``single_name_only_ids`` — the dealer family (D112/v13) plus the
+    chain-reading ids (D116/v14, see `CHAIN_READING_INDICATOR_IDS`) — from its
+    pool. Single-name hypotheses keep their full pools: the per-name decoupling
+    only exists on Crucible's universe paths. The sampler enforces §3.5 C4
+    (regime disjoint from directional) at sample time.
     """
     pool: dict[str, tuple[str, ...]] = {}
     for hyp in _HYPOTHESES:
@@ -299,8 +318,9 @@ def _build_regime_pool(
             # `_EVENT_MOMENTUM_REGIME_INDICATORS` in custom_predicates.
             pool[hyp] = tuple(sorted(set(_EVENT_MOMENTUM_REGIME_INDICATORS) & registry_ids))
         elif hyp == "relative_value":
-            # D112 (v13): the universe template never carries a dealer gate.
-            pool[hyp] = tuple(sorted(registry_ids - dealer_ids))
+            # D112 (v13) + D116 (v14): the universe template never carries a
+            # dealer or chain-reading gate.
+            pool[hyp] = tuple(sorted(registry_ids - single_name_only_ids))
         else:
             pool[hyp] = tuple(sorted(registry_ids))
     return MappingProxyType(pool)

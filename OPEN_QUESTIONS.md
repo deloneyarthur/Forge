@@ -582,7 +582,9 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 
 **Tag:** `crucible-coordination`, `gates`, `regime-coverage`, `verdicts`, `cohort-hygiene`, `relates-to-D111`, `operator-action`
 
-## 2026-06-09 — Q33 — Crucible's fail-open sweep: EVERY chain-reading regime gate is broken per-name on the rank/pairs paths — §3.5 R1 makes the entire MR rank arm structurally noise-gated (17.2% of current emission) — **HIGH SEVERITY, §3.5-RULE-TENSION, OPERATOR DECISION QUEUED**
+## 2026-06-09 — Q33 — Crucible's fail-open sweep: EVERY chain-reading regime gate is broken per-name on the rank/pairs paths — §3.5 R1 makes the entire MR rank arm structurally noise-gated (17.2% of current emission) — **RESOLVED 2026-06-09: operator chose option 1 (tighten now), shipped as grammar v14 (D116)**
+
+**Resolution (2026-06-09, same session):** operator picked option 1 via AskUserQuestion. Shipped as **D116 / grammar v14** — `CHAIN_READING_INDICATOR_IDS = {iv_rank, put_call_flow}` joins the dealer family as single-name-only at both D112 enforcement points (rank-branch skip + rv regime pool). MR structurally never ranks until Crucible's reference-underlying gate ships (the D115 trigger, AGREED-DEFERRED their side). Residual open threads live elsewhere: the indicator→mode map + `expected_value_estimator` classification + pairs-path parity (`PROMPT_CRUCIBLE_RANK_GATE_CLASS_MAP.md` asks #1/#2 — the interim id set is re-keyed on the map when it lands); the feedback-side gate-class tag for rank verdicts before weight loads (deferred with D114's era-split items). Original entry below.
 
 **Origin:** incoming `../Crucible/docs/handoffs/FORGE_rank_gate_failopen_sweep.md` (2026-06-09, their answer to our D115 prompt's soft flag). Their probe (`probe_results/rank_gate_failopen_sweep.json`, same harness as the dealer probe) generalizes the D115 finding from one mode to **three**, classed by how the indicator uses spot — all stemming from the same `params.get("underlying","SPY")` decoupling (verified structurally in `iv_rank.py:73` and `put_call_flow.py:52`):
 

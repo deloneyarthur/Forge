@@ -56,6 +56,7 @@ from forge.enumeration.indicator_thresholds import (
     sample_threshold_params,
 )
 from forge.enumeration.search_space import (
+    CHAIN_READING_INDICATOR_IDS,
     DEALER_POSITIONING_FAMILY,
     NON_ENUMERABLE_HYPOTHESES,
     RANK_COMBINER_HYPOTHESES,
@@ -331,16 +332,21 @@ def _pick_underlying(
     return rng.choice(pool)
 
 
-def _uses_dealer_positioning(
+def _uses_single_name_only_indicator(
     signals: list[SignalSpec],
     by_id: dict[str, IndicatorMetadata],
 ) -> bool:
-    """D112 (v13): True when any drawn signal references a dealer_positioning-
-    family indicator. Such configs are single-name only — they never take the
-    cross_sectional_rank branch (the dealer headline x universe is Crucible's
-    ~100x runner-cost tail)."""
+    """D112 (v13) + D116 (v14): True when any drawn signal references a
+    single-name-only indicator — the dealer_positioning family (the per-bar
+    greek grid x universe is Crucible's ~100x runner-cost tail) or a
+    chain-reading id (`CHAIN_READING_INDICATOR_IDS`: on Crucible's rank path
+    the chain underlying defaults to SPY regardless of the ranked sym, so the
+    declared per-name semantics never compute — Q33). Such configs never take
+    the cross_sectional_rank branch."""
     return any(
-        by_id[ind].family == DEALER_POSITIONING_FAMILY for sig in signals for ind in sig.indicators
+        by_id[ind].family == DEALER_POSITIONING_FAMILY or ind in CHAIN_READING_INDICATOR_IDS
+        for sig in signals
+        for ind in sig.indicators
     )
 
 
@@ -564,13 +570,24 @@ def sample_config(
     # D112 (v13): a config that drew ANY dealer_positioning signal never takes
     # the rank branch — dealer indicators are single-name only (the dealer
     # headline x universe is Crucible's ~100x runner tail; see
-    # `DEALER_POSITIONING_FAMILY`). The skip consumes no rng, so for non-dealer
-    # configs the v12 draw sequence is unchanged; the dealer config keeps its
-    # signals and pinned underlying — full single-name sampling weight.
+    # `DEALER_POSITIONING_FAMILY`). D116 (v14) widens the skip to the
+    # chain-reading ids (iv_rank, put_call_flow): on Crucible's rank path the
+    # chain underlying defaults to SPY regardless of the ranked sym, so a
+    # per-name chain-reading gate fires on noise or degenerates to a hidden
+    # uniform SPY gate (Q33 — Crucible's fail-open sweep). Consequence under
+    # §3.5 R1 ({iv_rank, gamma_flip} is MR's whole regime pool): mean_reversion
+    # never ranks until a coherent reference-underlying gate exists
+    # Crucible-side. The skip consumes no rng, so unaffected draw sequences are
+    # unchanged; the skipped config keeps its signals and pinned underlying —
+    # full single-name sampling weight.
     combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
     if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
         share = rank_combiner_share.get(hypothesis, 0.0)
-        if share > 0.0 and not _uses_dealer_positioning(signals, by_id) and rng.random() < share:
+        if (
+            share > 0.0
+            and not _uses_single_name_only_indicator(signals, by_id)
+            and rng.random() < share
+        ):
             combiner = CombinerSpec(
                 type="cross_sectional_rank",
                 rank_k=rng.choice(_RANK_K_CHOICES),

@@ -57,11 +57,15 @@ def test_rank_eligible_set() -> None:
 
 
 def test_rank_combiner_emitted_when_forced() -> None:
+    # D116 (v14) re-pin: this test forced mean_reversion through D112's window,
+    # but MR's whole R1 regime pool ({iv_rank, gamma_flip}) is single-name-only
+    # now, so MR structurally never ranks — trend_continuation (bar-only R2
+    # gates: adx/hurst/rv_rank) is the rank arm that still emits.
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
-    dealer = _dealer_ids(reg)
-    share = {"mean_reversion": 1.0}  # force the rank branch
+    single_name_only = _single_name_only_ids(reg)
+    share = {"trend_continuation": 1.0}  # force the rank branch
     ks: set[int] = set()
     rebs: set[str | None] = set()
     dirs: set[str | None] = set()
@@ -70,12 +74,12 @@ def test_rank_combiner_emitted_when_forced() -> None:
             space,
             reg,
             random.Random(seed),
-            forced_hypothesis="mean_reversion",
+            forced_hypothesis="trend_continuation",
             rank_combiner_share=share,
         )
-        if any(ind in dealer for s in cfg.signals for ind in s.indicators):
-            # D112 (v13): dealer-signal draws never take the rank branch —
-            # covered by test_rank_draw_skipped_for_dealer_signal_configs.
+        if any(ind in single_name_only for s in cfg.signals for ind in s.indicators):
+            # D112/D116: single-name-only draws never take the rank branch —
+            # covered by the skip tests below.
             continue
         assert cfg.combiner.type == "cross_sectional_rank"
         assert cfg.combiner.rank_k in (5, 10, 20)
@@ -123,6 +127,10 @@ def _dealer_ids(reg: RegistrySnapshot) -> frozenset[str]:
     return frozenset(ind.id for ind in reg.indicators if ind.family == "dealer_positioning")
 
 
+def _single_name_only_ids(reg: RegistrySnapshot) -> frozenset[str]:
+    return _dealer_ids(reg) | frozenset({"iv_rank", "put_call_flow"})
+
+
 def test_rank_draw_skipped_for_dealer_signal_configs() -> None:
     """D112 (v13): a config that drew ANY dealer_positioning signal must not
     take the rank branch even at share 1.0 — it stays single-name confluence.
@@ -131,14 +139,20 @@ def test_rank_draw_skipped_for_dealer_signal_configs() -> None:
     (5-14 min vs 1-3 s single-name), and the decided universe-wide dealer
     cohort cleared no §8.7 gate. The single-name dealer frontier is untouched:
     the config keeps its signals and a pinned underlying — it just never
-    multiplies a per-bar greek grid across the universe."""
+    multiplies a per-bar greek grid across the universe.
+
+    D116 (v14) re-pin: the non-dealer MR draws used to take the rank branch;
+    they are iv_rank-gated (R1) and iv_rank is chain-reading, so they now skip
+    too — every MR draw stays single-name. Both shapes are still asserted
+    distinctly so the dealer-skip and chain-skip mechanisms stay individually
+    covered."""
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
     dealer = _dealer_ids(reg)
     assert dealer, "fixture registry must carry dealer indicators for this test"
     share = {"mean_reversion": 1.0}
-    seen_dealer = seen_rank = 0
+    seen_dealer = seen_chain_only = 0
     for seed in range(300):
         cfg = sample_config(
             space,
@@ -147,17 +161,53 @@ def test_rank_draw_skipped_for_dealer_signal_configs() -> None:
             forced_hypothesis="mean_reversion",
             rank_combiner_share=share,
         )
+        assert cfg.combiner.type == "confluence", cfg.name
+        assert cfg.underlying is not None, cfg.name
         if any(ind in dealer for s in cfg.signals for ind in s.indicators):
             seen_dealer += 1
-            assert cfg.combiner.type == "confluence", cfg.name
-            assert cfg.underlying is not None, cfg.name
         else:
-            seen_rank += 1
-            assert cfg.combiner.type == "cross_sectional_rank", cfg.name
-            assert cfg.underlying is None, cfg.name
-    # Both branches must actually be exercised, or the test is vacuous.
+            # No dealer signal -> the skip was the chain-reading iv_rank gate.
+            seen_chain_only += 1
+    # Both skip mechanisms must actually be exercised, or the test is vacuous.
     assert seen_dealer > 0
-    assert seen_rank > 0
+    assert seen_chain_only > 0
+
+
+# ---------------------------------------------------------------------------
+# D116 (v14) — chain-reading indicators are single-name only: MR never ranks
+# ---------------------------------------------------------------------------
+
+
+def test_rank_draw_skipped_for_chain_reading_gate_configs() -> None:
+    """D116 (v14): a config that drew ANY chain-reading signal (iv_rank,
+    put_call_flow — Q33, Crucible's fail-open sweep) must not take the rank
+    branch even at share 1.0. On Crucible's rank path the chain underlying is
+    read from ``params["underlying"]`` (default SPY) regardless of the ranked
+    name, so iv_rank fires on noise (SPY's chain IV interpolated at the name's
+    spot) and put_call_flow is a hidden uniform SPY gate. §3.5 R1 pins
+    mean_reversion's regime pool to {iv_rank, gamma_flip_distance_pct} and both
+    are single-name only → EVERY mean_reversion draw stays single-name
+    confluence; the rank branch is structurally unreachable for MR until a
+    coherent reference-underlying gate exists Crucible-side (the Q33 trigger)."""
+    grammar = _grammar()
+    reg = minimal_registry_snapshot()
+    space = build_search_space(grammar, reg)
+    share = {"mean_reversion": 1.0}
+    seen_iv_rank_gate = 0
+    for seed in range(300):
+        cfg = sample_config(
+            space,
+            reg,
+            random.Random(seed),
+            forced_hypothesis="mean_reversion",
+            rank_combiner_share=share,
+        )
+        assert cfg.combiner.type == "confluence", cfg.name
+        assert cfg.underlying is not None, cfg.name
+        if any(s.role == "regime_filter" and "iv_rank" in s.indicators for s in cfg.signals):
+            seen_iv_rank_gate += 1
+    # Non-vacuous: the chain-gated shape (the v13 noise-gated arm) was drawn.
+    assert seen_iv_rank_gate > 0
 
 
 # ---------------------------------------------------------------------------

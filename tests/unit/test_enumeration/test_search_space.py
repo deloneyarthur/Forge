@@ -207,11 +207,11 @@ def test_regime_pool_trend_continuation_includes_gamma_flip() -> None:
     does live — enumerated 3.4k+ times), it joins the trend_continuation regime
     pool via R2, sorted second. Tested directly on `_build_regime_pool` so the
     shared minimal fixture (and its golden sampler-sequence tests) stays stable."""
-    # D112: gamma_flip stays in the trend (single-name) pool even though it is
-    # a dealer indicator — the exclusion targets universe templates only.
+    # D112/D116: gamma_flip stays in the trend (single-name) pool even though
+    # it is a dealer indicator — the exclusion targets universe templates only.
     pool = _build_regime_pool(
         {"adx", "hurst", "rv_rank", "gamma_flip_distance_pct"},
-        dealer_ids=frozenset({"gamma_flip_distance_pct"}),
+        single_name_only_ids=frozenset({"gamma_flip_distance_pct"}),
     )
     assert pool["trend_continuation"] == (
         "adx",
@@ -234,11 +234,13 @@ def test_regime_pool_mean_reversion_includes_gamma_flip() -> None:
     alternative to `iv_rank` (the long-gamma / ranging regime). Pool is sorted →
     gamma_flip first. Tested directly on `_build_regime_pool` so the shared
     minimal fixture (and its golden sampler-sequence tests) stays stable."""
-    # D112: gamma_flip stays in the MR (single-name) pool even though it is a
-    # dealer indicator — the exclusion targets universe templates only.
+    # D112/D116: gamma_flip AND iv_rank stay in the MR (single-name) pool even
+    # though both are single-name-only ids — the exclusion targets universe
+    # templates only; R1's single-name gate semantics are coherent (the chain
+    # is pinned to the traded name on Crucible's single-name path).
     pool = _build_regime_pool(
         {"iv_rank", "gamma_flip_distance_pct"},
-        dealer_ids=frozenset({"gamma_flip_distance_pct"}),
+        single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
     )
     assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "iv_rank")
 
@@ -278,7 +280,24 @@ def test_regime_pool_relative_value_excludes_dealer_positioning(
     assert dealer, "fixture registry must carry dealer indicators for this test"
     pool = set(space.regime_indicators_by_hypothesis["relative_value"])
     assert not pool & dealer
-    assert pool == {ind.id for ind in registry.indicators} - dealer
+
+
+def test_regime_pool_relative_value_excludes_chain_reading(
+    space: SearchSpace,
+    registry: RegistrySnapshot,
+) -> None:
+    """D116 (v14): relative_value's universe scan also drops the chain-reading
+    ids (iv_rank, put_call_flow) — the same per-name chain-source decoupling as
+    D112's dealer cut, confirmed class-wide by Crucible's fail-open sweep (Q33:
+    iv_rank = garbage_mismatch, put_call_flow = hidden uniform SPY reference).
+    Together with the dealer exclusion the rv pool is registry minus the
+    single-name-only set; single-name hypotheses keep the full pool."""
+    dealer = {ind.id for ind in registry.indicators if ind.family == "dealer_positioning"}
+    chain = {"iv_rank", "put_call_flow"} & {ind.id for ind in registry.indicators}
+    assert chain, "fixture registry must carry chain-reading indicators for this test"
+    pool = set(space.regime_indicators_by_hypothesis["relative_value"])
+    assert not pool & chain
+    assert pool == {ind.id for ind in registry.indicators} - dealer - chain
 
 
 # ---------------------------------------------------------------------------

@@ -115,6 +115,37 @@ def test_dealer_indicators_are_single_name_only(grammar: Grammar) -> None:
     assert seen_dealer_single > 0
 
 
+def test_chain_reading_indicators_are_single_name_only(grammar: Grammar) -> None:
+    """D116 (v14): widens D112's dealer cut to the chain-reading class (Q33,
+    Crucible fail-open sweep). On Crucible's rank/pairs paths a chain-reading
+    indicator reads its chain from ``params["underlying"]`` (default SPY),
+    decoupled from the per-name sym — the declared per-name regime never
+    computes (iv_rank fires on noise; put_call_flow is a hidden uniform SPY
+    gate). No universe-wide config (cross_sectional_rank or underlying=None)
+    may reference one; single-name configs keep the full pool — iv_rank is
+    §3.5 R1's MR gate and the single-name path pins the chain to the traded
+    name, where it is coherent (the keep-side guard)."""
+    registry = demo_registry()
+    chain = {"iv_rank", "put_call_flow"} & {ind.id for ind in registry.indicators}
+    assert chain, "demo registry must carry chain-reading indicators for this invariant"
+    share = {"trend_continuation": 1.0, "mean_reversion": 1.0, "event_momentum": 1.0}
+    seen_universe = seen_chain_single = 0
+    for cfg in enumerate_candidates(
+        grammar, registry, 13, max_candidates=400, rank_combiner_share=share
+    ):
+        uses_chain = any(ind in chain for sig in cfg.signals for ind in sig.indicators)
+        universe_wide = cfg.combiner.type == "cross_sectional_rank" or cfg.underlying is None
+        if universe_wide:
+            assert not uses_chain, cfg.name
+            seen_universe += 1
+        elif uses_chain:
+            seen_chain_single += 1
+    assert seen_universe > 0
+    # Keep-side guard: single-name chain-reading configs (MR x iv_rank — R1's
+    # own gate) must still be emitted.
+    assert seen_chain_single > 0
+
+
 # ---------------------------------------------------------------------------
 # CLAUDE.md hard rule #7 — no equity-family signal in any yielded config
 # ---------------------------------------------------------------------------

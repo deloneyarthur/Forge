@@ -98,7 +98,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D112 bumped v12 -> v13 (dealer_positioning indicators single-name only —
     # rank-branch skip + relative_value regime-pool exclusion; enumeration-policy
     # only, the 21 `rules:` again textually unchanged).
-    assert grammar.grammar_version == "v13"  # type: ignore[attr-defined]
+    # D116 bumped v13 -> v14 (chain-reading indicators join the single-name-only
+    # set — iv_rank/put_call_flow never rank, rv pool excludes them; same two
+    # enforcement points as v13, the 21 `rules:` again textually unchanged).
+    assert grammar.grammar_version == "v14"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
