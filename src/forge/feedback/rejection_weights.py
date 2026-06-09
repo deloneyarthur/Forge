@@ -307,6 +307,28 @@ def compute_hypothesis_reward_weights(
 COMPONENT_ALPHA: float = 1.0
 COMPONENT_BETA: float = 50.0
 COMPONENT_TIEBREAK_WEIGHT: float = 5e-5
+# D114 — joint-quality term. A rejected run earns
+# COMPONENT_QUALITY_WEIGHT * clamp(min(wf/thr_wf, cpcv/thr_cpcv), 0, 1),
+# eligible only when it passed its OWN min_oos_trade_count gate (per-bucket
+# thresholds ride in the gate row). Why a MATERIAL weight where D105 demoted
+# continuous signals to epsilon: the D105 Goodhart was TRADE-correlated signals
+# (gate_fraction / traded) — quality here is the two promotion-quality gate
+# VALUES themselves, which trading volume cannot farm (corr(trade_count,
+# cpcv_p25) ~ -0.14 on the live verdicts cohort) and which admission-rule
+# changes cannot move (Q32: regime_coverage enforcement zeroed single-name
+# component minting 2026-06-08 while the recorded WF/CPCV values were
+# untouched — the binary event signal mislearns "the cell died", the value
+# signal does not). Sizing: 1/0.25 = 4 frontier-grade rejects (quality 1.0)
+# ≈ one component event; the live frontier is sparse (4 joint near-misses in
+# 10,089 decisions), so typical cells move by quality only when they
+# consistently score — a DELIBERATE departure from the D105 "no volume can
+# outrank one component" bound, which now holds only for zero-quality volume.
+# Emission-proofed against the live verdicts cohort (D114).
+COMPONENT_QUALITY_WEIGHT: float = 0.25
+# The two promotion-quality gates whose VALUES form the joint score, and the
+# per-run trade-floor gate that makes those values meaningful at scale.
+_QUALITY_GATES: tuple[str, str] = ("walk_forward_sharpe_median", "cpcv_sharpe_p25")
+_QUALITY_TRADE_FLOOR_GATE: str = "min_oos_trade_count"
 # D081 semantics at the reward layer; one current-version run ≈ 4 prior ones.
 COMPONENT_PRIOR_VERSION_WEIGHT: float = 0.25
 # D106 — empirical-Bayes anchor strength for the hierarchical weighters
@@ -345,22 +367,56 @@ def component_prior_mean(*, alpha: float = COMPONENT_ALPHA, beta: float = COMPON
     return alpha / (alpha + beta)
 
 
-def _component_run_reward(gated_run: GatedRun, *, tiebreak_weight: float) -> float:
-    """1.0 for a component/promote decision, else an epsilon-scale tiebreak.
+def _joint_quality(gated_run: GatedRun) -> float:
+    """Joint promotion-quality proximity of a run, in [0, 1] (D114).
+
+    ``clamp(min(value/threshold over _QUALITY_GATES), 0, 1)`` — the MIN because
+    promotion requires BOTH axes, so the binding gate scores. Thresholds come
+    from the run's own gate rows (robust to Crucible recalibration and
+    per-bucket variation), and the run must have PASSED its own
+    ``min_oos_trade_count`` gate — quality below the breadth floor is noise.
+    Any absent row/value/threshold (or a non-positive threshold) → 0.0: missing
+    data never inflates (the ``_sharpe_reward`` stance). ``regime_coverage``
+    and every other gate's pass/fail are deliberately NOT consulted — that is
+    the Q32 robustness property pinned in tests.
+    """
+    gates = gated_run.decision.gate_results
+    floor_row = gates.get(_QUALITY_TRADE_FLOOR_GATE)
+    if floor_row is None or not floor_row.passed:
+        return 0.0
+    score = 1.0
+    for gate_name in _QUALITY_GATES:
+        row = gates.get(gate_name)
+        if row is None or row.value is None or row.threshold is None or row.threshold <= 0.0:
+            return 0.0
+        score = min(score, float(row.value) / float(row.threshold))
+    return max(0.0, score)
+
+
+def _component_run_reward(
+    gated_run: GatedRun,
+    *,
+    tiebreak_weight: float,
+    quality_weight: float,
+) -> float:
+    """1.0 for a component/promote decision, else quality + epsilon tiebreak.
 
     Promote counts as a component event — a promoted run cleared component-level
     screening on the way (contracts: 'component' = passed component screening
-    but not the full portfolio gate). The tiebreak reuses the D094/D101 quality
-    signals (gate-progress + Sharpe-proximity) at a scale that can order
-    zero-component keys but can never outrank a real component (see the section
-    comment's sizing invariant).
+    but not the full portfolio gate). Rejects earn ``quality_weight *
+    _joint_quality`` (D114 — material, see the section comment's sizing
+    rationale) plus the D094/D101 epsilon tiebreak (gate-progress +
+    Sharpe-proximity) that orders zero-quality keys but can never outrank a
+    real component.
     """
     if gated_run.decision.decision in _COMPONENT_DECISIONS:
         return 1.0
     gates = gated_run.decision.gate_results
     gate_fraction = sum(1 for g in gates.values() if g.passed) / len(gates) if gates else 0.0
     traded = gated_run.run.trade_count >= DEFAULT_TRADE_FLOOR
-    return tiebreak_weight * (gate_fraction + _sharpe_reward(gated_run, traded=traded)) / 2.0
+    quality = quality_weight * _joint_quality(gated_run) if quality_weight > 0.0 else 0.0
+    tiebreak = tiebreak_weight * (gate_fraction + _sharpe_reward(gated_run, traded=traded)) / 2.0
+    return quality + tiebreak
 
 
 def _component_rate_sums[K](
@@ -369,6 +425,7 @@ def _component_rate_sums[K](
     key_of: Callable[[Mapping[str, object]], K | None],
     *,
     tiebreak_weight: float,
+    quality_weight: float,
     current_grammar_version: str | None,
     prior_version_weight: float,
     cold_start_hypotheses: frozenset[str],
@@ -412,7 +469,9 @@ def _component_rate_sums[K](
         weight = 1.0 if is_current else prior_version_weight
         bucket = acc.setdefault(key, [0.0, 0.0])
         bucket[0] += weight
-        bucket[1] += weight * _component_run_reward(gr, tiebreak_weight=tiebreak_weight)
+        bucket[1] += weight * _component_run_reward(
+            gr, tiebreak_weight=tiebreak_weight, quality_weight=quality_weight
+        )
     return acc
 
 
@@ -424,6 +483,7 @@ def _component_rate_posteriors[K](
     alpha: float,
     beta: float,
     tiebreak_weight: float,
+    quality_weight: float,
     current_grammar_version: str | None,
     prior_version_weight: float,
     cold_start_hypotheses: frozenset[str],
@@ -443,6 +503,7 @@ def _component_rate_posteriors[K](
         gated_runs,
         key_of,
         tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -496,6 +557,7 @@ def compute_hypothesis_component_weights(
     alpha: float = COMPONENT_ALPHA,
     beta: float = COMPONENT_BETA,
     tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
     current_grammar_version: str | None = None,
     prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
     cold_start_hypotheses: frozenset[str] = frozenset(),
@@ -524,6 +586,7 @@ def compute_hypothesis_component_weights(
         alpha=alpha,
         beta=beta,
         tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -545,6 +608,7 @@ def compute_hypothesis_bucket_weights(
     alpha: float = COMPONENT_ALPHA,
     beta: float = COMPONENT_BETA,
     tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
     current_grammar_version: str | None = None,
     prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
     cold_start_hypotheses: frozenset[str] = frozenset(),
@@ -576,6 +640,7 @@ def compute_hypothesis_bucket_weights(
         alpha=alpha,
         beta=beta,
         tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -589,6 +654,7 @@ def compute_underlying_class_weights(
     alpha: float = COMPONENT_ALPHA,
     beta: float = COMPONENT_BETA,
     tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
     current_grammar_version: str | None = None,
     prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
     cold_start_hypotheses: frozenset[str] = frozenset(),
@@ -616,6 +682,7 @@ def compute_underlying_class_weights(
         alpha=alpha,
         beta=beta,
         tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -629,6 +696,7 @@ def compute_underlying_name_weights(
     alpha: float = COMPONENT_ALPHA,
     beta: float = COMPONENT_BETA,
     tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
     current_grammar_version: str | None = None,
     prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
     cold_start_hypotheses: frozenset[str] = frozenset(),
@@ -655,6 +723,7 @@ def compute_underlying_name_weights(
         gated_runs,
         _name_of,
         tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -695,6 +764,7 @@ def compute_hypothesis_directional_bucket_weights(
     alpha: float = COMPONENT_ALPHA,
     beta: float = COMPONENT_BETA,
     tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
     current_grammar_version: str | None = None,
     prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
     cold_start_hypotheses: frozenset[str] = frozenset(),
@@ -727,6 +797,7 @@ def compute_hypothesis_directional_bucket_weights(
         gated_runs,
         _hyp_dir_bucket_of,
         tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -840,15 +911,16 @@ def compute_orthogonal_yield_discounts(
     """
     if not gated_runs:
         return {}
-    # tiebreak_weight=0.0: H4 wants the pure component COUNT for the marginal-
-    # value factor, not the gate/Sharpe ordering tiebreak the other weighters
-    # carry — that tiebreak would put a tiny non-zero mass on componentless
-    # cells and break "discount = 1.0 at m = 0".
+    # tiebreak_weight=0.0 AND quality_weight=0.0: H4 wants the pure component
+    # COUNT for the marginal-value factor — neither the gate/Sharpe ordering
+    # tiebreak nor the D114 joint-quality term may contribute, or componentless
+    # cells would gain non-zero mass and break "discount = 1.0 at m = 0".
     sums = _component_rate_sums(
         db,
         gated_runs,
         _factor_cell_of,
         tiebreak_weight=0.0,
+        quality_weight=0.0,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -909,6 +981,7 @@ def compute_relative_value_regime_weights(
     alpha: float = COMPONENT_ALPHA,
     beta: float = COMPONENT_BETA,
     tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
     current_grammar_version: str | None = None,
     prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
     cold_start_hypotheses: frozenset[str] = frozenset(),
@@ -938,6 +1011,7 @@ def compute_relative_value_regime_weights(
         alpha=alpha,
         beta=beta,
         tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
         current_grammar_version=current_grammar_version,
         prior_version_weight=prior_version_weight,
         cold_start_hypotheses=cold_start_hypotheses,
@@ -998,6 +1072,7 @@ __all__ = [
     "COMPONENT_BETA",
     "COMPONENT_HIER_PRIOR_STRENGTH",
     "COMPONENT_PRIOR_VERSION_WEIGHT",
+    "COMPONENT_QUALITY_WEIGHT",
     "COMPONENT_TIEBREAK_WEIGHT",
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
