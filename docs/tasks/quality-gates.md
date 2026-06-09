@@ -36,8 +36,9 @@ record that in the commit/STATUS rather than skipping.
 
 - `type(scope): summary` style, lowercase (`fix(scripts): ...`, `docs(STATUS): ...`).
 - Commit small: one module + its tests when feasible.
-- Every behavior change ships with its D-entry (`IMPLEMENTATION_DECISIONS.md`) and a `STATUS.md`
-  update in the same or adjacent commit.
+- Every behavior change ships with its D-entry (`IMPLEMENTATION_DECISIONS.md`), a `STATUS.md`
+  update, and updates to any doc it invalidates (CLAUDE.md session discipline) in the same or
+  adjacent commit.
 - TDD evidence in the message where it matters (suite counts, RED→GREEN).
 - Don't push unless the operator expects it; the live service runs from the tree, not origin.
 

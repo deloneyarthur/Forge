@@ -112,6 +112,10 @@ best interpretation. Deviations are proposed as Decision Log entries, never sile
 sessions read `STATUS.md` + the routing below — not prior conversation history. Re-read files
 rather than trusting context memory.
 
+Docs are part of the change: if a commit alters a CLI command/flag, a ritual, a config file's
+meaning, or module layout, update the doc that owns it (routing table below) in the same commit.
+Volatile facts (versions, weights, counts) belong in `STATUS.md`/D-entries, never in docs.
+
 ## Where to look
 
 | Need | Read |
