@@ -69,6 +69,8 @@ journalctl --user -u crucible-runner.service -n 10 --no-pager
 ls -lt ~/optbt_data/exports/gated_runs_*.json | head -1
 ```
 
+Deeper digging (forge.db queries, cohort analysis, known traps): `tasks/investigate-live.md`.
+
 ## Common situations
 
 ### Forge says "blocked: ... 0% gated, waiting for >=80%"
@@ -104,6 +106,21 @@ Crucible. This is the rate limiter (correct behavior). If it's stuck for hours:
 The DB is single-writer. Forge never reads `runs.duckdb` directly — it reads the
 file exports. If exports are old, restart the relevant publisher (see above).
 
+### Crucible offline
+
+`forge feedback` exits non-zero with `error: Crucible DB unreachable: ...`. No partial
+mutations to Forge state. Re-invoke once the path is reachable; affected submissions
+stay `status='submitted'` until a matching gated run appears. Orphaned Crucible rows
+(no `promotion_decisions` row) are silently skipped — those submissions also stay
+`submitted` while the rest of the batch processes normally.
+
+### Stuck submission (`status='pending'`)
+
+The contracts `submit_candidate` write was interrupted between DB insert and inbox
+write. Inspect `~/optbt_data/inbox/<batch_id>/`: if the JSON file is present, update
+the row to `status='submitted'` manually; if absent, re-run the batch — the
+`config_hash` UNIQUE INDEX (§13.4) makes resubmission a safe no-op.
+
 ### Tune the generator from real results
 
 After a few hundred new gated runs accumulate, retrain the threshold ranges:
@@ -128,6 +145,8 @@ forge grammar approve-proposal --id <UUID> --initials AJ --forge-db ~/forge_data
 # then edit config/grammar.yaml by hand, bump grammar_version, archive the prior
 # version to config/grammar_archive/, and commit (pre-commit hook enforces this).
 ```
+
+Full change procedure (worktree, tests, deploy ritual): `tasks/grammar-change.md`.
 
 ## Where things live
 

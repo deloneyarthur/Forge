@@ -1,5 +1,11 @@
 # Forge — Status
 
+## Maintenance — 2026-06-09 (docs restructure for agent retrieval — no behavior change, no deploy; does NOT supersede D110 below)
+
+**Documentation hierarchy rebuilt (operator-requested), docs-only.** `CLAUDE.md` is now a ~135-line entry point (hard rules + blessed APIs + pitfalls + routing table — all rules preserved verbatim); new `docs/architecture.md` (as-built module map, change taxonomy, live-deployment topology, §13 bookmarks, root-file taxonomy), `docs/glossary.md`, and six playbooks under `docs/tasks/` (grammar-change, deploy, feedback-change, investigate-live, quality-gates, crucible-handoff), plus `tests/README.md` + `config/README.md`. `README.md` slimmed to quickstart + doc index (commands/config tables → MANPAGE.md, recovery → HOW-TO.md, monitoring SQL → tasks/investigate-live.md, invariant bookmarks → architecture.md — each fact now lives in exactly one file). Stale banners added to `AUDIT.md` and `docs/STRATEGY_GENERATION_STATE.md` (both v4-era snapshots). No production code, config, or service touched.
+
+---
+
 ## Maintenance — 2026-06-09 (operator-requested cleanup sweep — no behavior change, no deploy needed; does NOT supersede D110 below)
 
 **Full dead-code/refactor audit + 4 small commits (`4d7125f..6624377`, local main, unpushed).** Audit verdict: the tree is clean — zero ruff violations, no unused imports, no orphaned modules, no dead functions (apparent candidates were Typer registrations / the predicates dispatch table). Changes, all behavior-identical (full suite 1,404/0, mypy strict 0/85 files, ruff clean):

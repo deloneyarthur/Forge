@@ -1,5 +1,10 @@
 # Forge Audit Report
 
+> **STALE — point-in-time audit (banner added 2026-06-09).** Snapshot at D083/v4. Many findings
+> have since been addressed (see `IMPLEMENTATION_DECISIONS.md` D084–D110 — e.g. the §7.3 limiter
+> and aged-out flush were reworked in D110, the feedback loop re-aimed in D094/D101/D105).
+> Verify any finding against current code before acting on it.
+
 **Audit date:** 2026-05-29
 **Scope:** `src/forge/` (~75 files, ~13.5 KLOC), `tests/`, `config/`, `deploy/`, plus live system state (`~/forge_data/forge.db`, `~/optbt_data/exports/`, `forge.service` journal).
 **Reference:** `docs/DESIGN.md` (source of truth), `CLAUDE.md` (10 hard rules), `OPEN_QUESTIONS.md` (Q1–Q22), `IMPLEMENTATION_DECISIONS.md` (D001–D083).

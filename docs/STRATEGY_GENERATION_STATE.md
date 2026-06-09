@@ -1,5 +1,11 @@
 # Forge — Strategy Generation: State of the System
 
+> **STALE — historical snapshot (banner added 2026-06-09).** Written at grammar **v4** /
+> contracts 1.13.0; the system is now at v12 / 1.16.0 with a substantially re-aimed feedback
+> loop (D098–D110). The mechanics narrative (how enumeration/pre-filtering/ranking work) remains
+> broadly accurate; **all numbers, weights, search-space counts, and gap analyses are
+> superseded.** Current state: `STATUS.md` top block + `IMPLEMENTATION_DECISIONS.md` D095+.
+
 **Date:** 2026-05-29
 **Status:** Living discussion document — describes how Forge generates strategies *today* (grammar v4, contracts 1.13.0, post-D095).
 **Purpose:** A single place to judge whether Forge's generation approach is **strong and correct**. It is deliberately verbose: it covers the grammar, the enumeration mechanics, the path from candidate to submission, the feedback loop, what gives Forge its edge, the recent changes, and — most importantly — what the live data shows and where the gaps are.
