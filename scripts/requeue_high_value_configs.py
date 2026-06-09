@@ -159,8 +159,9 @@ def filter_to_current_grammar_version(
     return (matching, skipped)
 
 
-def select_config_hashes(forge_db: Path, top_n: int, include_tail_hedge: bool,
-                          include_relative_value: bool) -> dict[str, list[str]]:
+def select_config_hashes(
+    forge_db: Path, top_n: int, include_tail_hedge: bool, include_relative_value: bool
+) -> dict[str, list[str]]:
     """Query Forge DB for the selection sets. Returns
     {category: [config_hashes]} where category is one of 'top_trade_count',
     'tail_hedge', 'relative_value'."""
@@ -191,8 +192,7 @@ def select_config_hashes(forge_db: Path, top_n: int, include_tail_hedge: bool,
             out["tail_hedge"] = [
                 str(h)
                 for h, cj in tail_rows
-                if (json.loads(cj) if isinstance(cj, str) else cj).get("hypothesis")
-                == "tail_hedge"
+                if (json.loads(cj) if isinstance(cj, str) else cj).get("hypothesis") == "tail_hedge"
             ]
 
         if include_relative_value:
@@ -211,8 +211,7 @@ def select_config_hashes(forge_db: Path, top_n: int, include_tail_hedge: bool,
     return out
 
 
-def requeue_one(config_hash: str, processed_dir: Path, inbox_dir: Path,
-                *, dry_run: bool) -> str:
+def requeue_one(config_hash: str, processed_dir: Path, inbox_dir: Path, *, dry_run: bool) -> str:
     """Copy processed/{hash}.json → inbox/{hash}.json atomically.
 
     Returns a status string: 'copied' | 'missing_source' | 'already_in_inbox'
@@ -243,8 +242,10 @@ def main() -> int:  # noqa: PLR0912 — D055 filter adds branches; alternative i
     args.inbox_dir.mkdir(parents=True, exist_ok=True)
 
     selection = select_config_hashes(
-        args.forge_db, args.top_n,
-        args.include_tail_hedge, args.include_relative_value,
+        args.forge_db,
+        args.top_n,
+        args.include_tail_hedge,
+        args.include_relative_value,
     )
 
     # D055 / P1-3 — drop configs from stale grammar versions. v1-only signals
@@ -258,15 +259,17 @@ def main() -> int:  # noqa: PLR0912 — D055 filter adds branches; alternative i
         skipped_total: dict[str, int] = {}
         for category, hashes in list(selection.items()):
             matching, skipped = filter_to_current_grammar_version(
-                args.forge_db, hashes, current_grammar_version,
+                args.forge_db,
+                hashes,
+                current_grammar_version,
             )
             selection[category] = matching
-            for v, n in skipped.items():
-                skipped_total[v] = skipped_total.get(v, 0) + n
+            for version, n_skipped in skipped.items():
+                skipped_total[version] = skipped_total.get(version, 0) + n_skipped
         if skipped_total:
             print("  skipped by grammar_version:")
-            for v, n in sorted(skipped_total.items()):
-                print(f"    {v}: {n}")
+            for version, n_skipped in sorted(skipped_total.items()):
+                print(f"    {version}: {n_skipped}")
         else:
             print("  no stale-version configs in selection")
     else:
@@ -277,16 +280,23 @@ def main() -> int:  # noqa: PLR0912 — D055 filter adds branches; alternative i
     seen: set[str] = set()
     counts: dict[str, dict[str, int]] = {}
     for category, hashes in selection.items():
-        counts[category] = {"copied": 0, "already_in_inbox": 0,
-                            "missing_source": 0, "dry_run_would_copy": 0,
-                            "duplicate_across_categories": 0}
+        counts[category] = {
+            "copied": 0,
+            "already_in_inbox": 0,
+            "missing_source": 0,
+            "dry_run_would_copy": 0,
+            "duplicate_across_categories": 0,
+        }
         for h in hashes:
             if h in seen:
                 counts[category]["duplicate_across_categories"] += 1
                 continue
             seen.add(h)
             status = requeue_one(
-                h, args.processed_dir, args.inbox_dir, dry_run=args.dry_run,
+                h,
+                args.processed_dir,
+                args.inbox_dir,
+                dry_run=args.dry_run,
             )
             counts[category][status] = counts[category].get(status, 0) + 1
 
@@ -295,8 +305,8 @@ def main() -> int:  # noqa: PLR0912 — D055 filter adds branches; alternative i
     total_copied = 0
     for category, c in counts.items():
         print(f"  {category}:")
-        for k, v in c.items():
-            print(f"    {k}: {v}")
+        for status_name, count in c.items():
+            print(f"    {status_name}: {count}")
         total_copied += c.get("copied", 0) + c.get("dry_run_would_copy", 0)
     print(f"\ntotal {'would-copy' if args.dry_run else 'copied'}: {total_copied}")
     print(f"inbox depth now: {len(list(args.inbox_dir.glob('*.json')))}")
