@@ -48,6 +48,7 @@ from crucible_contracts import (
 )
 
 from forge.feedback.types import BatchFeedback, CandidateOutcome
+from forge.persistence.verdicts import record_verdicts
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -441,6 +442,12 @@ def reconcile_all_pending(
     if exports_dir is None:
         exports_dir = Path.home() / "optbt_data" / "exports"
     runs = _fetch_crucible_runs(crucible_db, exports_dir)
+
+    # D111 — persist per-candidate verdicts for EVERY export row Forge ever
+    # submitted (not just pending batches), so re-gates of completed batches
+    # are captured and verdicts survive the rolling window. Idempotent on
+    # `crucible_run_id`, so sweeping the same window every poll is a no-op.
+    record_verdicts(forge_db, runs)
 
     # D052 — flush aged-out rows BEFORE the per-batch loop so the batch
     # query only enumerates batches still reachable via the export window.

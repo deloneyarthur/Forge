@@ -116,6 +116,27 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
         decided_by          VARCHAR(64)
     )
     """,
+    # D111 — durable per-candidate Crucible verdicts. The gated-runs export is
+    # a rolling top-10k window, so without this table the per-candidate
+    # decision, gate values, and realized trade_count vanish once a row rolls
+    # off (the 2026-06-09 review found only 13.2% of submissions had a
+    # recoverable verdict). PK is `crucible_run_id`: a Crucible re-gate of the
+    # same config is a NEW run_id and appends rather than overwrites, so the
+    # table keeps verdict history per config. Written by
+    # `forge.persistence.verdicts.record_verdicts` on every reconcile pass.
+    """
+    CREATE TABLE IF NOT EXISTS verdicts (
+        crucible_run_id     UUID PRIMARY KEY,
+        config_hash         VARCHAR(16) NOT NULL,
+        decision            VARCHAR(20) NOT NULL,
+        decided_at          TIMESTAMP NOT NULL,
+        trade_count         INTEGER,
+        grammar_version     VARCHAR(20),
+        gate_results        JSON NOT NULL,
+        recorded_at         TIMESTAMP NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_verdicts_config_hash ON verdicts(config_hash)",
     """
     CREATE TABLE IF NOT EXISTS promoted_patterns (
         pattern_id          UUID PRIMARY KEY,
@@ -136,5 +157,6 @@ TABLE_NAMES: Final[frozenset[str]] = frozenset(
         "grammar_versions",
         "grammar_proposals",
         "promoted_patterns",
+        "verdicts",
     },
 )
