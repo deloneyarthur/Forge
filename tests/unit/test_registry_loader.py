@@ -104,6 +104,42 @@ def test_load_registry_default_is_fail_loud(tmp_path: Path) -> None:
         load_registry(exports_dir=missing)
 
 
+def test_load_registry_warns_when_snapshot_stale(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Crucible republishes the registry at every deploy/boot; a snapshot
+    14+ days old means the publisher is likely wedged. Warn — don't halt:
+    an old snapshot is still valid if the registry content didn't change
+    (registry_hash is the integrity key)."""
+    from datetime import UTC, datetime, timedelta
+
+    exports = tmp_path / "exports"
+    snap = demo_registry().model_copy(
+        update={"snapshot_taken_at": datetime.now(UTC) - timedelta(days=20)}
+    )
+    _write_snapshot(exports / "registry_snapshot_old.json", snap)
+    with caplog.at_level(logging.WARNING):
+        load_registry(exports_dir=exports)
+    assert any("registry_snapshot_stale" in r.getMessage() for r in caplog.records)
+
+
+def test_load_registry_no_stale_warning_when_fresh(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    exports = tmp_path / "exports"
+    snap = demo_registry().model_copy(
+        update={"snapshot_taken_at": datetime.now(UTC) - timedelta(days=2)}
+    )
+    _write_snapshot(exports / "registry_snapshot_fresh.json", snap)
+    with caplog.at_level(logging.WARNING):
+        load_registry(exports_dir=exports)
+    assert not any("registry_snapshot_stale" in r.getMessage() for r in caplog.records)
+
+
 def test_load_registry_propagates_validation_error_on_malformed_json(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
     exports.mkdir()

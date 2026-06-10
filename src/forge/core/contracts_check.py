@@ -17,6 +17,10 @@ from crucible_contracts import (
     validate_schema_version,
 )
 
+# 1.17.0 (D121): universe-export freshness bound — the enumerator's
+# `load_universe_tickers_from_export` call now raises `StaleExportError`
+# (a `QueryError` subclass) when the newest export exceeds max_age_days=35,
+# instead of silently enumerating a stale pool after a dead monthly publisher.
 # 1.16.0 (D109): the additive CombinerSpec rank fields (rank_k /
 # rebalance_frequency / direction_mode) + the event_momentum hypothesis literal +
 # the post_event_drift family literal — the H1 cross_sectional_rank combiner and
@@ -27,7 +31,7 @@ from crucible_contracts import (
 # 9995f81, shipped 2026-06-08 00:10Z in response to the D105 yield-map reply's
 # "export carries no version field" note). extra="forbid" makes this a
 # REQUIRED adoption: pre-1.15.0 readers reject the new export rows outright.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.16.0"
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.17.0"
 
 
 def check_contracts_version() -> str:

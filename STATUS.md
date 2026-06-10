@@ -1,5 +1,11 @@
 # Forge — Status
 
+## 2026-06-09 (post-D120) — D121: contracts 1.17.0 adopted — universe-export freshness bound (StaleExportError @35d) + registry-snapshot stale warning (@14d) — versionless, activates at next restart
+
+**Second integration-sweep fix (same family as D120: newest-by-mtime reads never expire).** contracts bumped 1.16.0→1.17.0 (`crucible_contracts` 64f1d0c): `load_universe_tickers_from_export` raises `StaleExportError ⊂ QueryError` when the newest universe export is >35 days old (one monthly publisher cycle + slack; sampler call site unchanged — fail-loud is the default; bypass = `max_age_days=None`). `registry_loader` warns `registry_snapshot_stale` when `snapshot_taken_at` >14d — warn-only since an old snapshot is still valid if content didn't change (`registry_hash` is the integrity key). `FORGE_EXPECTED_CONTRACT_VERSION` → 1.17.0. TDD red→green both sides; **full suite 1,441/0**; mypy --strict 0/82. Current universe export is 6d old — safe margin. Crucible adopts 1.17.0 in its tree same session (its new pin-equality test forces explicit adoption). Details: [[D121]].
+
+---
+
 ## 2026-06-09 (post-D118/D119) — D120: demo-registry fallback now OPT-IN (fail-loud production loads) — versionless, activates at next restart
 
 **Cross-system integration sweep (run from Crucible) flagged the silent demo fallback as the Forge-side residual risk; fixed this session.** `load_registry` default flipped `allow_demo_fallback` True→False: production paths (run loop, submission, `forge feedback`) now raise `FileNotFoundError` on a missing/empty exports dir instead of silently enumerating against the frozen 2026-05-13 Phase-2 demo (stale iv_rank/ema_50, no sue/dse, ~26 indicators missing). `forge enumerate`/`forge prefilter` keep their MANPAGE-documented fallback via explicit opt-in. `_demo_registry` re-documented as deliberately frozen (hermetic test fixture; production can never see it now — no refresh churn). TDD red→green (`test_load_registry_default_is_fail_loud`); **full suite 1,439/0**; mypy --strict 0/82. Latent fix — exports exist on this box, so live behavior is unchanged until an export outage; NOT bounced for this (rides the next operator-gated restart). Sweep context + the Crucible-side fixes (startup contract-version check, inbox registry validation) live in Crucible's tree. Details: [[D120]].

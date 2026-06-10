@@ -3509,3 +3509,17 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 **Attribution:** versionless and behavior-invisible while exports exist. Activates at the next service restart (not bounced for this — no behavior change on the live box). Read it in: an exports outage now crashes the loop loudly instead of enumerating stale.
 
 **Files:** `src/forge/persistence/registry_loader.py`, `src/forge/cli/main.py` (2 preview call sites), `src/forge/enumeration/_demo_registry.py` (docstring), `tests/unit/test_registry_loader.py`, this entry, `STATUS.md`.
+
+## D121 — 2026-06-09 — contracts 1.17.0 adopted: universe-export freshness bound + registry-snapshot staleness warning
+
+**Spec section:** §13.5 (contracts adoption); read-side of `EXPORT_LAYOUT`. Companion to [[D120]] — same 2026-06-09 integration-sweep finding family: every Crucible export Forge consumes is selected newest-by-mtime, which never expires, so a silently dead publisher meant operating on stale data with no signal anywhere.
+
+**Changes.**
+1. **contracts 1.17.0 adopted** (`FORGE_EXPECTED_CONTRACT_VERSION` 1.16.0 → 1.17.0): `load_universe_tickers_from_export` now raises `StaleExportError` (a `QueryError` subclass — existing catch sites already handle it) when the newest universe export exceeds `max_age_days=35` (one monthly publisher cycle + slack). The enumerator's call site (`sampler.py`) needs no change — fail-loud is the default. Age basis: payload `exported_at` (already stamped by Crucible's writer) with file-mtime fallback for pre-1.17.0 files.
+2. **Registry staleness warning** (`registry_loader.py`): a parsed snapshot whose `snapshot_taken_at` is >14 days old logs `registry_snapshot_stale`. Warn-only by design — Crucible republishes at every deploy/boot, so 14 quiet days means the publisher is likely wedged, but an old snapshot is still VALID when registry content hasn't changed; `registry_hash` (not age) remains the integrity key. A hard bound here would brick enumeration on a healthy-but-quiet Crucible.
+
+**Verification (TDD RED→GREEN):** Forge side — `test_load_registry_warns_when_snapshot_stale` (RED first: no warning emitted) + `test_load_registry_no_stale_warning_when_fresh`; contracts side (committed in `crucible_contracts` 64f1d0c) — 6 freshness tests incl. mtime fallback, naive-stamp normalization, `max_age_days=None` bypass, and `StaleExportError ⊂ QueryError`. Full suite 1,441/0; mypy --strict 0/82; ruff clean.
+
+**Attribution:** versionless; activates at the next service restart. Read it in: `registry_snapshot_stale` lines if the publisher wedges; a `StaleExportError` crash if the universe publisher dies for >35 days (current export is 6 days old — safe margin).
+
+**Files:** `src/forge/core/contracts_check.py`, `src/forge/persistence/registry_loader.py`, `tests/unit/test_registry_loader.py`, this entry, `STATUS.md`. Cross-repo: `crucible_contracts` 64f1d0c (v1.17.0), Crucible adopts the same version in its tree.

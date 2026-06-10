@@ -21,15 +21,24 @@ to work offline pass ``allow_demo_fallback=True`` explicitly.
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from pathlib import Path
 
 from crucible_contracts import RegistrySnapshot
+
+from forge.core.clock import utc_now
 
 _LOG = logging.getLogger(__name__)
 
 DEFAULT_EXPORTS_DIR = Path.home() / "optbt_data" / "exports"
 
 _SNAPSHOT_GLOB = "registry_snapshot_*.json"
+
+# Crucible republishes the registry at every deploy/boot (oneshot publisher
+# unit); 14 quiet days means the publisher is likely wedged. Warn-only — an
+# old snapshot is still valid when the registry content hasn't changed, and
+# registry_hash (not age) is the integrity key enumeration runs under.
+_STALE_WARN_DAYS = 14
 
 
 def find_latest_snapshot(exports_dir: Path = DEFAULT_EXPORTS_DIR) -> Path | None:
@@ -70,7 +79,21 @@ def load_registry(
             "registry_loaded_from_export",
             extra={"path": str(latest)},
         )
-        return RegistrySnapshot.model_validate_json(latest.read_text(encoding="utf-8"))
+        snapshot = RegistrySnapshot.model_validate_json(latest.read_text(encoding="utf-8"))
+        taken_at = snapshot.snapshot_taken_at
+        if taken_at.tzinfo is None:
+            taken_at = taken_at.replace(tzinfo=UTC)
+        age_days = (utc_now() - taken_at).total_seconds() / 86400.0
+        if age_days > _STALE_WARN_DAYS:
+            _LOG.warning(
+                "registry_snapshot_stale",
+                extra={
+                    "path": str(latest),
+                    "age_days": round(age_days, 1),
+                    "warn_after_days": _STALE_WARN_DAYS,
+                },
+            )
+        return snapshot
 
     if not allow_demo_fallback:
         raise FileNotFoundError(
