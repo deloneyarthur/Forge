@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-10 — Decision queue walked (4 AskUserQuestion approvals) → D128 BUILT (era/honesty keys in the reward path — awaiting restart), trend tilt REFUTED by our own data, pre_earnings_setup prompt drafted, v17 scope locked
+
+**Operator walked the queue; all four recommended options approved and executed:**
+
+- **D128 BUILT (the D124-queued feedback build; commit `168dd78`, versionless — activates at the NEXT RESTART, operator-gated):** `_component_run_reward` now enforces both read keys — pre-22:52:57Z rows earn no quality term and no Sharpe-proximity tiebreak (gate_fraction survives: booleans, not values); the binary component 1.0 requires an HONEST `regime_coverage` row (passed + no `coverage_unverified`; absent row fail-closed — pre-Q32 legacy components demoted). TDD 6 tests (5 RED-first) + fixture re-pins to modern export shape; **full suite 1,455/0**; mypy/ruff clean. **Live proof (production-faithful): ve 1.000 → 0.526 (its component mass was dishonest-legacy-inflated), em 0.211 → 1.0 (all-honest-era evidence), tc 0.604 → 0.800; rolling-window honesty is 44% (185/425 components — refit children healing the 94% all-time figure).** Watch post-restart: the `hypothesis_weights:` journal line shifts per above; em's top weight rides tiny-n honest evidence and will move fast.
+- **Trend tilt REFUTED (Q37.2, evidence-first readout):** our data partitions differently than the literature — weak = rolling_sharpe/macd/supertrend (spanning short+mid nodes), strong = donchian + the two long ids, and ema_cross (the other "dead-middle" id) has the pool's highest rate (7.3%, n=41). A lookback-keyed tilt would cut our best fragile performer → **leave alone**, revisit when post-cut columns thicken.
+- **Pre-earnings (Q37.1 → option B): `PROMPT_CRUCIBLE_PRE_EARNINGS_SETUP.md` drafted (operator: pass when convenient)** — composed indicator (days_to_earnings∈[5,10] AND rv_rank<q as one R3-class id), full fidelity in the existing 1-gate slot, their schedule.
+- **v17 scope LOCKED:** at the republish, activate `iv_minus_rv` only (→ ve directional pool); the R2 rule-edit case for market_state/vix_term_slope gets drafted for separate operator review (the market-wide trio's auto-flow lands only in the ignored pairs gate pool — D127's corrected value prop).
+- **Restart decision pending:** D128 is live-inert until a bounce. No urgency (the current weights are the known-imperfect ones we've run all along) — it can ride the next operator-gated restart or bounce on request. Other watches unchanged: their runner-restart era boundary (iv_rank v4), the ≥51-id republish, first v16 batches.
+
+---
+
 ## 2026-06-10 — D127: Crucible's own evidence review processed — 2 more shelf indicators (post-their-v10), §3 "expressible today" region measured HALF-true (1.2% of ve, conditioner has no slot), trend pool already ~bimodal (dead-middle 28%) — docs-only, Q37 logged
 
 **Operator commissioned the same literature review Crucible-side; `FORGE_evidence_review_indicators_and_grammar_notes.md` processed as [[D127]] (no code/grammar/weights/service change). Registry republish expectation now ≥51 ids (+`iv_term_slope`, +`option_momentum` — both fail-closed, v16-safe).**
