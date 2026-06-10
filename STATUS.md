@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-10 — D126: indicator-gaps response processed — Q34 CLOSED (R1 correct: MR is net-debit everywhere), all 4 indicators SHIPPED their side, ⚠️ single-name chain gates were SPY-decoupled all-time (their fix `14f773a` pending deploy = incoming era boundary) — docs-only
+
+**`FORGE_indicator_gaps_response.md` processed as [[D126]] (no code/grammar/weights/service change).**
+
+- **Q34 RESOLVED, no rule edit:** every MR template is net DEBIT at entry, every bucket (structural: long-only by type, spreads banned) → `iv_rank < threshold` is the evidence-supported side as written. The walkthrough readout retired with prejudice (it was noise — next bullet).
+- **⚠️ Their §2 finding: the single-name path never threaded the underlying into chain-reading params** — every NON-SPY single-name `iv_rank`/`put_call_flow` gate evaluated SPY's chain at the name's spot (finite garbage), all-time, under R1 and every ve iv_rank gate. Fixed their side (`14f773a`: iv_rank v4 / pcf v3, `requires_symbol=True`) but NOT deployed. **Watch: their next runner restart = a metric-era boundary for every iv_rank/pcf-gated cohort** (joins the D124 era keys); SPY-underlying rows were correct, non-SPY re-read as noise-gated on the gate axis; re-run R1-style readouts post-deploy only.
+- **All four Q36 indicators shipped as built** (`vix_term_slope`, `iv_minus_rv`, `market_state`, `cs_dispersion`; observed ranges + caveats in D126); registry republish pending one coordinated publish (+5th id `iv_term_slope`, + the v4/v3 bumps). **Verified our side: republish is SAFE with zero Forge changes** (unknown-threshold ids are `is_threshold_skippable` → invisible to sampling) and **v16's eligibility already handles their flag vocabulary** (`coherent OR market_wide`; vix_level confirmed in rv's gate pool). Expect ≥49 ids + REAL hash rotation (id-set growth — expected, not drift).
+- **v17 candidate scoped (operator-gated, blocked on republish):** threshold + horizon entries activate the four (auto-consequences made explicit in D126: iv_minus_rv → ve directional pool, macro trio → rv universe gates; R1/R2 pool membership = separate operator rule edits, recommend deciding on post-republish evidence). C1 macro-family collision on file (their per-id family override = operator-gated ask, on request).
+- Watch items now: (1) their runner-restart deploy timestamp (era boundary); (2) the ≥49-id republish; (3) first v16 batches (rank trend-only, zero kelly, trend deltas >0.36) — unchanged from D125.
+
+---
+
 ## 2026-06-10 — D125: grammar v16 DEPLOYED + VERIFIED 14:43:20Z — rank exclusion keyed on registry flags (id sets retired, kelly never ranks, auto-inherit live) + P3 trend delta widening to 0.55 (first approved loosening); INDICATOR_GAPS prompt updated with the boundary (operator: pass it)
 
 **Operator directive "merge this grammar with the hedge fund strategy changes" executed as one v16 bump (AskUserQuestion: re-key + trend-only P3 widening, build + deploy now). Q34 (R1 direction — blocked on Crucible's premium-sign answer) and Q36 (indicators that don't exist) deliberately NOT in v16; they ride the prompt.**
