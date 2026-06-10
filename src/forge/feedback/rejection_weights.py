@@ -25,6 +25,7 @@ when the gated_runs snapshot is held constant.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from forge.enumeration.underlying_class import underlying_class
@@ -361,6 +362,45 @@ DEFAULT_ORTHOGONAL_YIELD_MIN_DISCOUNT: float = 0.25
 
 _COMPONENT_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
 
+# D128 (enforcing D124's read standard in the reward path).
+#
+# Key 1 — cost-floor value era. Crucible's slippage cost floor deployed at
+# exactly 2026-06-09T22:52:57Z (their restart boundary, D124): every
+# WF/CPCV/Sharpe VALUE decided before it is zero-slippage-optimistic. Such
+# values must never earn reward — the D114 quality term and the
+# Sharpe-proximity half of the D094/D101 tiebreak are zeroed for pre-cut
+# rows. The gate_fraction half survives: pass/fail booleans are not values.
+# This is a literal constant, not a clock read (hard rule #8 untouched).
+_COST_FLOOR_VALUE_CUT: datetime = datetime(2026, 6, 9, 22, 52, 57, tzinfo=UTC)
+
+# Key 2 — coverage honesty is a row marker, not a time cut. Byte-for-byte
+# Crucible's `honest_regime_coverage` predicate (pool filter ≡ refit trigger
+# ≡ this read — cannot drift): the regime_coverage row passed AND its detail
+# does not carry the unverified-pass marker. Absent row (pre-Q32 legacy) =
+# cannot verify = not honest, fail-closed. 94% of legacy "components" fail
+# this marker (D124) — their binary event was unverified-admission noise;
+# honest re-evaluations flow in via the fullhist-refit children (same
+# config_hash), replacing the evidence organically.
+_COVERAGE_GATE: str = "regime_coverage"
+_COVERAGE_UNVERIFIED_MARK: str = "coverage_unverified"
+
+
+def _values_readable(gated_run: GatedRun) -> bool:
+    """D124 key 1: False when the run was decided before the cost-floor cut.
+
+    Naive timestamps are UTC (the verdicts/export era is uniform post-D117).
+    """
+    decided = gated_run.decision.decided_at
+    if decided.tzinfo is None:
+        decided = decided.replace(tzinfo=UTC)
+    return decided >= _COST_FLOOR_VALUE_CUT
+
+
+def _honest_regime_coverage(gated_run: GatedRun) -> bool:
+    """D124 key 2: True only when the coverage gate REALLY evaluated and passed."""
+    row = gated_run.decision.gate_results.get(_COVERAGE_GATE)
+    return row is not None and row.passed and _COVERAGE_UNVERIFIED_MARK not in (row.detail or "")
+
 
 def component_prior_mean(*, alpha: float = COMPONENT_ALPHA, beta: float = COMPONENT_BETA) -> float:
     """Beta(alpha, beta) prior mean — the weight given to unseen keys."""
@@ -409,13 +449,20 @@ def _component_run_reward(
     Sharpe-proximity) that orders zero-quality keys but can never outrank a
     real component.
     """
-    if gated_run.decision.decision in _COMPONENT_DECISIONS:
+    if gated_run.decision.decision in _COMPONENT_DECISIONS and _honest_regime_coverage(gated_run):
         return 1.0
+    # D128: a dishonest-coverage "component" (unverified-pass admission) is
+    # not the binary event — it falls through and earns what its READABLE
+    # values earn, like any reject.
     gates = gated_run.decision.gate_results
     gate_fraction = sum(1 for g in gates.values() if g.passed) / len(gates) if gates else 0.0
     traded = gated_run.run.trade_count >= DEFAULT_TRADE_FLOOR
-    quality = quality_weight * _joint_quality(gated_run) if quality_weight > 0.0 else 0.0
-    tiebreak = tiebreak_weight * (gate_fraction + _sharpe_reward(gated_run, traded=traded)) / 2.0
+    readable = _values_readable(gated_run)
+    quality = (
+        quality_weight * _joint_quality(gated_run) if quality_weight > 0.0 and readable else 0.0
+    )
+    sharpe_term = _sharpe_reward(gated_run, traded=traded) if readable else 0.0
+    tiebreak = tiebreak_weight * (gate_fraction + sharpe_term) / 2.0
     return quality + tiebreak
 
 

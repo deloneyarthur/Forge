@@ -128,6 +128,8 @@ def _quality_run(
     cpcv: float | None = None,
     cpcv_threshold: float | None = 1.5,
     regime_coverage_passed: bool | None = None,
+    coverage_detail: str = "",
+    decided_at: datetime | None = None,
 ) -> GatedRun:
     """A gated run whose gate rows mirror the live export shape (values +
     per-run thresholds on the named quality gates)."""
@@ -160,6 +162,7 @@ def _quality_run(
             passed=regime_coverage_passed,
             value=1825.0,
             threshold=1460.0,
+            detail=coverage_detail,
         )
     return GatedRun(
         run=RunResult(
@@ -174,7 +177,7 @@ def _quality_run(
             run_id=run_id,
             decision=decision,  # type: ignore[arg-type]
             gate_results=gates,
-            decided_at=datetime.now(UTC),
+            decided_at=decided_at if decided_at is not None else datetime.now(UTC),
             decided_by="test_evaluator/v1",
         ),
     )
@@ -236,8 +239,22 @@ def test_joint_quality_missing_data_never_inflates() -> None:
 
 def test_component_event_still_ceiling() -> None:
     """component/promote stay at exactly 1.0 — quality only grades rejects."""
-    assert _reward(_quality_run(config_hash="x", decision="component", wf=0.1, cpcv=0.1)) == 1.0
-    assert _reward(_quality_run(config_hash="x", decision="promote", wf=2.2, cpcv=1.6)) == 1.0
+    assert (
+        _reward(
+            _quality_run(
+                config_hash="x", decision="component", wf=0.1, cpcv=0.1, regime_coverage_passed=True
+            )
+        )
+        == 1.0
+    )
+    assert (
+        _reward(
+            _quality_run(
+                config_hash="x", decision="promote", wf=2.2, cpcv=1.6, regime_coverage_passed=True
+            )
+        )
+        == 1.0
+    )
 
 
 def test_reject_reward_is_quality_weight_times_score_plus_tiebreak() -> None:
@@ -287,7 +304,15 @@ def test_zero_quality_volume_still_cannot_outrank_component(tmp_path: Path) -> N
                 )
             )
         _insert_submission(conn, config=_config("volatility_event", "vc"), config_hash="ve_comp")
-        gated.append(_quality_run(config_hash="ve_comp", decision="component", wf=1.3, cpcv=0.9))
+        gated.append(
+            _quality_run(
+                config_hash="ve_comp",
+                decision="component",
+                wf=1.3,
+                cpcv=0.9,
+                regime_coverage_passed=True,
+            )
+        )
         weights = compute_hypothesis_component_weights(
             conn, gated, hypotheses=("relative_value", "volatility_event")
         )
@@ -322,7 +347,15 @@ def test_sustained_quality_can_rival_a_sparse_component(tmp_path: Path) -> None:
                 )
             )
         _insert_submission(conn, config=_config("mean_reversion", "mc"), config_hash="mr_comp")
-        gated.append(_quality_run(config_hash="mr_comp", decision="component", wf=1.0, cpcv=0.8))
+        gated.append(
+            _quality_run(
+                config_hash="mr_comp",
+                decision="component",
+                wf=1.0,
+                cpcv=0.8,
+                regime_coverage_passed=True,
+            )
+        )
         weights = compute_hypothesis_component_weights(
             conn, gated, hypotheses=("volatility_event", "mean_reversion")
         )
@@ -351,7 +384,15 @@ def test_h4_discounts_blind_to_quality(tmp_path: Path) -> None:
         _insert_submission(
             conn, config=_config("volatility_event", "c0", underlying="AAPL"), config_hash="comp"
         )
-        gated.append(_quality_run(config_hash="comp", decision="component", wf=1.0, cpcv=0.9))
+        gated.append(
+            _quality_run(
+                config_hash="comp",
+                decision="component",
+                wf=1.0,
+                cpcv=0.9,
+                regime_coverage_passed=True,
+            )
+        )
         discounts = compute_orthogonal_yield_discounts(conn, gated)
     assert ("volatility_event", "rsi_2", "NVDA") not in discounts
     assert discounts[("volatility_event", "rsi_2", "AAPL")] == pytest.approx(2.0**-0.15)
@@ -369,3 +410,81 @@ def test_deterministic(tmp_path: Path) -> None:
         first = compute_hypothesis_component_weights(conn, gated, hypotheses=("mean_reversion",))
         second = compute_hypothesis_component_weights(conn, gated, hypotheses=("mean_reversion",))
     assert first == second
+
+
+# ---------------------------------------------------------------------------
+# D128 (D124 keys 1+2) — era/honesty keys in the reward path
+# ---------------------------------------------------------------------------
+
+_PRE_CUT = datetime(2026, 6, 9, 22, 52, 56, tzinfo=UTC)
+_POST_CUT = datetime(2026, 6, 9, 22, 52, 58, tzinfo=UTC)
+
+
+def test_honest_component_keeps_binary_reward() -> None:
+    """D124 key 2: a component whose regime_coverage row passed WITHOUT the
+    'coverage_unverified' marker is the real binary event — reward 1.0."""
+    gr = _quality_run(config_hash="x", decision="component", regime_coverage_passed=True)
+    assert _reward(gr) == 1.0
+
+
+def test_dishonest_component_unverified_detail_falls_through() -> None:
+    """A 'component' admitted through an unverified-pass coverage gate is NOT
+    the binary event (94% of legacy components — D124). It earns what its
+    readable values earn, like any reject; never the 1.0."""
+    gr = _quality_run(
+        config_hash="x",
+        decision="component",
+        regime_coverage_passed=True,
+        coverage_detail="coverage_unverified (rank path; floor not evaluated)",
+        wf=1.0,
+        cpcv=0.9,
+    )
+    assert _reward(gr) < 1.0
+
+
+def test_dishonest_component_failed_coverage_row_falls_through() -> None:
+    gr = _quality_run(
+        config_hash="x",
+        decision="component",
+        regime_coverage_passed=False,
+        wf=1.0,
+        cpcv=0.9,
+    )
+    assert _reward(gr) < 1.0
+
+
+def test_component_without_coverage_row_is_not_honest() -> None:
+    """Fail-closed: a row with NO regime_coverage gate (pre-Q32 legacy) cannot
+    be verified honest — the binary event is not granted."""
+    gr = _quality_run(config_hash="x", decision="component", regime_coverage_passed=None)
+    assert _reward(gr) < 1.0
+
+
+def test_pre_cost_floor_values_earn_no_quality() -> None:
+    """D124 key 1: WF/CPCV values decided before 2026-06-09T22:52:57Z are
+    zero-slippage-optimistic — the quality term and the sharpe-proximity
+    tiebreak half must be 0 for those rows; the gate_fraction half (pass/fail
+    booleans, not values) survives. An identical row decided after the cut
+    earns its quality."""
+    pre = _quality_run(config_hash="x", wf=4.0, cpcv=3.0, decided_at=_PRE_CUT)
+    post = _quality_run(config_hash="x", wf=4.0, cpcv=3.0, decided_at=_POST_CUT)
+    pre_reward, post_reward = _reward(pre), _reward(post)
+    assert post_reward > pre_reward
+    # post earns the full quality term (wf 4/2=2, cpcv 3/1.5=2 → clamp 1.0).
+    assert post_reward >= COMPONENT_QUALITY_WEIGHT
+    # pre keeps only epsilon-scale tiebreak (gate_fraction half).
+    assert pre_reward < COMPONENT_QUALITY_WEIGHT / 2
+    assert pre_reward > 0.0  # gate_fraction half is NOT zeroed
+
+
+def test_naive_decided_at_is_read_as_utc() -> None:
+    """Naive timestamps are UTC post-D117; a naive pre-cut stamp must still
+    be treated as pre-cut."""
+    naive_pre = _quality_run(
+        config_hash="x",
+        wf=4.0,
+        cpcv=3.0,
+        decided_at=datetime(2026, 6, 9, 22, 52, 56),  # noqa: DTZ001 — deliberate naive
+    )
+    aware_post = _quality_run(config_hash="x", wf=4.0, cpcv=3.0, decided_at=_POST_CUT)
+    assert _reward(naive_pre) < _reward(aware_post)

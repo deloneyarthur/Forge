@@ -143,6 +143,12 @@ def _gated_run(
 ) -> GatedRun:
     run_id = str(uuid.uuid4())
     gate_results: dict[str, GateResult] = {}
+    # D128: the modern export carries a regime_coverage row on every run; an
+    # honest pass on component rows keeps the binary event under the honesty
+    # key. Added only for component/promote so reject-row gate_fraction
+    # arithmetic in existing pins is untouched.
+    if decision in ("component", "promote"):
+        gate_results["regime_coverage"] = GateResult(gate_name="regime_coverage", passed=True)
     for i in range(gates_passed):
         gate_results[f"gate_pass_{i}"] = GateResult(gate_name=f"gate_pass_{i}", passed=True)
     for i in range(gates_failed):

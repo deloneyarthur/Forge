@@ -126,10 +126,13 @@ def _gated_run(*, config_hash: str, decision: str = "reject", trade_count: int =
     run_id = str(uuid.uuid4())
     # A full slate of passed gates so the (irrelevant-to-H4) tiebreak signal is
     # strong — proving the discount keys on the component decision, not on
-    # gate-progress or trades.
+    # gate-progress or trades. D128: the modern export carries a
+    # regime_coverage row on every run; an HONEST pass here, so component
+    # decisions still grant the binary event under the honesty key.
     gate_results = {
         "g0": GateResult(gate_name="g0", passed=True),
         "g1": GateResult(gate_name="g1", passed=True),
+        "regime_coverage": GateResult(gate_name="regime_coverage", passed=True),
     }
     return GatedRun(
         run=RunResult(
