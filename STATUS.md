@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-10 — D131: grammar v17 DEPLOYED + VERIFIED 17:36:10Z — iv_minus_rv live as ve directional (ve×swing_mid reachable, partial Q28 lift) + market_state in R2 (incl. rank arm); rides the v2-stamped registry AND the earnings-exit-live era
+
+**Operator: "push to v17" on the locked scope; R2 resolved via AskUserQuestion (market_state only — vix_term_slope excluded, vol-returns evidence ≠ trend conditioning). Loosening: OPEN_PROPOSALS `2d0d68ca`. Full record: [[D131]].**
+
+- **Built (TDD, 3 RED-first + the horizon-coverage invariant firing as designed):** iv_minus_rv threshold (−0.05, 0.01) op `<` (Goyal-Saretto, net-debit book) + 21d horizon (medium → swing_short/mid) → auto-enters ve's directional pool via C2; R2 pool += market_state ({0.0, ">"}, degenerate by design; market-wide → rank-coherent). **Uncontended 1,458/0; mypy clean. Emission proof (52 ids): iv_minus_rv = TOP ve directional 123/587 incl. 37 swing_mid — Q28's cap lifted live; market_state 129 trend gates incl. 41 on rank; 0 violations.**
+- **DEPLOYED:** stopped 17:33:45Z → v17 + archive → suite → commit `5939fc4` → restart **17:36:10Z** → verified: v17 stamped, manual_bump row, reconcile 34/2,568, NRestarts=0, zero errors. **Registry hash → `a7ae9ccf843fd969`: the 17:23:39Z snapshot carries days_to_earnings v2 + pre_earnings_setup v2 (the expected calendar republish) — consumed cleanly.**
+- **Era confluence (one boundary, three changes):** Crucible's exit-era runner restart = **17:17:13Z** (D130's pending timestamp, now firm — earnings_exit fires from there) → v2 registry 17:23:39Z → **v17 17:36:10Z**. The v17 cohort is therefore ALSO the first earnings-exit-live cohort — funnel reads across 17:17–17:36Z should treat the trio as one composite boundary.
+- **Watches:** first v17 batches (iv_minus_rv ve draws — first-ever ve×swing_mid submissions; market_state trend gates; both under D128-corrected weights, which are moving fast on the rolling window — mr/rv at 1.0 this boot); ve×days_to_earnings draws may now pass the prefilter (real calendar); Q35 re-check + rank re-eval triggers unchanged. Post-their-v10: iv_term_slope/option_momentum/pre_earnings_setup adoption cut (S4 classing ours to propose).
+
+---
+
 ## 2026-06-10 — D130: earnings calendar LIVE (their same-day execution of our priority call) — indicator era 17:05:01Z, exit era = their next runner restart; protection is PARTIAL (~half; 32.5% of events anchor-late) — docs-only
 
 **`FORGE_earnings_calendar_live.md` processed as [[D130]].** 140 symbols / 4,221 dates / 2018→2026-06-03, derived from filing dates (§20 entry owns the PIT assumption). Their build also found the SECOND half of the starvation: the runner never wired the calendar into `Backtester` — the mandatory exit was unwired engine-side regardless of the parquet. Both fixed in `1ca0361`.
