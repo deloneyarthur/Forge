@@ -63,3 +63,21 @@ ships either way without our operator; this just orients the question.
 - Priorities are ours from evidence strength; reorder freely on your data-availability
   reality (P2 likely cheapest if ATM IV history already backs `iv_rank`; P1 needs the VIX
   ingest that never happened).
+
+## 4. Addendum (2026-06-10): grammar v16 is LIVE — boundary 2026-06-10T14:43:20Z
+
+Drafted before the v16 deploy; now live, so for your funnel reads
+(`funnel --compare v15 v16` when it matures):
+
+- **The "v16 plan" in §3 is no longer a plan** — rank/universe exclusion is keyed on your
+  1.18.0 flags as of the boundary. Visible in our emission: **fractional_kelly never takes
+  the rank branch anymore** (its X2 EV-confluence chain pins it single-name — your
+  rank-confluence response's logic applied; expect kelly to vanish from the rank arm,
+  ~48/3,000 draws at v15), and `pairs_zscore` left the universe regime-GATE pool (it is in
+  your 13 flag-excluded; it stays rv's pairs-path directional).
+- **P3 delta widening, trend-scoped (operator-approved loosening, our D125):**
+  trend_continuation swing_long 0.20–0.35 → 0.20–0.55 and swing_mid 0.30–0.45 → 0.30–0.55.
+  Within the existing 0.55 cap — **no position-builder change needed your side**; expect
+  trend `delta_target` up to 0.55 at both buckets, other hypotheses unchanged.
+- A no-emission gap 2026-06-10T07:12–14:43Z (long deploy stop-window) — absence, not a
+  behavior era.
