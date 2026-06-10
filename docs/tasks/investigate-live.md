@@ -55,6 +55,18 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
   naive LOCAL values (mixed eras — do not trust them without the +7h correction). The
   `verdicts` table was repaired once via `scripts/migrate_verdicts_decided_at.py`; rows
   written after the fix are correct at ingest.
+- **Cost-floor value era: hard-cut at `2026-06-09T22:52:57Z`** (Crucible-confirmed exact
+  restart; their "~23:09" STATUS note is the deploy-sequence tail). WF/CPCV/Sharpe **values**
+  decided before the cut were priced with zero slippage — never learn from or compare gate
+  values across the cut (D124).
+- **Coverage honesty is a row marker, not a time-cut:** trust
+  `gate_results["regime_coverage"].passed == true` AND `detail` NOT containing
+  `'coverage_unverified'` — byte-for-byte Crucible's `honest_regime_coverage` predicate.
+  Real coverage floors went live 2026-06-10T01:00:02Z (pairs) / 01:28:03Z (rank); earlier
+  rank/pairs coverage passes are unverified (D124).
+- **Fullhist-refit children re-gate under the same `config_hash` with a new `run_id`** —
+  `verdicts` holds both parent and child rows; lineage pointer at
+  `universe_json.submission_metadata.fullhist_refit_of` (D124).
 - Post-D105, the sampler is weighted — condition scans on the live weights (no more
   quasi-randomization).
 

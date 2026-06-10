@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-09 (latest) — D124: Crucible's v118/OOM/residuals response processed — OOM cure telemetry-backed (~60 dec/hr), Q32 CLOSED (d964e908 honest re-run: WF 2.225→0.280, recency-fit), era keys + honesty marker adopted; confirm prompt updated (operator: relay it, one message closes everything)
+
+**Incoming `FORGE_v118_oom_telemetry_and_residuals.md` verified and recorded as D124 (docs-only; no code/weights/service change).** Every checkable claim reproduced: contracts 0b5f183=1.18.0 (our pin already matches, [[D123]]); the 4th OOM kill we missed (pid 713927, 03:22:59Z, 101 MB) kernel-verified; **`b8b83495` — the fullhist child of `d964e908` — already in our verdicts table next to its reject parent, same config_hash** (their 94/94 continuity claim spot-checked on `42f3a442`/`815be985` too).
+
+- **OOM thread CLOSED:** kills = refit-lane children of tier-2 rank configs hitting both since-fixed mechanisms (EV-passthrough per-bar trades-scans + bulk-cache fragmentation); cure telemetry-backed (anon 10–11 GB steady = 28 workers × ~355 MB; same-shape children now complete in 11–14 min); **capacity ~60 decisions/hr post-fix** (refit lane a third). Honest caveat held: current-window rank duration UNMEASURED post-fix — hold rank share 1/3 until their re-statement + the ≥300-decided re-eval. 3 orphaned children re-run at their next deploy (canary, benign).
+- **Q32 CLOSED (all four asks):** pairs parity real too (`4fd6ee2`, live 01:00:02Z; rank 01:28:03Z). **`d964e908` re-gated honestly: component, but WF 2.225→0.280 / CPCV-p25 1.537→0.953 — the only both-quality-gates pass ever was recency-fit**; the "beheaded promote-grade frontier" narrative downgrades accordingly (weight impact flows in automatically via the verdicts row). Single-name confluence emission confirmed alive (fullhist-refit lane reaches the rejected-on-coverage-alone class) — no emission change.
+- **Read standard adopted (D124 + `investigate-live.md` era keys):** (1) cost-floor value hard-cut **2026-06-09T22:52:57Z** (exact, not ~23:09) — pre-cut WF/CPCV values are zero-slippage-optimistic; (2) coverage honesty = row marker (`regime_coverage.passed` AND no `'coverage_unverified'` in detail — their own predicate, can't drift), no time-cut; (3) refit children: same config_hash, change nothing.
+- **Operator: relay `PROMPT_CRUCIBLE_CONTRACTS_1_18_ADOPTED.md`** (now carries a receipt addendum closing the OOM/coverage threads) → they republish the registry → **v16 actionable** (rank-branch eligibility keyed on `rank_per_name_coherent`, all roles — operator-gated).
+- **Queued next build (now fully specified, D114-sibling, versionless):** feedback engine enforces the two read keys — quality-term values exclude pre-22:52:57Z rows; component-evidence reads key on the honesty marker (94% of legacy "components" are dishonest-coverage). Mechanical per `feedback-change.md`; ready on request.
+
+---
+
 ## 2026-06-09 (late night, after D122) — D123: contracts 1.18.0 ADOPTED (rank-path flags) — Crucible shipped 36 min after our go-ahead; confirm prompt ready (operator: relay) → registry republish → v16 actionable
 
 **Crucible executed step 1 of the agreed order at 22:46 PDT (`crucible_contracts` 0b5f183 — the two `IndicatorMetadata` booleans, fail-closed defaults, pyproject aligned per our nit). Discovered via uv.lock churn during the D122 session; adopted same hour as [[D123]].**

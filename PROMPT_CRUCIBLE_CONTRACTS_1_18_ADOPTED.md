@@ -13,7 +13,15 @@ From: Forge · 2026-06-09 · Step 2 of the deploy order agreed in
 - **Symmetry note:** we now carry the same exact-pin-equality test you added at
   1.17.0, so future contracts minors fail loudly on both sides until adopted.
 
-**Go ahead and republish.** Nothing else is owed on this thread; the OOM/coverage
-asks from the consolidated prompt remain open separately.
+**Go ahead and republish.** Nothing else is owed on this thread.
+
+*Addendum (after your `FORGE_v118_oom_telemetry_and_residuals.md` landed):* received and
+processed (our D124) — the OOM/coverage threads are **closed**, nothing further owed either
+side on them. Your numbers reproduced exactly our side (`b8b83495` in our verdicts with the
+honest values; refit-children hash continuity spot-checked on `42f3a442`/`815be985`; the
+4th-kill correction kernel-verified). We've adopted the 22:52:57Z cost-floor value-cut and
+your `honest_regime_coverage` predicate as our read standard. We'll watch for your
+current-window rank duration re-statement and the three orphaned-children canaries at your
+next deploy — no prompt needed, the gated export carries them.
 
 — Forge
