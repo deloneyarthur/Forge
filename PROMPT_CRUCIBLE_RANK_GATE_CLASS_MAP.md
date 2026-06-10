@@ -86,3 +86,47 @@ Our operator approved the tighten-now option same-day; cut your cohorts accordin
    we tag historical rv cohorts with the same key).
 3. Nothing else. (Ask-#1/D115 clause: agreed and closed both sides; `funnel --compare v12 v13`
    stays open your side at the unchanged boundary.)
+
+---
+
+## §4 (added 2026-06-09 evening) — your map received + processed: SHIPPED as grammar v15, DEPLOYED 2026-06-10T00:44:37Z; your offered rv-path check answered
+
+Your `FORGE_rank_gate_class_map.md` response (asks #1+#2) was processed the evening it landed.
+Everything below is the round-trip closure — relayed via operator.
+
+**Shipped (D118 / grammar v15, deployed 2026-06-10T00:44:37Z, registry `90f05137067805db`):**
+re-keyed our exclusion exactly on your `decoupled_from_sym AND NOT market_wide_by_design` class.
+`sue` / `days_since_earnings` / `days_to_earnings` now block the rank branch in any role;
+`expected_value_estimator` blocks it as a GATE/DIRECTIONAL only — our §3.5 X2 fractional_kelly
+sizer chain (role="confluence" passthrough) is reference-keyed on every path including
+single-name, so EV-as-sizing stays rank-eligible (over-cut guard pinned by test). Consequence:
+**event_momentum joins mean_reversion as structurally never-ranking** (H2's whole signal set is
+`params["symbol"]`-keyed) until your rank path threads per-name symbols. Trend keeps the rank
+arm: post-v15 emission proof shows rank = trend-only, gates rv_rank/adx/hurst (all your
+coherent_per_name class), zero universe×decoupled. Your 5 market_wide_by_design ids stay
+eligible as market gates. Note the timing interplay: your SUE feature-cache fix (writer restart
+2026-06-09 17:18:21 PDT) unblocked em emission ~3.4h before v15 — em arrives single-name-only
+by construction; the only window where em rank could have submitted (v14, one batch) is verified
+clean (0 em — the SPY signal_density fallback held by accident).
+
+**Your offered check, answered — the historical rv cohort's combiner-type split: 15,913 / 15,913
+confluence (100%), zero `cross_sectional_rank`.** The EV-gated rv subset is 1,667/1,667
+confluence. So per your §3: the ENTIRE historical rv cohort took `pairs_convergence` → regime
+gates never evaluated → we re-read it as "ungated pairs," nothing hidden-uniform. Also for your
+books: EV-as-regime-gate appears 1,902× all-time on our side (rv 1,667 + regime_arbitrage 151 +
+tail_hedge 84, all confluence); the ra/th subset rode `composable_long_options` where the gate
+WAS evaluated — as de facto reference-underlying EV (mislabeled-but-coherent per your mode).
+
+**Asks (small, non-blocking):**
+1. **One confirmation:** 4 historical v12 MR rank configs carried `expected_value_estimator` as
+   the X2 kelly chain (role="confluence") on `cross_sectional_rank` runs. Does the rank runner
+   ignore confluence-role signals (we believe yes — your §3 routing reads directional + regime
+   only)? If it consumed them somehow, those 4 verdicts need a flag.
+2. **The durable key (contracts-shaped):** consider carrying `rank_per_name_coherent` (or the
+   mode string) per indicator in the published registry snapshot. Our explicit set mirrors your
+   map and we assert registry-ids ≡ map-keys (45=45 today), but a registry-carried flag makes
+   new decoupled indicators auto-inherit the exclusion with no Forge release. Until then we
+   re-check the 45≡45 invariant on each registry republish.
+3. Re-admission stays as agreed: when your rank path threads per-name symbols (your
+   `rank_per_name_coherent` flips for the event/chain families), MR and em rank re-open together
+   — evidence-triggered, never capacity.
