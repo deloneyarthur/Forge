@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-10 — D127: Crucible's own evidence review processed — 2 more shelf indicators (post-their-v10), §3 "expressible today" region measured HALF-true (1.2% of ve, conditioner has no slot), trend pool already ~bimodal (dead-middle 28%) — docs-only, Q37 logged
+
+**Operator commissioned the same literature review Crucible-side; `FORGE_evidence_review_indicators_and_grammar_notes.md` processed as [[D127]] (no code/grammar/weights/service change). Registry republish expectation now ≥51 ids (+`iv_term_slope`, +`option_momentum` — both fail-closed, v16-safe).**
+
+- **Their 2 new indicators are on THEIR shelf** (no adoption until their v10 corrected-data re-measure + portfolio battery; classing/bounds ours to propose at the first post-v10 cut). `iv_term_slope` (per-name Vasquez — NOT our P1) + `option_momentum` (Heston 2023; all published evidence GROSS — net is the hypothesis). The Q28 ve×swing_mid cap condition on file: needs BOTH iv_term_slope and iv_minus_rv classed medium-horizon in S4.
+- **§3 pre-earnings region — measured, their claim corrected:** expressible half (ve×days_to_earnings≤10×swing_short) lands at **1.2% of ve emission**; the low-RV conditioner that carries the documented effect is structurally inexpressible (1 regime slot, R3-pinned, C2 blocks rv_rank as ve directional). Four options scoped in **Q37** (recommend B: a composed `pre_earnings_setup` indicator their side — full fidelity, zero structural change; or D: wait for their v10).
+- **§4 trend lookbacks — measured, milder than warned:** pool is uniform-7 but already ~bimodal (short-node 42% / long 29% / **dead-middle ema_cross+rolling_sharpe 28%**). Tilt = deliberate policy (no per-directional weights exist); evidence-first alternative logged in Q37.
+- **§5 Cao-Han constraint** recorded for the future dispersion-lite class design (select cheap OPTIONS — low iv_minus_rv — not volatile names; don't conflate with our high_idio_vol underlying-class weighting).
+- Watch items unchanged (their runner-restart era boundary; the ≥51-id republish; first v16 batches). Operator decisions queued: Q37 (A–D + lookback tilt), v17 activation (post-republish).
+
+---
+
 ## 2026-06-10 — D126: indicator-gaps response processed — Q34 CLOSED (R1 correct: MR is net-debit everywhere), all 4 indicators SHIPPED their side, ⚠️ single-name chain gates were SPY-decoupled all-time (their fix `14f773a` pending deploy = incoming era boundary) — docs-only
 
 **`FORGE_indicator_gaps_response.md` processed as [[D126]] (no code/grammar/weights/service change).**
