@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-09 (late night) — D122: rank-confluence response books-corrections LANDED (docs-only) — confluence IS a rank input; the 4 rank×EV configs are 1×v12 + 3×v13 (verified on our DB), no flag needed; X2 re-read recorded; flag chain still waiting on contracts 1.18.0
+
+**`FORGE_rank_confluence_and_registry_flag.md` processing COMPLETE.** The consolidated prompt (cd279a1) sent the sequencing ACK the same night; this session lands the in-books corrections it promised, as [[D122]] (docs-only — no code/weights/grammar/service change).
+
+- **Premise corrected on file:** rank consumes confluence in the z-score composite (roles partition regime_filter vs everything-else, their `cross_sectional_rank_composable.py:145-151`); **EV-as-sizing has no live wiring anywhere** (sizer EV-gate exists, zero call sites pass `expected_value`) → X2 cohorts re-read as "EV entry-confluence + static `kelly_fraction` sizing" everywhere — the "X2 books re-read" item queued in the block below is **DONE**. D118's over-cut-guard rationale premise-retired; the guard test stays until v16 (v15 behavior independently harmless: a warm EV on rank is provably output-neutral — uniform → zero-variance → all-zero z-scores).
+- **4 rank×EV configs verified on OUR books** (fresh /tmp snapshot 22:43 PDT): 1×v12 (`15bbaab5`, 20:04:48Z) + 3×v13 (`9fd2eaa8` / `21089ca1` / `6c747157`), straddling the 20:49:45Z v12→v13 cut, matching their queue times +15–36 s; all still `status='submitted'`, zero verdicts → **nothing to flag anywhere**; when they decide they decide post-cost-floor-era. D118's "4 v12" was a mis-grouping — entry annotated.
+- **New reading instructions recorded (D122):** cold-EV-on-rank freeze class (uniform NaN → empty scores → rebalance no-ops; masked by the warm SPY cohort, structurally removed at v16); single-name X2 chains are never entry-neutral (warm EV = standing LONG_CALL vote, NaN = standing FLAT → `unanimous` unsatisfiable).
+- **Still waiting (unchanged):** contracts **1.18.0 NOT landed** (`../crucible_contracts` still at 64f1d0c / 1.17.0, checked this session) → adopt + pin bump + retire 45≡45 → confirm → they republish → v16 candidate (operator-gated). D114 value-read era-cut still blocked on their exact cost-floor timestamp (consolidated-prompt residual #3). Relay of `PROMPT_CRUCIBLE_FLAG_SEQUENCING_OOM_COVERAGE.md` remains an operator action (status unknown this session). `PROMPT_CRUCIBLE_RANK_GATE_CLASS_MAP.md` fully answered — archive candidate once the flag chain completes.
+
+---
+
 ## 2026-06-09 (night) — ⚠️ box-wide OOM 03:21–03:26Z auto-bounced forge → D120+D121 NOW ACTIVE (boundary 2026-06-10T03:23:18Z); v15 emission + first-ever em submissions verified flowing; Crucible-side verification → consolidated outgoing prompt (flag ACK / OOM / coverage residuals)
 
 **Three findings + one outgoing prompt (operator asked "next steps for strategy generation" → verify Crucible-side state → single consolidated prompt).**
