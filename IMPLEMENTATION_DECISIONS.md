@@ -3539,3 +3539,21 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 **Thread state:** ask #2 (registry flag) — design agreed; slice 1 shipped their side (`9da86f4`), registry publish deliberately held for our adoption; **waiting on contracts 1.18.0** (the 1.17.0 collision, our correction in cd279a1) → we adopt + bump pin + retire the 45≡45 invariant in the adoption commit → confirm → they republish (fingerprint rotation = contracts boundary, not drift). Ask #3 (re-admission evidence-triggered, never capacity) unchanged, on file both sides. The v16 candidate stays queued and operator-gated behind that chain. `PROMPT_CRUCIBLE_RANK_GATE_CLASS_MAP.md` is now fully answered — archive candidate once the flag chain completes.
 
 **Files:** this entry, [[D118]] correction annotations, `STATUS.md`.
+
+## D123 — 2026-06-09 — contracts 1.18.0 adopted: IndicatorMetadata rank-path flags — registry republish unblocked; pin-equality test closes the silent-minor-adoption hole
+
+**Spec section:** §13.5 (contracts adoption). Origin: `crucible_contracts` 0b5f183 (2026-06-09 22:46 PDT — 36 minutes after our cd279a1 go-ahead landed; step 1 of the [[D122]] deploy order executed their side). Shipped surface verified against the agreed design: `rank_per_name_coherent` + `market_wide_by_design` on `IndicatorMetadata`, **fail-closed defaults** (False/False == rank-excluded; pre-1.18 snapshot files validate unchanged), `pyproject.toml` aligned to 1.18.0 (our version-drift nit taken), `_version.py` = 1.18.0.
+
+**Changes Forge-side.**
+1. **Pin bump** `FORGE_EXPECTED_CONTRACT_VERSION` 1.17.0 → 1.18.0 (`contracts_check.py`, with the adoption-ledger comment).
+2. **New: pin-equality test** (`test_expected_contract_version_matches_installed`) — exact match, not just §13.5's major-only runtime check. Born RED on the real 1.17.0/1.18.0 gap this session: a contracts minor release could previously ship silently under a stale pin (the runtime check tolerates minors by design — unchanged). Mirrors the test Crucible added their side at 1.17.0; from now on every contracts minor bump fails our suite until explicitly adopted.
+3. **New: fail-closed flags test** (`test_indicator_metadata_rank_path_flags_fail_closed`) — pins the absence-semantics the v16 policy will key on: an indicator whose snapshot entry omits the fields reads as NOT rank-eligible. This is the auto-inherit-exclusion property that motivated the registry-flag ask.
+4. `uv.lock` refresh (editable dep metadata 1.16.0 → 1.18.0; the lock had silently lagged since their pyproject drifted).
+
+**The D118 45≡45 invariant retires here** (as ACKed in cd279a1): the first new-field registry snapshot rotates `registry_hash` over the full canonical dump — read it as a contracts boundary, not indicator-set drift; same 45 ids expected. The manual registry-ids≡map-keys check was books-level practice (D118), not an executable test — nothing to delete; retired in prose.
+
+**Verification:** pin test RED-confirmed (`'1.18.0' != '1.17.0'`) → pin bump → GREEN. **Full suite (contended) 1,443/0**; mypy --strict 0/82; ruff + format clean on changed files. Versionless and live-inert: the running daemon (03:23:18Z boot) keeps its loaded 1.17.0-era modules; the next restart loads contracts 1.18.0 against pin 1.18.0 — consistent either way (and the 22:46→now window where a restart would have paired 1.18.0 contracts with the 1.17.0 pin was safe regardless: §13.5 is major-only).
+
+**Thread state:** our adoption confirm → `PROMPT_CRUCIBLE_CONTRACTS_1_18_ADOPTED.md` (operator: relay) → Crucible republishes the registry (publish deliberately held for this) → the **v16 candidate becomes actionable** (key rank-branch eligibility on `rank_per_name_coherent` for ALL roles incl. confluence — operator-gated grammar/policy bump, replaces v14's interim id set + v15's 4-id set; the [[D122]] cold-EV-freeze class dies with it).
+
+**Files:** `src/forge/core/contracts_check.py`, `tests/integration/test_contracts_integration.py`, `uv.lock`, `PROMPT_CRUCIBLE_CONTRACTS_1_18_ADOPTED.md`, this entry, `STATUS.md`.

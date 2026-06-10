@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-09 (late night, after D122) — D123: contracts 1.18.0 ADOPTED (rank-path flags) — Crucible shipped 36 min after our go-ahead; confirm prompt ready (operator: relay) → registry republish → v16 actionable
+
+**Crucible executed step 1 of the agreed order at 22:46 PDT (`crucible_contracts` 0b5f183 — the two `IndicatorMetadata` booleans, fail-closed defaults, pyproject aligned per our nit). Discovered via uv.lock churn during the D122 session; adopted same hour as [[D123]].**
+
+- **Adoption (TDD):** pin 1.17.0 → 1.18.0 + **new pin-equality test born RED on the real gap** (exact match, closes the silent-minor-adoption hole — mirrors their 1.17.0-era test; every future contracts minor now fails our suite until adopted) + fail-closed flags test (absence ⇒ rank-excluded — the property v16 keys on). **Full suite 1,443/0** (contended); mypy --strict 0/82; ruff/format clean. Live-inert: the running daemon keeps its loaded modules; the next restart pairs 1.18.0 contracts with the 1.18.0 pin.
+- **45≡45 retired** (as ACKed in cd279a1): the first new-field snapshot rotates `registry_hash` = contracts boundary, not drift; same 45 ids expected.
+- **Operator: relay `PROMPT_CRUCIBLE_CONTRACTS_1_18_ADOPTED.md`** — the confirm they're holding the registry publish for. After they republish: the **v16 candidate becomes actionable** (rank branch keyed on `rank_per_name_coherent` for ALL roles incl. confluence; operator-gated; replaces v14's interim set + v15's 4-id set; kills the D122 cold-EV-freeze class). **Watch at the next restart:** registry_hash rotation in the journal — expected, not drift.
+- Still open (unchanged): consolidated-prompt OOM/coverage asks; D114 value-read era-cut (their exact cost-floor timestamp). Concurrent this hour: the deep-research session landed Q34–Q36 (d641aca, no file overlap).
+
+---
+
 ## 2026-06-09 (late night) — Deep-research pass: most-successful funds/traders → documented edges → Forge replication map (docs-only: Q34–Q36 logged, full report in-session; no code/grammar/weights/service change)
 
 **Operator asked for web deep research on the most successful hedge funds/traders, what makes their strategies work, and how to replicate them in Forge.** Run: deep-research workflow (killed twice at session boundaries; all fetched-source claims salvaged from transcripts — 38 source extractions, 27/27 verification votes zero refutations) + 3 foreground research agents (~45 sources: primary papers, Thorp's own Wilmott account, AQR/CBOE/practitioner records).

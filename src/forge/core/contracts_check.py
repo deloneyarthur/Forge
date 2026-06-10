@@ -17,6 +17,14 @@ from crucible_contracts import (
     validate_schema_version,
 )
 
+# 1.18.0 (D123): IndicatorMetadata rank-path flags (`rank_per_name_coherent`,
+# `market_wide_by_design`), fail-closed defaults — together they reconstruct
+# the D118 rank-exclusion key (excluded == NOT coherent AND NOT market_wide)
+# so the v16 enumeration policy can key on the registry instead of explicit
+# id sets. Additive/minor: pre-1.18 snapshot files still validate (fields
+# absent → False/False == excluded); the first republished snapshot rotates
+# `registry_hash` — a contracts boundary, not drift (the D118 45≡45 manual
+# id-set check retires here).
 # 1.17.0 (D121): universe-export freshness bound — the enumerator's
 # `load_universe_tickers_from_export` call now raises `StaleExportError`
 # (a `QueryError` subclass) when the newest export exceeds max_age_days=35,
@@ -31,7 +39,7 @@ from crucible_contracts import (
 # 9995f81, shipped 2026-06-08 00:10Z in response to the D105 yield-map reply's
 # "export carries no version field" note). extra="forbid" makes this a
 # REQUIRED adoption: pre-1.15.0 readers reject the new export rows outright.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.17.0"
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.18.0"
 
 
 def check_contracts_version() -> str:
