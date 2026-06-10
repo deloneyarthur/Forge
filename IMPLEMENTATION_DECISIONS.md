@@ -3618,6 +3618,8 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 
 **Files:** `src/forge/feedback/rejection_weights.py`, `tests/unit/test_feedback/test_quality_term.py` (+6 tests, builder extension, 5 re-pins), `tests/unit/test_feedback/test_orthogonal_yield.py` + `test_component_rate_weights.py` (builder re-pins), this entry, `STATUS.md`.
 
+**Deploy (D104 ritual, operator-directed same day):** stopped 2026-06-10T16:36:29Z (exit 143) → full uncontended suite **1,455/0** on committed main `f1d8359` → reset-failed → restart **2026-06-10T16:38:26Z** → verified: v16 unchanged, `registry_hash=d0b58c4b981dde4e` (the 51-id republish — already consumed in-process pre-restart, zero errors, new ids sampling-invisible as D126 predicted), reconcile 32/2,393, NRestarts=0, zero error lines, and **the `hypothesis_weights:` line shifted exactly per the live proof — em 1.000 / ve 0.524 / tc 0.813 / mr 0.794 / rv 0.750 (was em 0.211 / ve 1.000)**. D128 ACTIVE; boundary 16:38:26Z.
+
 ## D124 — 2026-06-09 — Crucible's v118/OOM/residuals response processed: OOM cure telemetry-backed (~60 decisions/hr), all four coverage residuals answered, d964e908's honest re-run craters the "best config ever" story — era keys + honesty marker adopted as the read standard (docs-only)
 
 **Spec section:** §7 (feedback inputs), §20-adjacent (Crucible gates; read-side only). Origin: `../Crucible/docs/handoffs/FORGE_v118_oom_telemetry_and_residuals.md` (their response to `PROMPT_CRUCIBLE_FLAG_SEQUENCING_OOM_COVERAGE.md`). No code, weights, grammar, or service change — this entry fixes the *read standard* for every future feedback/analysis pass; the build that enforces it in the feedback engine is queued (see "Queued" below).

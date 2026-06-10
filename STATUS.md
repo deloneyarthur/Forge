@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-10 — D128 ACTIVE (ritual restart 16:38:26Z) on the 51-id republished registry — weights shifted exactly per proof (em 1.000 / ve 0.524); registry verified to spec (iv_rank v4 / pcf v3); v17 now actionable
+
+**Crucible republished (`registry_snapshot_2026-06-10T155624Z`, verified: 51 ids = 45 + P1–P4 + iv_term_slope + option_momentum; iv_rank v4 / put_call_flow v3 — the §2 chain-gate fix bumps; flags exactly as pre-declared; new ids sampling-invisible, zero in-process errors). Operator directed the restart; D104 ritual executed:** stopped 16:36:29Z → uncontended **1,455/0** on `f1d8359` → restart **16:38:26Z** → verified: v16, `registry_hash=d0b58c4b981dde4e`, reconcile 32/2,393, NRestarts=0, zero errors, **`hypothesis_weights:` em=1.000 / tc=0.813 / mr=0.794 / rv=0.750 / ve=0.524 — the D128 era/honesty keys live, matching the pre-deploy proof (ve's dishonest-legacy inflation gone; em's clean-era record leads, will move fast on tiny n).**
+
+- **New facts from the republish:** `option_momentum` shipped `family=trend` → at adoption it auto-enters trend's DIRECTIONAL pool via C2 (note for the post-their-v10 cut); `pre_earnings_setup` not in this publish (expected — just asked). **iv_rank v4 in the registry implies their §2 fix rode this deploy — exact runner-restart timestamp (the era boundary for iv_rank-gated reads) still to be confirmed; earliest bound = the 15:56:24Z snapshot.**
+- **v17 is now actionable** (scope locked: activate `iv_minus_rv` thresholds/horizon → ve directional; R2 rule-edit case for market_state/vix_term_slope drafted for separate review). Operator-gated; say go.
+- Boundaries today: v16 14:43:20Z → 51-id registry in-process ~15:56Z → **D128 16:38:26Z**. Watches: first post-D128 batches (weight-shifted mix), em verdicts (its 1.0 weight is tiny-n), iv_rank-v4 era timestamp, the two relay prompts (PRE_EARNINGS_SETUP; INDICATOR_GAPS pair now closed by their response).
+
+---
+
 ## 2026-06-10 — Decision queue walked (4 AskUserQuestion approvals) → D128 BUILT (era/honesty keys in the reward path — awaiting restart), trend tilt REFUTED by our own data, pre_earnings_setup prompt drafted, v17 scope locked
 
 **Operator walked the queue; all four recommended options approved and executed:**
