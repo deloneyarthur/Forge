@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-09 (Q34–Q36 walkthrough) — operator walked the research questions: both verdict readouts RUN (Q34 inconclusive; Q35 suggestive high-delta, swing_mid counterexample), `PROMPT_CRUCIBLE_INDICATOR_GAPS.md` drafted (operator: pass when convenient) — docs-only
+
+**Follow-through on the deep-research block below (operator chose all three recommended options via AskUserQuestion).** ⚠️ Cross-session correction absorbed: D124's honest re-run collapsed `d964e908` WF 2.225→0.280 — the research block's "matches our only double-quality-gate config ever" corroboration line for the ve×earnings arm is RETIRED; the literature evidence (Gao/Xing/Zhang +3.34%/event) stands on its own, unsupported locally.
+
+- **Q34 readout (single-name MR×iv_rank, n=2,376, eras split at the cost-floor cut): inconclusive.** Component rate 1.5/1.6/0.9% by threshold tercile (Fisher-fragile); gate doesn't modulate tradability (53% never trade, CPCV NULL 94%); gamma control unreadable (n=59). The deciding fact stays Crucible-side → asked.
+- **Q35 readout (trend, single=2,354 + rank=121, coverage-honesty marker applied): suggestive high-delta tilt** (6/8 usable comparisons incl. rank both buckets and single swing_long 3.5% vs ~0.7% component rate) **but** single swing_mid contradicts: 0 components above 0.40Δ in 576 rows, all 5 components at 0.31–0.38Δ — possible mid-band peak. **Re-check trigger: ≥300 decided post-cost-floor trend configs → re-run; a holding tilt = P3's "Evidence to relax."** No proposal.
+- **Q36: `PROMPT_CRUCIBLE_INDICATOR_GAPS.md` drafted** — P1 `vix_term_slope` > P2 `iv_minus_rv` > P3 `market_state` > P4 `cs_dispersion`, coherence class pre-declared per the map (P2 single-name only); Q34's template-direction question rides §1; explicitly sequencing-free vs the 1.18.0 chain (post-D124 the flags are live, so any shipped indicator auto-inherits rank eligibility under the v16 plan).
+- Q34/Q35/Q36 entries updated in place; no code/grammar/weights/service change.
+
+---
+
 ## 2026-06-09 (post-D124) — Registry REPUBLISHED (1.18.0 flags live) → daemon stalled on stale in-memory contracts → operator-approved ritual restart 23:32:34 PDT — VERIFIED healthy; hash rotation confirmed boundary; v16 now actionable (operator-gated)
 
 **The flag chain is COMPLETE end-to-end.** Crucible republished at 23:13 PDT (`registry_snapshot_2026-06-10T061337Z.json`) — verified raw: 45 ids (same set), new fields on all, **27 `rank_per_name_coherent` + 5 `market_wide_by_design` + 13 fail-closed-excluded** (= the map's 12 broken + `put_call_flow`, correctly NOT flagged by-design market-wide — the flag key exactly reproduces our v14/v15 cut surface).
