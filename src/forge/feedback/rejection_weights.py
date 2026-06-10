@@ -934,23 +934,35 @@ def compute_orthogonal_yield_discounts(
 
 # ---------------------------------------------------------------------------
 # Dynamic relative_value regime-gate curation (D103 / v9; estimand re-aimed by
-# D105).
+# D105) — FROZEN by D119 (2026-06-09).
 #
 # relative_value has no §3.5 R-rule, so the sampler draws its mandatory regime
 # gate near-uniformly from the WHOLE registry (search_space._build_regime_pool),
 # unlike R1/R2/R3-constrained mean_reversion / trend_continuation /
 # volatility_event. In the live gated cohort the two most-sampled relative_value
-# gates (rsi_2, rv_rank) are among the WORST performers — an incoherent gate
-# just subsets a pairs-convergence signal's entry dates with noise, yielding the
-# negative-Sharpe runs that fail walk_forward_sharpe_median / cpcv_sharpe_p25.
-# Rather than a static hand-curated subset (overfit to a thin n~49 sample), this
-# LEARNS which gates yield accepted components, scoped to relative_value, so the
-# sampler tilts toward them. D105 note: the original D103 estimand (the D094
+# gates (rsi_2, rv_rank) were among the WORST performers — so D103 LEARNED which
+# gates yield accepted components, scoped to relative_value, and the sampler
+# tilted toward them. D105 note: the original D103 estimand (the D094
 # trade-biased reward) collapsed once the rv fix made every gate trade — the
-# live journal showed all 34 gates compressed into 0.33-0.40 — so it now uses
-# the component-rate engine above. The regime POOL is unchanged (hard rule #1 —
-# no rule edit); only the SELECTION weight changes, floored by the sampler
-# (D067 analogue) so no regime is starved out of exploration.
+# live journal showed all 34 gates compressed into 0.33-0.40 — so it was
+# re-aimed at the component-rate engine above.
+#
+# D119 FREEZE: Crucible's class-map response (2026-06-09,
+# `../Crucible/docs/handoffs/FORGE_rank_gate_class_map.md` §3) proved from code
+# that the `pairs_convergence` runner evaluates NO regime filters —
+# `propose_actions` gates purely on cointegration pvalue/zscore/halflife and
+# never calls `signal.evaluate(...)` (`pairs_convergence.py:89-168`). Every
+# relative_value regime gate ever submitted (15,960/15,960 confluence → all
+# routed to that path) was a dead label, so the D103 premise ("rsi_2/rv_rank
+# are the worst-performing gates") was a sampling artifact: gate-id vs outcome
+# correlations with no causal path. The learned posterior is noise; APPLYING it
+# tilts rv emission toward accidental winners. The compute function therefore
+# returns `{}` unconditionally — the sampler's documented cold-start contract
+# (empty → uniform regime draw, identical to pre-D103). The learning machinery
+# below the early return is kept dormant for reversibility: if Crucible threads
+# regime gates into the pairs path, drop the early return and restore the D103
+# learning tests from git history at the D119 commit. The regime POOL is
+# unchanged throughout (hard rule #1 — no rule edit).
 # ---------------------------------------------------------------------------
 
 _REGIME_CURATED_HYPOTHESIS: str = "relative_value"
@@ -974,6 +986,14 @@ def _regime_indicator_of(cfg: Mapping[str, object]) -> str | None:
     return None
 
 
+# D119 — the freeze switch. True → `compute_relative_value_regime_weights`
+# returns `{}` unconditionally (sampler falls back to the uniform regime draw,
+# identical to pre-D103). Flip to False ONLY when Crucible's pairs path
+# actually evaluates regime filters (see the section comment above) — and
+# restore the D103 learning tests from git history at the D119 commit.
+_RV_REGIME_WEIGHTS_FROZEN: bool = True
+
+
 def compute_relative_value_regime_weights(
     db: duckdb.DuckDBPyConnection,
     gated_runs: Sequence[GatedRun],
@@ -986,18 +1006,18 @@ def compute_relative_value_regime_weights(
     prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
     cold_start_hypotheses: frozenset[str] = frozenset(),
 ) -> dict[str, float]:
-    """Per-regime-indicator component-rate posterior, WITHIN ``relative_value``
-    (D103, estimand re-aimed by D105).
+    """FROZEN (D119): returns ``{}`` unconditionally — see the section comment.
 
-    Each gated ``relative_value`` run contributes the component-rate reward
-    (component/promote = 1.0, epsilon tiebreak otherwise), bucketed by its
-    regime-gate indicator. Returns RAW posteriors — the regime key set is open
-    (registry-dependent), so the sampler compares against its own prior/floor
-    constants rather than a normalized scale (see the D105 section comment).
-    Same empty -> ``{}`` cold-start contract (the sampler falls back to
-    uniform) and the same determinism property (hard rule #6: a pure function
-    of the ``submissions`` table + the ``gated_runs`` snapshot).
+    Crucible's ``pairs_convergence`` runner never evaluates regime filters
+    (class-map response §3, 2026-06-09), so the D103/D105 posterior this
+    computed was fit to noise. ``{}`` engages the sampler's documented
+    cold-start contract (uniform regime draw, identical to pre-D103) and the
+    CLI's truthiness-gated journal line simply disappears. The signature and
+    the dormant learning body are kept for reversibility — flip
+    ``_RV_REGIME_WEIGHTS_FROZEN`` only when the pairs path evaluates gates.
     """
+    if _RV_REGIME_WEIGHTS_FROZEN:
+        return {}
 
     def _rv_regime_of(cfg: Mapping[str, object]) -> str | None:
         if cfg.get("hypothesis") != _REGIME_CURATED_HYPOTHESIS:
