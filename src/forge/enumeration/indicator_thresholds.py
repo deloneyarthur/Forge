@@ -267,6 +267,34 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=(25.0, 75.0),  # [25, 50, 75] per PTS calibration
         op_regime="<",  # fire when rv_rank < threshold (vol is cheap)
     ),
+    # ----- D131 (v17) activations — Crucible 2026-06-10 indicator batch -----
+    # iv_minus_rv: per-name ATM IV minus trailing 21d realized vol, annualized
+    # decimals (Crucible as-built: AAPL 2024 median +0.01, range -0.14..+0.25).
+    # The Goyal-Saretto (JFE 2009) single-name premium conditioner. For the
+    # net-debit book (their Q34 answer: every MR/ve template is long premium)
+    # the documented edge buys where IV is CHEAP vs realized → op "<", with
+    # the range spanning "clearly cheap" (-0.05) to "at the median" (+0.01) —
+    # selectivity ~10-50%. Provenance is their one-name summary stats; refine
+    # against funnel evidence (D131). volatility_event DIRECTIONAL via C2
+    # (iv_structure); regime use deliberately None (the R1-sibling question
+    # stays open per Q34's coda — admitting it as a GATE is a future rule
+    # decision, not an activation).
+    "iv_minus_rv": IndicatorThresholdSpec(
+        directional_range=(-0.05, 0.01),
+        regime_range=None,
+        op_directional="<",  # fire when IV cheap vs the name's own realized
+    ),
+    # market_state: sign of the reference's trailing 252-session return,
+    # emits ±1 (0 only on an exactly-flat window). Threshold is degenerate by
+    # design: the only meaningful cut is 0 (up-market vs down-market —
+    # Cooper/Gutierrez/Hameed JF 2004; momentum pays after up-markets).
+    # (0.0, 0.0) makes the sampler emit exactly threshold=0.0. Gate-only:
+    # R2 pool member as of v17 (D131).
+    "market_state": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=(0.0, 0.0),
+        op_regime=">",  # fire in up-market state
+    ),
     # ----- Microstructure (low signal on SPY) -----
     "amihud": IndicatorThresholdSpec(
         directional_range=(0.0001, 0.001),

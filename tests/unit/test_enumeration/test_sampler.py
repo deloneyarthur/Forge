@@ -1331,3 +1331,103 @@ def test_h4_discount_slices_by_hypothesis_and_directional_in_sample_config(
     finally:
         sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
         _load_underlyings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# D131 (v17) — iv_minus_rv activated as a ve directional; market_state in R2
+# ---------------------------------------------------------------------------
+
+
+def _v17_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """Fixture registry + the two v17-activated live-registry ids."""
+    extra = (
+        IndicatorMetadata(
+            id="iv_minus_rv",
+            version=1,
+            family="iv_structure",
+            lookback=21,
+            params_schema={},
+            rank_per_name_coherent=False,
+            market_wide_by_design=False,
+        ),
+        IndicatorMetadata(
+            id="market_state",
+            version=1,
+            family="macro",
+            lookback=0,
+            params_schema={},
+            rank_per_name_coherent=False,
+            market_wide_by_design=True,
+        ),
+    )
+    return base.model_copy(update={"indicators": (*base.indicators, *extra)})
+
+
+def test_v17_ve_draws_iv_minus_rv_directional(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """D131 (v17): with threshold + horizon entries live, iv_minus_rv
+    auto-enters volatility_event's DIRECTIONAL pool via C2 (iv_structure).
+    Gate direction `<` — enter when IV is cheap vs realized (Goyal-Saretto,
+    net-debit book per Crucible's Q34 answer). Its 21d horizon is
+    medium_lookback → ve x swing_mid becomes reachable (the partial Q28
+    lift) — assert at least one such draw appears."""
+    reg = _v17_registry(registry)
+    space = build_search_space(grammar, reg)
+    seen = seen_swing_mid = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
+        d = next(s for s in cfg.signals if s.role == "directional")
+        if d.indicators[0] != "iv_minus_rv":
+            continue
+        seen += 1
+        assert d.params["op"] == "<", cfg.name
+        assert -0.05 <= d.params["threshold"] <= 0.01, cfg.name
+        if cfg.dte_bucket == "swing_mid":
+            seen_swing_mid += 1
+        else:
+            assert cfg.dte_bucket == "swing_short", cfg.name  # S4 medium class
+    assert seen > 0
+    assert seen_swing_mid > 0
+
+
+def test_v17_trend_draws_market_state_regime_gate(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D131 (v17): market_state joins R2's pool (operator-approved rule edit —
+    R2's own evidence_to_relax clause fired). The threshold is the degenerate
+    by-design cut: exactly 0.0 with op '>' (up-market admits)."""
+    reg = _v17_registry(registry)
+    space = build_search_space(grammar, reg)
+    seen = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="trend_continuation")
+        g = next(s for s in cfg.signals if s.role == "regime_filter")
+        if g.indicators[0] != "market_state":
+            continue
+        seen += 1
+        assert g.params == {"threshold": 0.0, "op": ">"}, cfg.name
+    assert seen > 0
+
+
+def test_v17_market_state_gate_allowed_on_rank_arm(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """market_state is market_wide_by_design — uniform-across-names is CORRECT
+    for a market gate, so trend rank draws gated on it stay rank-eligible
+    (the v16 flag key: excluded only when NOT coherent AND NOT market-wide)."""
+    reg = _v17_registry(registry)
+    space = build_search_space(grammar, reg)
+    assert "market_state" not in space.rank_excluded_ids
+    share = {"trend_continuation": 1.0}
+    seen_ms_rank = 0
+    for seed in range(400):
+        cfg = sample_config(
+            space,
+            reg,
+            random.Random(seed),
+            forced_hypothesis="trend_continuation",
+            rank_combiner_share=share,
+        )
+        uses_ms = any("market_state" in s.indicators for s in cfg.signals)
+        if uses_ms and cfg.combiner.type == "cross_sectional_rank":
+            seen_ms_rank += 1
+    assert seen_ms_rank > 0

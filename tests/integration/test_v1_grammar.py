@@ -111,7 +111,12 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # (2) P3 trend-scoped delta widening — swing_long/mid upper edges to 0.55,
     # the first hypothesis-scoped P3 override; operator-approved loosening,
     # OPEN_PROPOSALS 343e71fd. The 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v16"  # type: ignore[attr-defined]
+    # D131 bumped v16 -> v17 (activation + rule edit, operator-approved
+    # loosening OPEN_PROPOSALS 2d0d68ca: (1) iv_minus_rv threshold/horizon
+    # entries → ve directional via C2, 21d medium horizon → ve x swing_mid
+    # reachable; (2) R2 pool += market_state — the rule's own
+    # evidence_to_relax clause fired. The 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v17"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

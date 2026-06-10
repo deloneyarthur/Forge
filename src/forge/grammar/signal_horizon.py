@@ -92,6 +92,15 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # ----- iv_structure / event directional + regime -----
     # Signal horizon (level mean-reverts over ~weeks), NOT the 252-day window.
     "iv_rank": 30,
+    # D131 (v17): the IV-vs-realized spread converges over roughly its own
+    # realized window (21 td) — medium_lookback → swing_short/swing_mid (S4),
+    # which is what makes ve x swing_mid reachable (the partial Q28 lift; the
+    # full lift adds iv_term_slope at the post-their-v10 cut, roadmap A2).
+    "iv_minus_rv": 21,
+    # D131 (v17): trailing-252-session sign — a long, slow regime. Gate-only
+    # (no directional_range), so S4 never consults this; the entry satisfies
+    # the thresholdable-coverage invariant honestly.
+    "market_state": 252,
     "vix_level": 1,  # spot VIX
     # ----- flow / calendar (event proximity — near-instant reads) -----
     "put_call_flow": 5,

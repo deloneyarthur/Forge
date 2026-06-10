@@ -239,6 +239,12 @@ _R2_TREND_CONTINUATION_REGIME_INDICATORS = (
     "hurst",
     "rv_rank",
     "gamma_flip_distance_pct",
+    # D131 (v17, operator-approved rule edit — R2's own evidence_to_relax
+    # clause): market_state, the Cooper/Gutierrez/Hameed up-market filter
+    # (momentum pays after up-markets, inverts after down). market-wide by
+    # design → also valid on trend's rank arm (uniform across names is
+    # correct for a market gate).
+    "market_state",
 )
 # T1.4 (PROMPT_5_FORGE_V1_1_REVISED, grammar v2): expanded from
 # (days_to_earnings, days_to_fomc) to include macro-event indicators

@@ -272,15 +272,15 @@ The trend overrides widen the UPPER edge only: systematically buying low-delta/O
 
 **Evidence to relax.** Promoted mean-reversion strategies that use a non-`iv_rank`, non-`gamma_flip_distance_pct` regime proxy (e.g., `iv_zscore`, custom realized-vs-implied ratio).
 
-### R2: Trend strategies require regime gate (v2, D077; v11, D107)
+### R2: Trend strategies require regime gate (v2, D077; v11, D107; v17, D131)
 
-**What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx`, `hurst`, `rv_rank`, or `gamma_flip_distance_pct`.
+**What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx`, `hurst`, `rv_rank`, `gamma_flip_distance_pct`, or `market_state`.
 
-**Why.** Trend-continuation strategies presume there *is* a trend to continue. Firing in range-bound markets is dead-weight risk. `adx` gates on trend strength, `hurst` on trend persistence. `rv_rank` (v2, D077) gates on realized-vol regime — PTS thesis: "enter trend-following long calls when realized vol is cheap" (`rv_rank < threshold`, `op: "<"`). `gamma_flip_distance_pct` (v11, D107 — the dealer-gamma regime switch, H3) gates on the dealer-gamma regime: trend pays when dealers are SHORT gamma and amplifying moves (flip above spot → `gamma_flip_distance_pct > threshold`, `op: ">"`), per the GEX literature (SpotGamma/SqueezeMetrics: negative-gamma = trending) and Forge's own gated cohort (trend is the weakest archetype; gating it to its productive regime is the lever).
+**Why.** Trend-continuation strategies presume there *is* a trend to continue. Firing in range-bound markets is dead-weight risk. `adx` gates on trend strength, `hurst` on trend persistence. `rv_rank` (v2, D077) gates on realized-vol regime — PTS thesis: "enter trend-following long calls when realized vol is cheap" (`rv_rank < threshold`, `op: "<"`). `gamma_flip_distance_pct` (v11, D107 — the dealer-gamma regime switch, H3) gates on the dealer-gamma regime: trend pays when dealers are SHORT gamma and amplifying moves (flip above spot → `gamma_flip_distance_pct > threshold`, `op: ">"`), per the GEX literature (SpotGamma/SqueezeMetrics: negative-gamma = trending) and Forge's own gated cohort (trend is the weakest archetype; gating it to its productive regime is the lever). `market_state` (v17, D131 — the relax clause below fired, operator-approved) gates on the market state: sign of the reference's trailing 252-session return, `market_state > 0` = up-market — momentum pays after up-markets and inverts after down-markets (Cooper/Gutierrez/Hameed JF 2004; Daniel-Moskowitz crash regime = down-state). Market-wide by design, so it is also a coherent gate on trend's rank arm.
 
 **Cost.** Medium. Excludes trend strategies without an explicit regime filter from the accepted set.
 
-**Evidence to relax.** Promoted trend strategies that use a regime gate outside `{adx, hurst, rv_rank, gamma_flip_distance_pct}`.
+**Evidence to relax.** Promoted trend strategies that use a regime gate outside `{adx, hurst, rv_rank, gamma_flip_distance_pct, market_state}`. (Fired once: the v17 `market_state` admission above.)
 
 ### R3: Volatility-event strategies require event-proximity gate
 

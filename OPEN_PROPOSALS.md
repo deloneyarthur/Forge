@@ -353,3 +353,30 @@ proposal_yaml: |
 decided_at: '2026-06-10T07:02:00+00:00'
 decided_by: operator (in-session AskUserQuestion approval, 2026-06-09 PDT; recorded in D125)
 decision_marker: null
+---
+proposal_id: 2d0d68ca-4a52-4159-b9af-5019945d1965
+status: APPROVED
+proposed_at: '2026-06-10T17:40:00+00:00'
+proposal_type: loosen
+target: grammar_v17_activation
+rationale: 'v17 (D131): (1) activate iv_minus_rv as a volatility_event DIRECTIONAL
+  (threshold + horizon entries; auto-enters the ve pool via C2 family iv_structure;
+  21d horizon = medium -> ve x swing_mid becomes reachable, the partial Q28 lift).
+  The Goyal-Saretto IV-vs-realized spread is the best-validated single-name premium
+  conditioner; gate direction < threshold (enter when IV cheap vs realized -
+  net-debit book per their Q34 answer). (2) R2 pool += market_state (operator-owned
+  rule edit, approved): Cooper/Gutierrez/Hameed JF 2004 - momentum pays after
+  up-markets, inverts after down; R2''s own evidence_to_relax clause ("a regime
+  gate outside {adx,hurst,rv_rank}") fired. vix_term_slope deliberately NOT added
+  (validated for vol returns, not trend conditioning).'
+evidence:
+  trigger: operator_directed_evidence_reviewed
+  literature: 'Goyal-Saretto JFE 2009; Israelov-Nielsen 2015; Cooper et al. JF 2004'
+  crucible_as_built: 'iv_minus_rv AAPL 2024 median +0.01 range -0.14..+0.25;
+    market_state +/-1, ~18% down-state vs SPY 2019-2026'
+proposal_yaml: |
+  # v17: iv_minus_rv directional_range (-0.05, 0.01) op '<' + horizon 21d;
+  # market_state regime threshold 0.0 op '>'; R2 pool += market_state
+decided_at: '2026-06-10T17:38:00+00:00'
+decided_by: operator (in-session AskUserQuestion, 2026-06-10; recorded in D131)
+decision_marker: null
