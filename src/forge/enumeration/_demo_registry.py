@@ -34,6 +34,7 @@ def demo_registry() -> RegistrySnapshot:
         indicators=(
             IndicatorMetadata(
                 id="rsi_2",
+                rank_per_name_coherent=True,
                 version=1,
                 family="mean_reversion",
                 lookback=2,
@@ -41,6 +42,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="rsi_14",
+                rank_per_name_coherent=True,
                 version=1,
                 family="mean_reversion",
                 lookback=14,
@@ -48,6 +50,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="momentum_252",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend",
                 lookback=252,
@@ -55,6 +58,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="iv_rank",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="iv_structure",
                 lookback=30,
@@ -62,6 +67,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="ema_50",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend",
                 lookback=50,
@@ -69,6 +75,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="adx",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend_strength",
                 lookback=14,
@@ -76,6 +83,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="hurst",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend_strength",
                 lookback=100,
@@ -83,6 +91,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="days_to_earnings",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="calendar",
                 lookback=0,
@@ -90,6 +100,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="days_to_fomc",
+                market_wide_by_design=True,
                 version=1,
                 family="calendar",
                 lookback=0,
@@ -97,6 +108,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="realized_vol",
+                rank_per_name_coherent=True,
                 version=1,
                 family="volatility",
                 lookback=20,
@@ -104,6 +116,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="expected_value_estimator",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="smart_money",
                 lookback=60,
@@ -111,6 +125,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="pairs_zscore",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="pairs",
                 lookback=60,
@@ -118,6 +134,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="put_call_flow",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="flow",
                 lookback=5,
@@ -125,6 +143,7 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="vix_level",
+                market_wide_by_design=True,
                 version=1,
                 family="macro",
                 lookback=1,
@@ -133,6 +152,7 @@ def demo_registry() -> RegistrySnapshot:
             # rv_rank — realized-vol percentile rank (D077; Crucible rv_rank.py).
             IndicatorMetadata(
                 id="rv_rank",
+                rank_per_name_coherent=True,
                 version=1,
                 family="volatility",
                 lookback=252,
@@ -144,6 +164,8 @@ def demo_registry() -> RegistrySnapshot:
             # Dealer-positioning indicators (§4.3.5; wired 2026-05-18)
             IndicatorMetadata(
                 id="gex",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,
@@ -151,6 +173,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="vex",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,
@@ -158,6 +182,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="cex",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,
@@ -165,6 +191,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="call_wall_distance_pct",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,
@@ -172,6 +200,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="put_wall_distance_pct",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,
@@ -179,6 +209,8 @@ def demo_registry() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="gamma_flip_distance_pct",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,

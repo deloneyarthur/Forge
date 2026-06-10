@@ -193,6 +193,35 @@ _P3_DELTA_BAND: dict[str, tuple[float, float]] = {
     "swing_long": (0.20, 0.35),
 }
 
+# D125 (v16) — hypothesis-scoped P3 band overrides (the first; P3 was
+# bucket-only before). Trend's long-options expression sat in the
+# embedded-leverage drag zone (Frazzini-Pedersen RAPS 2022) and the
+# within-band evidence agreed: the verdicts delta-tercile readout shows trend
+# component rate rising monotonically toward the upper band edge
+# (swing_long 5/8/16 — P3's own "promotion at the edges" relax clause), with
+# every honest-coverage trend component in the upper two terciles, under a
+# legacy zero-slippage value bias that favored LOW delta. MR and vol_event
+# gradients are flat-to-inverted (components concentrate LOW), so only trend
+# widens; lower edges keep the convexity rationale. Upper edge 0.55 = the
+# grammar-wide cap (no Crucible position-builder change needed).
+# Operator-approved loosening: OPEN_PROPOSALS 343e71fd, recorded in D125.
+_P3_DELTA_BAND_OVERRIDES: dict[str, dict[str, tuple[float, float]]] = {
+    "trend_continuation": {
+        "swing_long": (0.20, 0.55),
+        "swing_mid": (0.30, 0.55),
+    },
+}
+
+
+def effective_delta_band(hypothesis: str, dte_bucket: str) -> tuple[float, float] | None:
+    """The P3 band for (hypothesis, bucket): override when one exists, else
+    the base bucket band; None for an unknown bucket."""
+    override = _P3_DELTA_BAND_OVERRIDES.get(hypothesis, {}).get(dte_bucket)
+    if override is not None:
+        return override
+    return _P3_DELTA_BAND.get(dte_bucket)
+
+
 # §3.5 R2 regime-gate indicator requirements.
 # D077: expanded from (adx, hurst) to include rv_rank — PTS thesis
 # "enter trend-following when realized vol is cheap" (Crucible rv_rank.py).
@@ -653,7 +682,7 @@ def _p3_delta_target_in_dte_band(
     registry: RegistrySnapshot,
 ) -> PredicateResult:
     del registry
-    band = _P3_DELTA_BAND.get(config.dte_bucket)
+    band = effective_delta_band(config.hypothesis, config.dte_bucket)
     if band is None:
         return PredicateResult(
             passed=False,

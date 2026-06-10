@@ -716,6 +716,74 @@ def test_p3_delta_target_outside_band_fails() -> None:
     assert "0.4" in result.detail
 
 
+def test_p3_trend_widened_swing_long_band_passes() -> None:
+    """D125 (v16): trend_continuation swing_long band widens 0.20-0.35 →
+    0.20-0.55 (hypothesis-scoped — P3's first per-hypothesis override).
+    Evidence: within-band delta-tercile readout (components 5/8/16 rising
+    toward the upper edge; every honest-coverage trend component in the upper
+    two terciles) + the Frazzini-Pedersen embedded-leverage drag prior (Q35);
+    operator-approved loosening (OPEN_PROPOSALS 343e71fd)."""
+    cfg = grammar_valid_baseline(
+        hypothesis="trend_continuation",
+        dte_bucket="swing_long",
+        selector=SelectorSpec(
+            delta_target=0.50,  # off-band for base swing_long, in-band for trend
+            delta_tolerance=0.05,
+            dte_min=60,
+            dte_max=90,
+        ),
+    )
+    result = evaluate(_predicate("delta_target_in_dte_band"), cfg, _registry())
+    assert result.passed, result.detail
+
+
+def test_p3_non_trend_swing_long_band_unchanged() -> None:
+    """D125 (v16): the widening is trend-scoped ONLY — the MR and vol_event
+    delta-tercile gradients are flat-to-inverted (components concentrate at
+    LOW delta), so every other hypothesis keeps the base bands."""
+    cfg = grammar_valid_baseline(
+        hypothesis="mean_reversion",
+        dte_bucket="swing_long",
+        selector=SelectorSpec(
+            delta_target=0.50,
+            delta_tolerance=0.05,
+            dte_min=60,
+            dte_max=90,
+        ),
+    )
+    result = evaluate(_predicate("delta_target_in_dte_band"), cfg, _registry())
+    assert not result.passed
+    assert "swing_long" in result.detail
+    assert "0.35" in result.detail
+
+
+def test_p3_trend_swing_mid_widened_swing_short_unchanged() -> None:
+    """D125 (v16): trend swing_mid widens to 0.30-0.55; trend swing_short has
+    NO override (already 0.40-0.55 — the ATM-ish floor rationale untouched)."""
+    mid = grammar_valid_baseline(
+        hypothesis="trend_continuation",
+        dte_bucket="swing_mid",
+        selector=SelectorSpec(
+            delta_target=0.55,
+            delta_tolerance=0.05,
+            dte_min=30,
+            dte_max=45,
+        ),
+    )
+    assert evaluate(_predicate("delta_target_in_dte_band"), mid, _registry()).passed
+    short = grammar_valid_baseline(
+        hypothesis="trend_continuation",
+        dte_bucket="swing_short",
+        selector=SelectorSpec(
+            delta_target=0.30,  # below swing_short's 0.40 floor — still invalid
+            delta_tolerance=0.05,
+            dte_min=14,
+            dte_max=21,
+        ),
+    )
+    assert not evaluate(_predicate("delta_target_in_dte_band"), short, _registry()).passed
+
+
 # ---------------------------------------------------------------------------
 # E1 — Mandatory exits present
 # ---------------------------------------------------------------------------

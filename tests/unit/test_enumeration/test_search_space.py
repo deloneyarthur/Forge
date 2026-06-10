@@ -23,6 +23,7 @@ from forge.enumeration.search_space import (
     SearchSpace,
     _build_regime_pool,
     build_search_space,
+    rank_excluded_indicator_ids,
 )
 from forge.grammar import load_grammar
 from forge.grammar.custom_predicates import (
@@ -297,11 +298,14 @@ def test_regime_pool_relative_value_excludes_chain_reading(
     assert chain, "fixture registry must carry chain-reading indicators for this test"
     pool = set(space.regime_indicators_by_hypothesis["relative_value"])
     assert not pool & chain
-    # D118 (v15) re-pin: the pool equality now also subtracts the per-name
-    # event/DB ids (next test) — rv pool = registry minus the full
-    # single-name-only set.
-    decoupled = {"sue", "days_since_earnings", "days_to_earnings", "expected_value_estimator"}
-    assert pool == {ind.id for ind in registry.indicators} - dealer - chain - decoupled
+    # D118 (v15) → D125 (v16) re-pin: the exclusion is flag-derived now —
+    # rv pool = registry minus `rank_excluded_indicator_ids` (dealer family +
+    # every NOT-coherent/NOT-market-wide id). vs v15 this also drops
+    # pairs_zscore from the GATE pool (it is flag-excluded in Crucible's 13;
+    # it remains rv's pairs-path DIRECTIONAL, which this pool never governed).
+    assert pool == {ind.id for ind in registry.indicators} - rank_excluded_indicator_ids(registry)
+    # The flag key subsumes the old explicit sets — dealer/chain stay out.
+    assert not pool & dealer
 
 
 def test_regime_pool_relative_value_excludes_rank_decoupled(

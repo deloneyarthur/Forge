@@ -105,7 +105,13 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # per-name event/DB ids — sue/days_since_earnings/days_to_earnings any-role,
     # expected_value_estimator as gate/directional — join the set; em never
     # ranks; same two enforcement points, the 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v15"  # type: ignore[attr-defined]
+    # D125 bumped v15 -> v16 (two changes, one boundary: (1) rank/universe
+    # exclusion keyed on the contracts-1.18.0 registry flags — explicit id sets
+    # retired, confluence role included, new indicators auto-inherit exclusion;
+    # (2) P3 trend-scoped delta widening — swing_long/mid upper edges to 0.55,
+    # the first hypothesis-scoped P3 override; operator-approved loosening,
+    # OPEN_PROPOSALS 343e71fd. The 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v16"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

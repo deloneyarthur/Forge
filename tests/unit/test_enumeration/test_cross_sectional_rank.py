@@ -23,7 +23,11 @@ from pathlib import Path
 from crucible_contracts import CombinerSpec, RegistrySnapshot
 
 from forge.enumeration.sampler import sample_config
-from forge.enumeration.search_space import RANK_COMBINER_HYPOTHESES, build_search_space
+from forge.enumeration.search_space import (
+    RANK_COMBINER_HYPOTHESES,
+    build_search_space,
+    rank_excluded_indicator_ids,
+)
 from forge.grammar import load_grammar, validate
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
@@ -141,21 +145,24 @@ def test_rank_combiner_emitted_for_event_momentum() -> None:
     assert seen_dse_gate > 0
 
 
-def test_rank_draw_allowed_for_kelly_ev_sizer_chain() -> None:
-    """D118 (v15) role-scoping pin: `expected_value_estimator` is excluded from
-    the rank branch only as a GATE or DIRECTIONAL (on the rank path an EV gate
-    is the reference underlying's runs-DB EV for every name —
-    hidden_uniform_reference per Crucible's map — never the ranked name's own).
-    The X2 fractional_kelly sizer chain (role="confluence" passthrough) is
-    reference-keyed on EVERY path — single-name kelly configs size off the same
-    default-underlying EV with empty params — so it must NOT block the rank
-    branch. Guards against over-cutting: a kelly-sized trend rank config is as
-    coherent as any other trend rank config."""
+def test_rank_draw_blocked_for_kelly_ev_sizer_chain() -> None:
+    """D125 (v16) — deliberate INVERSION of the v15 over-cut guard.
+
+    v15 exempted the X2 kelly EV chain (role="confluence") from the rank skip
+    on the premise that it was EV-as-SIZING. D122 corrected the premise from
+    Crucible's code: EV-as-sizing has no live wiring anywhere (no template
+    passes `expected_value` into the sizer), and on the rank path a confluence
+    signal IS a rank-score factor — where a warm EV is provably output-neutral
+    (uniform across names → zero-variance → all-zero z-scores) and a cold one
+    freezes the config (uniform NaN → empty scores → rebalance no-ops).
+    Eligibility buys nothing and carries the freeze class, so v16 keys the
+    rank skip on `rank_per_name_coherent` for ALL roles, confluence included.
+    Kelly-chain draws keep full single-name weight (X2 untouched there)."""
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
     share = {"trend_continuation": 1.0}
-    seen_kelly_rank = 0
+    seen_kelly_confluence = seen_rank = 0
     for seed in range(300):
         cfg = sample_config(
             space,
@@ -169,10 +176,103 @@ def test_rank_draw_allowed_for_kelly_ev_sizer_chain() -> None:
             for s in cfg.signals
         )
         if has_ev_chain:
-            assert cfg.combiner.type == "cross_sectional_rank", cfg.name
-            seen_kelly_rank += 1
-    # Non-vacuous: the kelly-sized rank shape must actually be drawn.
-    assert seen_kelly_rank > 0
+            assert cfg.combiner.type == "confluence", cfg.name
+            assert cfg.underlying is not None, cfg.name
+            seen_kelly_confluence += 1
+        elif cfg.combiner.type == "cross_sectional_rank":
+            seen_rank += 1
+    # Non-vacuous both ways: kelly chains are still drawn (single-name), and
+    # the rank arm still emits for non-kelly trend draws.
+    assert seen_kelly_confluence > 0
+    assert seen_rank > 0
+
+
+def test_rank_exclusion_keys_on_registry_flags_not_identity() -> None:
+    """D125 (v16) — the rank skip reads `rank_per_name_coherent` off the
+    registry, not an explicit id list: flipping a known-coherent bar-only id
+    (adx) to False/False in an otherwise identical registry must pull every
+    adx-using trend draw off the rank branch. This is the auto-inherit
+    property — a future indicator with fail-closed flags is excluded the same
+    way without any Forge release (under v15 it was rank-eligible the moment
+    it appeared: the fail-open hole behind the dealer/iv_rank confounded
+    eras). A *truly* novel id can't even be drawn until it has a
+    threshold-table entry, so the flag check is exercised through an id the
+    sampler can actually draw."""
+    grammar = _grammar()
+    base = minimal_registry_snapshot()
+    flipped = base.model_copy(
+        update={
+            "indicators": tuple(
+                ind.model_copy(
+                    update={"rank_per_name_coherent": False, "market_wide_by_design": False}
+                )
+                if ind.id == "adx"
+                else ind
+                for ind in base.indicators
+            )
+        }
+    )
+    space = build_search_space(grammar, flipped)
+    share = {"trend_continuation": 1.0}
+    seen_adx = seen_rank_without_adx = 0
+    for seed in range(300):
+        cfg = sample_config(
+            space,
+            flipped,
+            random.Random(seed),
+            forced_hypothesis="trend_continuation",
+            rank_combiner_share=share,
+        )
+        uses_adx = any("adx" in s.indicators for s in cfg.signals)
+        if uses_adx:
+            assert cfg.combiner.type == "confluence", cfg.name
+            assert cfg.underlying is not None, cfg.name
+            seen_adx += 1
+        elif cfg.combiner.type == "cross_sectional_rank":
+            seen_rank_without_adx += 1
+    # Non-vacuous: adx draws happen and get pinned single-name; the rank arm
+    # survives on the still-coherent gates.
+    assert seen_adx > 0
+    assert seen_rank_without_adx > 0
+
+
+def test_dealer_family_excluded_even_if_flagged_coherent() -> None:
+    """D125 (v16) green-both-sides guard: the dealer cut is NOT flag-keyed.
+
+    D115's re-admission clause needs the reference-gate built AND coherent
+    single-name MRxgamma evidence — a Crucible flag flip alone is only half
+    the trigger (and the D112 ~100x runner-cost rationale is independent of
+    coherence). A future registry that flips dealer ids to
+    `rank_per_name_coherent=True` must still never rank."""
+    grammar = _grammar()
+    base = minimal_registry_snapshot()
+    flipped = base.model_copy(
+        update={
+            "indicators": tuple(
+                ind.model_copy(update={"rank_per_name_coherent": True})
+                if ind.family == "dealer_positioning"
+                else ind
+                for ind in base.indicators
+            )
+        }
+    )
+    space = build_search_space(grammar, flipped)
+    dealer = _dealer_ids(flipped)
+    share = {"mean_reversion": 1.0, "trend_continuation": 1.0}
+    seen_dealer = 0
+    for seed in range(300):
+        for offset, hyp in enumerate(("mean_reversion", "trend_continuation")):
+            cfg = sample_config(
+                space,
+                flipped,
+                random.Random(seed * 2 + offset),
+                forced_hypothesis=hyp,
+                rank_combiner_share=share,
+            )
+            if any(ind in dealer for s in cfg.signals for ind in s.indicators):
+                assert cfg.combiner.type == "confluence", cfg.name
+                seen_dealer += 1
+    assert seen_dealer > 0
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +285,11 @@ def _dealer_ids(reg: RegistrySnapshot) -> frozenset[str]:
 
 
 def _single_name_only_ids(reg: RegistrySnapshot) -> frozenset[str]:
-    return _dealer_ids(reg) | frozenset({"iv_rank", "put_call_flow"})
+    # D125 (v16) re-pin: the exclusion set is flag-derived production truth
+    # (was a hand-rolled dealer|{iv_rank,put_call_flow} mirror through v15).
+    # Using the production function keeps the forced-rank test's skip filter
+    # from silently drifting as Crucible flips flags.
+    return rank_excluded_indicator_ids(reg)
 
 
 def test_rank_draw_skipped_for_dealer_signal_configs() -> None:

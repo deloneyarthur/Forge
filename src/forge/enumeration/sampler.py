@@ -56,11 +56,8 @@ from forge.enumeration.indicator_thresholds import (
     sample_threshold_params,
 )
 from forge.enumeration.search_space import (
-    DEALER_POSITIONING_FAMILY,
     NON_ENUMERABLE_HYPOTHESES,
     RANK_COMBINER_HYPOTHESES,
-    RANK_DECOUPLED_GATE_INDICATOR_IDS,
-    SINGLE_NAME_ONLY_INDICATOR_IDS,
 )
 from forge.enumeration.underlying_class import underlying_class
 from forge.grammar.signal_horizon import (
@@ -335,38 +332,22 @@ def _pick_underlying(
 
 def _uses_single_name_only_indicator(
     signals: list[SignalSpec],
-    by_id: dict[str, IndicatorMetadata],
+    rank_excluded_ids: frozenset[str],
 ) -> bool:
-    """D112 (v13) + D116 (v14) + D118 (v15): True when a drawn signal makes the
-    config single-name-only — it never takes the cross_sectional_rank branch.
+    """D112 (v13) → D125 (v16): True when a drawn signal makes the config
+    single-name-only — it never takes the cross_sectional_rank branch.
 
-    Three triggers, re-keyed on Crucible's indicator→mode map (D118):
-      - any signal in the dealer_positioning family (the per-bar greek grid x
-        universe is Crucible's ~100x runner-cost tail — D112);
-      - any signal whose indicator is per-name-decoupled on the rank path
-        (`SINGLE_NAME_ONLY_INDICATOR_IDS`: chain-reading ids read the
-        reference chain via params["underlying"]; sue/days_since_earnings/
-        days_to_earnings are events keyed on params["symbol"], which the rank
-        path never threads → inert fail-open, and sue as a rank directional
-        would rank the universe on NaN);
-      - a GATE or DIRECTIONAL on a runs-DB reference indicator
-        (`RANK_DECOUPLED_GATE_INDICATOR_IDS`, role-scoped: the §3.5 X2
-        fractional_kelly sizer chain is role="confluence" and reference-keyed
-        on every path including single-name, so EV-as-sizing does not block
-        the rank branch)."""
-    for sig in signals:
-        for ind in sig.indicators:
-            if (
-                by_id[ind].family == DEALER_POSITIONING_FAMILY
-                or ind in SINGLE_NAME_ONLY_INDICATOR_IDS
-            ):
-                return True
-            if (
-                sig.role in ("directional", "regime_filter")
-                and ind in RANK_DECOUPLED_GATE_INDICATOR_IDS
-            ):
-                return True
-    return False
+    v16 keys the check on the registry's contracts-1.18.0 flags
+    (`SearchSpace.rank_excluded_ids` = the dealer family + every
+    `NOT rank_per_name_coherent AND NOT market_wide_by_design` id — Crucible's
+    fail-closed ClassVar truth about per-name fan-out), retiring the v13-v15
+    explicit id sets. ANY role counts, confluence included: D122 corrected the
+    v15 premise — EV-as-sizing has no live wiring anywhere, and on the rank
+    path a confluence signal is a rank-score factor, where a decoupled
+    indicator is output-neutral warm and a cold-cohort FREEZE (uniform NaN →
+    empty scores → rebalance no-ops) cold. The X2 kelly EV chain therefore
+    pins its config single-name; kelly emission itself is untouched."""
+    return any(ind in rank_excluded_ids for sig in signals for ind in sig.indicators)
 
 
 def sample_config(
@@ -553,7 +534,7 @@ def sample_config(
             )
         )
 
-    selector = _build_selector(space, bucket, rng)
+    selector = _build_selector(space, hypothesis, bucket, rng)
     sizer = _build_sizer(space, mode, rng)
     exits = _build_exits(space, hypothesis, rng)
 
@@ -590,26 +571,24 @@ def sample_config(
     # the rank branch — dealer indicators are single-name only (the dealer
     # headline x universe is Crucible's ~100x runner tail; see
     # `DEALER_POSITIONING_FAMILY`). D116 (v14) widened the skip to the
-    # chain-reading ids; D118 (v15) re-keys it on Crucible's indicator→mode
-    # map: the broken class is per-name decoupling (the indicator's data
-    # source comes from its own params, never threaded per-name on the rank
-    # path), adding the event/DB ids — sue, days_since_earnings,
-    # days_to_earnings (any role) and expected_value_estimator (gate/
-    # directional only; the X2 kelly sizer chain is exempt — see
-    # `_uses_single_name_only_indicator`). Consequences: mean_reversion never
-    # ranks (§3.5 R1's whole pool is single-name-only, D116) and
-    # event_momentum never ranks (H2's sue directional + dse gate are both
-    # per-name events, D118) until Crucible threads per-name symbols on the
-    # rank path; trend_continuation (bar-only gates) keeps the rank arm. The
-    # skip consumes no rng, so unaffected draw sequences are unchanged; the
-    # skipped config keeps its signals and pinned underlying — full
-    # single-name sampling weight.
+    # chain-reading ids; D118 (v15) re-keyed it on Crucible's indicator→mode
+    # map; D125 (v16) keys it on the contracts-1.18.0 registry flags
+    # (`space.rank_excluded_ids` — fail-closed, so new indicators auto-inherit
+    # exclusion) and drops the v15 confluence exemption (D122: the X2 kelly EV
+    # chain is a rank-score factor on this path, not sizing — output-neutral
+    # warm, config-freezing cold — so kelly-chain draws stay single-name).
+    # Consequences: mean_reversion and event_momentum never rank (their pools/
+    # signal sets are flag-excluded) until Crucible flips
+    # `rank_per_name_coherent`; trend_continuation (bar-only gates) keeps the
+    # rank arm, minus its kelly-chain draws. The skip consumes no rng, so
+    # unaffected draw sequences are unchanged; the skipped config keeps its
+    # signals and pinned underlying — full single-name sampling weight.
     combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
     if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
         share = rank_combiner_share.get(hypothesis, 0.0)
         if (
             share > 0.0
-            and not _uses_single_name_only_indicator(signals, by_id)
+            and not _uses_single_name_only_indicator(signals, space.rank_excluded_ids)
             and rng.random() < share
         ):
             combiner = CombinerSpec(
@@ -850,10 +829,11 @@ def _pick_regime(
 
 def _build_selector(
     space: SearchSpace,
+    hypothesis: str,
     bucket: str,
     rng: random.Random,
 ) -> SelectorSpec:
-    """§3.5 P2 entry-side DTE + §3.5 P3 delta band.
+    """§3.5 P2 entry-side DTE + §3.5 P3 delta band (hypothesis-aware, D125).
 
     D074 (Phase 5): pre-D074 dte_min and dte_max were pinned to the §3.5
     P2 window's exact bounds (e.g., swing_short always emitted dte_min=14
@@ -869,7 +849,12 @@ def _build_selector(
     the window stays valid by construction.
     """
     dte_low, dte_high = space.dte_entry_window_by_bucket[bucket]
-    delta_low, delta_high = space.delta_band_by_bucket[bucket]
+    # D125 (v16): hypothesis-scoped P3 override (trend swing_long/mid upper
+    # edges → 0.55). One rng.uniform call either way, so non-overridden draw
+    # sequences are byte-identical (hard rule #6).
+    delta_low, delta_high = space.delta_band_overrides_by_hypothesis.get(hypothesis, {}).get(
+        bucket, space.delta_band_by_bucket[bucket]
+    )
     mid = (dte_low + dte_high) // 2
     return SelectorSpec(
         delta_target=round(rng.uniform(delta_low, delta_high), 3),

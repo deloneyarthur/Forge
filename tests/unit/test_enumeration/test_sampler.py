@@ -27,6 +27,7 @@ from forge.grammar.custom_predicates import (
     _C2_HYPOTHESIS_FAMILIES,
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
+    _P3_DELTA_BAND_OVERRIDES,
     _R1_IV_RANK_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
@@ -230,13 +231,51 @@ def test_p2_selector_dte_in_entry_window(grammar: Grammar, registry: RegistrySna
 
 
 def test_p3_delta_target_in_band(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    # D125 (v16) re-pin: the band lookup is hypothesis-aware — trend's
+    # swing_long/mid upper edges widened to 0.55, everything else on the base
+    # bands. The sampler must respect the per-hypothesis effective band.
     for seed in range(30):
         cfg = _sample(grammar, registry, seed=seed)
-        band_low, band_high = _P3_DELTA_BAND[cfg.dte_bucket]
+        band_low, band_high = _P3_DELTA_BAND_OVERRIDES.get(cfg.hypothesis, {}).get(
+            cfg.dte_bucket, _P3_DELTA_BAND[cfg.dte_bucket]
+        )
         assert band_low <= cfg.selector.delta_target <= band_high, (
             f"P3 delta_target out of band at seed={seed}: "
             f"{cfg.selector.delta_target} not in [{band_low}, {band_high}]"
         )
+
+
+def test_p3_trend_sampler_explores_widened_band(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D125 (v16): forced-trend draws must actually reach the widened region
+    (delta > 0.36 in swing_long / > 0.46 in swing_mid) and never exceed 0.55;
+    non-trend draws stay inside the base bands. RED-born on v15 (trend
+    swing_long capped at 0.35)."""
+    space = build_search_space(grammar, registry)
+    seen_widened = {"swing_long": False, "swing_mid": False}
+    for seed in range(400):
+        cfg = sample_config(
+            space, registry, random.Random(seed), forced_hypothesis="trend_continuation"
+        )
+        delta = cfg.selector.delta_target
+        assert delta <= 0.55, cfg.name
+        if cfg.dte_bucket == "swing_long":
+            assert delta >= 0.20, cfg.name
+            if delta > 0.36:
+                seen_widened["swing_long"] = True
+        elif cfg.dte_bucket == "swing_mid":
+            assert delta >= 0.30, cfg.name
+            if delta > 0.46:
+                seen_widened["swing_mid"] = True
+    assert all(seen_widened.values()), seen_widened
+    # Non-trend control: mean_reversion stays on the base bands everywhere.
+    for seed in range(200):
+        cfg = sample_config(
+            space, registry, random.Random(seed), forced_hypothesis="mean_reversion"
+        )
+        lo, hi = _P3_DELTA_BAND[cfg.dte_bucket]
+        assert lo <= cfg.selector.delta_target <= hi, cfg.name
 
 
 def test_p4_risk_pct_in_range(grammar: Grammar, registry: RegistrySnapshot) -> None:

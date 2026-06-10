@@ -152,50 +152,59 @@ def test_chain_reading_indicators_are_single_name_only(grammar: Grammar) -> None
 
 
 def test_rank_decoupled_event_db_indicators_are_universe_excluded(grammar: Grammar) -> None:
-    """D118 (v15): re-keys D116's interim chain-reading set on Crucible's
-    indicator→mode map (`rank_gate_class_map.json`, 45 indicators,
-    completeness-asserted their side). The broken class is per-name DECOUPLING
-    from the evaluated sym: `days_to_earnings`/`days_since_earnings`/`sue` are
-    keyed on ``params["symbol"]`` which the universe paths never thread (inert
-    fail-open — an ungated arm), and `expected_value_estimator` reads the runs
-    DB keyed on ``params["underlying"]`` (the reference's EV for every ranked
-    name). No universe-wide config (cross_sectional_rank or underlying=None)
-    may carry one as a DIRECTIONAL or REGIME GATE. Role-scoped deliberately:
-    the X2 fractional_kelly sizer chain (role="confluence") is reference-keyed
-    on every path including single-name, so it does not block the rank branch.
-    The demo registry carries days_to_earnings + expected_value_estimator;
-    sue/days_since_earnings (absent here) are covered by the unit-fixture em
-    tests in test_cross_sectional_rank. Keep-side: single-name configs still
-    gate on the decoupled ids at full weight (coherent — the composable path
-    pins the symbol)."""
+    """D118 (v15) → D125 (v16): the universe exclusion is keyed on the
+    registry's contracts-1.18.0 flags, not an explicit id set — the broken
+    class is `NOT rank_per_name_coherent AND NOT market_wide_by_design`
+    (Crucible's fail-closed ClassVar defaults; a new indicator ships excluded
+    until proven coherent). v16 also drops v15's role-scoping: confluence
+    counts too (D122 — on the rank path a confluence signal is a rank-score
+    factor, where a decoupled indicator is output-neutral at best and a
+    cold-cohort freeze at worst; the X2 kelly EV chain therefore pins its
+    config single-name). No universe-wide config (cross_sectional_rank or
+    underlying=None) may carry a flag-excluded indicator in ANY role.
+    Keep-side: single-name configs still use the decoupled ids at full weight
+    (coherent — the composable path pins the symbol)."""
     registry = demo_registry()
     decoupled = {
-        "sue",
-        "days_since_earnings",
-        "days_to_earnings",
-        "expected_value_estimator",
-    } & {ind.id for ind in registry.indicators}
-    assert decoupled, "demo registry must carry rank-decoupled ids for this invariant"
+        ind.id
+        for ind in registry.indicators
+        if not ind.rank_per_name_coherent
+        and not ind.market_wide_by_design
+        and ind.family != "dealer_positioning"  # dealer covered by its own invariant
+    }
+    assert decoupled, "demo registry must carry flag-excluded ids for this invariant"
     share = {"trend_continuation": 1.0, "mean_reversion": 1.0, "event_momentum": 1.0}
-    seen_universe = seen_single_gated = 0
+    seen_rank = seen_pairs = seen_single_used = 0
     for cfg in enumerate_candidates(
         grammar, registry, 17, max_candidates=400, rank_combiner_share=share
     ):
-        gated = any(
-            sig.role in ("directional", "regime_filter") and ind in decoupled
-            for sig in cfg.signals
-            for ind in sig.indicators
-        )
-        universe_wide = cfg.combiner.type == "cross_sectional_rank" or cfg.underlying is None
-        if universe_wide:
-            assert not gated, cfg.name
-            seen_universe += 1
-        elif gated:
-            seen_single_gated += 1
-    assert seen_universe > 0
+        if cfg.combiner.type == "cross_sectional_rank":
+            # Rank path: NO flag-excluded indicator in ANY role (v16 drops
+            # v15's confluence exemption — D122).
+            assert not any(ind in decoupled for sig in cfg.signals for ind in sig.indicators), (
+                cfg.name
+            )
+            seen_rank += 1
+        elif cfg.underlying is None:
+            # Pairs/universe-scan path: flag-excluded ids must not appear as
+            # REGIME GATES (pool exclusion). The directional (pairs_zscore —
+            # flag-excluded for the RANK path, coherent on the pair) and the
+            # X2 confluence chain are deliberately untouched: this path
+            # evaluates no regime filters Crucible-side, and the flag speaks
+            # to per-name fan-out, which only the rank template does.
+            assert not any(
+                sig.role == "regime_filter" and ind in decoupled
+                for sig in cfg.signals
+                for ind in sig.indicators
+            ), cfg.name
+            seen_pairs += 1
+        elif any(ind in decoupled for sig in cfg.signals for ind in sig.indicators):
+            seen_single_used += 1
+    assert seen_rank > 0
+    assert seen_pairs > 0
     # Keep-side guard: the cut must not over-reach — single-name configs
-    # gated on a decoupled id must still be emitted.
-    assert seen_single_gated > 0
+    # using a decoupled id (incl. the X2 kelly EV chain) must still be emitted.
+    assert seen_single_used > 0
 
 
 # ---------------------------------------------------------------------------

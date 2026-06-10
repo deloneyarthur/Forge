@@ -35,6 +35,7 @@ from forge.grammar.custom_predicates import (
     _EVENT_MOMENTUM_REGIME_INDICATORS,
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
+    _P3_DELTA_BAND_OVERRIDES,
     _R1_GAMMA_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
@@ -120,44 +121,32 @@ RANK_COMBINER_HYPOTHESES: frozenset[str] = frozenset(
 # promotion frontier (the only CPCV-p25-gate clearers in the decided pool).
 DEALER_POSITIONING_FAMILY: str = "dealer_positioning"
 
-# D116 (v14) → D118 (v15) — single-name-only indicator ids beyond the dealer
-# family. v14 carried the chain-reading pair as an interim set; v15 re-keys on
-# Crucible's full indicator→mode map (`rank_gate_class_map.json`, 2026-06-09,
-# 45 indicators, completeness-asserted their side). The broken class is
-# per-name DECOUPLING from the evaluated sym, not chain reads: on the
-# rank/pairs paths the indicator's data source comes from its own params
-# (`underlying`/`symbol`), which those paths never thread per-name, so the
-# declared per-name semantics never compute. Modes: iv_rank fires on noise
-# (the reference chain's IV at the name's spot — garbage_mismatch);
-# put_call_flow returns the reference's value for every name
-# (hidden_uniform_reference); sue / days_since_earnings / days_to_earnings
-# are per-name events keyed on params["symbol"] → NaN → inert fail-open (an
-# ungated arm; as a rank DIRECTIONAL, sue would rank the universe on NaN —
-# the dealer-directional 0/8 pattern). Bar-only indicators compute on the
-# name's own bars and are unaffected. market_wide_by_design ids (vix_level,
-# days_to_cpi/fomc/nfp/opex) are deliberately NOT here — uniform-across-names
-# is correct for a market gate. Durable key = a `rank_per_name_coherent`
-# flag on registry indicator metadata (contracts gap, surfaced to Crucible);
-# until then this explicit set mirrors the map.
-SINGLE_NAME_ONLY_INDICATOR_IDS: frozenset[str] = frozenset(
-    {
-        "iv_rank",
-        "put_call_flow",
-        "sue",
-        "days_since_earnings",
-        "days_to_earnings",
-    }
-)
 
-# D118 (v15) — `expected_value_estimator` is excluded as a universe GATE or
-# DIRECTIONAL only (it reads the runs-DB trades table keyed on
-# params["underlying"] → the reference's EV for every ranked name —
-# hidden_uniform_reference with an inert NaN fallback). Role-scoped
-# deliberately: the §3.5 X2 fractional_kelly sizer chain (role="confluence"
-# passthrough) is reference-keyed on EVERY path — single-name kelly configs
-# size off the same default-underlying EV with empty params — so EV-as-sizing
-# must not block the rank branch (see `_uses_single_name_only_indicator`).
-RANK_DECOUPLED_GATE_INDICATOR_IDS: frozenset[str] = frozenset({"expected_value_estimator"})
+# D125 (v16) — rank/universe exclusion is keyed on the contracts-1.18.0
+# registry flags, retiring the v13-v15 explicit id sets
+# (SINGLE_NAME_ONLY_INDICATOR_IDS / RANK_DECOUPLED_GATE_INDICATOR_IDS). The
+# excluded class is `NOT rank_per_name_coherent AND NOT market_wide_by_design`
+# — exactly the D118 key, but published per-indicator by Crucible from
+# ClassVars asserted against their runner code (the authority on per-name
+# fan-out), with FAIL-CLOSED defaults: a new indicator ships excluded until
+# Crucible proves coherence, so the dealer/iv_rank fail-open eras cannot
+# recur. v16 also drops v15's confluence exemption (D122: EV-as-sizing has no
+# live wiring; on the rank path a confluence signal is a rank-score factor —
+# output-neutral warm, config-freezing cold — so the X2 kelly EV chain pins
+# its config single-name). The dealer family stays excluded INDEPENDENTLY of
+# its flags: D115's re-admission clause needs the reference gate AND coherent
+# single-name MRxgamma evidence — a Crucible flag flip alone is only half the
+# trigger, and the D112 ~100x runner-cost rationale is coherence-independent.
+def rank_excluded_indicator_ids(registry: RegistrySnapshot) -> frozenset[str]:
+    """Indicator ids that may never appear in a universe-wide config's
+    signals (rank branch: any role; universe regime pools: gate role)."""
+    return frozenset(
+        ind.id
+        for ind in registry.indicators
+        if ind.family == DEALER_POSITIONING_FAMILY
+        or (not ind.rank_per_name_coherent and not ind.market_wide_by_design)
+    )
+
 
 # Fallback if no §3.5 P4 numerical_range rule is present in the grammar
 # (won't happen with v1; defended in `build_search_space`).
@@ -193,7 +182,14 @@ class SearchSpace:
 
     dte_entry_window_by_bucket: Mapping[str, tuple[int, int]]
     delta_band_by_bucket: Mapping[str, tuple[float, float]]
+    # D125 (v16): hypothesis-scoped P3 band overrides (trend swing_long/mid
+    # upper edges → 0.55); sampler draws from the effective band.
+    delta_band_overrides_by_hypothesis: Mapping[str, Mapping[str, tuple[float, float]]]
     risk_pct_range: tuple[float, float]
+
+    # D125 (v16): flag-derived universe exclusion (see
+    # `rank_excluded_indicator_ids`) — the rank-branch skip reads this.
+    rank_excluded_ids: frozenset[str]
 
     # D071 (Phase 4 multi-exit): pre-D071 schema was s5_required_by_hypothesis
     # (single tuple). Post-D071 the sampler reads `required_always` (must-all-
@@ -223,16 +219,12 @@ def build_search_space(
 
     indicators_by_family = _build_indicators_by_family(registry)
     directional = _build_directional_pool(indicators_by_family)
+    rank_excluded = rank_excluded_indicator_ids(registry)
     regime = _build_regime_pool(
         registry_ids,
-        single_name_only_ids=(
-            frozenset(indicators_by_family.get(DEALER_POSITIONING_FAMILY, ()))
-            | (SINGLE_NAME_ONLY_INDICATOR_IDS & registry_ids)
-            # Regime pools are gate pools, so the gate-only EV exclusion
-            # applies here unconditionally (the role-scoping only matters in
-            # the sampler's rank-branch check, where the X2 chain is exempt).
-            | (RANK_DECOUPLED_GATE_INDICATOR_IDS & registry_ids)
-        ),
+        # Regime pools are universe gate pools — the whole flag-excluded
+        # class (dealer included) is out (D125/v16).
+        single_name_only_ids=rank_excluded,
     )
     samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
     risk_pct_range = _resolve_p4_risk_pct_range(grammar)
@@ -273,7 +265,14 @@ def build_search_space(
         sizer_required_indicator=sizer_req,
         dte_entry_window_by_bucket=MappingProxyType(dict(_P2_ENTRY_DTE)),
         delta_band_by_bucket=MappingProxyType(dict(_P3_DELTA_BAND)),
+        delta_band_overrides_by_hypothesis=MappingProxyType(
+            {
+                hyp: MappingProxyType(dict(buckets))
+                for hyp, buckets in _P3_DELTA_BAND_OVERRIDES.items()
+            }
+        ),
         risk_pct_range=risk_pct_range,
+        rank_excluded_ids=rank_excluded,
         s5_required_always_by_hypothesis=s5_required_always,
         s5_required_from_set_by_hypothesis=s5_required_from_set,
         s5_optional_additions_by_hypothesis=s5_optional_additions,
@@ -323,13 +322,13 @@ def _build_regime_pool(
     `_EVENT_MOMENTUM_REGIME_INDICATORS`). regime_arbitrage and tail_hedge have no
     constraint, so any registry indicator may serve. relative_value is also
     R-rule-free but runs as the universe template (underlying=None), so it
-    excludes ``single_name_only_ids`` — the dealer family (D112/v13), the
-    chain-reading ids (D116/v14), and the per-name event/DB ids re-keyed from
-    Crucible's indicator→mode map (D118/v15, see
-    `SINGLE_NAME_ONLY_INDICATOR_IDS` + `RANK_DECOUPLED_GATE_INDICATOR_IDS`) —
-    from its pool. Single-name hypotheses keep their full pools: the per-name
-    decoupling only exists on Crucible's universe paths. The sampler enforces
-    §3.5 C4 (regime disjoint from directional) at sample time.
+    excludes ``single_name_only_ids`` from its pool — since D125 (v16) that
+    set is flag-derived (`rank_excluded_indicator_ids`: the dealer family +
+    every `NOT rank_per_name_coherent AND NOT market_wide_by_design` id),
+    replacing the v13-v15 explicit sets. Single-name hypotheses keep their
+    full pools: the per-name decoupling only exists on Crucible's universe
+    paths. The sampler enforces §3.5 C4 (regime disjoint from directional)
+    at sample time.
     """
     pool: dict[str, tuple[str, ...]] = {}
     for hyp in _HYPOTHESES:

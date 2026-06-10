@@ -202,11 +202,17 @@ is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.)
 - `swing_mid`: 0.30-0.45
 - `swing_long`: 0.20-0.35
 
+Hypothesis-scoped overrides (v16, D125 — P3's first; bands above remain the base):
+- `trend_continuation` × `swing_long`: 0.20-0.55
+- `trend_continuation` × `swing_mid`: 0.30-0.55
+
 **Why.** Short-DTE positions live in a high-theta, high-gamma regime — ATM-ish deltas dominate; OTM puts/calls decay before any movement matters. Long-DTE positions can afford lower deltas because there's time for the position to develop into the money. The bands match each bucket's natural delta range.
+
+The trend overrides widen the UPPER edge only: systematically buying low-delta/OTM options pays the embedded-leverage premium (Frazzini-Pedersen RAPS 2022), and the within-band evidence agreed — trend component rate rises monotonically toward the upper band edge (the relax clause below, triggered), with every honest-coverage trend component in the upper two terciles. MR and vol_event show the OPPOSITE gradient (components concentrate low-delta), so only trend widens; lower edges keep the convexity rationale. Operator-approved loosening: OPEN_PROPOSALS `343e71fd`, D125.
 
 **Cost.** Medium. Excludes off-band deltas that would mostly be premium-collection or far-OTM lottery tickets.
 
-**Evidence to relax.** Promoted strategies whose `delta_target` sits at the band edges suggest widening — again a calibration.
+**Evidence to relax.** Promoted strategies whose `delta_target` sits at the band edges suggest widening — again a calibration. (Fired once: the v16 trend overrides above.)
 
 ### P4: Sizer per-trade risk percentage in [0.005, 0.02]
 

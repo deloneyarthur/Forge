@@ -324,3 +324,32 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for walk_forward_sharpe_median
   # Triggered by failure_rate=1.00
+---
+proposal_id: 343e71fd-0a65-4b29-958e-c2d8c151c40b
+status: APPROVED
+proposed_at: '2026-06-10T07:05:00+00:00'
+proposal_type: loosen
+target: grammar_p3_delta_band
+rationale: 'P3 trend-scoped upper-edge widening: trend_continuation swing_long
+  0.20-0.35 -> 0.20-0.55, swing_mid 0.30-0.45 -> 0.30-0.55. All other hypotheses
+  and buckets unchanged. P3 own relax clause (band-edge concentration) met:
+  within-band delta-tercile readout on the verdicts table shows trend component
+  rate rising monotonically toward the upper band edge (swing_long 1.9%/3.0%/6.0%,
+  z~2.4; every honest-coverage trend component in the upper two terciles of both
+  bands) under a legacy zero-slippage bias that favored LOW delta. Literature
+  prior agrees (Frazzini-Pedersen RAPS 2022 embedded-leverage drag; Q35). MR and
+  vol_event gradients are flat-to-inverted - their bands deliberately untouched.'
+evidence:
+  trigger: operator_directed_with_readout
+  readout: 'verdicts x submissions delta terciles, 2026-06-10 session (D125)'
+  trend_swing_long_components_by_tercile: [5, 8, 16]
+  trend_swing_mid_components_by_tercile: [9, 9, 12]
+  mr_swing_short_components_by_tercile: [18, 18, 4]
+  ve_swing_short_components_by_tercile: [60, 54, 46]
+proposal_yaml: |
+  # P3 hypothesis-scoped delta band overrides (v16):
+  # trend_continuation: swing_long [0.20, 0.55], swing_mid [0.30, 0.55]
+  # all other hypotheses: bands unchanged
+decided_at: '2026-06-10T07:02:00+00:00'
+decided_by: operator (in-session AskUserQuestion approval, 2026-06-09 PDT; recorded in D125)
+decision_marker: null

@@ -79,6 +79,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Short-lookback (S4 short bucket; D010 threshold ≤ 6)
             IndicatorMetadata(
                 id="rsi_2",
+                rank_per_name_coherent=True,
                 version=1,
                 family="mean_reversion",
                 lookback=2,
@@ -87,6 +88,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Medium-lookback (S4 medium bucket)
             IndicatorMetadata(
                 id="rsi_14",
+                rank_per_name_coherent=True,
                 version=1,
                 family="mean_reversion",
                 lookback=14,
@@ -95,6 +97,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Long-lookback (S4 long bucket; ≥ 90)
             IndicatorMetadata(
                 id="momentum_252",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend",
                 lookback=252,
@@ -103,6 +106,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # iv_rank — the regime-gate indicator §3.5 R1 references by name.
             IndicatorMetadata(
                 id="iv_rank",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="iv_structure",
                 lookback=30,
@@ -111,6 +116,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Trend family — for C2 trend_continuation
             IndicatorMetadata(
                 id="ema_50",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend",
                 lookback=50,
@@ -121,6 +127,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # trend-family directional without triggering C1.
             IndicatorMetadata(
                 id="adx",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend_strength",
                 lookback=14,
@@ -128,6 +135,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="hurst",
+                rank_per_name_coherent=True,
                 version=1,
                 family="trend_strength",
                 lookback=100,
@@ -136,6 +144,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Event-proximity regime gates (R3)
             IndicatorMetadata(
                 id="days_to_earnings",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="calendar",
                 lookback=0,
@@ -143,6 +153,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="days_to_fomc",
+                market_wide_by_design=True,
                 version=1,
                 family="calendar",
                 lookback=0,
@@ -155,6 +166,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # is C1-distinct from the `sue` directional below.
             IndicatorMetadata(
                 id="days_since_earnings",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="calendar",
                 lookback=0,
@@ -166,6 +179,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # calendar-family days_since_earnings gate in one config.
             IndicatorMetadata(
                 id="sue",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="post_event_drift",
                 lookback=0,
@@ -174,6 +189,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Sizer-mode required indicators (X1, X2)
             IndicatorMetadata(
                 id="realized_vol",
+                rank_per_name_coherent=True,
                 version=1,
                 family="volatility",
                 lookback=20,
@@ -181,6 +197,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="expected_value_estimator",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="smart_money",
                 lookback=60,
@@ -189,6 +207,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Pairs family (C2 relative_value)
             IndicatorMetadata(
                 id="pairs_zscore",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="pairs",
                 lookback=60,
@@ -197,6 +217,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # Flow / macro families (C2 volatility_event, tail_hedge)
             IndicatorMetadata(
                 id="put_call_flow",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="flow",
                 lookback=5,
@@ -204,6 +226,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="vix_level",
+                market_wide_by_design=True,
                 version=1,
                 family="macro",
                 lookback=1,
@@ -213,6 +236,7 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # `volatility` family: C1 satisfied against `trend`-family directionals.
             IndicatorMetadata(
                 id="rv_rank",
+                rank_per_name_coherent=True,
                 version=1,
                 family="volatility",
                 lookback=252,
@@ -226,6 +250,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             # extensions added alongside Crucible commit 5af63ad.
             IndicatorMetadata(
                 id="gex",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,
@@ -233,6 +259,8 @@ def minimal_registry_snapshot() -> RegistrySnapshot:
             ),
             IndicatorMetadata(
                 id="call_wall_distance_pct",
+                rank_per_name_coherent=False,
+                market_wide_by_design=False,
                 version=1,
                 family="dealer_positioning",
                 lookback=0,
