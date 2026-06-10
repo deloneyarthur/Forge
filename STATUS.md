@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-10 — D129: pre_earnings_setup SHIPPED (2 spec corrections accepted) — ⚠️ BLOCKER FOUND: forward earnings calendar NEVER EXISTED (days_to_earnings inert all-time; mandatory earnings_exit data-starved — every backtest held through earnings) — docs-only
+
+**`FORGE_pre_earnings_setup_response.md` processed as [[D129]].** The composed indicator shipped as asked (`b29822f`, 52-id class map, post-their-v10 adoption lane) with two corrections to our spec accepted (rv_q on [0,100] default 50 — our 0.5 would have been a dead id; all-NaN no-data semantics; calendar-day windows ≈ [7,14] for the literature's 5–10 trading days).
+
+- **⚠️ The blocker:** `earnings.parquet` never existed → `days_to_earnings` = 999 on every bar all-time. With our `<` ops those gates NEVER admit. **Forge exposure measured: contained** — 86 submissions all-time (one 2026-05-17 batch, zero verdicts); the §5 activation-dates prefilter has absorbed the inert class ever since (their data bug, our cheap-stage catch). D127's "1.2% expressible half" = a sampling share that dies at the prefilter; the pre-earnings region is fully data-inert today, both halves.
+- **Global reading note (the bigger half):** E1's mandatory `earnings_exit` reads the same missing calendar — **every historical backtest, every config, held through earnings.** All verdict economics include earnings-gap risk the grammar believed excluded. **Calendar-live (their §20 + days_to_earnings v2 + pre_earnings_setup v2) = a future metric-era boundary for every single-name cohort** — watch for their deploy flag.
+- **Operator: relay `PROMPT_CRUCIBLE_CALENDAR_PRIORITY_ACK.md`** — corrections accepted + YES on prioritizing the calendar derivation (single prerequisite for the pre-earnings program; restores the mandatory exit's designed semantics book-wide; their PIT/§20 adjudication to own) + the exposure datum for their entry.
+- Watches: first post-D128 batches; em tiny-n weight; iv_rank-v4 era timestamp (still unconfirmed); calendar-live boundary (new); v17 ready on go.
+
+---
+
 ## 2026-06-10 — D128 ACTIVE (ritual restart 16:38:26Z) on the 51-id republished registry — weights shifted exactly per proof (em 1.000 / ve 0.524); registry verified to spec (iv_rank v4 / pcf v3); v17 now actionable
 
 **Crucible republished (`registry_snapshot_2026-06-10T155624Z`, verified: 51 ids = 45 + P1–P4 + iv_term_slope + option_momentum; iv_rank v4 / put_call_flow v3 — the §2 chain-gate fix bumps; flags exactly as pre-declared; new ids sampling-invisible, zero in-process errors). Operator directed the restart; D104 ritual executed:** stopped 16:36:29Z → uncontended **1,455/0** on `f1d8359` → restart **16:38:26Z** → verified: v16, `registry_hash=d0b58c4b981dde4e`, reconcile 32/2,393, NRestarts=0, zero errors, **`hypothesis_weights:` em=1.000 / tc=0.813 / mr=0.794 / rv=0.750 / ve=0.524 — the D128 era/honesty keys live, matching the pre-deploy proof (ve's dishonest-legacy inflation gone; em's clean-era record leads, will move fast on tiny n).**
