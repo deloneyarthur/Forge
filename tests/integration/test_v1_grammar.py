@@ -101,7 +101,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D116 bumped v13 -> v14 (chain-reading indicators join the single-name-only
     # set — iv_rank/put_call_flow never rank, rv pool excludes them; same two
     # enforcement points as v13, the 21 `rules:` again textually unchanged).
-    assert grammar.grammar_version == "v14"  # type: ignore[attr-defined]
+    # D118 bumped v14 -> v15 (re-keyed on Crucible's indicator→mode map: the
+    # per-name event/DB ids — sue/days_since_earnings/days_to_earnings any-role,
+    # expected_value_estimator as gate/directional — join the set; em never
+    # ranks; same two enforcement points, the 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v15"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

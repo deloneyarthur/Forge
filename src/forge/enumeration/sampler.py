@@ -56,10 +56,11 @@ from forge.enumeration.indicator_thresholds import (
     sample_threshold_params,
 )
 from forge.enumeration.search_space import (
-    CHAIN_READING_INDICATOR_IDS,
     DEALER_POSITIONING_FAMILY,
     NON_ENUMERABLE_HYPOTHESES,
     RANK_COMBINER_HYPOTHESES,
+    RANK_DECOUPLED_GATE_INDICATOR_IDS,
+    SINGLE_NAME_ONLY_INDICATOR_IDS,
 )
 from forge.enumeration.underlying_class import underlying_class
 from forge.grammar.signal_horizon import (
@@ -336,18 +337,36 @@ def _uses_single_name_only_indicator(
     signals: list[SignalSpec],
     by_id: dict[str, IndicatorMetadata],
 ) -> bool:
-    """D112 (v13) + D116 (v14): True when any drawn signal references a
-    single-name-only indicator — the dealer_positioning family (the per-bar
-    greek grid x universe is Crucible's ~100x runner-cost tail) or a
-    chain-reading id (`CHAIN_READING_INDICATOR_IDS`: on Crucible's rank path
-    the chain underlying defaults to SPY regardless of the ranked sym, so the
-    declared per-name semantics never compute — Q33). Such configs never take
-    the cross_sectional_rank branch."""
-    return any(
-        by_id[ind].family == DEALER_POSITIONING_FAMILY or ind in CHAIN_READING_INDICATOR_IDS
-        for sig in signals
-        for ind in sig.indicators
-    )
+    """D112 (v13) + D116 (v14) + D118 (v15): True when a drawn signal makes the
+    config single-name-only — it never takes the cross_sectional_rank branch.
+
+    Three triggers, re-keyed on Crucible's indicator→mode map (D118):
+      - any signal in the dealer_positioning family (the per-bar greek grid x
+        universe is Crucible's ~100x runner-cost tail — D112);
+      - any signal whose indicator is per-name-decoupled on the rank path
+        (`SINGLE_NAME_ONLY_INDICATOR_IDS`: chain-reading ids read the
+        reference chain via params["underlying"]; sue/days_since_earnings/
+        days_to_earnings are events keyed on params["symbol"], which the rank
+        path never threads → inert fail-open, and sue as a rank directional
+        would rank the universe on NaN);
+      - a GATE or DIRECTIONAL on a runs-DB reference indicator
+        (`RANK_DECOUPLED_GATE_INDICATOR_IDS`, role-scoped: the §3.5 X2
+        fractional_kelly sizer chain is role="confluence" and reference-keyed
+        on every path including single-name, so EV-as-sizing does not block
+        the rank branch)."""
+    for sig in signals:
+        for ind in sig.indicators:
+            if (
+                by_id[ind].family == DEALER_POSITIONING_FAMILY
+                or ind in SINGLE_NAME_ONLY_INDICATOR_IDS
+            ):
+                return True
+            if (
+                sig.role in ("directional", "regime_filter")
+                and ind in RANK_DECOUPLED_GATE_INDICATOR_IDS
+            ):
+                return True
+    return False
 
 
 def sample_config(
@@ -570,16 +589,21 @@ def sample_config(
     # D112 (v13): a config that drew ANY dealer_positioning signal never takes
     # the rank branch — dealer indicators are single-name only (the dealer
     # headline x universe is Crucible's ~100x runner tail; see
-    # `DEALER_POSITIONING_FAMILY`). D116 (v14) widens the skip to the
-    # chain-reading ids (iv_rank, put_call_flow): on Crucible's rank path the
-    # chain underlying defaults to SPY regardless of the ranked sym, so a
-    # per-name chain-reading gate fires on noise or degenerates to a hidden
-    # uniform SPY gate (Q33 — Crucible's fail-open sweep). Consequence under
-    # §3.5 R1 ({iv_rank, gamma_flip} is MR's whole regime pool): mean_reversion
-    # never ranks until a coherent reference-underlying gate exists
-    # Crucible-side. The skip consumes no rng, so unaffected draw sequences are
-    # unchanged; the skipped config keeps its signals and pinned underlying —
-    # full single-name sampling weight.
+    # `DEALER_POSITIONING_FAMILY`). D116 (v14) widened the skip to the
+    # chain-reading ids; D118 (v15) re-keys it on Crucible's indicator→mode
+    # map: the broken class is per-name decoupling (the indicator's data
+    # source comes from its own params, never threaded per-name on the rank
+    # path), adding the event/DB ids — sue, days_since_earnings,
+    # days_to_earnings (any role) and expected_value_estimator (gate/
+    # directional only; the X2 kelly sizer chain is exempt — see
+    # `_uses_single_name_only_indicator`). Consequences: mean_reversion never
+    # ranks (§3.5 R1's whole pool is single-name-only, D116) and
+    # event_momentum never ranks (H2's sue directional + dse gate are both
+    # per-name events, D118) until Crucible threads per-name symbols on the
+    # rank path; trend_continuation (bar-only gates) keeps the rank arm. The
+    # skip consumes no rng, so unaffected draw sequences are unchanged; the
+    # skipped config keeps its signals and pinned underlying — full
+    # single-name sampling weight.
     combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
     if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
         share = rank_combiner_share.get(hypothesis, 0.0)

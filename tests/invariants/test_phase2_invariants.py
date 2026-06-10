@@ -147,6 +147,58 @@ def test_chain_reading_indicators_are_single_name_only(grammar: Grammar) -> None
 
 
 # ---------------------------------------------------------------------------
+# D118 (v15) — per-name event/DB indicators are universe-excluded as gates
+# ---------------------------------------------------------------------------
+
+
+def test_rank_decoupled_event_db_indicators_are_universe_excluded(grammar: Grammar) -> None:
+    """D118 (v15): re-keys D116's interim chain-reading set on Crucible's
+    indicator→mode map (`rank_gate_class_map.json`, 45 indicators,
+    completeness-asserted their side). The broken class is per-name DECOUPLING
+    from the evaluated sym: `days_to_earnings`/`days_since_earnings`/`sue` are
+    keyed on ``params["symbol"]`` which the universe paths never thread (inert
+    fail-open — an ungated arm), and `expected_value_estimator` reads the runs
+    DB keyed on ``params["underlying"]`` (the reference's EV for every ranked
+    name). No universe-wide config (cross_sectional_rank or underlying=None)
+    may carry one as a DIRECTIONAL or REGIME GATE. Role-scoped deliberately:
+    the X2 fractional_kelly sizer chain (role="confluence") is reference-keyed
+    on every path including single-name, so it does not block the rank branch.
+    The demo registry carries days_to_earnings + expected_value_estimator;
+    sue/days_since_earnings (absent here) are covered by the unit-fixture em
+    tests in test_cross_sectional_rank. Keep-side: single-name configs still
+    gate on the decoupled ids at full weight (coherent — the composable path
+    pins the symbol)."""
+    registry = demo_registry()
+    decoupled = {
+        "sue",
+        "days_since_earnings",
+        "days_to_earnings",
+        "expected_value_estimator",
+    } & {ind.id for ind in registry.indicators}
+    assert decoupled, "demo registry must carry rank-decoupled ids for this invariant"
+    share = {"trend_continuation": 1.0, "mean_reversion": 1.0, "event_momentum": 1.0}
+    seen_universe = seen_single_gated = 0
+    for cfg in enumerate_candidates(
+        grammar, registry, 17, max_candidates=400, rank_combiner_share=share
+    ):
+        gated = any(
+            sig.role in ("directional", "regime_filter") and ind in decoupled
+            for sig in cfg.signals
+            for ind in sig.indicators
+        )
+        universe_wide = cfg.combiner.type == "cross_sectional_rank" or cfg.underlying is None
+        if universe_wide:
+            assert not gated, cfg.name
+            seen_universe += 1
+        elif gated:
+            seen_single_gated += 1
+    assert seen_universe > 0
+    # Keep-side guard: the cut must not over-reach — single-name configs
+    # gated on a decoupled id must still be emitted.
+    assert seen_single_gated > 0
+
+
+# ---------------------------------------------------------------------------
 # CLAUDE.md hard rule #7 — no equity-family signal in any yielded config
 # ---------------------------------------------------------------------------
 

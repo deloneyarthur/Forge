@@ -120,19 +120,44 @@ RANK_COMBINER_HYPOTHESES: frozenset[str] = frozenset(
 # promotion frontier (the only CPCV-p25-gate clearers in the decided pool).
 DEALER_POSITIONING_FAMILY: str = "dealer_positioning"
 
-# D116 (v14) — chain-reading indicators beyond the dealer family are ALSO
-# single-name only, widening D112's cut to the whole class. Crucible's
-# fail-open sweep (2026-06-09, `probe_results/rank_gate_failopen_sweep.json`;
-# Forge Q33) showed every chain-reading indicator evaluated per-name on the
-# rank/pairs paths reads the REFERENCE chain — `params["underlying"]` defaults
-# to "SPY", decoupled from the ranked sym — so the declared per-name regime
-# never computes: iv_rank fires on noise (SPY's chain IV interpolated at the
-# name's spot, garbage_mismatch mode), put_call_flow returns SPY's value for
-# every name (hidden_uniform_reference mode). Bar-only indicators compute on
-# the name's own bars and are unaffected. Explicit id set as an interim key —
-# superseded by Crucible's indicator→mode map when it lands
-# (PROMPT_CRUCIBLE_RANK_GATE_CLASS_MAP.md ask #1).
-CHAIN_READING_INDICATOR_IDS: frozenset[str] = frozenset({"iv_rank", "put_call_flow"})
+# D116 (v14) → D118 (v15) — single-name-only indicator ids beyond the dealer
+# family. v14 carried the chain-reading pair as an interim set; v15 re-keys on
+# Crucible's full indicator→mode map (`rank_gate_class_map.json`, 2026-06-09,
+# 45 indicators, completeness-asserted their side). The broken class is
+# per-name DECOUPLING from the evaluated sym, not chain reads: on the
+# rank/pairs paths the indicator's data source comes from its own params
+# (`underlying`/`symbol`), which those paths never thread per-name, so the
+# declared per-name semantics never compute. Modes: iv_rank fires on noise
+# (the reference chain's IV at the name's spot — garbage_mismatch);
+# put_call_flow returns the reference's value for every name
+# (hidden_uniform_reference); sue / days_since_earnings / days_to_earnings
+# are per-name events keyed on params["symbol"] → NaN → inert fail-open (an
+# ungated arm; as a rank DIRECTIONAL, sue would rank the universe on NaN —
+# the dealer-directional 0/8 pattern). Bar-only indicators compute on the
+# name's own bars and are unaffected. market_wide_by_design ids (vix_level,
+# days_to_cpi/fomc/nfp/opex) are deliberately NOT here — uniform-across-names
+# is correct for a market gate. Durable key = a `rank_per_name_coherent`
+# flag on registry indicator metadata (contracts gap, surfaced to Crucible);
+# until then this explicit set mirrors the map.
+SINGLE_NAME_ONLY_INDICATOR_IDS: frozenset[str] = frozenset(
+    {
+        "iv_rank",
+        "put_call_flow",
+        "sue",
+        "days_since_earnings",
+        "days_to_earnings",
+    }
+)
+
+# D118 (v15) — `expected_value_estimator` is excluded as a universe GATE or
+# DIRECTIONAL only (it reads the runs-DB trades table keyed on
+# params["underlying"] → the reference's EV for every ranked name —
+# hidden_uniform_reference with an inert NaN fallback). Role-scoped
+# deliberately: the §3.5 X2 fractional_kelly sizer chain (role="confluence"
+# passthrough) is reference-keyed on EVERY path — single-name kelly configs
+# size off the same default-underlying EV with empty params — so EV-as-sizing
+# must not block the rank branch (see `_uses_single_name_only_indicator`).
+RANK_DECOUPLED_GATE_INDICATOR_IDS: frozenset[str] = frozenset({"expected_value_estimator"})
 
 # Fallback if no §3.5 P4 numerical_range rule is present in the grammar
 # (won't happen with v1; defended in `build_search_space`).
@@ -202,7 +227,11 @@ def build_search_space(
         registry_ids,
         single_name_only_ids=(
             frozenset(indicators_by_family.get(DEALER_POSITIONING_FAMILY, ()))
-            | (CHAIN_READING_INDICATOR_IDS & registry_ids)
+            | (SINGLE_NAME_ONLY_INDICATOR_IDS & registry_ids)
+            # Regime pools are gate pools, so the gate-only EV exclusion
+            # applies here unconditionally (the role-scoping only matters in
+            # the sampler's rank-branch check, where the X2 chain is exempt).
+            | (RANK_DECOUPLED_GATE_INDICATOR_IDS & registry_ids)
         ),
     )
     samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
@@ -294,11 +323,13 @@ def _build_regime_pool(
     `_EVENT_MOMENTUM_REGIME_INDICATORS`). regime_arbitrage and tail_hedge have no
     constraint, so any registry indicator may serve. relative_value is also
     R-rule-free but runs as the universe template (underlying=None), so it
-    excludes ``single_name_only_ids`` — the dealer family (D112/v13) plus the
-    chain-reading ids (D116/v14, see `CHAIN_READING_INDICATOR_IDS`) — from its
-    pool. Single-name hypotheses keep their full pools: the per-name decoupling
-    only exists on Crucible's universe paths. The sampler enforces §3.5 C4
-    (regime disjoint from directional) at sample time.
+    excludes ``single_name_only_ids`` — the dealer family (D112/v13), the
+    chain-reading ids (D116/v14), and the per-name event/DB ids re-keyed from
+    Crucible's indicator→mode map (D118/v15, see
+    `SINGLE_NAME_ONLY_INDICATOR_IDS` + `RANK_DECOUPLED_GATE_INDICATOR_IDS`) —
+    from its pool. Single-name hypotheses keep their full pools: the per-name
+    decoupling only exists on Crucible's universe paths. The sampler enforces
+    §3.5 C4 (regime disjoint from directional) at sample time.
     """
     pool: dict[str, tuple[str, ...]] = {}
     for hyp in _HYPOTHESES:
@@ -318,8 +349,8 @@ def _build_regime_pool(
             # `_EVENT_MOMENTUM_REGIME_INDICATORS` in custom_predicates.
             pool[hyp] = tuple(sorted(set(_EVENT_MOMENTUM_REGIME_INDICATORS) & registry_ids))
         elif hyp == "relative_value":
-            # D112 (v13) + D116 (v14): the universe template never carries a
-            # dealer or chain-reading gate.
+            # D112 (v13) + D116 (v14) + D118 (v15): the universe template
+            # never carries a dealer, chain-reading, or per-name event/DB gate.
             pool[hyp] = tuple(sorted(registry_ids - single_name_only_ids))
         else:
             pool[hyp] = tuple(sorted(registry_ids))

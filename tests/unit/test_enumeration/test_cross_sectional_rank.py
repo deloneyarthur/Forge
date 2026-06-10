@@ -102,20 +102,77 @@ def test_rank_combiner_emitted_when_forced() -> None:
 
 
 def test_rank_combiner_emitted_for_event_momentum() -> None:
-    """§2.4 — event_momentum's productive form is cross-sectional PEAD."""
+    """§2.4 said event_momentum's productive form is cross-sectional PEAD —
+    D118 (v15) re-pin: em structurally never ranks. Crucible's indicator→mode
+    map (`rank_gate_class_map.json`) classifies H2's WHOLE signal set as broken
+    on the rank path: `sue` and `days_since_earnings` are per-name events keyed
+    on ``params["symbol"]``, which the rank path never threads — the sue
+    directional would rank the universe on NaN (the dealer-directional 0/8
+    pattern) and the timing gate is inert fail-open. Every em draw stays
+    single-name confluence (the composable path pins the symbol; both
+    indicators are coherent there) until Crucible threads per-name symbols on
+    the rank path. Keep-side asserted: the sue directional + dse gate pair is
+    still emitted single-name at full weight."""
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
-    cfg = sample_config(
-        space,
-        reg,
-        random.Random(7),
-        forced_hypothesis="event_momentum",
-        rank_combiner_share={"event_momentum": 1.0},
-    )
-    assert cfg.combiner.type == "cross_sectional_rank"
-    assert cfg.underlying is None
-    assert validate(cfg, grammar, reg).valid  # type: ignore[arg-type]
+    share = {"event_momentum": 1.0}
+    seen_sue_directional = seen_dse_gate = 0
+    for seed in range(120):
+        cfg = sample_config(
+            space,
+            reg,
+            random.Random(seed),
+            forced_hypothesis="event_momentum",
+            rank_combiner_share=share,
+        )
+        assert cfg.combiner.type == "confluence", cfg.name
+        assert cfg.underlying is not None, cfg.name
+        assert validate(cfg, grammar, reg).valid  # type: ignore[arg-type]
+        if any(s.role == "directional" and "sue" in s.indicators for s in cfg.signals):
+            seen_sue_directional += 1
+        if any(
+            s.role == "regime_filter" and "days_since_earnings" in s.indicators for s in cfg.signals
+        ):
+            seen_dse_gate += 1
+    # Non-vacuous: the H2 signal pair is still drawn — the cut moved the
+    # combiner, not the hypothesis's single-name emission.
+    assert seen_sue_directional > 0
+    assert seen_dse_gate > 0
+
+
+def test_rank_draw_allowed_for_kelly_ev_sizer_chain() -> None:
+    """D118 (v15) role-scoping pin: `expected_value_estimator` is excluded from
+    the rank branch only as a GATE or DIRECTIONAL (on the rank path an EV gate
+    is the reference underlying's runs-DB EV for every name —
+    hidden_uniform_reference per Crucible's map — never the ranked name's own).
+    The X2 fractional_kelly sizer chain (role="confluence" passthrough) is
+    reference-keyed on EVERY path — single-name kelly configs size off the same
+    default-underlying EV with empty params — so it must NOT block the rank
+    branch. Guards against over-cutting: a kelly-sized trend rank config is as
+    coherent as any other trend rank config."""
+    grammar = _grammar()
+    reg = minimal_registry_snapshot()
+    space = build_search_space(grammar, reg)
+    share = {"trend_continuation": 1.0}
+    seen_kelly_rank = 0
+    for seed in range(300):
+        cfg = sample_config(
+            space,
+            reg,
+            random.Random(seed),
+            forced_hypothesis="trend_continuation",
+            rank_combiner_share=share,
+        )
+        has_ev_chain = any(
+            s.role == "confluence" and "expected_value_estimator" in s.indicators
+            for s in cfg.signals
+        )
+        if has_ev_chain:
+            assert cfg.combiner.type == "cross_sectional_rank", cfg.name
+            seen_kelly_rank += 1
+    # Non-vacuous: the kelly-sized rank shape must actually be drawn.
+    assert seen_kelly_rank > 0
 
 
 # ---------------------------------------------------------------------------

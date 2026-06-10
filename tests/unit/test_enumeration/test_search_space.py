@@ -297,7 +297,35 @@ def test_regime_pool_relative_value_excludes_chain_reading(
     assert chain, "fixture registry must carry chain-reading indicators for this test"
     pool = set(space.regime_indicators_by_hypothesis["relative_value"])
     assert not pool & chain
-    assert pool == {ind.id for ind in registry.indicators} - dealer - chain
+    # D118 (v15) re-pin: the pool equality now also subtracts the per-name
+    # event/DB ids (next test) — rv pool = registry minus the full
+    # single-name-only set.
+    decoupled = {"sue", "days_since_earnings", "days_to_earnings", "expected_value_estimator"}
+    assert pool == {ind.id for ind in registry.indicators} - dealer - chain - decoupled
+
+
+def test_regime_pool_relative_value_excludes_rank_decoupled(
+    space: SearchSpace,
+    registry: RegistrySnapshot,
+) -> None:
+    """D118 (v15): re-keys the universe-template gate exclusion on Crucible's
+    indicator→mode map (`rank_gate_class_map.json`, 2026-06-09): the broken
+    class is per-name DECOUPLING from the evaluated sym, not chain reads.
+    Beyond D112's dealer family and D116's chain-reading ids, the map adds the
+    per-name event/DB indicators — `sue`, `days_since_earnings`,
+    `days_to_earnings` (keyed on ``params["symbol"]``, never threaded on
+    universe paths → inert fail-open) and `expected_value_estimator` (reads the
+    runs DB keyed on ``params["underlying"]`` → the reference's EV for every
+    name; rv's top historical gate, structurally ignored on the pairs path) —
+    none may gate a universe scan. Keep-side: the R-rule-free single-name
+    hypotheses keep the full pool (pinned by
+    test_regime_pool_unconstrained_hypothesis_uses_full_registry above —
+    the composable path pins the symbol, where all four are coherent)."""
+    decoupled = {"sue", "days_since_earnings", "days_to_earnings", "expected_value_estimator"}
+    present = decoupled & {ind.id for ind in registry.indicators}
+    assert present == decoupled, "fixture registry must carry all four decoupled ids"
+    pool = set(space.regime_indicators_by_hypothesis["relative_value"])
+    assert not pool & decoupled
 
 
 # ---------------------------------------------------------------------------
