@@ -617,3 +617,57 @@ Modes are **structural/era-invariant** (code-level, window-independent) — no e
 **Resolve by:** operator picks an option (AskUserQuestion pending this session). Response prompt to Crucible drafted regardless (accept the map offer; report our tagging numbers; flag `expected_value_estimator`).
 
 **Tag:** `crucible-coordination`, `grammar`, `rank-path`, `R1-tension`, `verdicts`, `weight-pollution`, `operator-action`, `relates-to-D112`, `relates-to-D115`, `relates-to-Q32`
+
+---
+
+## 2026-06-09 — Q34 — R1's iv_rank gate direction vs the published single-name premium evidence: the rule's own "Why" argues both sides, and the literature's validated conditioner is the IV−RV *spread*, not the IV-rank *level* — **MEDIUM**
+
+**Question:** R1 (GRAMMAR.md §R1) gates mean_reversion on `iv_rank` with `threshold ≤ 50, op "<"` — fire only when IV-rank is LOW. But the rule's own rationale text is internally two-sided: it opens "mean-reversion strategies make money by **selling rich premium** that mean-reverts" and "selling premium when IV is already low … is selling lottery tickets — there's no premium to capture," then concludes the gate forces firing "only when IV is **cheap**." Those argue opposite gate directions. Which direction the evidence supports depends on a fact Forge does not control: whether Crucible's MR position templates are net SHORT premium (credit spreads — then the documented edge wants IV **rich**) or net LONG premium (debit structures betting on underlying reversion — then cheap-IV entry is right).
+
+**What the literature says (deep-research session, this date; sources verified):**
+- Goyal & Saretto (JFE 2009): sorting single names on log(12-month realized vol / ATM IV) predicts option returns — long premium where IV is *cheap vs the name's own realized*, short where *rich*; long-short straddle deciles earned 21.9%/mo gross, ~4.1%/mo at quoted-spread costs (costs, not decay, are the binding constraint). The conditioner is the **IV-vs-own-realized spread**, not the IV level/percentile alone.
+- Israelov & Nielsen (JPM 2015, "Still Not Cheap"): absolute IV level is explicitly NOT a valid timing signal — low IV typically accompanies even lower realized; the implied-minus-subsequent-realized spread is what prices.
+- Bakshi & Kapadia (JoD 2003): single-name VRP is thin (~1.5%/yr vs ~3.3% index) and conditions on **market** vol level, not firm vol — short-premium MR earns more when market RV is high.
+- Carr & Wu (RFS 2009): raw single-name variance premia insignificant for 32/35 names — unconditioned single-name premium selling has little documented edge; conditioning is everything.
+
+**Why this is a Q-entry, not a fix:** R1 is operator-owned (§3.5, hard rule #1); any pool/direction change is a rule edit, and admitting a new conditioner is a loosening (OPEN_PROPOSALS path). R1's own "Evidence to relax" line already anticipates exactly this: "custom realized-vs-implied ratio."
+
+**Asks:** (1) confirm with Crucible what the MR position templates' net premium sign actually is per DTE bucket (determines which side of the iv_rank gate the evidence supports); (2) contracts/indicator gap candidate for the next round-trip: an `iv_minus_rv`-class spread indicator (ATM IV minus trailing realized, per-name) — the single best-validated single-name premium conditioner in the literature; Crucible already computes both inputs (iv_rank needs ATM IV history; realized_vol ships).
+
+**What I did instead:** logged; no grammar/code change. MR single-name emission continues under R1 as written.
+
+**Tag:** `grammar`, `R1-tension`, `literature-priors`, `contracts-gap`, `operator-action`, `relates-to-Q33`
+
+---
+
+## 2026-06-09 — Q35 — P3's delta bands put trend's long-options expression in the literature's worst zone (embedded-leverage premium): swing_long trend = 0.20–0.35Δ, exactly the high-embedded-leverage region documented to carry negative alpha drag — **LOW**
+
+**Question:** Frazzini & Pedersen (RAPS 2022, "Embedded Leverage"): options with high embedded leverage (low-delta/OTM, short-dated) earn LOWER risk-adjusted returns — long-low-leverage/short-high-leverage portfolios significant at t=8.6 (equity options) / t=6.3 (index options). Leverage-constrained buyers overpay for embedded leverage; a systematic long-OTM-options buyer pays that premium structurally. P3 maps trend_continuation's longest horizon (swing_long, 60–90 DTE) to delta 0.20–0.35 — the most embedded-leverage-rich band Forge emits — and caps all bands at 0.55, so no ITM/low-leverage expression exists for any hypothesis. The literature design rule for expressing a directional anomaly in options: prefer higher delta / longer date, or spread structures that sell the expensive leverage back (debit spreads), unless deliberately net-selling embedded leverage.
+
+**Tension, not error:** P3's rationale (low gamma, room for trend, convexity) is real, and trend's convex-payoff design (no hard_profit_target, S5) deliberately wants tail payoff. The cost side (FP2022's drag) was just never priced into the band choice. Whether 0.20–0.35Δ trend longs are net-positive after the embedded-leverage premium is an empirical question Crucible's gate answers — but the prior says the high-delta edge of each band should outperform, and a band widening (e.g. trend swing_long up to ~0.50–0.55, or >0.55 if ever warranted) is an operator-gated grammar change + Crucible position-builder question.
+
+**What I did instead:** logged as a literature prior; no proposal. Cheap evidence first: when enough trend verdicts accumulate, read promotion/quality vs sampled delta_target within-band (verdicts table + config_json) — if the high-delta edge dominates, that's the "Evidence to relax" for P3.
+
+**Tag:** `grammar`, `P3`, `literature-priors`, `evidence-readout-recipe`, `relates-to-D114`
+
+---
+
+## 2026-06-09 — Q36 — Literature-validated regime conditioners Forge cannot currently express: IV−RV spread, VIX term-structure slope, market-state, cross-sectional dispersion (contracts/indicator gaps); ADX/Hurst (R2's pool) lack peer-reviewed OOS validation — **LOW**
+
+**Question:** the deep-research pass ranked conditioning variables by replication strength. The top of the list is only partially expressible in the current 45-indicator registry:
+
+| Conditioner | Evidence | Forge today |
+|---|---|---|
+| Strategy-specific trailing realized vol (scale/gate by own RV) | Barroso & Santa-Clara JFE 2015 (~2× momentum Sharpe, kills crash tail); Daniel & Moskowitz JFE 2016 | **HAVE** — `rv_rank` (R2 pool), `realized_vol` + X1 `vol_target` sizer; best-supported members of their pools |
+| VIX term-structure slope (contango/backwardation) | Johnson JFQA 2017 (slope predicts variance-swap/VIX-futures/straddle returns at ALL maturities; the validated short-vol gate); Simon & Campasano JoD 2014 | **GAP** — `vix_level` is a stub; no VIX term-structure data at all |
+| IV − trailing-RV spread (per name) | Goyal & Saretto JFE 2009 (see Q34) | **GAP** — `iv_rank` is IV-vs-own-IV-history, not IV-vs-RV |
+| Market state (sign of trailing 12–36m INDEX return; bear-rebound flag) | Cooper/Gutierrez/Hameed JF 2004 (momentum +0.93%/mo after up-markets vs −0.37% after down); Daniel-Moskowitz crash indicator | **GAP** — indicators evaluate on the name's own bars; no market-level state gate exists for single-name configs (`vix_level` stub is the closest cousin) |
+| Cross-sectional return dispersion | Stivers & Sun JFQA 2010 (high dispersion → cut momentum, favor reversal/pairs) | **GAP** — no universe-level dispersion indicator |
+| Pair quality: OU half-life, formation zero-crossings, sector homogeneity | Avellaneda & Lee 2010; Do & Faff 2010/12 | **Crucible-side** (it selects pairs/half-life); relevant to the deferred "should rv draw regime gates at all" — literature answer is yes: turbulence/dispersion gates (Do-Faff: pairs work in prolonged turbulence; Zhu Yale 2024: +0.8%/mo per +1% BAA−AAA, robust to VIX substitution) |
+| ADX / Hurst trend gates | **No peer-reviewed OOS validation found** (Hurst appears only in pairs-allocation literature; ADX practitioner-only) | R2's pool — they stay (operator-owned); prior says `rv_rank`/`gamma_flip` are the evidence-backed members |
+
+Note all four GAP rows are `market_wide_by_design`-class (or per-name chain-derived for IV−RV) — the rank-coherence classification from Q33/D118 applies and should be declared at birth if any ship.
+
+**What I did instead:** logged; gaps are contracts asks to queue for a future Crucible round-trip (not workarounds — hard rule #2); no emission change. Full research report delivered in-session (2026-06-09 deep-research: ~45 sources, claims adversarially verified, zero refutations on 27 votes).
+
+**Tag:** `contracts-gap`, `literature-priors`, `regime-gates`, `crucible-coordination`, `relates-to-Q34`
