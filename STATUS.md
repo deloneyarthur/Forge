@@ -11,7 +11,7 @@
 
 ---
 
-## 2026-06-09 (latest) — D124: Crucible's v118/OOM/residuals response processed — OOM cure telemetry-backed (~60 dec/hr), Q32 CLOSED (d964e908 honest re-run: WF 2.225→0.280, recency-fit), era keys + honesty marker adopted; confirm prompt updated (operator: relay it, one message closes everything)
+## 2026-06-09 (late night) — D124: Crucible's v118/OOM/residuals response processed — OOM cure telemetry-backed (~60 dec/hr), Q32 CLOSED (d964e908 honest re-run: WF 2.225→0.280, recency-fit), era keys + honesty marker adopted; confirm prompt updated (operator: relay it, one message closes everything)
 
 **Incoming `FORGE_v118_oom_telemetry_and_residuals.md` verified and recorded as D124 (docs-only; no code/weights/service change).** Every checkable claim reproduced: contracts 0b5f183=1.18.0 (our pin already matches, [[D123]]); the 4th OOM kill we missed (pid 713927, 03:22:59Z, 101 MB) kernel-verified; **`b8b83495` — the fullhist child of `d964e908` — already in our verdicts table next to its reject parent, same config_hash** (their 94/94 continuity claim spot-checked on `42f3a442`/`815be985` too).
 

@@ -14,6 +14,14 @@ repos maintained by separate agents; the operator carries messages between them.
   `src/forge/core/contracts_check.py`, refresh `uv.lock`, update test fixtures, run `forge check`.
   §13.5 halts the CLI on MAJOR mismatch. Watch-item: Crucible has bumped contracts unannounced
   (D106) — `forge check` failing after a quiet period likely means this.
+- **A contracts minor that changes parsed models is NOT live-inert** (D124 post-mortem): the
+  running daemon keeps its boot-time contracts modules, so when Crucible's republished export
+  carries the new fields, every registry load fail-loops on `extra_forbidden` until the service
+  restarts (correct fail-loud, but emission stalls). If an adoption precedes a counterparty
+  republish, the go-ahead prompt must either (a) schedule the operator-gated restart BEFORE the
+  publish, or (b) state the expected stall-and-restart explicitly. Journal trap: the loop logs
+  `registry_loaded_from_export` BEFORE validation — a stalled daemon looks half-healthy; grep
+  for `extra_forbidden` and recent `batch_id=` lines to tell.
 
 ## Outgoing (Forge → Crucible)
 
