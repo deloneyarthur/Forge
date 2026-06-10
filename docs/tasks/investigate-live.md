@@ -67,6 +67,15 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
 - **Fullhist-refit children re-gate under the same `config_hash` with a new `run_id`** —
   `verdicts` holds both parent and child rows; lineage pointer at
   `universe_json.submission_metadata.fullhist_refit_of` (D124).
+- **Earnings-calendar eras (D130, two-stage):** the forward calendar NEVER existed before
+  **2026-06-10T17:05:01Z** (`days_to_earnings` = 999 every bar before it → `<`-gates never
+  admitted; exposure contained at 86 prefilter-era submissions, zero verdicts). Indicator-side
+  reads are real from 17:05:01Z; **the mandatory `earnings_exit` only fires from Crucible's
+  NEXT runner restart after that** (wiring `1ca0361` — boundary flagged by them when it lands;
+  check D130/STATUS for the timestamp). Every backtest decided before the exit-side boundary
+  HELD THROUGH EARNINGS, every single-name config. Post-boundary protection is PARTIAL, not
+  binary: filing-date anchors are late for ~32.5% of events (their §20 probe) — do not read
+  the era flip as full earnings-risk exclusion.
 - Post-D105, the sampler is weighted — condition scans on the live weights (no more
   quasi-randomization).
 

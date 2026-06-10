@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-10 — D130: earnings calendar LIVE (their same-day execution of our priority call) — indicator era 17:05:01Z, exit era = their next runner restart; protection is PARTIAL (~half; 32.5% of events anchor-late) — docs-only
+
+**`FORGE_earnings_calendar_live.md` processed as [[D130]].** 140 symbols / 4,221 dates / 2018→2026-06-03, derived from filing dates (§20 entry owns the PIT assumption). Their build also found the SECOND half of the starvation: the runner never wired the calendar into `Backtester` — the mandatory exit was unwired engine-side regardless of the parquet. Both fixed in `1ca0361`.
+
+- **Era keys recorded (investigate-live.md):** indicator-side **2026-06-10T17:05:01Z** (no restart needed); **exit-side = their next runner restart** (they flag the timestamp — THE boundary for every single-name cohort; everything before it held through earnings). v2 bumps incoming at next republish (`days_to_earnings` v2, `pre_earnings_setup` v2, likely 52 ids) — hash rotation expected.
+- **Read the flip honestly:** filing-date anchors are late for **32.5%** of events (8-K before 10-Q) → post-boundary protection ≈ half, not full. Our [7,14]-calendar enter-range remains the pre_earnings_setup mitigation; their anchor-v2 (true announcement calendar) is data-tier-blocked.
+- **Watch additions:** their runner-restart flag (exit-era timestamp); forward-edge staleness automation (calendar ends 2026-06-03 — names go 999 again past their last filing until refresh; matters for the post-v10 adoption); the prefilter will start PASSING days_to_earnings ve draws once their writer recomputes (real activations) — expected, not a problem.
+- Standing: first post-D128 batches, em tiny-n weight, iv_rank-v4 era timestamp, v17 on go. Nothing owed back — their doc asks nothing; the priority loop (D129 ask → same-day ship) is closed.
+
+---
+
 ## 2026-06-10 — D129: pre_earnings_setup SHIPPED (2 spec corrections accepted) — ⚠️ BLOCKER FOUND: forward earnings calendar NEVER EXISTED (days_to_earnings inert all-time; mandatory earnings_exit data-starved — every backtest held through earnings) — docs-only
 
 **`FORGE_pre_earnings_setup_response.md` processed as [[D129]].** The composed indicator shipped as asked (`b29822f`, 52-id class map, post-their-v10 adoption lane) with two corrections to our spec accepted (rv_q on [0,100] default 50 — our 0.5 would have been a dead id; all-NaN no-data semantics; calendar-day windows ≈ [7,14] for the literature's 5–10 trading days).

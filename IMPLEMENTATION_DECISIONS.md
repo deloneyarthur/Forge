@@ -3632,6 +3632,25 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 
 **Files:** this entry, `OPEN_QUESTIONS.md` (Q37 coda), `PROMPT_CRUCIBLE_CALENDAR_PRIORITY_ACK.md`, `STATUS.md`.
 
+## D130 — 2026-06-10 — earnings calendar LIVE same-day (their §20 `earnings-calendar-derivation`): two-stage era boundary recorded; anchor quality quantified (~half protected, 32.5% late); v2 bumps incoming
+
+**Spec section:** §7 read discipline (era keys), E1/R3 (what the data restores). Origin: `../Crucible/docs/handoffs/FORGE_earnings_calendar_live.md` — their same-day execution of the D129 priority call. **Docs-only.**
+
+**The calendar exists:** 140 symbols, 4,221 dates, 2018-02-20 → 2026-06-03, derived from the D107 financials filing dates (deterministic, atomic; commit `1ca0361`). Their build also found the **second half of the starvation: the runner never passed the calendar into `Backtester`** — the mandatory exit's `earnings` parameter was unwired engine-side, independent of the missing parquet. Both halves fixed in `1ca0361`.
+
+**Era keys adopted (recorded in `investigate-live.md`):**
+1. **Indicator-side = 2026-06-10T17:05:01Z** (parquet write; `days_to_earnings`/`pre_earnings_setup` read it at compute time, no restart).
+2. **Exit-side = their NEXT runner restart** (wiring + v2 cache keys ride deploy; they flag the timestamp when it lands — THE boundary for every single-name cohort: everything decided before it held through earnings).
+3. **Version bumps incoming: `days_to_earnings` v1→v2, `pre_earnings_setup` v1→v2** — expect them (plus 51→52 ids if `pre_earnings_setup` joins the published snapshot) at the next registry republish; another hash rotation, expected.
+
+**Anchor quality (their §20 probe, 3,469 events — the honest read of what the era flip buys):** median announcement-vs-filing offset −1 calendar day; ~40% within [−2,0]; **32.5% at ≤−6 (8-K well before the 10-Q) → `earnings_exit` is LATE for about a third of events** — post-boundary cohorts have ~half-restored protection, NOT full earnings-risk exclusion; never read the flip as binary. Re-anchoring to price spikes was rejected their side as lookahead (correct). For `pre_earnings_setup`, the same tail makes the gate post-announcement for those filings — our [7,14]-calendar enter-range sampling (D129 ack) is the agreed mitigation.
+
+**Subtle window noted (no action):** with real activation dates, our §5 prefilter will START PASSING `days_to_earnings`-gated ve draws once their feature-cache writer recomputes against the parquet (next writer cycle) — if that precedes their runner restart, a few runs could compute v1-keyed real values in the gap. Real data either way; their v2 invalidation assumption holds in spirit; their restart is expected imminently. Not flagged back.
+
+**Residuals on watch (theirs):** forward-edge staleness — the calendar ends at the last ingested filing (2026-06-03 today); names past their last known date read 999 until each financials refresh + builder re-run (nightly automation candidate; they flag if automated — matters for `pre_earnings_setup` adoption at the post-v10 cut). Anchor v2 (true announcement calendar) blocked on data tier. `earnings_exit` 2-day threshold deferred until the funnel shows the exit firing.
+
+**Files:** this entry, `docs/tasks/investigate-live.md` (era keys), `STATUS.md`.
+
 ## D124 — 2026-06-09 — Crucible's v118/OOM/residuals response processed: OOM cure telemetry-backed (~60 decisions/hr), all four coverage residuals answered, d964e908's honest re-run craters the "best config ever" story — era keys + honesty marker adopted as the read standard (docs-only)
 
 **Spec section:** §7 (feedback inputs), §20-adjacent (Crucible gates; read-side only). Origin: `../Crucible/docs/handoffs/FORGE_v118_oom_telemetry_and_residuals.md` (their response to `PROMPT_CRUCIBLE_FLAG_SEQUENCING_OOM_COVERAGE.md`). No code, weights, grammar, or service change — this entry fixes the *read standard* for every future feedback/analysis pass; the build that enforces it in the feedback engine is queued (see "Queued" below).
