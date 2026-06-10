@@ -3495,3 +3495,17 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 **Files:** `src/forge/enumeration/search_space.py`, `src/forge/enumeration/sampler.py`, `config/grammar.yaml` (v15 + header note), `config/grammar_archive/v15.yaml`, tests (4 files), `PROMPT_CRUCIBLE_RANK_GATE_CLASS_MAP.md` (thread → response section), `OPEN_QUESTIONS.md` (Q33 map-residual closed), `STATUS.md`, this entry.
 
 **Thread state / owed:** relay to Crucible (operator): v15 boundary 2026-06-10T00:44:37Z + the rv combiner split answer (100% pairs path — their "confirm which path" offer satisfied) + the 4 MR-rank×EV-confluence configs question + the `rank_per_name_coherent` registry-field ask. Deferred (unchanged from D114/Q33): the feedback-side gate-class tag for rank verdicts — now mechanically keyable on their map artifact.
+
+## D120 — 2026-06-09 — demo-registry fallback is opt-in: production registry loads fail loudly
+
+**Spec section:** §13.5 (contracts/startup discipline); registry read-side of `EXPORT_LAYOUT`. Origin: 2026-06-09 cross-system integration sweep (Crucible side), finding #3. The `registry_loader` module docstring always said production flips to fail-loud once Crucible's v3 export wiring ships — it shipped 2026-05-15 (Crucible Phase 9 v3); the flip never happened.
+
+**Problem.** `load_registry(allow_demo_fallback=True)` was the default for every caller, production included (run-loop feedback, submission path, `forge feedback`). A missing/empty `~/optbt_data/exports/` would silently feed the enumerator the frozen Phase-2 (2026-05-13) demo registry: iv_rank v1/lookback-30 vs live v3/252, ema_50 lookback 50 vs 200 (S4 horizon misclassification), `sue`/`days_since_earnings` absent entirely (event_momentum enumeration crashes), ~26 newer indicators invisible. Latent, not live — exports exist on this box, so production never actually fell back; the risk was a silent month of stale enumeration after an export-publisher failure.
+
+**Decision.** Default flipped to `allow_demo_fallback=False`; `load_registry` now raises `FileNotFoundError` when no snapshot exists. The two offline preview commands (`forge enumerate`, `forge prefilter`) opt in explicitly — their MANPAGE-documented fallback behavior is unchanged. `_demo_registry.py` re-documented as a deliberately FROZEN hermetic fixture: refreshing it to track the live registry would churn every test pinned to its contents for zero production benefit now that production can never see it; trust `registry_hash` for what enumeration ran against.
+
+**Verification (TDD RED→GREEN):** `test_load_registry_default_is_fail_loud` (bare `load_registry()` on a missing dir must raise; confirmed RED first: returned the demo snapshot). Full suite 1,439/0; mypy --strict 0/82; ruff clean (changed files).
+
+**Attribution:** versionless and behavior-invisible while exports exist. Activates at the next service restart (not bounced for this — no behavior change on the live box). Read it in: an exports outage now crashes the loop loudly instead of enumerating stale.
+
+**Files:** `src/forge/persistence/registry_loader.py`, `src/forge/cli/main.py` (2 preview call sites), `src/forge/enumeration/_demo_registry.py` (docstring), `tests/unit/test_registry_loader.py`, this entry, `STATUS.md`.

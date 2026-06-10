@@ -110,7 +110,9 @@ def cmd_enumerate(
     grammar_path = Path(__file__).resolve().parents[3] / "config" / "grammar.yaml"
     archive_dir = grammar_path.parent / "grammar_archive"
     grammar = load_grammar(grammar_path, archive_dir=archive_dir)
-    registry = load_registry()
+    # Offline preview command — the demo fallback is documented MANPAGE
+    # behavior here; production paths use the fail-loud default.
+    registry = load_registry(allow_demo_fallback=True)
 
     typer.echo(
         f"grammar_version={grammar.grammar_version} "
@@ -270,7 +272,9 @@ def cmd_prefilter(
     prefilter_yaml = grammar_path.parent / "prefilter.yaml"
 
     grammar = load_grammar(grammar_path, archive_dir=archive_dir)
-    registry = load_registry()
+    # Offline preview command (synthetic cache) — demo fallback allowed,
+    # same as `forge enumerate`; production paths use the fail-loud default.
+    registry = load_registry(allow_demo_fallback=True)
     calibration = load_calibration(prefilter_yaml)
     seed_hierarchy = SeedHierarchy(seed)
     if synthetic_cache:

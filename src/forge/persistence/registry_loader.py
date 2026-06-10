@@ -8,13 +8,14 @@ enumeration. This module is the read-side of that contract.
 Phase-2 history: Forge originally enumerated against an in-Forge stub
 (`forge.enumeration._demo_registry`) because Crucible hadn't yet wired the
 export. The 2026-05-13 go-live attempt surfaced the resulting mismatch
-(Q11/Q12 in `OPEN_QUESTIONS.md`); Crucible Phase 9 v3 closes it by
-publishing real snapshots. Until then, `load_registry` falls back to the
-demo registry with a warning so dev/test flows keep working.
+(Q11/Q12 in `OPEN_QUESTIONS.md`); Crucible Phase 9 v3 closed it by
+publishing real snapshots (2026-05-15).
 
-The fallback is graceful by default but can be turned off — callers that
-must NOT see the demo (e.g., production `forge.service` after Crucible v3
-ships) should pass ``allow_demo_fallback=False``.
+The fallback is therefore opt-in: production paths fail loudly when no
+snapshot exists, because silently enumerating against the frozen Phase-2
+demo means stale indicator versions/lookbacks and missing families
+(2026-06-09 integration sweep). Dev-preview commands that are documented
+to work offline pass ``allow_demo_fallback=True`` explicitly.
 """
 
 from __future__ import annotations
@@ -50,15 +51,15 @@ def find_latest_snapshot(exports_dir: Path = DEFAULT_EXPORTS_DIR) -> Path | None
 def load_registry(
     *,
     exports_dir: Path = DEFAULT_EXPORTS_DIR,
-    allow_demo_fallback: bool = True,
+    allow_demo_fallback: bool = False,
 ) -> RegistrySnapshot:
     """Load the latest Crucible-published `RegistrySnapshot`.
 
     When an `EXPORT_LAYOUT`-compliant snapshot is present in ``exports_dir``,
-    parse and return it. Otherwise, if ``allow_demo_fallback`` is true,
-    log a warning and return the Forge-internal demo registry; if false,
-    raise ``FileNotFoundError`` so the caller surfaces the missing
-    dependency to the operator.
+    parse and return it. Otherwise raise ``FileNotFoundError`` so the caller
+    surfaces the missing dependency to the operator — unless
+    ``allow_demo_fallback`` is explicitly true, in which case log a warning
+    and return the frozen Forge-internal demo registry (offline dev only).
 
     The malformed-JSON case is intentionally not caught — Pydantic's
     `ValidationError` propagates so the corruption surfaces loudly.

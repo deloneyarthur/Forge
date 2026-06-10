@@ -93,6 +93,17 @@ def test_load_registry_raises_when_missing_and_fallback_disabled(tmp_path: Path)
         load_registry(exports_dir=missing, allow_demo_fallback=False)
 
 
+def test_load_registry_default_is_fail_loud(tmp_path: Path) -> None:
+    """The demo fallback must be opt-in, not the default. Crucible's v3
+    export wiring shipped 2026-05-15; the module docstring always said
+    production flips to fail-loud once it did. With the default True, a
+    missing/empty exports dir silently fed the live enumerator a frozen
+    2026-05-13 registry (stale versions, no sue/dse — 2026-06-09 sweep)."""
+    missing = tmp_path / "exports"  # dir doesn't exist
+    with pytest.raises(FileNotFoundError, match="EXPORT_LAYOUT"):
+        load_registry(exports_dir=missing)
+
+
 def test_load_registry_propagates_validation_error_on_malformed_json(tmp_path: Path) -> None:
     exports = tmp_path / "exports"
     exports.mkdir()

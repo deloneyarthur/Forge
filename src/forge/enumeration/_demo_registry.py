@@ -1,13 +1,18 @@
-"""Inline demo registry for the Phase 2 ``forge enumerate`` CLI.
+"""Frozen offline-dev registry — NOT a mirror of Crucible's live registry.
 
-Phase 2 ships ahead of the Phase 4 Crucible-registry wiring, so the CLI
-needs a registry to run against. This module mirrors
-``tests/fixtures/strategy_configs.minimal_registry_snapshot`` in ``src``
-so the CLI never reaches into test code. Phase 4 will replace this
-helper with a ``crucible_contracts``-driven registry query.
+This is the Phase-2 (2026-05-13) snapshot, kept as a hermetic fixture for
+tests and for the offline preview commands (``forge enumerate`` /
+``forge prefilter``), which opt in via ``allow_demo_fallback=True``.
+Production paths can never see it: ``load_registry`` fails loudly when no
+published snapshot exists (2026-06-09 sweep — the silent fallback meant
+stale indicator versions/lookbacks and missing families like
+post_event_drift).
 
-If you change the test fixture's indicator set, mirror it here (or
-remove this module entirely once Phase 4 lands).
+Deliberately frozen: refreshing it to track the live registry would churn
+every test pinned to its contents for no production benefit. Trust the
+printed ``registry_hash``, not this module, for what enumeration ran
+against. Mirrors ``tests/fixtures/strategy_configs.minimal_registry_snapshot``
+in ``src`` so the CLI never reaches into test code.
 """
 
 from __future__ import annotations
