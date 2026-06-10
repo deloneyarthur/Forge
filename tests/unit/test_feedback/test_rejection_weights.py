@@ -23,7 +23,6 @@ from crucible_contracts import (
 )
 
 from forge.feedback.rejection_weights import (
-    COMPONENT_TIEBREAK_WEIGHT,
     DEFAULT_ALPHA,
     DEFAULT_BETA,
     DEFAULT_EXPLORATION_FLOOR,
@@ -699,13 +698,16 @@ def test_reward_weights_sharpe_clamped_to_unit(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# D103 (v9) — dynamic relative_value regime-gate curation. relative_value has no
-# §3.5 R-rule, so the sampler draws its mandatory regime gate near-uniformly from
-# the whole registry — and the most-sampled gates (rsi_2, rv_rank) are among the
-# WORST for pairs convergence. `compute_relative_value_regime_weights` learns,
-# per regime indicator, the same Sharpe-aware reward the hypothesis weighter uses,
-# scoped to relative_value, so the sampler tilts toward gates that yield
-# gate-passing components. The regime POOL is unchanged (no rule edit).
+# D103 (v9) — dynamic relative_value regime-gate curation — FROZEN by D119.
+# D103 learned per-regime-indicator component rewards because the most-sampled
+# rv gates (rsi_2, rv_rank) looked like the WORST performers. Crucible's
+# class-map response (2026-06-09, §3) proved the pairs runner never evaluates
+# regime filters at all, so those "performances" were sampling artifacts and
+# the engine was noise-fitting. `compute_relative_value_regime_weights` now
+# returns `{}` unconditionally (`_RV_REGIME_WEIGHTS_FROZEN`). The D103 learning
+# tests (component-gate-outweighs, rv-scoping, determinism/orphans) were
+# deliberately REMOVED with the freeze — restore them from git history at the
+# D119 commit if the freeze is ever lifted. The regime POOL is unchanged.
 # ---------------------------------------------------------------------------
 
 
@@ -757,14 +759,29 @@ def test_d103_regime_weights_empty_returns_empty(tmp_path: Path) -> None:
         assert compute_relative_value_regime_weights(conn, []) == {}
 
 
-def test_d103_regime_weights_component_gate_outweighs_trading_gate(tmp_path: Path) -> None:
-    """D105 re-aim: a regime gate that yields an accepted COMPONENT must outweigh
-    one whose runs merely trade. (The original D103 estimand — the D094
-    trade-biased reward — collapsed once Crucible's rv fix made every gate
-    trade: the live journal showed all 34 gates compressed into 0.33-0.40.)"""
+def test_d119_regime_weights_frozen_returns_empty_despite_component_evidence(
+    tmp_path: Path,
+) -> None:
+    """D119: the rv-regime granularity is FROZEN — `{}` regardless of evidence.
+
+    Crucible's class-map response (2026-06-09, `FORGE_rank_gate_class_map.md`
+    §3) proved from code that the `pairs_convergence` runner evaluates NO
+    regime filters: `propose_actions` gates purely on cointegration
+    pvalue/zscore/halflife; `config.signals` is read only for pairs parameters.
+    Every relative_value regime gate ever submitted (15,960/15,960 confluence
+    → all routed to that path) was a dead label. The D103 posterior was
+    therefore fit to noise — gate-id vs outcome correlations with no causal
+    path — and applying it tilts rv emission toward gates that "performed" by
+    sampling accident. Frozen until Crucible threads regime gates into the
+    pairs path (revert: drop the early return in
+    `compute_relative_value_regime_weights`; restore the D103 learning tests
+    from git history at the D119 commit).
+
+    The fixture is the strongest evidence the old engine accepted (a component
+    on one gate vs trading rejects on another) — it must now move nothing."""
     with db_connection(tmp_path / "forge.db") as conn:
         gated: list[GatedRun] = []
-        for i in range(10):  # good regime: 1 component + 9 trading rejects
+        for i in range(10):
             ch = f"good_{i:04d}"
             _insert_submission(
                 conn,
@@ -781,30 +798,13 @@ def test_d103_regime_weights_component_gate_outweighs_trading_gate(tmp_path: Pat
                     wf_sharpe=1.5,
                 )
             )
-        for i in range(10):  # bad regime: all trade, none accepted (the live mode)
-            ch = f"bad_{i:04d}"
-            _insert_submission(
-                conn,
-                config=_cfg_with_regime("relative_value", "rsi_2", f"b_{i}"),
-                config_hash=ch,
-            )
-            gated.append(
-                _gated_run_graded(
-                    config_hash=ch, trade_count=150, gates_passed=3, gates_failed=1, wf_sharpe=1.5
-                )
-            )
-        weights = compute_relative_value_regime_weights(conn, gated)
-    assert weights["put_call_flow"] > weights["rsi_2"]
-    # Component-rate scale (alpha=1, beta=50): per-run tiebreak for a trading
-    # reject at 3/4 gates + sharpe 0.75 is eps*(0.75+0.75)/2 = 0.75*eps.
-    tb = COMPONENT_TIEBREAK_WEIGHT * 0.75
-    assert weights["put_call_flow"] == pytest.approx((1 + 1 + 9 * tb) / 61, rel=1e-9)
-    assert weights["rsi_2"] == pytest.approx((1 + 10 * tb) / 61, rel=1e-9)
+        assert compute_relative_value_regime_weights(conn, gated) == {}
 
 
-def test_d103_regime_weights_scoped_to_relative_value(tmp_path: Path) -> None:
-    """A non-relative_value config with the SAME regime indicator does NOT
-    contribute — the curation is scoped to relative_value only."""
+def test_d119_regime_weights_frozen_for_heterogeneous_inputs(tmp_path: Path) -> None:
+    """D119: `{}` over mixed evidence too — rv rejects, a cross-hypothesis
+    promote, un-gated submissions, and orphan runs all produce the same frozen
+    result (and trivially deterministically, hard rule #6)."""
     with db_connection(tmp_path / "forge.db") as conn:
         _insert_submission(
             conn, config=_cfg_with_regime("relative_value", "adx", "rv1"), config_hash="rv_hash"
@@ -814,13 +814,13 @@ def test_d103_regime_weights_scoped_to_relative_value(tmp_path: Path) -> None:
             config=_cfg_with_regime("trend_continuation", "adx", "tc1", directional="rsi_2"),
             config_hash="tc_hash",
         )
+        _insert_submission(
+            conn, config=_cfg_with_regime("relative_value", "hurst", "rv2"), config_hash="ungated"
+        )
         gated = [
-            # relative_value: traded reject, 2/4 gates, no sharpe → tiebreak only
             _gated_run_graded(
                 config_hash="rv_hash", trade_count=50, gates_passed=2, gates_failed=2
             ),
-            # trend promote (a full component event) — must be EXCLUDED from the
-            # adx bucket: the curation is scoped to relative_value
             _gated_run_graded(
                 config_hash="tc_hash",
                 decision="promote",
@@ -828,31 +828,9 @@ def test_d103_regime_weights_scoped_to_relative_value(tmp_path: Path) -> None:
                 gates_passed=4,
                 gates_failed=0,
             ),
-        ]
-        weights = compute_relative_value_regime_weights(conn, gated)
-    assert set(weights) == {"adx"}
-    # only the rv run contributes (component-rate scale, alpha=1 beta=50):
-    # (1 + eps*(0.5+0)/2) / (51+1) — NOT inflated by the trend promote
-    assert weights["adx"] == pytest.approx((1 + COMPONENT_TIEBREAK_WEIGHT * 0.25) / 52, rel=1e-9)
-
-
-def test_d103_regime_weights_deterministic_and_orphans_skipped(tmp_path: Path) -> None:
-    """Hard rule #6 determinism + orphan/un-gated submissions ignored."""
-    with db_connection(tmp_path / "forge.db") as conn:
-        _insert_submission(
-            conn, config=_cfg_with_regime("relative_value", "iv_rank", "rv1"), config_hash="rv_hash"
-        )
-        # un-gated relative_value submission contributes nothing
-        _insert_submission(
-            conn, config=_cfg_with_regime("relative_value", "hurst", "rv2"), config_hash="ungated"
-        )
-        gated = [
-            _gated_run_graded(
-                config_hash="rv_hash", trade_count=40, gates_passed=2, gates_failed=2
-            ),
             _gated_run_graded(config_hash="orphan", trade_count=99, gates_passed=4, gates_failed=0),
         ]
         first = compute_relative_value_regime_weights(conn, gated)
         second = compute_relative_value_regime_weights(conn, gated)
-    assert first == second
-    assert set(first) == {"iv_rank"}  # hurst (un-gated) + orphan both excluded
+    assert first == {}
+    assert second == {}
