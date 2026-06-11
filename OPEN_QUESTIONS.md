@@ -710,7 +710,7 @@ Note all four GAP rows are `market_wide_by_design`-class (or per-name chain-deri
 
 ---
 
-## 2026-06-11 — Q38 — §7.3 limiter never trips during an upstream Crucible stall (feedback consumer pins on the oldest unflushed batch) — **MEDIUM**
+## 2026-06-11 — Q38 — §7.3 limiter never trips during an upstream Crucible stall (feedback consumer pins on the oldest unflushed batch) — **MEDIUM — DESIGN APPROVED 2026-06-11: `docs/proposals/limiter-stall-guard.md` (all four §8 decisions, recommended options); build pending**
 
 **Question:** During the 2026-06-10T23:55:05Z runner wedge (~17 h, zero new verdicts — see
 `PROMPT_CRUCIBLE_RUNNER_WEDGE.md`), Forge kept submitting at full cadence: ~15.6 k v17
@@ -735,5 +735,19 @@ ranking batches whose feedback value is zero until the stall clears.
 
 **What I did instead:** logged; evidence relayed to Crucible
 (`PROMPT_CRUCIBLE_RUNNER_WEDGE.md`); no behavior change.
+
+**Update 2026-06-11 (design pass — `docs/proposals/limiter-stall-guard.md`):** the
+suggested signal does not survive contact with the code — `newly_gated_total` is
+mislabeled: `consume_batch_results` re-derives outcomes from the export window for ALL
+batch rows each pass, so the line read ~199 (not 0) throughout the wedge; a stagnation
+detector on it needs a semantics fix plus cross-iteration state. The proposal instead
+recommends a stateless decision-clock predicate: block iff a `submitted` row postdates
+the export's `max(decided_at)` by ≥ T (default 3 h; knob `stall_after_seconds`).
+Backtested against all four >2 h decision gaps on record: fires on both true stalls
+(05-30 17.1 h, 06-10 18.1 h), correctly silent on healthy-slow (06-04) and the
+Forge-quiet migration window (06-07 — the deadlock-immunity guard). The runner
+recovered 2026-06-11T17:59:34Z (18.08 h). **All four §8 decisions APPROVED same
+session (recommended options: predicate / 3 h / direct enforce / extend
+`check_rate_limit`); build pending, service-inert until the next ritual restart.**
 
 **Tag:** `feedback-loop`, `limiter`, `crucible-coordination`, `relates-to-D110`

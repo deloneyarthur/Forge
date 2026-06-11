@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-11 — Q38 DESIGN APPROVED: §7.3 stall guard (`docs/proposals/limiter-stall-guard.md`; all four §8 decisions = recommended options) — ⚠️ CRUCIBLE RUNNER RECOVERED 17:59:34Z (18.08 h stall, 187 verdicts flushed by 18:13Z snapshot) — docs-only
+
+**Operator: "let's start designing" on Q38; design grounded in code + a fresh live-DB snapshot (18:19Z), which also showed the wedge CLEARED — first decision 2026-06-11T17:59:34Z; next checkpoint's post-flush train/eval is now actionable. Operator then walked §8 in-session (AskUserQuestion): decision-clock predicate / T = 3 h / direct enforce / extend `check_rate_limit` — build greenlit.**
+
+- **Q38 premise corrected by measurement:** `newly_gated_total` is mislabeled — `consume_batch_results` re-derives outcomes from the export window for ALL batch rows each pass, so the line read ~199 (never 0) during the wedge. A stagnation counter on it needs a semantics fix + cross-iteration state → rejected as the signal.
+- **Proposed instead — stateless decision-clock predicate in `check_rate_limit`:** block iff ∃ `submitted` row with `submitted_at > max(decided_at)` and age ≥ T (default 3 h, knob `submission.stall_after_seconds`). Stateless ⇒ cannot latch (the D110 lesson); work-pending clause ⇒ deadlock-immune when the staleness is OUR quiet. D110's frozen watermark keeps the witness row alive for the stall's whole duration.
+- **Calibration (verdicts table, full history):** healthy gaps p50 7 s / p99 4.7 min / max 65 min; all four >2 h gaps classified — detector at 3 h fires on both true stalls (05-30 17.1 h / 10 k subs; 06-10 18.1 h / 13 k subs), silent on healthy-slow 06-04 and the Forge-quiet 06-07 migration gap. **Backtest 2/2 true, 0 false.** At 3 h, the 06-10 wedge would have been caught at 02:55Z — 10,800 of 13,000 dead submissions avoided.
+- **§8 decisions APPROVED (all recommended):** decision-clock predicate; T = 3 h (`submission.stall_after_seconds: 10800`, 0 = disabled); direct enforce riding the next D104 ritual restart (the full-history backtest is the shadow evidence); extend `check_rate_limit`/`RateLimitStatus` (avoids a third ~50 MB export parse and a second main.py seam).
+- **Next:** build increment (rate_limiter + config wiring + RED-first invariants incl. deadlock-immunity + guard-off equivalence + the four-episode replay + MANPAGE/HOW-TO/investigate-live docs) under its own D-entry; service-inert until the next ritual restart. Checkpoint #2 (post-flush train/eval) unblocked by the recovery.
+
+---
+
 ## 2026-06-11 — EOD CHECKPOINT #1 (17:06Z snapshot) — ⚠️ CRUCIBLE RUNNER WEDGED since 23:55:05Z (~17 h, zero new verdicts; relay `PROMPT_CRUCIBLE_RUNNER_WEDGE.md`) — pre-stall v17 funnel healthy (2.94 % comp, FIRST iv_minus_rv component); new arms still starved → F-track case confirmed; F3 criterion clock NOT started
 
 **First daily reassess vs the 2026-06-10T18:53:47Z baseline. Headline: Crucible's runner is hung — process alive, 0 % CPU, blocked in `futex_do_wait` since 23:55:05Z; last `runner_done` 23:55:02Z, three run_ids in-flight forever (`f0b05b4b`, `20180605`, `bf6b7ce1`); exports republish byte-identical (49,895,047 B) every minute; inbox consumed but queue unrun. Evidence + 3 asks drafted: `PROMPT_CRUCIBLE_RUNNER_WEDGE.md` (operator: relay; includes the unflagged 22:37:39Z runner restart that preceded the wedge). All verdict-side reads below are therefore pre-stall data.**
