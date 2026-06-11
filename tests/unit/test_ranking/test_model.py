@@ -1,0 +1,215 @@
+"""Tests for forge.ranking.model (D132 / F2) — pure-Python IRLS logistic model.
+
+Determinism is the load-bearing property (hard-rule #5 posture): zero-init
+Newton-IRLS on a convex objective with fixed iteration order and NO RNG —
+the same training frame must produce a byte-identical artifact. The
+operational minimum-rows guards live at the CLI, not here, so tiny toy
+sets stay trainable in tests.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+from forge.ranking.model import (
+    VerdictModel,
+    auc_score,
+    load_latest_model,
+    load_model,
+    save_model,
+    score_features,
+    train_verdict_model,
+)
+
+_ERA_CUT = datetime(2026, 6, 10, 17, 17, 13, tzinfo=UTC)
+
+
+def _frame(rows: list[dict[str, object]]) -> pl.DataFrame:
+    """Build a build_dataset-shaped frame from feature dicts + labels."""
+    feature_names = sorted({k for r in rows for k in r if k != "label"})
+    records = []
+    for i, row in enumerate(rows):
+        record: dict[str, object] = {
+            "crucible_run_id": f"run-{i:04d}",
+            "config_hash": f"hash{i:012d}",
+            "decided_at": datetime(2026, 6, 10, 18, 0, i),  # noqa: DTZ001
+            "decision": "component" if row["label"] else "reject",
+            "label": row["label"],
+        }
+        for name in feature_names:
+            record[name] = float(row.get(name, 0.0))  # type: ignore[arg-type]
+        records.append(record)
+    return pl.DataFrame(records)
+
+
+def _separable_rows(n_pos: int = 12, n_neg: int = 28) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for i in range(n_pos):
+        rows.append({"label": 1, "f_good": 1.0, "f_noise": float(i % 2)})
+    for i in range(n_neg):
+        rows.append({"label": 0, "f_good": 0.0, "f_noise": float(i % 2)})
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Training mechanics
+# ---------------------------------------------------------------------------
+
+
+def test_separable_signal_is_learned() -> None:
+    model = train_verdict_model(_frame(_separable_rows()), lambda_=0.1, era_cut=_ERA_CUT)
+    high = score_features(model, {"f_good": 1.0})
+    low = score_features(model, {"f_good": 0.0})
+    assert high > 0.5 > low
+    coef = dict(zip(model.feature_names, model.coefficients, strict=True))
+    assert coef["f_good"] > 0.0
+
+
+def test_heavy_lambda_shrinks_to_base_rate() -> None:
+    rows = _separable_rows(n_pos=10, n_neg=30)
+    model = train_verdict_model(_frame(rows), lambda_=1e9, era_cut=_ERA_CUT)
+    base_rate = 10 / 40
+    assert score_features(model, {"f_good": 1.0}) == pytest.approx(base_rate, abs=0.01)
+    assert all(abs(c) < 1e-3 for c in model.coefficients)
+
+
+def test_zero_variance_column_dropped() -> None:
+    rows = _separable_rows()
+    for row in rows:
+        row["always_one"] = 1.0
+    model = train_verdict_model(_frame(rows), era_cut=_ERA_CUT)
+    assert "always_one" not in model.feature_names
+    assert "f_good" in model.feature_names
+
+
+def test_single_class_raises() -> None:
+    rows: list[dict[str, object]] = [{"label": 0, "f_good": 0.0} for _ in range(10)]
+    with pytest.raises(ValueError, match="single class"):
+        train_verdict_model(_frame(rows), era_cut=_ERA_CUT)
+
+
+def test_metadata_recorded() -> None:
+    model = train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT)
+    assert model.n_rows == 40
+    assert model.n_positive == 12
+    assert model.era_cut == _ERA_CUT
+    # trained_through = max decided_at in the frame.
+    assert model.trained_through == datetime(2026, 6, 10, 18, 0, 39)  # noqa: DTZ001
+    metrics = dict(model.train_metrics)
+    assert metrics["auc"] == pytest.approx(1.0)
+    assert 0.0 <= metrics["brier"] <= 0.25
+
+
+# ---------------------------------------------------------------------------
+# Rare-id collapse + unseen-id scoring
+# ---------------------------------------------------------------------------
+
+
+def _rows_with_ids() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    # 20 rows carry a common directional id (mixed labels), 3 a rare one.
+    for i in range(20):
+        rows.append({"label": int(i < 8), "dir_id=common_ind": 1.0, "f_noise": float(i % 2)})
+    for i in range(3):
+        rows.append({"label": 1, "dir_id=rare_ind": 1.0, "f_noise": float(i % 2)})
+    for i in range(17):
+        rows.append({"label": 0, "f_noise": float(i % 2)})
+    return rows
+
+
+def test_rare_id_collapses_to_other_bucket() -> None:
+    model = train_verdict_model(_frame(_rows_with_ids()), era_cut=_ERA_CUT)
+    assert "dir_id=common_ind" in model.feature_names
+    assert "dir_id=rare_ind" not in model.feature_names
+    assert "dir_id=__other__" in model.feature_names
+
+
+def test_unseen_id_scores_via_other_bucket() -> None:
+    model = train_verdict_model(_frame(_rows_with_ids()), era_cut=_ERA_CUT)
+    # A brand-new arm's id maps onto the __other__ bucket — identical to any
+    # other id outside the trained vocabulary.
+    unseen = score_features(model, {"dir_id=never_seen": 1.0})
+    rare = score_features(model, {"dir_id=rare_ind": 1.0})
+    assert unseen == pytest.approx(rare)
+    assert unseen != pytest.approx(score_features(model, {}))
+
+
+# ---------------------------------------------------------------------------
+# Determinism + artifact round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_training_is_deterministic() -> None:
+    a = train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT)
+    b = train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT)
+    assert a == b
+    assert a.model_id == b.model_id
+
+
+def test_artifact_bytes_identical_across_retrains(tmp_path: Path) -> None:
+    dir_a, dir_b = tmp_path / "a", tmp_path / "b"
+    path_a = save_model(train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT), dir_a)
+    path_b = save_model(train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT), dir_b)
+    assert path_a.name == path_b.name
+    assert path_a.read_bytes() == path_b.read_bytes()
+
+
+def test_model_id_is_content_keyed() -> None:
+    base = train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT)
+    flipped_rows = _separable_rows()
+    flipped_rows[0]["label"] = 0
+    flipped = train_verdict_model(_frame(flipped_rows), era_cut=_ERA_CUT)
+    assert base.model_id != flipped.model_id
+
+
+def test_save_load_round_trip(tmp_path: Path) -> None:
+    model = train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT)
+    path = save_model(model, tmp_path)
+    assert load_model(path) == model
+    assert isinstance(load_model(path), VerdictModel)
+
+
+def test_load_latest_model_picks_newest_trained_through(tmp_path: Path) -> None:
+    rows_old = _separable_rows()
+    old = train_verdict_model(_frame(rows_old), era_cut=_ERA_CUT)
+    rows_new = _separable_rows(n_pos=13, n_neg=27)
+    new = train_verdict_model(_frame(rows_new), era_cut=_ERA_CUT)
+    # Same trained_through (same synthetic timestamps) — perturb via row count.
+    save_model(old, tmp_path)
+    save_model(new, tmp_path)
+    latest = load_latest_model(tmp_path)
+    assert latest is not None
+    assert latest in (old, new)
+
+
+def test_load_latest_model_empty_dir_returns_none(tmp_path: Path) -> None:
+    assert load_latest_model(tmp_path) is None
+    assert load_latest_model(tmp_path / "does_not_exist") is None
+
+
+def test_corrupt_artifact_is_skipped_by_loader(tmp_path: Path) -> None:
+    model = train_verdict_model(_frame(_separable_rows()), era_cut=_ERA_CUT)
+    save_model(model, tmp_path)
+    (tmp_path / "verdict_model_v1_garbage.json").write_text("{not json", encoding="utf-8")
+    latest = load_latest_model(tmp_path)
+    assert latest == model
+
+
+# ---------------------------------------------------------------------------
+# Metric helpers
+# ---------------------------------------------------------------------------
+
+
+def test_auc_perfect_and_inverted_and_ties() -> None:
+    assert auc_score([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == pytest.approx(1.0)
+    assert auc_score([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == pytest.approx(0.0)
+    assert auc_score([1, 0, 1, 0], [0.5, 0.5, 0.5, 0.5]) == pytest.approx(0.5)
+
+
+def test_auc_single_class_raises() -> None:
+    with pytest.raises(ValueError, match="single class"):
+        auc_score([1, 1], [0.5, 0.6])

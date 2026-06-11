@@ -147,6 +147,22 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
         sample_size         INTEGER NOT NULL
     )
     """,
+    # D132 / F2 — learned-verdict-model shadow telemetry. One row per
+    # (submitted candidate, model): the model's calibrated P(component) next
+    # to the incumbent §6.2 composite score, so `forge ranker-model eval` can
+    # compare both against later verdicts. Written by
+    # `forge.ranking.shadow.run_shadow_scoring` AFTER selection + submission —
+    # never read by the production loop (F3 is a separate gate).
+    """
+    CREATE TABLE IF NOT EXISTS shadow_scores (
+        forge_candidate_id  UUID NOT NULL,
+        model_id            VARCHAR(64) NOT NULL,
+        model_score         DOUBLE NOT NULL,
+        composite_score     DOUBLE NOT NULL,
+        scored_at           TIMESTAMP NOT NULL,
+        PRIMARY KEY (forge_candidate_id, model_id)
+    )
+    """,
 )
 
 TABLE_NAMES: Final[frozenset[str]] = frozenset(
@@ -158,5 +174,6 @@ TABLE_NAMES: Final[frozenset[str]] = frozenset(
         "grammar_proposals",
         "promoted_patterns",
         "verdicts",
+        "shadow_scores",
     },
 )

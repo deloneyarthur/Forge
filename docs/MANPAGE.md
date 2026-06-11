@@ -159,8 +159,41 @@ cp ~/forge_data/forge.db /tmp/forge_snap.db
 forge ranker-model dataset --forge-db /tmp/forge_snap.db --out /tmp/verdict_dataset.parquet
 ```
 
-(`train` / `eval` are F2 commands — designed in `docs/proposals/learned-ranker.md`,
-not yet built.)
+### forge ranker-model train
+
+Train the verdict model on the honest era and save the artifact (D132 / F2 —
+manual, run at the daily checkpoints). Refuses datasets under 50 rows / 5
+positives. Artifacts are append-only canonical JSON with coefficients by
+feature name; the daemon shadow-scores against the newest artifact in
+`<forge_data>/models/` from its next batch (telemetry only until F3).
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML defaults (db_path, models dir). |
+| `--exports-dir` | path | exports default | Crucible exports dir (registry snapshot). |
+| `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override. |
+| `--lambda` | float | 1.0 | L2 regularization strength. |
+| `--models-dir` | path | `<config db_path parent>/models` | Artifact dir (NOT derived from `--forge-db` — that's a snapshot). |
+
+### forge ranker-model eval
+
+Shadow vs incumbent readout on decided verdicts (the F3 criterion: model AUC ≥
+incumbent + 0.05 AND precision@K ≥ incumbent's, on ≥3 consecutive daily
+checkpoints of ≥150 fresh verdicts each). Prints AUC/precision@K/Brier and a
+calibration table per model_id.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML default for the DB path. |
+| `--since` | str | clean-era boundary | ISO window start (naive = UTC). |
+
+```
+cp ~/forge_data/forge.db /tmp/forge_snap.db
+forge ranker-model train --forge-db /tmp/forge_snap.db
+forge ranker-model eval --forge-db /tmp/forge_snap.db --since 2026-06-11T00:00:00Z
+```
 
 ### forge grammar list-proposals
 
@@ -343,6 +376,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 | `grammar_versions` | Grammar change history (version, sha256, operator initials). |
 | `grammar_proposals` | Refinement proposals (pending/approved/rejected/applied). |
 | `promoted_patterns` | Discovered patterns across promoted strategies. |
+| `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. Written post-submission; never read by the loop. |
 
 ---
 

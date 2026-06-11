@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import duckdb
 from crucible_contracts import GatedRun, StrategyConfig
@@ -182,3 +183,149 @@ def test_feature_extraction_roundtrips_through_config_json() -> None:
     config = minimal_strategy_config()
     rehydrated = StrategyConfig.model_validate_json(config.model_dump_json())
     assert extract_features(config, _REGISTRY) == extract_features(rehydrated, _REGISTRY)
+
+
+# ---------------------------------------------------------------------------
+# 4 — training determinism (F2): same DB snapshot → byte-identical artifact
+# ---------------------------------------------------------------------------
+
+
+def test_training_is_deterministic_byte_identical(tmp_path: Path) -> None:
+    """No RNG exists in the train path: two trains on the same frame must
+    produce byte-identical artifacts (hard-rule #5 posture, D132 decision 2)."""
+    import polars as pl
+
+    from forge.ranking.model import save_model, train_verdict_model
+
+    records = []
+    for i in range(30):
+        records.append(
+            {
+                "crucible_run_id": f"run-{i:04d}",
+                "config_hash": f"hash{i:012d}",
+                "decided_at": datetime(2026, 6, 10, 18, 0, i),  # noqa: DTZ001
+                "decision": "component" if i % 5 == 0 else "reject",
+                "label": int(i % 5 == 0),
+                "f_signal": float(i % 5 == 0),
+                "f_noise": float(i % 3),
+            }
+        )
+    frame = pl.DataFrame(records)
+    path_a = save_model(train_verdict_model(frame, era_cut=CLEAN_ERA_LABEL_CUT), tmp_path / "a")
+    path_b = save_model(train_verdict_model(frame, era_cut=CLEAN_ERA_LABEL_CUT), tmp_path / "b")
+    assert path_a.name == path_b.name
+    assert path_a.read_bytes() == path_b.read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# 5 — shadow no-op (F2): a model artifact must not change what gets submitted
+# ---------------------------------------------------------------------------
+
+
+_LOOSE_PREFILTER_YAML = """\
+prefilter:
+  signal_density:
+    min_activations: 1
+  expected_trade_count:
+    min_trades: 1
+    min_pass_probability: 0.0
+    min_bucket_samples: 1000000
+  predicted_activations:
+    min_entries: 1
+  novelty:
+    max_jaccard_overlap: 1.0
+  signal_correlation:
+    max_jaccard_overlap: 1.0
+  regime_exposure:
+    max_single_regime_concentration: 1.0
+  permutation_test:
+    n_permutations: 10
+    p_value_threshold: 1.0
+    forward_horizon_days: 5
+  auto_tune:
+    enabled: false
+    min_promotion_rate: 0.005
+    max_promotion_rate: 0.05
+    adjustment_pct_per_step: 0.10
+    max_cumulative_adjustment: 0.30
+"""
+
+
+def test_shadow_scoring_never_changes_the_submitted_set(tmp_path: Path) -> None:
+    """Same seed, model artifact present vs absent → identical submitted
+    config_hash sets; the only difference is shadow_scores telemetry.
+
+    The hermetic sandbox runs on the synthetic feature cache, which the
+    production battery rightly rejects wholesale — so the battery is
+    loosened to the floor here to get real submissions through the full
+    rank → submit → shadow path.
+    """
+    import polars as pl
+    from typer.testing import CliRunner
+
+    from forge.cli.main import app
+    from forge.ranking.model import save_model, train_verdict_model
+    from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
+
+    runner = CliRunner()
+    hashes: dict[str, list[str]] = {}
+    shadow_counts: dict[str, int] = {}
+    for label in ("absent", "present"):
+        root = tmp_path / label
+        root.mkdir()
+        forge_db = root / "forge.db"
+        build_synthetic_crucible_db(root / "crucible.db").close()
+        prefilter_yaml = root / "prefilter.yaml"
+        prefilter_yaml.write_text(_LOOSE_PREFILTER_YAML, encoding="utf-8")
+        if label == "present":
+            records = []
+            for i in range(30):
+                records.append(
+                    {
+                        "crucible_run_id": f"run-{i:04d}",
+                        "config_hash": f"hash{i:012d}",
+                        "decided_at": datetime(2026, 6, 10, 18, 0, i),  # noqa: DTZ001
+                        "decision": "component" if i % 5 == 0 else "reject",
+                        "label": int(i % 5 == 0),
+                        "hypothesis=mean_reversion": 1.0,
+                        "f_noise": float(i % 3),
+                    }
+                )
+            save_model(
+                train_verdict_model(pl.DataFrame(records), era_cut=CLEAN_ERA_LABEL_CUT),
+                root / "models",
+            )
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--no-config",
+                "--seed",
+                "7",
+                "--batch-size",
+                "2",
+                "--max",
+                "200",
+                "--forge-db",
+                str(forge_db),
+                "--inbox",
+                str(root / "inbox"),
+                "--crucible-db",
+                str(root / "crucible.db"),
+                "--prefilter-yaml",
+                str(prefilter_yaml),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        with db_connection(forge_db) as conn:
+            hashes[label] = sorted(
+                h for (h,) in conn.execute("SELECT config_hash FROM submissions").fetchall()
+            )
+            row = conn.execute("SELECT count(*) FROM shadow_scores").fetchone()
+            assert row is not None
+            shadow_counts[label] = row[0]
+
+    assert hashes["absent"] == hashes["present"]
+    assert len(hashes["present"]) > 0
+    assert shadow_counts["absent"] == 0
+    assert shadow_counts["present"] == len(hashes["present"])

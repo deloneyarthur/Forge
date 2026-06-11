@@ -1748,6 +1748,22 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             typer.echo(f"funnel_export: {funnel_path}")
         except Exception as exc:
             typer.echo(f"funnel_export: skipped (non-fatal): {exc}")
+        # D132 / F2: shadow-score the submitted candidates against the latest
+        # verdict-model artifact. Telemetry only — selection and submission
+        # already happened above, and run_shadow_scoring never raises (no
+        # artifact in {forge_data}/models = normal pre-training state, 0 rows).
+        from forge.ranking.shadow import run_shadow_scoring
+
+        shadow_count = run_shadow_scoring(
+            conn,
+            models_dir=forge_db_path.parent / "models",
+            candidates=ranked,
+            registry=registry,
+            batch_id=str(result.batch_id),
+            scored_at=batch.submitted_at,
+        )
+        if shadow_count:
+            typer.echo(f"shadow_scores={shadow_count}")
     timings["submit"] = _time.monotonic() - _t_submit
     typer.echo(
         f"batch_id={result.batch_id} submitted={result.submitted_count} "

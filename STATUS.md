@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-10 — D134: F2 BUILT (verdict model + shadow telemetry) — IRLS model w/ byte-identical artifacts, `shadow_scores` post-submit hook, train/eval CLI; 1,523/0, mypy 0/88; INERT until ritual restart + first production train (both operator-gated)
+
+**The D132 F-track's second gate executed (TDD, 32 RED-first tests).** Pure-Python Newton-IRLS (zero deps, no RNG — same frame = byte-identical artifact, invariant-pinned), rare-id `__other__` buckets give new arms a score-time prior, append-only `models/` artifacts w/ named coefficients. `run_shadow_scoring` hooks AFTER submit (loop-level invariant: artifact present vs absent → identical submitted sets); `shadow_scores` also persists the incumbent composite (never stored before). `forge ranker-model train` (manual, ≥50 rows/≥5 positives) + `eval` (AUC/P@K/Brier/calibration vs incumbent, prints the F3 `criterion(+0.05)` verdict; labels = the dataset's own `label_for`, cannot drift).
+
+- **Smoke (live snapshot 23:55Z): 5.4 s train** — 2,117 rows / 61 positive / 89 features, train_auc 0.927 (in-sample). Top coefs sane (`dir_id=put_wall_distance_pct` +0.59, `exit=target_exit` +0.44, `rank_k` −0.47). Artifact to /tmp only; **`~/forge_data/models/` deliberately empty.**
+- **To activate shadow (operator):** (1) D104 ritual restart onto this code; (2) `cp ~/forge_data/forge.db /tmp/… && uv run forge ranker-model train --forge-db /tmp/…` (writes to `~/forge_data/models/`). Order irrelevant; both required; production ranking unaffected either way. Then daily: re-train + `eval` at each checkpoint — criterion clock starts at the first ≥150-fresh-verdict window.
+- **Next:** F3 (scorer wiring + staleness/era guards + per-arm floor) only after ≥3 consecutive PASS checkpoints AND a separate go. Watches unchanged (first v17 batches; new-arm draws = EOD read #1; em tiny-n weight).
+
+---
+
 ## 2026-06-10 — D133: F1 BUILT (learned-ranker dataset track) — `forge.ranking.features` + `forge.ranking.dataset` + `forge ranker-model dataset` CLI; 1,491/0, mypy 0/85; service-inert (no restart needed)
 
 **The D132 F-track's first gate executed same-session (TDD, 33 RED-first tests).** Single-codepath feature extraction (schema v1, ~35 config-structural dims; band normalizations read the grammar's own tables incl. v16 trend overrides) + honest-era dataset builder (era cut ≥ **2026-06-10T17:17:13Z** inclusive, label = component/promote AND D128-honest coverage via the new single-sourced `honest_regime_coverage_row`, keep-all refit rows) + parquet CLI. Invariants pinned: era constant byte-exact, boundary-second inclusivity, honesty-predicate parity (cannot drift from the reward path), config_json round-trip skew-proof. **Daemon untouched** — new modules unimported by the running service; rejection_weights delegation behavior-identical (feedback suite 262/0).

@@ -28,6 +28,7 @@ from forge.feedback.rejection_weights import (
 from forge.ranking.features import extract_features
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
     import duckdb
@@ -36,6 +37,18 @@ if TYPE_CHECKING:
 # A positive label requires BOTH a positive decision and honest coverage;
 # any reject variant is 0.
 _POSITIVE_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
+
+
+def parse_gate_results(raw: str) -> dict[str, GateResult]:
+    """Rehydrate a verdicts.gate_results JSON payload."""
+    return {name: GateResult.model_validate(p) for name, p in json.loads(raw).items()}
+
+
+def label_for(decision: str, gate_results: Mapping[str, GateResult]) -> int:
+    """THE label: positive decision AND D128-honest coverage. Shared by the
+    dataset builder and `forge.ranking.evaluation` so they cannot drift."""
+    return int(decision in _POSITIVE_DECISIONS and honest_regime_coverage_row(gate_results))
+
 
 _IDENTITY_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "crucible_run_id": pl.Utf8,
@@ -78,11 +91,7 @@ def build_dataset(
     feature_names: set[str] = set()
     for run_id, config_hash, decision, decided_at, gate_results_json, config_json in rows:
         config = StrategyConfig.model_validate_json(config_json)
-        gate_results = {
-            name: GateResult.model_validate(payload)
-            for name, payload in json.loads(gate_results_json).items()
-        }
-        label = int(decision in _POSITIVE_DECISIONS and honest_regime_coverage_row(gate_results))
+        label = label_for(decision, parse_gate_results(gate_results_json))
         features = extract_features(config, registry).as_dict()
         feature_names.update(features)
         records.append(
