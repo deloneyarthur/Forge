@@ -1,6 +1,8 @@
 # Learned Verdict Model for Ranking — Design Proposal (F-track)
 
-**Status: PROPOSED — operator-gated at three points (F1 / F2 / F3 below). No code exists yet.**
+**Status: APPROVED 2026-06-10 — all six §8 decisions resolved (in-session AskUserQuestion,
+every recommended option chosen). F1 and F2 are greenlit; F3 remains gated on the §4
+promotion criterion plus its own operator go. No code exists yet as of approval.**
 **Date:** 2026-06-10. Origin: operator brainstorm session ("should we incorporate learning
 prediction models for strategy generation?").
 **Spec anchors:** §6.2 (composite score; the `prior_promotion_proximity` learning slot),
@@ -249,15 +251,20 @@ Mechanism (the D103 per-hypothesis-floor precedent, same insertion point):
   scorer wiring + guards + `model_id` cohort key + per-arm floor + invariants 5–6 +
   `docs/DECISIONS.md` entry + MANPAGE/architecture doc updates in the same commit.
 
-## 8. Operator decisions needed before F1 starts
+## 8. Operator decisions — DECIDED 2026-06-10 (in-session AskUserQuestion)
 
-1. **Approve the F-track shape** (shadow-first, three gates, floor coupled to F3)?
-2. **Solver dependency:** pure-Python IRLS, zero new deps (recommended) — or scikit-learn?
-3. **Slot:** upgrade `prior_promotion_proximity` (recommended; spec's designated slot) —
-   or add a sixth composite term with its own weight?
-4. **F3 criterion defaults:** 3 consecutive checkpoints / ≥150 verdicts / AUC margin
-   +0.05 / precision@K parity — acceptable?
-5. **Floor constants:** K=25 honest verdicts to graduate an arm; 2 slots per young arm,
-   ≤10% of batch — acceptable?
-6. **Refit children:** keep all rows per config_hash (recommended, D124-consistent) —
-   or first-decision-only?
+1. **F-track shape: APPROVED as designed** — shadow-first, three gates, floor coupled
+   to F3. (The auto-train-in-F2 variant was offered and not chosen: the trainer is
+   invoked manually at the daily checkpoints during the calibration period.)
+2. **Solver: pure-Python Newton–IRLS** — zero new dependencies.
+3. **Slot: upgrade `prior_promotion_proximity`** — weight stays 0.10; Jaccard becomes
+   the fallback path.
+4. **F3 criterion: defaults stand** — ≥3 consecutive daily checkpoints, each ≥150
+   newly-decided honest verdicts across ≥5 batches; model AUC ≥ incumbent + 0.05 AND
+   precision@K ≥ incumbent.
+5. **Floor constants: K=25 honest verdicts; 2 slots per young arm; ≤10% of batch.**
+6. **Refit children: keep all rows** (independent gate evaluations, D124-consistent).
+
+**Effect:** F1 (features + dataset) and F2 (shadow model + eval) are greenlit and build
+in order. F3 ships only after the decision-4 criterion is met AND a separate operator go,
+and only together with the decision-5 floor.
