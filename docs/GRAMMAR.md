@@ -285,15 +285,16 @@ The trend overrides widen the UPPER edge only: systematically buying low-delta/O
 ### R3: Volatility-event strategies require event-proximity gate
 
 > **(v2, D039 + M-9)** — pool widened from 2 to 5 event-proximity indicators
-> and ETF-incompatibility added.
+> and ETF-incompatibility added. **(v18, D135)** — pool widened to 6:
+> `pre_earnings_setup` (operator-approved adoption cut).
 
-**What.** When `hypothesis == "volatility_event"`, at least one `regime_filter` signal must reference one of the five event-proximity indicators: `days_to_earnings`, `days_to_fomc`, `days_to_cpi`, `days_to_nfp`, `days_to_opex` (all `calendar` family). **ETF exception:** ETF underlyings (`SPY`, `QQQ`, `IWM`, `DIA`) have no earnings, so `days_to_earnings` returns the sentinel 999 and never fires — the (ETF underlying, `days_to_earnings`) combination is rejected at validation time (T1.4/D039). On ETFs the gate must use a macro-calendar indicator instead.
+**What.** When `hypothesis == "volatility_event"`, at least one `regime_filter` signal must reference one of the six event-proximity indicators: `days_to_earnings`, `days_to_fomc`, `days_to_cpi`, `days_to_nfp`, `days_to_opex`, `pre_earnings_setup` (all `calendar` family). **ETF exception:** ETF underlyings (`SPY`, `QQQ`, `IWM`, `DIA`) have no earnings, so `days_to_earnings` returns the sentinel/far value and never fires — the (ETF underlying, `days_to_earnings`) combination is rejected at validation time (T1.4/D039). `pre_earnings_setup` composes `days_to_earnings`, so it carries the same ETF rejection (D135). On ETFs the gate must use a macro-calendar indicator instead.
 
-**Why.** Volatility-event strategies depend on a discrete event happening (earnings, FOMC, CPI, NFP, OPEX) — firing far from any event means the volatility setup hasn't materialized. The gate forces declaration of the event the strategy is anchoring to. The macro-calendar additions (D039) make the hypothesis usable on ETFs, which have no single-name earnings. (All five are sampled as regime gates per `_INDICATOR_THRESHOLD_TABLE` — M-9 added the threshold entries for the three macro indicators that D039 introduced but left unsamplable.)
+**Why.** Volatility-event strategies depend on a discrete event happening (earnings, FOMC, CPI, NFP, OPEX) — firing far from any event means the volatility setup hasn't materialized. The gate forces declaration of the event the strategy is anchoring to. The macro-calendar additions (D039) make the hypothesis usable on ETFs, which have no single-name earnings. (All are sampled as regime gates per `_INDICATOR_THRESHOLD_TABLE` — M-9 added the threshold entries for the three macro indicators that D039 introduced but left unsamplable.) `pre_earnings_setup` (v18, D135) is the composed pre-earnings IV-run-up conditioner — `days_to_earnings ∈ [enter_min, enter_max]` (calendar days, sampled centered on [7, 14]) AND `rv_rank < rv_q` — expressing the Chung-Louis / Gao-Xing-Zhang region at full fidelity in the existing one-gate slot; Crucible's mandatory `earnings_exit` forces the pre-announcement exit, which is exactly the variant that dodged the post-2013 decay.
 
 **Cost.** Medium. Excludes volatility-event strategies without an explicit event reference.
 
-**Evidence to relax.** Promoted volatility-event strategies that use a non-calendar event proxy (e.g., "iv_spike_above_threshold" as a generic event indicator).
+**Evidence to relax.** Promoted volatility-event strategies that use a non-calendar event proxy (e.g., "iv_spike_above_threshold" as a generic event indicator). (Fired once, in composed form: the v18 `pre_earnings_setup` admission — still calendar-anchored.)
 
 ---
 

@@ -284,6 +284,50 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=None,
         op_directional="<",  # fire when IV cheap vs the name's own realized
     ),
+    # ----- D135 (v18) adoption — Crucible shelf indicators -----
+    # iv_term_slope: per-name ATM IV at ~back_dte(90cal) minus ATM IV at
+    # ~front_dte(30cal), annualized decimals (Vasquez JFQA 2017: upward slope
+    # positively predicts the name's option returns → op ">", buy steep
+    # contango). Range AUDITED against the live feature cache (2026-06-11
+    # probe, 6 names x ~2,119 bars): median ≈ +0.005..+0.01; "> 0.01" fires
+    # on ~44-49% of bars, "> 0.04" on ~5-20% — so (0.01, 0.04) spans
+    # above-median to clearly-steep at the same ~10-50% selectivity band as
+    # iv_minus_rv. Known failure mode (their as-built note): imminent
+    # earnings inflate FRONT IV → fake-NEGATIVE slope → the ">" gate goes
+    # quiet pre-earnings (a conservative miss, not a false fire).
+    # volatility_event DIRECTIONAL via C2 (iv_structure); the second
+    # medium-horizon ve anchor (A2 → full Q28 lift). Regime use deliberately
+    # None (the R1-sibling gate question stays open, as with iv_minus_rv).
+    "iv_term_slope": IndicatorThresholdSpec(
+        directional_range=(0.01, 0.04),
+        regime_range=None,
+        op_directional=">",
+    ),
+    # option_momentum: DELIBERATELY ABSENT (no spec entry → never samplable
+    # in any threshold role). The 2026-06-11 live-cache probe found the
+    # series data-starved on the current tier: 0 non-NaN bars over ~8.5y on
+    # MSFT/AMZN/GOOGL/META/NFLX/TSLA, and only 22-146 on AAPL/AMD/KO — below
+    # the §5.3.3 min_activations=30 floor at EVERY threshold (absolute and
+    # percentile). Activating it would put a provably-dead arm in the v18
+    # cohort. Q39 tracks re-activation once Crucible's chain coverage
+    # supports the monthly-straddle construction; the horizon entry (126) is
+    # already in place so activation is a one-line table add.
+    # pre_earnings_setup: composed binary conditioner — 1.0 iff
+    # days_to_earnings ∈ [enter_min, enter_max] AND rv_rank < rv_q (Chung &
+    # Louis / Gao-Xing-Zhang: buy premium ~5-10 td pre-announcement when
+    # recent realized vol is LOW; Crucible's mandatory earnings_exit forces
+    # the pre-event exit, dodging the decayed announcement-hold leg). Gate
+    # `> 0.5` is degenerate by design (binary emission — the market_state
+    # precedent); the real knobs (enter window / rv_q) ride the same params
+    # via the sampler (`_sample_pre_earnings_setup_params`). Regime-only:
+    # an R3-class event-proximity gate, never a directional. Probe
+    # (2026-06-11): fires 114-152 days/name at [7,14]/q50 — comfortably
+    # above the min_activations floor.
+    "pre_earnings_setup": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=(0.5, 0.5),
+        op_regime=">",
+    ),
     # market_state: sign of the reference's trailing 252-session return,
     # emits ±1 (0 only on an exactly-flat window). Threshold is degenerate by
     # design: the only meaningful cut is 0 (up-market vs down-market —

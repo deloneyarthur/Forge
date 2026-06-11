@@ -1431,3 +1431,157 @@ def test_v17_market_state_gate_allowed_on_rank_arm(
         if uses_ms and cfg.combiner.type == "cross_sectional_rank":
             seen_ms_rank += 1
     assert seen_ms_rank > 0
+
+
+# ---------------------------------------------------------------------------
+# D135 (v18) — adoption cut: iv_term_slope ve directional (A2), pre_earnings
+# setup in R3; option_momentum deliberately NOT activated (data-starved, Q39)
+# ---------------------------------------------------------------------------
+
+
+def _v18_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """Fixture registry + the live-registry ids relevant to the v18 cut
+    (flags/families exactly as the 52-id snapshot
+    `registry_snapshot_2026-06-10T172339Z.json` publishes them)."""
+    extra = (
+        IndicatorMetadata(
+            id="iv_term_slope",
+            version=1,
+            family="iv_structure",
+            lookback=0,
+            params_schema={},
+            rank_per_name_coherent=False,
+            market_wide_by_design=False,
+        ),
+        IndicatorMetadata(
+            id="option_momentum",
+            version=1,
+            family="smart_money",
+            lookback=147,
+            params_schema={},
+            rank_per_name_coherent=False,
+            market_wide_by_design=False,
+        ),
+        IndicatorMetadata(
+            id="pre_earnings_setup",
+            version=2,
+            family="calendar",
+            lookback=252,
+            params_schema={},
+            rank_per_name_coherent=False,
+            market_wide_by_design=False,
+        ),
+    )
+    return base.model_copy(update={"indicators": (*base.indicators, *extra)})
+
+
+def test_v18_ve_draws_iv_term_slope_directional(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D135 (v18): with threshold + horizon entries live, iv_term_slope
+    auto-enters volatility_event's DIRECTIONAL pool via C2 (iv_structure).
+    Gate direction `>` — upward slope predicts option returns (Vasquez
+    JFQA 2017; long-only book buys the steep-contango names). Its 21d
+    horizon is medium_lookback, making it the second medium-horizon ve
+    anchor (the A2 condition; full Q28 lift) — assert swing_mid draws."""
+    reg = _v18_registry(registry)
+    space = build_search_space(grammar, reg)
+    seen = seen_swing_mid = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
+        d = next(s for s in cfg.signals if s.role == "directional")
+        if d.indicators[0] != "iv_term_slope":
+            continue
+        seen += 1
+        assert d.params["op"] == ">", cfg.name
+        assert 0.01 <= d.params["threshold"] <= 0.04, cfg.name
+        if cfg.dte_bucket == "swing_mid":
+            seen_swing_mid += 1
+        else:
+            assert cfg.dte_bucket == "swing_short", cfg.name  # S4 medium class
+    assert seen > 0
+    assert seen_swing_mid > 0
+
+
+def test_v18_ve_draws_pre_earnings_setup_regime_gate(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D135 (v18): pre_earnings_setup joins R3's event-proximity pool. The
+    binary gate is the degenerate-by-design cut (`> 0.5`); the composed
+    params ride the same signal: enter window in CALENDAR days centered on
+    the literature's [7, 14] (their Correction note), rv_q on the
+    component-native [0, 100] scale around the shipped default 50."""
+    reg = _v18_registry(registry)
+    space = build_search_space(grammar, reg)
+    seen = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
+        g = next(s for s in cfg.signals if s.role == "regime_filter")
+        if g.indicators[0] != "pre_earnings_setup":
+            continue
+        seen += 1
+        assert g.params["threshold"] == 0.5, cfg.name
+        assert g.params["op"] == ">", cfg.name
+        assert g.params["enter_min"] in (5, 6, 7, 8, 9), cfg.name
+        assert g.params["enter_max"] in (12, 13, 14, 15, 16), cfg.name
+        assert isinstance(g.params["rv_q"], float), cfg.name
+        assert 30.0 <= g.params["rv_q"] <= 60.0, cfg.name
+    assert seen > 0
+
+
+def test_v18_pre_earnings_setup_never_on_etf_underlying(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """pre_earnings_setup composes days_to_earnings, which is far-value on
+    ETFs (no earnings) — the conjunction is a permanent 0.0 there (never
+    admits, silent zero-trade). The sampler must constrain such draws to
+    single names, exactly like days_to_earnings itself (T1.4 precedent)."""
+    from forge.enumeration.sampler import _TIER_1_ETF_UNDERLYINGS
+
+    reg = _v18_registry(registry)
+    space = build_search_space(grammar, reg)
+    seen = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
+        if not any("pre_earnings_setup" in s.indicators for s in cfg.signals):
+            continue
+        seen += 1
+        assert cfg.underlying is not None, cfg.name
+        assert cfg.underlying not in _TIER_1_ETF_UNDERLYINGS, cfg.name
+    assert seen > 0
+
+
+def test_v18_option_momentum_not_emitted(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """D135 (v18): option_momentum is deliberately NOT activated — the live
+    probe (2026-06-11) showed the series is data-starved on the current
+    tier (0 non-NaN bars on MSFT/AMZN/GOOGL/META/NFLX/TSLA over ~8.5y;
+    <=146 on the covered names; every parameterization lands below the
+    signal_density min_activations=30 floor). No threshold entry → never
+    samplable in any role (Q39 tracks re-activation)."""
+    from forge.enumeration.indicator_thresholds import is_threshold_skippable
+    from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES
+
+    assert is_threshold_skippable("option_momentum", "directional")
+    assert is_threshold_skippable("option_momentum", "regime_filter")
+    reg = _v18_registry(registry)
+    space = build_search_space(grammar, reg)
+    # The any-family pools (regime_arbitrage/tail_hedge) list it structurally
+    # but are never enumerated; every ENUMERABLE hypothesis's C2 family set
+    # excludes smart_money, so no pool edit was needed to hold it back.
+    for hyp, pool in space.directional_indicators_by_hypothesis.items():
+        if hyp in NON_ENUMERABLE_HYPOTHESES:
+            continue
+        assert "option_momentum" not in pool, hyp
+    for seed in range(300):
+        cfg = sample_config(space, reg, random.Random(seed))
+        assert not any("option_momentum" in s.indicators for s in cfg.signals), cfg.name
+
+
+def test_v18_new_ids_rank_excluded(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """All three v18 ids publish rank_per_name_coherent=False AND
+    market_wide_by_design=False — the v16 flag-derived exclusion must
+    pick them up with no Forge-side id list (fail-closed by design)."""
+    reg = _v18_registry(registry)
+    space = build_search_space(grammar, reg)
+    for ind in ("iv_term_slope", "option_momentum", "pre_earnings_setup"):
+        assert ind in space.rank_excluded_ids, ind

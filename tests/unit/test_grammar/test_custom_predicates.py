@@ -1446,3 +1446,81 @@ def test_x2_kelly_without_estimator_fails() -> None:
     result = evaluate(_predicate("kelly_requires_expected_value_estimator"), cfg, _registry())
     assert not result.passed
     assert "expected_value_estimator" in result.detail
+
+
+def test_r3_volatility_event_with_pre_earnings_setup_passes() -> None:
+    """D135 (v18): pre_earnings_setup (the composed days_to_earnings x
+    rv_rank conditioner, family calendar) joins R3's event-proximity pool —
+    it IS an earnings-proximity gate, at full fidelity in the 1-gate slot."""
+    cfg = grammar_valid_baseline(
+        underlying="AAPL",
+        hypothesis="volatility_event",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("put_call_flow",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("pre_earnings_setup",),
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="iv_crush_exit"),
+            ExitSpec(id="event_passed_exit"),
+        ),
+    )
+    result = evaluate(
+        _predicate("volatility_event_requires_event_proximity_gate"),
+        cfg,
+        _registry(),
+    )
+    assert result.passed
+
+
+def test_r3_volatility_event_with_pre_earnings_setup_on_etf_rejects() -> None:
+    """D135 (v18): pre_earnings_setup composes days_to_earnings, which is
+    far-value on ETFs (no earnings) — the conjunction never admits there
+    (permanent 0.0 = silent zero-trade). Same T1.4 rejection class."""
+    cfg = grammar_valid_baseline(
+        underlying="SPY",  # ETF — no earnings; composed gate never fires
+        hypothesis="volatility_event",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("put_call_flow",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("pre_earnings_setup",),
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="iv_crush_exit"),
+            ExitSpec(id="event_passed_exit"),
+        ),
+    )
+    result = evaluate(
+        _predicate("volatility_event_requires_event_proximity_gate"),
+        cfg,
+        _registry(),
+    )
+    assert not result.passed
+    assert "ETF" in (result.detail or "")
+    assert "pre_earnings_setup" in (result.detail or "")

@@ -116,7 +116,13 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # entries → ve directional via C2, 21d medium horizon → ve x swing_mid
     # reachable; (2) R2 pool += market_state — the rule's own
     # evidence_to_relax clause fired. The 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v17"  # type: ignore[attr-defined]
+    # D135 bumped v17 -> v18 (the operator-directed adoption cut:
+    # (1) iv_term_slope threshold/horizon entries → ve directional via C2,
+    # 21d medium horizon — the second medium ve anchor, A2 → full Q28 lift;
+    # (2) R3 pool += pre_earnings_setup incl. the ETF-incompatible sets;
+    # (3) option_momentum held back — data-starved, Q39. The 21 `rules:`
+    # textually unchanged).
+    assert grammar.grammar_version == "v18"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

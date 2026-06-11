@@ -95,6 +95,14 @@ def test_horizon_class_for_days_boundaries(days: int, expected: str) -> None:
         ("iv_rank", "medium_lookback"),
         ("pairs_zscore", "medium_lookback"),
         ("put_call_flow", "short_lookback"),
+        # D135 (v18): iv_term_slope is the SECOND medium-horizon ve anchor —
+        # the A2 condition that fully lifts Q28's ve x swing_mid cap.
+        ("iv_term_slope", "medium_lookback"),
+        # D135 (v18): 6-month straddle-return formation window; shelf-classed
+        # long even while activation is held (Q39 data starvation).
+        ("option_momentum", "long_lookback"),
+        # D135 (v18): event-proximity read, gate-only (S4 never consults it).
+        ("pre_earnings_setup", "short_lookback"),
     ],
 )
 def test_horizon_class_known_indicators(indicator: str, expected: str) -> None:

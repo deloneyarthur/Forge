@@ -160,3 +160,25 @@ Q13 in `OPEN_QUESTIONS.md` documented "100% rejection at permutation_test under 
 **Left absolute (out of scope):** `dealer_positioning` directional (call/put-wall, gamma-flip — the only `mean_reversion`-directional overlap with `volatility_event`); already-rank `iv_rank` / `rv_rank` (percentile-by-construction); and the entire `volatility_event` indicator set (`days_to_*`, vol indicators) — it fires in ~every fold, so D099 deliberately does not touch it. Because `mean_reversion`-family directional indicators are sampled only by `mean_reversion`, and `adx`/`hurst` are `trend_strength` (regime-only, not in `volatility_event`'s R3 gate), this `(indicator, role)` allowlist provably cannot leak into `volatility_event`.
 
 **Coordination:** percentile mode is interpreted on Crucible's side in **two** paths — the strategy/backtest path (`494cf96`) and the feature-cache writer that answers Forge's pre-filter `activation_dates` queries (`PROMPT_CRUCIBLE_PERCENTILE_FEATURE_CACHE.md`). Forge holds v6 emission undeployed until both are live. The percentile ranges here are calibrated to *intent* (loosen the diagnosed-too-tight constraints), not to SPY data — they are tunable as the `crucible funnel --compare v5 v6` signal comes in.
+
+---
+
+## v18 (2026-06-11, D135) — adoption-cut entries, audited against the live feature cache
+
+The D031 SPY audit predates these ids; their ranges were calibrated with a live
+`FeatureCacheClient` activation-count sweep (2026-06-11, 6-10 names x ~2,119
+bars each, `data_history_days=2400` — the Q31 probe pattern). Raw numbers in
+D135.
+
+| indicator | role | range | op | calibration evidence |
+|---|---|---|---|---|
+| `iv_term_slope` | directional | `(0.01, 0.04)` | `>` | dense series (non-NaN ≈ every bar, all names). Median ≈ +0.005..+0.01; `> 0.01` fires ~44-49% of bars, `> 0.04` ~5-20% → the range spans above-median to clearly-steep at the same ~10-50% selectivity band as `iv_minus_rv`. Units: annualized IV decimals (back ≈ 90cal ATM IV − front ≈ 30cal). |
+| `pre_earnings_setup` | regime_filter | `(0.5, 0.5)` | `>` | binary composed gate — threshold degenerate by design (the `market_state` precedent). The real knobs ride the same params via `_sample_pre_earnings_setup_params`: `enter_min ∈ {5..9}` / `enter_max ∈ {12..16}` **calendar** days (centered on the literature's [7, 14]) + `rv_q ∈ [30, 60]` on the rv_rank-native [0, 100] scale. At [7,14]/q50 the gate fires 114-152 days/name — above the §5.3.3 `min_activations=30` floor. |
+| `option_momentum` | — | **no entry** | — | **deliberately unsamplable.** The probe found the series data-starved on the current tier: 0 non-NaN bars over ~8.5y on MSFT/AMZN/GOOGL/META/NFLX/TSLA; 22-146 on AAPL/AMD/KO; ≤26 activations under percentile mode — below the `min_activations=30` floor at every parameterization. Q39 tracks re-activation; horizon already shelf-classed (126 td). |
+
+**iv_term_slope failure mode (their as-built note):** imminent earnings inflate
+front IV → fake-NEGATIVE slope → the `>` gate goes *quiet* pre-earnings — a
+conservative miss, not a false fire. Corollary: an `iv_term_slope` directional
+paired with the `pre_earnings_setup` gate is thesis-contradictory (the gate
+admits exactly when the slope reads fake-negative); such draws are C1-legal and
+will mostly die at the expected-trades prefilter — watch, don't special-case.

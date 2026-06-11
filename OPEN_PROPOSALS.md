@@ -380,3 +380,49 @@ proposal_yaml: |
 decided_at: '2026-06-10T17:38:00+00:00'
 decided_by: operator (in-session AskUserQuestion, 2026-06-10; recorded in D131)
 decision_marker: null
+---
+proposal_id: 4c5d26ec-2879-4314-8575-06cbdfef6679
+status: APPROVED
+proposed_at: '2026-06-11T23:46:00+00:00'
+proposal_type: loosen
+target: grammar_v18_adoption
+rationale: 'v18 (D135): the operator-directed adoption cut (Crucible GO doc
+  FORGE_v18_adoption_go.md, 2026-06-11 — "cut v18 now so the cohort matures
+  before the Sunday 2026-06-14 session"; data-bar 3,753/1,500 v17 decided).
+  (1) activate iv_term_slope as a volatility_event DIRECTIONAL (threshold +
+  horizon entries; auto-enters the ve pool via C2 family iv_structure; 21d
+  horizon = medium). With iv_minus_rv (v17) BOTH medium-horizon ve anchors
+  are live — the roadmap A2 condition; Q28''s ve x swing_mid structural cap
+  is fully lifted. Gate direction > threshold (Vasquez JFQA 2017: upward
+  per-name term-structure slope predicts option returns; long-only book buys
+  steep contango). (2) R3 pool += pre_earnings_setup (composed
+  days_to_earnings x rv_rank pre-earnings IV-run-up conditioner, D127/D129
+  lineage) incl. the R3 + sampler ETF-incompatible sets (composes
+  days_to_earnings -> permanent-0 on ETFs). (3) option_momentum deliberately
+  HELD BACK despite the GO doc listing it: the 2026-06-11 live-cache probe
+  showed the series data-starved on the current tier (0 non-NaN bars over
+  ~8.5y on MSFT/AMZN/GOOGL/META/NFLX/TSLA; 22-146 on AAPL/AMD/KO — below the
+  signal_density min_activations=30 floor at every parameterization).
+  Activating it would put a provably-dead arm in the v18 cohort, against the
+  GO doc''s own readability goal. Q39 tracks re-activation.'
+evidence:
+  trigger: operator_directed_adoption_cut
+  literature: 'Vasquez JFQA 2017 (IV term-structure slope); Chung-Louis /
+    Gao-Xing-Zhang (pre-earnings IV run-up, low-RV conditioner); Heston et
+    al. JF 2023 (option momentum — held back, Q39)'
+  crucible_as_built: 'registry_snapshot_2026-06-10T172339Z.json (52 ids,
+    sha256 f4f737401f298ccb…, live since D131); iv_term_slope front 30 /
+    back 90 cal ATM-IV slope; pre_earnings_setup v2 gate >0.5, rv_q on
+    [0,100], enter window calendar-day native'
+  live_probe: 'FeatureCacheClient activation sweep 2026-06-11: iv_term_slope
+    dense, median ~+0.005..+0.01, >0.01 ~44-49%, >0.04 ~5-20%;
+    pre_earnings_setup [7,14]/q50 fires 114-152 days/name; option_momentum
+    0 non-NaN on 6/10 names, max 146 bars on KO'
+proposal_yaml: |
+  # v18: iv_term_slope directional_range (0.01, 0.04) op '>' + horizon 21d;
+  # pre_earnings_setup regime (0.5, 0.5) op '>' + params enter_min {5..9} /
+  # enter_max {12..16} (calendar) / rv_q [30, 60]; R3 pool += pre_earnings_setup;
+  # ETF-incompatible sets += pre_earnings_setup; option_momentum NOT activated (Q39)
+decided_at: '2026-06-11T23:39:00+00:00'
+decided_by: operator (v18 GO relayed via Crucible FORGE_v18_adoption_go.md, 2026-06-11; recorded in D135)
+decision_marker: null

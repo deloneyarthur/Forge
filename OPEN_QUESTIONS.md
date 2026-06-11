@@ -514,7 +514,9 @@ Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exact
 
 **Tag:** `funnel`, `exports`, `relates-to-D104`, `relates-to-D096`, `low`
 
-## 2026-06-07 — Q28 — vol_event x swing_mid (the 9.7%-yield cell) is structurally capped by §3.5 S4: only `iv_rank` among vol_event directionals is medium-horizon-class — **MEDIUM SEVERITY, LOOSENING-CLASS**
+## 2026-06-07 — Q28 — vol_event x swing_mid (the 9.7%-yield cell) is structurally capped by §3.5 S4: only `iv_rank` among vol_event directionals is medium-horizon-class — **RESOLVED 2026-06-11 (v18/D135: cap fully lifted)**
+
+**RESOLVED in two operator-approved steps:** v17/D131 activated `iv_minus_rv` (21d medium horizon → first new medium-class ve directional; partial lift, first ve×swing_mid cohort verified live — 2 components / 41 decided at the v18 reassessment). v18/D135 activated `iv_term_slope` (21d medium) — the roadmap A2 condition ("class BOTH iv_term_slope and iv_minus_rv as medium-horizon S4 anchors") is now satisfied and the structural cap is gone: three medium-horizon ve directionals (`iv_rank`, `iv_minus_rv`, `iv_term_slope`) reach swing_mid via the lead-20 event bracket. Original entry below.
 
 **Symptom:** the D105 emission proof showed the bucket-weighted sampler can only push vol_event's swing_mid share to ~9% (5.1% cold → 9.2% weighted) even with the cell weighted hot. Mechanically: the DTE bucket is derived from the DIRECTIONAL's horizon (D102), and every vol_event directional except `iv_rank` (horizon 30 → medium class) is short-class (put_call_flow 5, vix_level 1, dealer family 1, days_to_* 5 → S4 permits swing_short only), so all three event-lead options snap to swing_short. The highest-yield cell in Crucible's map (9.7% on 31 decided) is reachable only via `iv_rank` + lead-20 draws.
 
@@ -751,3 +753,33 @@ session (recommended options: predicate / 3 h / direct enforce / extend
 `check_rate_limit`); build pending, service-inert until the next ritual restart.**
 
 **Tag:** `feedback-loop`, `limiter`, `crucible-coordination`, `relates-to-D110`
+
+## 2026-06-11 — Q39 — `option_momentum` is data-starved on the current tier: 0 non-NaN bars on 6/10 probed names over ~8.5y — adoption HELD at the v18 cut despite the GO doc listing it — **MEDIUM SEVERITY, CRUCIBLE-COORDINATION**
+
+**Symptom:** the v18 pre-activation calibration probe (FeatureCacheClient activation
+sweep, 2026-06-11, `data_history_days=2400`) found `option_momentum`'s series almost
+entirely NaN: **0 non-NaN bars on MSFT / AMZN / GOOGL / META / NFLX / TSLA** (control
+`rsi_2` healthy at ~2,119 bars on the same names), and only AAPL 68 / AMD 22 / KO 146
+non-NaN. Where values exist the cross-name scale is wildly heterogeneous (NVDA's 64
+values ALL below −0.30 while KO sits mostly above 0 — a fixed absolute threshold would
+mostly encode name identity). Percentile mode (`use_percentile`) works mechanically but
+yields ≤ 26 activations. **Every parameterization on every probed name lands below the
+§5.3.3 `min_activations=30` signal_density floor** — the arm cannot produce a viable
+config today.
+
+**What I did instead:** held the activation out of v18 (no `_INDICATOR_THRESHOLD_TABLE`
+entry → structurally unsamplable; test-pinned) while shelf-classing its horizon
+(126 td → long) so re-activation is a one-line table add + version bump. The GO doc's
+item-4 family question (`smart_money` pin) is moot until then — no C2 edit shipped,
+which also keeps `expected_value_estimator` out of any directional pool. Relay drafted
+with the probe numbers (their construction needs both straddle legs quoted at
+month boundaries ≥6 consecutive months — the zero-coverage names suggest the chain
+history tier, not the math; the NVDA all-below-−0.30 pattern is worth their look
+regardless).
+
+**Resolve by:** Crucible investigates coverage (data-tier vs construction bug),
+republishes or confirms; Forge re-probes (same sweep), and if ≥ the activation floor
+on a reasonable name set, activates in the next grammar cut with an audited range
+(+ the C2/family decision made deliberately at that point).
+
+**Tag:** `crucible-coordination`, `data-starvation`, `relates-to-D135`, `adoption-deferred`, `operator-visibility`

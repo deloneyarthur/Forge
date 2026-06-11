@@ -251,8 +251,11 @@ _TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"}
 # forward one to the exclusion; v12 adds the backward twin so event_momentum is
 # single-name by construction (only event_momentum draws days_since_earnings, so
 # this leaves every pre-v12 hypothesis's underlying draw byte-identical — #6).
+# D135 (v18) adds pre_earnings_setup — it composes days_to_earnings, so the
+# conjunction is a permanent 0.0 on ETFs (never admits); only new v18 draws
+# carry it, so every pre-v18 underlying sequence is unchanged (#6).
 _EARNINGS_CALENDAR_ETF_INCOMPATIBLE: frozenset[str] = frozenset(
-    {"days_to_earnings", "days_since_earnings"}
+    {"days_to_earnings", "days_since_earnings", "pre_earnings_setup"}
 )
 
 
@@ -1073,6 +1076,11 @@ def _regime_signal_params(
     params = sample_threshold_params(regime_id, "regime_filter", rng)
     if regime_id == "rv_rank":
         params.update(_sample_rv_rank_params(rng))
+    # D135 (v18): the composed pre-earnings conditioner's real knobs ride the
+    # same params dict as the degenerate `> 0.5` gate (the threshold table's
+    # (0.5, 0.5) emission).
+    if regime_id == "pre_earnings_setup":
+        params.update(_sample_pre_earnings_setup_params(rng))
     # D107 (v11 / H3): mean_reversion uses the LONG-gamma side of the flip
     # (op "<", flip below spot -> dealers long gamma -> dampening -> ranging);
     # the indicator_thresholds default op ">" is the trend / short-gamma side.
@@ -1091,6 +1099,27 @@ def _sample_rv_rank_params(rng: random.Random) -> dict[str, object]:
     return {
         "rv_window": rng.choice((10, 21)),
         "window": rng.choice((126, 252)),
+    }
+
+
+def _sample_pre_earnings_setup_params(rng: random.Random) -> dict[str, object]:
+    """D135 (v18) — Crucible pre_earnings_setup composed-indicator params.
+
+    `enter_min`/`enter_max` are CALENDAR days (days_to_earnings-native, their
+    Correction note): the literature's 5-10 *trading*-day pre-announcement
+    window is ~[7, 14] calendar — both choice sets center there (7 / 14)
+    rather than on the shipped defaults (5 / 10, a trading-day reading).
+    `rv_q` rides the component-native [0, 100] rv_rank percentile scale
+    (their Correction 1: a [0, 1] draw would never fire). The documented
+    effect concentrates where recent realized vol is LOW, so the range spans
+    stricter-than-default (30) to slightly looser (60) around the shipped
+    default 50. Live-probe check (2026-06-11): [7, 14] x q50 fires 114-152
+    days/name — comfortably above the §5.3.3 min_activations floor.
+    """
+    return {
+        "enter_min": rng.choice((5, 6, 7, 8, 9)),
+        "enter_max": rng.choice((12, 13, 14, 15, 16)),
+        "rv_q": round(rng.uniform(30.0, 60.0), 1),
     }
 
 

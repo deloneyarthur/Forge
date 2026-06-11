@@ -97,6 +97,18 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # which is what makes ve x swing_mid reachable (the partial Q28 lift; the
     # full lift adds iv_term_slope at the post-their-v10 cut, roadmap A2).
     "iv_minus_rv": 21,
+    # D135 (v18): per-name IV term-structure slope (Vasquez JFQA 2017 —
+    # monthly-sorted predictor; the slope mean-reverts over ~a month).
+    # medium_lookback → swing_short/swing_mid: the SECOND medium-horizon ve
+    # anchor, satisfying the roadmap A2 condition (full Q28 ve x swing_mid
+    # lift; iv_minus_rv was the first, v17).
+    "iv_term_slope": 21,
+    # D135 (v18): trailing 6-completed-month straddle-return mean (Heston et
+    # al. JF 2023; persistence 6-36 months). long_lookback → swing_mid/long.
+    # Shelf-classed only — NOT activated in v18 (no threshold entry): the
+    # 2026-06-11 live probe showed the series data-starved on the current
+    # tier (Q39). The entry makes the eventual activation a one-line flip.
+    "option_momentum": 126,
     # D131 (v17): trailing-252-session sign — a long, slow regime. Gate-only
     # (no directional_range), so S4 never consults this; the entry satisfies
     # the thresholdable-coverage invariant honestly.
@@ -112,6 +124,11 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # H2 (v12 / D109): days_since_earnings is the calendar countdown AFTER the
     # print (backward twin of days_to_earnings) — a near-instant read, horizon 5.
     "days_since_earnings": 5,
+    # D135 (v18): composed days_to_earnings x rv_rank pre-earnings conditioner —
+    # an event-proximity read like its parents. Gate-only (no directional_range),
+    # so S4 never consults this; the entry satisfies the thresholdable-coverage
+    # invariant honestly (the market_state precedent).
+    "pre_earnings_setup": 5,
     # ----- post_event_drift (H2 / PEAD directional) -----
     # `sue` (standardized unexpected earnings): the surprise is known instantly,
     # but its DRIFT — the tradeable edge — plays out over ~5-20 td. The signal

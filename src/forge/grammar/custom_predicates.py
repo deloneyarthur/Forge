@@ -258,12 +258,21 @@ _R3_EVENT_PROXIMITY_INDICATORS = (
     "days_to_cpi",
     "days_to_nfp",
     "days_to_opex",
+    # D135 (v18, operator-approved adoption cut — Crucible GO doc
+    # 2026-06-11): pre_earnings_setup, the composed days_to_earnings x
+    # rv_rank conditioner (family calendar). It IS an earnings-proximity
+    # gate — the full-fidelity pre-earnings IV-run-up expression in the
+    # existing 1-gate slot (D127/D129 lineage).
+    "pre_earnings_setup",
 )
 # ETF underlyings have no earnings — `days_to_earnings` returns the
 # sentinel 999 on these tickers and the gate never fires. T1.4 forbids
 # the (etf-underlying, days_to_earnings-regime) combination at validation
-# time to prevent silent zero-trade outcomes.
-_R3_ETF_INCOMPATIBLE_INDICATORS = frozenset({"days_to_earnings"})
+# time to prevent silent zero-trade outcomes. D135 (v18) adds
+# pre_earnings_setup: it composes days_to_earnings, so on ETFs the
+# conjunction is a permanent 0.0 (never admits) — same silent-zero-trade
+# class, one derivation removed.
+_R3_ETF_INCOMPATIBLE_INDICATORS = frozenset({"days_to_earnings", "pre_earnings_setup"})
 _R3_ETF_UNDERLYINGS = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 
 # §3.5 R1 IV-rank gate parameters.
