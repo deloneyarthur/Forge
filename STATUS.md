@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-10 — D132: learned-ranker design PROPOSED (`docs/proposals/learned-ranker.md`) — calibrated P(component|features) upgrading §6.2's prior_promotion_proximity slot, shadow-first (F1 dataset → F2 shadow+eval → F3 wiring+per-arm floor); docs-only, awaiting operator decisions §8
+
+**Origin: operator brainstorm ("incorporate learning prediction models for generation?") → "lets do the sketch out for it and design". No code/grammar/weights/service change — the proposal stops at three operator gates.**
+
+- **The case:** §6.2's only learning term (prior_promotion_proximity, weight 0.10) is non-discriminating — `promoted_patterns` empty, 0 promotions all-time; and per-cell weight counters can't generalize to new arms (live symptom: iv_minus_rv 2/600 submitted vs ~4% emission at the 18:53Z baseline). A regularized logistic regression over config-structural features (pure-Python Newton–IRLS, **zero new deps** — numpy/sklearn verified absent) gives the ranker an outcome gradient AND a feature-based prior for never-seen arms. Deterministic by construction (convex, zero-init, no RNG — nothing to seed); hard-rule table in the doc (#5/#6 clean).
+- **Honesty posture:** labels = component/promote under the D128 honesty predicate (imported, not copied); training rows hard-cut at the composite clean-era boundary **2026-06-10T17:17:13Z**; any future era boundary auto-obsoletes the model (era guard refuses + falls back to the Jaccard path, D076 two-mode precedent). Artifact = append-only JSON w/ coefficients by feature name (grammar_archive analog).
+- **The coupling rule:** F3 live wiring ships ONLY with the per-arm exploration floor (young arm = (role, indicator_id) < 25 honest verdicts → ≤2 reserved slots/arm, ≤10% batch, D103 diversifier-floor precedent) — otherwise the model's training data becomes conditioned on its own choices (closed-loop selection bias, the design's central risk).
+- **Also closes a telemetry gap:** F2's `shadow_scores` table persists the incumbent composite score (never stored today) — we currently can't measure whether the existing ranker ranks well at all.
+- **Next:** operator walks `docs/proposals/learned-ranker.md` §8 (6 numbered decisions: shape, solver dep, slot, F3 criterion, floor constants, refit-children rows) → F1 build on go. Watches unchanged from D131 (first v17 batches; new-arm draws — tonight's EOD read #1 doubles as this design's motivating evidence check; em tiny-n weight).
+
+---
+
 ## 2026-06-10 — D131: grammar v17 DEPLOYED + VERIFIED 17:36:10Z — iv_minus_rv live as ve directional (ve×swing_mid reachable, partial Q28 lift) + market_state in R2 (incl. rank arm); rides the v2-stamped registry AND the earnings-exit-live era
 
 **Operator: "push to v17" on the locked scope; R2 resolved via AskUserQuestion (market_state only — vix_term_slope excluded, vol-returns evidence ≠ trend conditioning). Loosening: OPEN_PROPOSALS `2d0d68ca`. Full record: [[D131]].**
