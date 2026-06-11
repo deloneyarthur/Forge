@@ -707,3 +707,33 @@ Note all four GAP rows are `market_wide_by_design`-class (or per-name chain-deri
 **Tag-update:** `decisions-recorded`
 
 **Update (2026-06-10, coda): option B SHIPPED their side (`pre_earnings_setup`, b29822f, 52-id class map) — then their validation found THE BLOCKER: the forward earnings calendar never existed.** `days_to_earnings` = 999 every bar all-time → with our `<` ops every such gate never admits; exposure measured at 86 submissions (one 2026-05-17 batch, zero verdicts — the §5 prefilter absorbed the class ever since); D127's "1.2% expressible half" re-reads as a sampling share that dies at the prefilter — the §3 region is fully data-inert today, BOTH halves. Global reading note: E1's mandatory `earnings_exit` is data-starved too — every historical backtest held through earnings; calendar-live = a future metric-era boundary for all single-name cohorts. Calendar derivation prioritization: recommended YES (`PROMPT_CRUCIBLE_CALENDAR_PRIORITY_ACK.md`, operator: pass). Two spec corrections accepted (rv_q [0,100]; all-NaN no-data; calendar-day windows ≈ [7,14]). Full record: [[D129]].
+
+---
+
+## 2026-06-11 — Q38 — §7.3 limiter never trips during an upstream Crucible stall (feedback consumer pins on the oldest unflushed batch) — **MEDIUM**
+
+**Question:** During the 2026-06-10T23:55:05Z runner wedge (~17 h, zero new verdicts — see
+`PROMPT_CRUCIBLE_RUNNER_WEDGE.md`), Forge kept submitting at full cadence: ~15.6 k v17
+configs into a gate that was deciding nothing. The §7.3 limiter never blocked because the
+feedback consumer stays pinned on the oldest unflushed batch (`00dbf3b8`, 199/200 gated —
+pre-stall), so "prev batch % gated" kept reading healthy while every batch AFTER it sat at
+0 % gated. The limiter's designed signal (Crucible backpressure via gated fraction) is
+blind to the stall mode where the export goes stagnant but stays fresh-by-mtime
+(publisher republishing byte-identical content every minute). Should the limiter also
+consider `newly_gated_total` stagnation across N consecutive reconciles (a cheap,
+already-computed signal) before submitting?
+
+**Why not just fix it:** limiter/consumer semantics have history (D052 → D061 → D110
+aged-out watermark) and the CLAUDE.md pitfalls list says limiter behavior is not to be
+"fixed" casually; a wrong tightening here wedges US (the documented failure mode is the
+inverse). Needs a deliberate design pass, not a hotfix.
+
+**Cost of the gap:** no correctness issue — submissions are idempotent (hard rule #9),
+the inbox/queue is durable, and Crucible will flush the backlog on restart. Cost is
+unbounded queue growth their side + ~22 h of compute spent enumerating/prefiltering/
+ranking batches whose feedback value is zero until the stall clears.
+
+**What I did instead:** logged; evidence relayed to Crucible
+(`PROMPT_CRUCIBLE_RUNNER_WEDGE.md`); no behavior change.
+
+**Tag:** `feedback-loop`, `limiter`, `crucible-coordination`, `relates-to-D110`

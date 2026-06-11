@@ -1,5 +1,18 @@
 # Forge — Status
 
+## 2026-06-11 — EOD CHECKPOINT #1 (17:06Z snapshot) — ⚠️ CRUCIBLE RUNNER WEDGED since 23:55:05Z (~17 h, zero new verdicts; relay `PROMPT_CRUCIBLE_RUNNER_WEDGE.md`) — pre-stall v17 funnel healthy (2.94 % comp, FIRST iv_minus_rv component); new arms still starved → F-track case confirmed; F3 criterion clock NOT started
+
+**First daily reassess vs the 2026-06-10T18:53:47Z baseline. Headline: Crucible's runner is hung — process alive, 0 % CPU, blocked in `futex_do_wait` since 23:55:05Z; last `runner_done` 23:55:02Z, three run_ids in-flight forever (`f0b05b4b`, `20180605`, `bf6b7ce1`); exports republish byte-identical (49,895,047 B) every minute; inbox consumed but queue unrun. Evidence + 3 asks drafted: `PROMPT_CRUCIBLE_RUNNER_WEDGE.md` (operator: relay; includes the unflagged 22:37:39Z runner restart that preceded the wedge). All verdict-side reads below are therefore pre-stall data.**
+
+- **v17 funnel (pre-stall):** 16,200 submitted (600 at baseline); decided 56 component / 1,847 reject = **2.94 %** (baseline 2.8 % tiny-n — holding, inside §1.3's 1–3 %). Honest-era overall (≥17:17:13Z): 79/2,117 = 3.73 %.
+- **New arms (EOD question #1 answered — still starved, ratio unchanged):** iv_minus_rv **79/16,200 = 0.49 %** submitted, market_state 86 = 0.53 % (vs ~4 % each in raw emission) — consistent with ranker cold-start; the F3 per-arm-floor case strengthens. BUT: **iv_minus_rv landed its FIRST component** (1/22 decided = 4.5 % tiny-n, above cohort rate); market_state 0/13; first-ever ve×swing_mid cohort exists (66 submitted, 0/9 decided).
+- **Weights NOT whiplashing — they're starved:** `trend=1.000, em=0.485, ve=0.218, mr=0.092` frozen at the 07:02Z boot values all day (zero new evidence). Trend concentration in the submitted stream: 76.4 % since restart, uncorrected until verdicts flow.
+- **F-track:** shadow scoring healthy — 7,400 `shadow_scores` over 37 batches, 200/200 every batch since 07:07:39Z. `ranker-model eval` correctly reports *no shadow-scored verdicts decided* (none decided since scoring began) → **the ≥150-fresh-verdict criterion clock starts only after the runner unwedges.** Train skipped: data window unchanged (max `decided_at` still 23:55:02Z) → would re-emit byte-identical `b7d260cb`.
+- **New open question [[Q38]] (MEDIUM):** the §7.3 limiter never blocked during the stall — feedback consumer pins on oldest unflushed batch `00dbf3b8` (199/200, pre-stall) so "prev batch % gated" stays green while the export goes stagnant-but-fresh. ~15.6 k configs submitted into a dead gate (idempotent, durable — no correctness issue; design pass needed, not a hotfix).
+- **Next checkpoint:** after the runner restart — expect a large reconcile flush; re-run train/eval on the post-flush window (first criterion-eligible eval likely then); re-read new-arm draws once weights move.
+
+---
+
 ## 2026-06-11 — D134 ACTIVATED (ritual restart 07:02:07Z + first production train) — shadow scoring LIVE: first batch 200/200 scored against `b7d260cbf5c984fc` at 07:11:12Z; F3 criterion clock starts at the first ≥150-fresh-verdict eval
 
 **Operator "yes" on folding the first train into the restart; D104 ritual executed:** stopped 06:59:43Z (exit 143) → **uncontended 1,523/0** on committed `77addd5` → production train in the stop window (`~/forge_data/models/verdict_model_v1_20260610T235502Z_b7d260cb.json` — same model_id as the /tmp smoke, live proof of byte-identical determinism on the same data window) → reset-failed → restart **07:02:07Z** → verified: v17 unchanged, `registry_hash=a7ae9ccf843fd969` unchanged, reconcile 75 batches / 3,908 newly gated, NRestarts=0, zero error lines.
