@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-11 — D134 ACTIVATED (ritual restart 07:02:07Z + first production train) — shadow scoring LIVE: first batch 200/200 scored against `b7d260cbf5c984fc` at 07:11:12Z; F3 criterion clock starts at the first ≥150-fresh-verdict eval
+
+**Operator "yes" on folding the first train into the restart; D104 ritual executed:** stopped 06:59:43Z (exit 143) → **uncontended 1,523/0** on committed `77addd5` → production train in the stop window (`~/forge_data/models/verdict_model_v1_20260610T235502Z_b7d260cb.json` — same model_id as the /tmp smoke, live proof of byte-identical determinism on the same data window) → reset-failed → restart **07:02:07Z** → verified: v17 unchanged, `registry_hash=a7ae9ccf843fd969` unchanged, reconcile 75 batches / 3,908 newly gated, NRestarts=0, zero error lines.
+
+- **Shadow live at 07:11:12Z:** iteration 548 batch `e91e4ce2` — enumerated 5,000 / 840 passed / 200 ranked+submitted, `shadow_scores_recorded recorded=200`. The incumbent composite is now persisted per submission too (first time ever).
+- **⚠️ Watch (pre-existing, now very visible):** weights on the rolling window have swung hard — `hypothesis_weights: trend=1.000, em=0.485, ve=0.218, mr=0.092` and the first post-restart batch ranked **169/200 trend**. This is the D128-era honest evidence moving fast on small n (the tiny-n whiplash the F-track's pooling is designed to dampen). Also: `volatility_event×iv_minus_rv×swing_mid` now has a learned directional-bucket cell (0.012) — the v17 arm is accruing evidence.
+- **Daily rhythm from here:** at each checkpoint `cp` snapshot → `forge ranker-model train` → `forge ranker-model eval` (first meaningful window ~150+ fresh verdicts ≈ a few hours at ~60/hr). 3 consecutive PASS → F3 comes back for its own go (wiring + per-arm floor, one unit).
+
+---
+
 ## 2026-06-10 — D134: F2 BUILT (verdict model + shadow telemetry) — IRLS model w/ byte-identical artifacts, `shadow_scores` post-submit hook, train/eval CLI; 1,523/0, mypy 0/88; INERT until ritual restart + first production train (both operator-gated)
 
 **The D132 F-track's second gate executed (TDD, 32 RED-first tests).** Pure-Python Newton-IRLS (zero deps, no RNG — same frame = byte-identical artifact, invariant-pinned), rare-id `__other__` buckets give new arms a score-time prior, append-only `models/` artifacts w/ named coefficients. `run_shadow_scoring` hooks AFTER submit (loop-level invariant: artifact present vs absent → identical submitted sets); `shadow_scores` also persists the incumbent composite (never stored before). `forge ranker-model train` (manual, ≥50 rows/≥5 positives) + `eval` (AUC/P@K/Brier/calibration vs incumbent, prints the F3 `criterion(+0.05)` verdict; labels = the dataset's own `label_for`, cannot drift).
