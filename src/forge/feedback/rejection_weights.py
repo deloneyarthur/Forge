@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
     import duckdb
     from crucible_contracts import GatedRun
+    from crucible_contracts.models import GateResult
 
 
 # Beta prior over per-hypothesis promotion rate. Mild prior favoring
@@ -384,6 +385,16 @@ _COST_FLOOR_VALUE_CUT: datetime = datetime(2026, 6, 9, 22, 52, 57, tzinfo=UTC)
 _COVERAGE_GATE: str = "regime_coverage"
 _COVERAGE_UNVERIFIED_MARK: str = "coverage_unverified"
 
+# Label-era key for the learned verdict model (D132 / F1). Stricter than the
+# value-cut above on purpose: training LABELS must come from the engine that
+# enforces earnings exits and reads correct single-name chains — the composite
+# clean-era boundary (Crucible's exit-era runner restart, D130/D131; the v2
+# registry and v17 followed within 19 minutes of the same boot). Literal
+# constant, not a clock read (hard rule #8 untouched). Any era boundary
+# declared after a model's training cutoff obsoletes that model (the F3 era
+# guard refuses it).
+CLEAN_ERA_LABEL_CUT: datetime = datetime(2026, 6, 10, 17, 17, 13, tzinfo=UTC)
+
 
 def _values_readable(gated_run: GatedRun) -> bool:
     """D124 key 1: False when the run was decided before the cost-floor cut.
@@ -396,10 +407,19 @@ def _values_readable(gated_run: GatedRun) -> bool:
     return decided >= _COST_FLOOR_VALUE_CUT
 
 
+def honest_regime_coverage_row(gate_results: Mapping[str, GateResult]) -> bool:
+    """D124 key 2 on a bare gate-results mapping — the single source of truth.
+
+    Shared by the reward path (via `_honest_regime_coverage`) and the learned
+    verdict model's label builder (D132), so the two reads cannot drift.
+    """
+    row = gate_results.get(_COVERAGE_GATE)
+    return row is not None and row.passed and _COVERAGE_UNVERIFIED_MARK not in (row.detail or "")
+
+
 def _honest_regime_coverage(gated_run: GatedRun) -> bool:
     """D124 key 2: True only when the coverage gate REALLY evaluated and passed."""
-    row = gated_run.decision.gate_results.get(_COVERAGE_GATE)
-    return row is not None and row.passed and _COVERAGE_UNVERIFIED_MARK not in (row.detail or "")
+    return honest_regime_coverage_row(gated_run.decision.gate_results)
 
 
 def component_prior_mean(*, alpha: float = COMPONENT_ALPHA, beta: float = COMPONENT_BETA) -> float:

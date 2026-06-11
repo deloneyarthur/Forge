@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-10 — D133: F1 BUILT (learned-ranker dataset track) — `forge.ranking.features` + `forge.ranking.dataset` + `forge ranker-model dataset` CLI; 1,491/0, mypy 0/85; service-inert (no restart needed)
+
+**The D132 F-track's first gate executed same-session (TDD, 33 RED-first tests).** Single-codepath feature extraction (schema v1, ~35 config-structural dims; band normalizations read the grammar's own tables incl. v16 trend overrides) + honest-era dataset builder (era cut ≥ **2026-06-10T17:17:13Z** inclusive, label = component/promote AND D128-honest coverage via the new single-sourced `honest_regime_coverage_row`, keep-all refit rows) + parquet CLI. Invariants pinned: era constant byte-exact, boundary-second inclusivity, honesty-predicate parity (cannot drift from the reward path), config_json round-trip skew-proof. **Daemon untouched** — new modules unimported by the running service; rejection_weights delegation behavior-identical (feedback suite 262/0).
+
+- **Usable now:** `cp ~/forge_data/forge.db /tmp/… && uv run forge ranker-model dataset --forge-db /tmp/… --out …` (~339 decided post-boundary rows at the 18:53Z baseline, ~60/hr accruing).
+- **Next:** F2 (pure-Python IRLS trainer + `shadow_scores` + eval CLI) on go; F3 double-gated (D132 criterion + operator go, ships only with the per-arm floor). Watches unchanged (first v17 batches; new-arm draws = tonight's EOD read #1; em tiny-n weight).
+
+---
+
 ## 2026-06-10 — D132: learned-ranker design PROPOSED (`docs/proposals/learned-ranker.md`) — calibrated P(component|features) upgrading §6.2's prior_promotion_proximity slot, shadow-first (F1 dataset → F2 shadow+eval → F3 wiring+per-arm floor); docs-only, awaiting operator decisions §8
 
 **Origin: operator brainstorm ("incorporate learning prediction models for generation?") → "lets do the sketch out for it and design". No code/grammar/weights/service change — the proposal stops at three operator gates.**

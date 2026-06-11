@@ -138,6 +138,30 @@ refinements. Auto-tune always runs. (Daemon equivalent: `forge run --consume-fee
 forge feedback --batch-id 1a41005f-... --forge-db ~/forge_data/forge.db
 ```
 
+### forge ranker-model dataset
+
+Build the learned verdict model's honest-era training frame (D132 / F1):
+`verdicts ⋈ submissions` on config_hash, rows hard-cut at the clean-era label
+boundary, label = component/promote AND D128-honest coverage, one feature
+column per emitted feature name (wide, missing → 0.0). The live forge.db holds
+an intermittent RW lock — point `--forge-db` at a `/tmp` snapshot.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--out` | path | required | Output parquet path. |
+| `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML default for the DB path. |
+| `--exports-dir` | path | exports default | Crucible exports dir (registry snapshot). |
+| `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override (naive = UTC). |
+
+```
+cp ~/forge_data/forge.db /tmp/forge_snap.db
+forge ranker-model dataset --forge-db /tmp/forge_snap.db --out /tmp/verdict_dataset.parquet
+```
+
+(`train` / `eval` are F2 commands — designed in `docs/proposals/learned-ranker.md`,
+not yet built.)
+
 ### forge grammar list-proposals
 
 List pending refinement proposals. Recurring themes (3+ pending) tagged `[PERSISTENT]`.
