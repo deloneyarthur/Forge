@@ -259,3 +259,56 @@ def test_n_above_pool_returns_all_passed() -> None:
     )
     out = rank_batch(r, reports, promoted_strategies=(), n=100)
     assert {c.report.config.name for c in out} == {"a", "c"}
+
+
+def test_rank_batch_forwards_mature_arms_to_the_arm_floor() -> None:
+    """D136 — `mature_arms` reaches the diversifier: a young-arm survivor is
+    selected despite being outscored when the floor is on, and the legacy
+    selection is unchanged when it is None."""
+    ranker = Ranker(weights=_default_weights())
+    incumbents = [_report(f"m{i}", signals=(f"s{i}", f"g{i}")) for i in range(12)]
+    # The incumbents' configs carry (directional, rsi_2) + (regime_filter,
+    # iv_rank) per _named_config; the young report swaps its directional
+    # indicator to a never-seen arm and zeroes every score component.
+    young_cfg = minimal_strategy_config(
+        name="young",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("iv_term_slope",),
+                params={"threshold": 0.02, "key": "young"},
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("iv_rank",),
+                params={"threshold": 50.0, "key": "young"},
+            ),
+        ),
+    )
+    young_report = PreFilterReport(
+        config=young_cfg,
+        passed=True,
+        filter_results=MappingProxyType(
+            {
+                "structural_redundancy": FilterResult(passed=True, score=1.0),
+                "resource_feasibility": FilterResult(passed=True, score=1.0),
+                "signal_density": FilterResult(passed=True, score=0.0),
+                "expected_trades": FilterResult(passed=True, score=1.0),
+                "novelty": FilterResult(passed=True, score=0.0),
+                "regime_exposure": FilterResult(passed=True, score=0.0),
+                "permutation_test": FilterResult(passed=True, score=0.0),
+            }
+        ),
+        diagnostic_notes=(),
+        composite_score=None,
+    )
+    reports = [*incumbents, young_report]
+    mature = frozenset({("directional", "rsi_2"), ("regime_filter", "iv_rank")})
+    floored = rank_batch(ranker, reports, promoted_strategies=(), n=10, mature_arms=mature)
+    assert "young" in [c.report.config.name for c in floored]
+    legacy = rank_batch(ranker, reports, promoted_strategies=(), n=10)
+    assert "young" not in [c.report.config.name for c in legacy]

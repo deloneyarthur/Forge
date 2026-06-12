@@ -343,3 +343,137 @@ def test_d103_floor_deterministic() -> None:
     a = select_top_n(cands, 10, min_per_hypothesis=2)
     b = select_top_n(cands, 10, min_per_hypothesis=2)
     assert [c.report.config.name for c in a] == [c.report.config.name for c in b]
+
+
+# ---------------------------------------------------------------------------
+# D136 — per-arm exploration floor (young-arm reservation phase)
+# ---------------------------------------------------------------------------
+
+
+def _arm_candidate(
+    name: str,
+    *,
+    directional: str,
+    regime: str,
+    composite_score: float,
+) -> RankedCandidate:
+    """Candidate whose config carries the (directional, regime) arms; params
+    keyed by name so content-keys (and thus Jaccard) stay distinct."""
+    cfg = minimal_strategy_config(
+        name=name,
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=(directional,),
+                params={"threshold": 1.0, "key": name},
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=(regime,),
+                params={"threshold": 1.0, "key": name},
+            ),
+        ),
+    )
+    rep = PreFilterReport(
+        config=cfg,
+        passed=True,
+        filter_results=MappingProxyType(
+            {"structural_redundancy": FilterResult(passed=True, score=1.0)}
+        ),
+        diagnostic_notes=(),
+    )
+    return RankedCandidate(report=rep, prior_promotion_score=0.0, composite_score=composite_score)
+
+
+def _mature_pool(n: int) -> list[RankedCandidate]:
+    """n distinct high-scoring candidates all carrying the same MATURE arms."""
+    return [
+        _arm_candidate(
+            f"mature_{i:02d}", directional="rsi_2", regime="iv_rank", composite_score=1.0
+        )
+        for i in range(n)
+    ]
+
+
+_MATURE_ARMS = frozenset({("directional", "rsi_2"), ("regime_filter", "iv_rank")})
+
+
+def test_young_arm_candidate_reserved_despite_low_score() -> None:
+    """The point of the floor: a survivor carrying a never-seen arm gets a
+    slot even when every incumbent outscores it."""
+    pool = _mature_pool(20)
+    young = _arm_candidate(
+        "young", directional="iv_term_slope", regime="iv_rank", composite_score=0.0
+    )
+    selected = select_top_n([*pool, young], 10, mature_arms=_MATURE_ARMS)
+    names = [c.report.config.name for c in selected]
+    assert "young" in names
+    assert len(selected) == 10
+
+
+def test_arm_floor_cap_bounds_total_reservation() -> None:
+    """≤ int(n * fraction) slots total go to the reservation phase, however
+    many young arms exist (n=10 → cap 1 at the 0.10 default)."""
+    pool = _mature_pool(20)
+    youngs = [
+        _arm_candidate(
+            f"young_{i}", directional=f"new_ind_{i}", regime="iv_rank", composite_score=0.0
+        )
+        for i in range(6)
+    ]
+    selected = select_top_n([*pool, *youngs], 10, mature_arms=_MATURE_ARMS)
+    young_picked = [c for c in selected if c.report.config.name.startswith("young_")]
+    assert len(young_picked) == 1  # cap = int(10 * 0.10)
+    assert len(selected) == 10
+
+
+def test_at_most_two_slots_per_young_arm() -> None:
+    pool = _mature_pool(20)
+    youngs = [
+        _arm_candidate(
+            f"young_{i}", directional="iv_term_slope", regime="iv_rank", composite_score=0.0
+        )
+        for i in range(3)
+    ]
+    selected = select_top_n([*pool, *youngs], 20, mature_arms=_MATURE_ARMS)
+    young_picked = [c for c in selected if c.report.config.name.startswith("young_")]
+    assert len(young_picked) == 2  # ARM_FLOOR_SLOTS_PER_ARM, under cap int(20*0.10)=2
+
+
+def test_mature_arms_none_is_byte_identical_to_legacy() -> None:
+    pool = [
+        *_mature_pool(8),
+        _arm_candidate("x", directional="macd", regime="adx", composite_score=0.5),
+    ]
+    legacy = select_top_n(pool, 5)
+    assert select_top_n(pool, 5, mature_arms=None) == legacy
+
+
+def test_floor_never_invents_when_no_young_arm_survives() -> None:
+    """All candidate arms mature → the reservation phase is a no-op and the
+    selection equals the legacy greedy exactly (starvation stays visible
+    upstream rather than papered over)."""
+    pool = [
+        *_mature_pool(8),
+        _arm_candidate("x", directional="rsi_2", regime="iv_rank", composite_score=0.5),
+    ]
+    legacy = select_top_n(pool, 5)
+    floored = select_top_n(pool, 5, mature_arms=_MATURE_ARMS)
+    assert floored == legacy
+
+
+def test_arm_floor_composes_with_hypothesis_floor() -> None:
+    """Both floors active: the young arm still lands, and the result is
+    deterministic across repeated calls."""
+    pool = _mature_pool(20)
+    young = _arm_candidate(
+        "young", directional="iv_term_slope", regime="iv_rank", composite_score=0.0
+    )
+    a = select_top_n([*pool, young], 10, mature_arms=_MATURE_ARMS, min_per_hypothesis=2)
+    b = select_top_n([*pool, young], 10, mature_arms=_MATURE_ARMS, min_per_hypothesis=2)
+    assert a == b
+    assert "young" in [c.report.config.name for c in a]

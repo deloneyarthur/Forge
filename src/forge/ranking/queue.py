@@ -21,9 +21,12 @@ from forge.ranking.prior_promotion import compute_prior_promotion_proximity
 from forge.ranking.types import RankedCandidate
 
 if TYPE_CHECKING:
+    from collections.abc import Set as AbstractSet
+
     from crucible_contracts import StrategyConfig
 
     from forge.prefilters.types import PreFilterReport
+    from forge.ranking.arm_floor import Arm
     from forge.ranking.scorer import Ranker
 
 
@@ -43,6 +46,7 @@ def rank_batch(
     *,
     similarity_fn: Callable[[StrategyConfig, StrategyConfig], float] = jaccard_signal_ids,
     min_per_hypothesis: int = 0,
+    mature_arms: AbstractSet[Arm] | None = None,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
 
@@ -56,6 +60,11 @@ def rank_batch(
     `prior_promotion_proximity` score is `0.0` for every candidate in
     that case, and the §6.2 weighted sum's other 0.90 of weight does
     the work.
+
+    `mature_arms` (D136) activates the diversifier's per-arm exploration
+    floor — young `(role, indicator_id)` arms get reserved slots so a new
+    grammar arm can't be starved at ranking by the learned weights (the
+    v17 cold-start lesson). `None` keeps the legacy selection exactly.
     """
     scored: list[RankedCandidate] = []
     for report in reports:
@@ -71,7 +80,11 @@ def rank_batch(
             ),
         )
     return select_top_n(
-        scored, n, similarity_fn=similarity_fn, min_per_hypothesis=min_per_hypothesis
+        scored,
+        n,
+        similarity_fn=similarity_fn,
+        min_per_hypothesis=min_per_hypothesis,
+        mature_arms=mature_arms,
     )
 
 

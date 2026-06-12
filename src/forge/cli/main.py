@@ -657,6 +657,25 @@ def _format_regime_weights_line(weights: Mapping[str, float]) -> str:
     return f"regime_weights(relative_value): {len(weights)} gates learned; top: {parts}"
 
 
+def _load_mature_arms(forge_db_path: Path) -> frozenset[tuple[str, str]] | None:
+    """D136 — mature `(role, indicator_id)` arms for the diversifier's
+    per-arm exploration floor (honest-era verdict count ≥ K; everything
+    else, including never-seen arms, is young and floor-eligible).
+
+    Returns ``None`` (floor inactive, legacy selection byte-identical) when
+    the DB is unavailable — the dry-run/:memory: contexts, mirroring the
+    sibling loaders' no-op posture. Production always has the DB, so the
+    floor is always on there (an empty frozenset means "every arm young",
+    which the batch-fraction cap keeps bounded)."""
+    from forge.persistence.db import db_connection
+    from forge.ranking.arm_floor import compute_mature_arms
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return None
+    with db_connection(forge_db_path) as conn:
+        return compute_mature_arms(conn)
+
+
 def _load_bucket_weights(
     forge_db_path: Path,
     current_grammar_version: str | None = None,
@@ -1664,6 +1683,16 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     _t_rank = _time.monotonic()
     from forge.ranking.queue import _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS
 
+    # D136 — per-arm exploration floor: young (role, indicator_id) arms get
+    # reserved diversifier slots (≤2/arm, ≤10% of batch) so a new grammar
+    # arm can't be starved at ranking by the learned weights (the v17
+    # cold-start lesson; GO-doc item 5 for the v18 cohort).
+    mature_arms = _load_mature_arms(forge_db_path)
+    if mature_arms is not None:
+        typer.echo(
+            f"arm_floor: mature_arms={len(mature_arms)} "
+            f"(young arms reserved <=2 slots, cap 10% of batch)"
+        )
     ranked = rank_batch(
         ranker,
         reports,
@@ -1673,6 +1702,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         # the orthogonal relative_value sleeve can't be starved by a feedback
         # oscillation (the midday mean_reversion flood).
         min_per_hypothesis=_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
+        mature_arms=mature_arms,
     )
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")

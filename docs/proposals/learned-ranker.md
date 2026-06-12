@@ -173,6 +173,16 @@ risk.
 
 ### F3 — Live wiring + per-arm exploration floor (one unit, never split)
 
+> **Status update (2026-06-11, D136):** the FLOOR half shipped early —
+> standalone, ahead of the wiring — at the v18 adoption cut (GO-doc item 5:
+> v17's new arms reached Crucible at ~8x under raw emission share). The
+> coupling rule below binds one direction only: wiring may never ship
+> without the floor; the floor alone is pure coverage and relaxes nothing.
+> Implementation: `forge.ranking.arm_floor` + the diversifier reservation
+> phase, parameters exactly as approved in §8 (K=25 / 2 slots / ≤10%).
+> F3's remaining scope (scorer wiring + staleness/era guards) stays
+> double-gated (criterion + operator go).
+
 **Wiring:** `prior_promotion_proximity_score := model P(component)` (already [0,1]).
 Weight stays at 0.10 initially — raising it is a separate, later, evidence-gated
 `ranker.yaml` change. Fallback chain (the D076 two-mode precedent): model file missing /
