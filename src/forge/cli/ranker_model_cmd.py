@@ -54,6 +54,19 @@ def _resolve_era_cut(era_cut: str | None) -> datetime:
     return cut.replace(tzinfo=UTC) if cut.tzinfo is None else cut
 
 
+def _resolve_models_dir(models_dir: Path | None, config: Path) -> Path:
+    """Artifact dir: explicit, else the CONFIG db_path's parent ``/models`` (where
+    the daemon reads) — never derived from ``--forge-db``, which is a /tmp snapshot."""
+    if models_dir is not None:
+        return models_dir
+    if not config.exists():
+        typer.echo(f"error: config {config} not found — pass --models-dir explicitly", err=True)
+        raise typer.Exit(code=2)
+    from forge.config import load_forge_config
+
+    return load_forge_config(config).db_path.parent / "models"
+
+
 @ranker_model_app.command("dataset")
 def cmd_dataset(
     out: Path = typer.Option(..., "--out", help="output parquet path"),
@@ -130,13 +143,7 @@ def cmd_train(
 
     forge_db = _resolve_forge_db(forge_db, config)
     cut = _resolve_era_cut(era_cut)
-    if models_dir is None:
-        if not config.exists():
-            typer.echo(f"error: config {config} not found — pass --models-dir explicitly", err=True)
-            raise typer.Exit(code=2)
-        from forge.config import load_forge_config
-
-        models_dir = load_forge_config(config).db_path.parent / "models"
+    models_dir = _resolve_models_dir(models_dir, config)
     registry = load_registry(exports_dir=exports_dir) if exports_dir else load_registry()
 
     with db_connection(forge_db) as conn:
@@ -226,3 +233,72 @@ def cmd_eval(
             for lo, n, mean, rate in ev.calibration
         )
         typer.echo(f"  calibration: {cal}")
+
+
+@ranker_model_app.command("train-robustness")
+def cmd_train_robustness(
+    forge_db: Path | None = typer.Option(
+        None, "--forge-db", help="forge.db path (use a /tmp snapshot of the live DB)"
+    ),
+    config: Path = typer.Option(
+        Path("config/forge.yaml"), "--config", help="forge.yaml (db_path + models dir defaults)"
+    ),
+    exports_dir: Path | None = typer.Option(
+        None, "--exports-dir", help="Crucible exports dir override (registry snapshot)"
+    ),
+    era_cut: str | None = typer.Option(
+        None, "--era-cut", help="ISO label-era cutoff override (naive = UTC)"
+    ),
+    lambda_: float = typer.Option(1.0, "--lambda", help="L2 regularization strength"),
+    target: str = typer.Option(
+        "target_cpcv_p25", "--target", help="continuous gate value to predict (T1)"
+    ),
+    models_dir: Path | None = typer.Option(
+        None, "--models-dir", help="artifact dir (default: <config db_path parent>/models)"
+    ),
+) -> None:
+    """Train the tail-aware robustness model (T1): a ridge fit predicting a continuous
+    worst-quartile gate value (default cpcv_sharpe_p25). Manual, at the daily
+    checkpoints like `train`; the model never touches ranking before its own gate.
+    Design: docs/proposals/tail-aware-ranker.md."""
+    from forge.core.contracts_check import check_contracts_version
+
+    check_contracts_version()
+
+    from forge.persistence.db import db_connection
+    from forge.persistence.registry_loader import load_registry
+    from forge.ranking.dataset import build_dataset
+    from forge.ranking.model import save_robustness_model, train_robustness_model
+
+    forge_db = _resolve_forge_db(forge_db, config)
+    cut = _resolve_era_cut(era_cut)
+    models_dir = _resolve_models_dir(models_dir, config)
+    registry = load_registry(exports_dir=exports_dir) if exports_dir else load_registry()
+
+    with db_connection(forge_db) as conn:
+        frame = build_dataset(conn, registry, era_cut=cut)
+
+    if target not in frame.columns:
+        typer.echo(f"error: target column {target!r} not in dataset", err=True)
+        raise typer.Exit(code=2)
+    trainable = sum(1 for v in frame[target].to_list() if v is not None) if frame.height else 0
+    if trainable < _MIN_TRAIN_ROWS:
+        typer.echo(
+            f"refusing to train: {trainable} rows carry {target} (need >= {_MIN_TRAIN_ROWS})",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    model = train_robustness_model(frame, target=target, lambda_=lambda_, era_cut=cut)
+    path = save_robustness_model(model, models_dir)
+    metrics = dict(model.train_metrics)
+    typer.echo(
+        f"trained robustness[{target}]: model_id={model.model_id} rows={model.n_rows}, "
+        f"features={len(model.feature_names)}, train_r2={metrics['r2']:.3f} "
+        f"rmse={metrics['rmse']:.4f} -> {path}"
+    )
+    top = sorted(
+        zip(model.feature_names, model.coefficients, strict=True),
+        key=lambda pair: -abs(pair[1]),
+    )[:8]
+    typer.echo("top coefficients: " + ", ".join(f"{n}={c:+.3f}" for n, c in top))

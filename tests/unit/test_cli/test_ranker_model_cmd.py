@@ -154,6 +154,12 @@ def _seed_training_db(db_path: Path, *, n: int = 60) -> None:
                                 threshold=None,
                                 detail="",
                             ),
+                            "cpcv_sharpe_p25": GateResult(
+                                gate_name="cpcv_sharpe_p25",
+                                passed=False,
+                                value=0.3 + (0.5 if i % 6 == 0 else 0.0) + (i % 5) * 0.02,
+                                threshold=1.5,
+                            ),
                         },
                         decided_at=datetime(2026, 6, 10, 18, 0, i),  # noqa: DTZ001
                         decided_by="runner.forge_minimal",
@@ -246,6 +252,59 @@ def test_eval_command_reports_model_vs_incumbent(tmp_path: Path) -> None:
     assert "model=feedbeeffeedbeef" in result.output
     assert "auc_margin=+1.000" in result.output
     assert "criterion(+0.05)=PASS" in result.output
+
+
+def test_train_robustness_command_writes_artifact(tmp_path: Path) -> None:
+    db_path = tmp_path / "forge.db"
+    _seed_training_db(db_path)
+    _write_registry_export(tmp_path / "exports")
+    models_dir = tmp_path / "models"
+
+    result = runner.invoke(
+        app,
+        [
+            "ranker-model",
+            "train-robustness",
+            "--forge-db",
+            str(db_path),
+            "--exports-dir",
+            str(tmp_path / "exports"),
+            "--models-dir",
+            str(models_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    artifacts = list(models_dir.glob("robustness_model_*.json"))
+    assert len(artifacts) == 1
+    assert "trained robustness[target_cpcv_p25]" in result.output
+    assert "train_r2=" in result.output
+
+
+def test_train_robustness_refuses_when_target_all_null(tmp_path: Path) -> None:
+    # The seeder carries cpcv but not WF — train-robustness on WF must refuse.
+    db_path = tmp_path / "forge.db"
+    _seed_training_db(db_path)
+    _write_registry_export(tmp_path / "exports")
+
+    result = runner.invoke(
+        app,
+        [
+            "ranker-model",
+            "train-robustness",
+            "--forge-db",
+            str(db_path),
+            "--exports-dir",
+            str(tmp_path / "exports"),
+            "--models-dir",
+            str(tmp_path / "models"),
+            "--target",
+            "target_wf_median",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "refusing to train" in result.output
 
 
 def test_dataset_command_era_cut_override(tmp_path: Path) -> None:
