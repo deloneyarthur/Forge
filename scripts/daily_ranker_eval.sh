@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Daily learned-verdict-model train + eval for the Forge F-track (D132 / F2-F3).
+# Daily learned-model train + eval for the Forge F-track (D132 / F2-F3 / D140-D141).
 #
 # Automates the manual checkpoint rhythm (STATUS: "cp snapshot -> ranker-model
-# train -> eval"): snapshot the live forge.db, refresh the shadow-model artifact,
-# evaluate the live shadow model, and append the F3 consecutive-PASS streak to a
-# JSONL log so the operator can read the clock at a glance instead of re-deriving.
+# train -> eval"): snapshot the live forge.db, refresh BOTH shadow-model artifacts
+# (the P(component) verdict model, D134; and the tail-aware cpcv_p25 robustness
+# model, D140/D141), evaluate the live shadow model, and append the F3
+# consecutive-PASS streak to a JSONL log so the operator reads the clock at a glance.
 #
 # Deterministic Python only (hard rule #5 -- no LLM in this loop). Telemetry only:
 # it NEVER touches grammar.yaml, weights, config, the ranking path, or any service.
@@ -62,6 +63,22 @@ if uv run forge ranker-model train --forge-db "$SNAP" --models-dir "$STAGING"; t
     shopt -u nullglob
 else
     echo "daily-ranker-eval: train non-zero (insufficient rows or registry load) -- still evaluating" >&2
+fi
+
+# --- train-robustness -> staging, then atomic publish (tail-aware T1, D140/D141) --
+#     Refreshes the cpcv_p25 robustness artifact the inert shadow hook scores with
+#     (D141). Same staging+atomic-mv discipline; never read by the loop. Independent
+#     of the logistic train above -- it can refuse (no cpcv rows) without affecting it.
+echo "daily-ranker-eval: train-robustness"
+if uv run forge ranker-model train-robustness --forge-db "$SNAP" --models-dir "$STAGING"; then
+    shopt -s nullglob
+    for art in "$STAGING"/robustness_model_*.json; do
+        mv -f -- "$art" "$MODELS_DIR/"   # same fs -> atomic rename
+        echo "daily-ranker-eval: published $(basename "$art")"
+    done
+    shopt -u nullglob
+else
+    echo "daily-ranker-eval: train-robustness non-zero (insufficient cpcv rows or registry) -- continuing" >&2
 fi
 
 # --- eval + streak (single DB pass; criterion constant imported from the CLI so
