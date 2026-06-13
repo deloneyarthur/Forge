@@ -426,3 +426,53 @@ proposal_yaml: |
 decided_at: '2026-06-11T23:39:00+00:00'
 decided_by: operator (v18 GO relayed via Crucible FORGE_v18_adoption_go.md, 2026-06-11; recorded in D135)
 decision_marker: null
+---
+proposal_id: 0c7e9d2f-1a83-4b6c-8e54-9d138c2a7f01
+status: APPROVED
+proposed_at: '2026-06-13T01:00:00+00:00'
+proposal_type: loosen
+target: grammar_v19_activation
+rationale: 'v19 (D138): operator-directed activation of option_momentum,
+  REVERSING the v18 hold (D135). Crucible''s coverage handoff
+  (FORGE_option_momentum_coverage_response.md, 2026-06-12) resolved Q39: the v18
+  zeros were the shipped default min_months=months=6 (six CONSECUTIVE clean
+  reconstructed-straddle months) x a ~40% honest per-month exit-match miss — a
+  threshold x sparsity interaction, NOT a coverage hole. The Forge re-probe
+  confirmed the writer reads min_months from per-config SignalSpec params (no
+  Crucible republish needed) and that min_months=3 clears the signal_density
+  min_activations=30 floor on all 10 probed names. Activation: (1) C2 family
+  map — smart_money joins trend_continuation''s directional families (the
+  operator-pinned home; Heston-Jones-Khorram-Li JF 2023 option-momentum
+  continuation thesis; horizon 126 td long -> swing_mid/long DTE). The sibling
+  smart_money member expected_value_estimator is pinned OUT of the directional
+  path (directional range nulled -> is_threshold_skippable; stays the X2 kelly
+  sizer feature). (2) PERCENTILE-ONLY directional threshold (op ">", range
+  (0.80, 0.90) = top-10-20% winners). Crucible §3: the ABSOLUTE threshold is a
+  cross-sectional inverse-IV sort (a confound their gate would reject), not the
+  momentum signal — so no absolute form is samplable. (3) sampler emits
+  min_months=3 + months=6 per config. The 21 `rules:` text is unchanged.'
+evidence:
+  trigger: operator_directed_activation
+  literature: 'Heston-Jones-Khorram-Li JF 2023 (option momentum — past option
+    returns predict future option returns; a momentum/persistence factor)'
+  crucible_as_built: 'FORGE_option_momentum_coverage_response.md 2026-06-12:
+    chains fully present (~2,054-2,122 partitions/name, 2018->2026-06-11); the
+    as-built straddle return holds front-expiry ~34->4 DTE (near-total theta
+    harvest) so its level scales with name IV; constant-maturity construction
+    offered (Crucible §20) as the principled fix for any absolute-threshold arm'
+  live_probe: 'scripts/probe_option_momentum_min_months.py +
+    probe_results/option_momentum_min_months_sweep.json (registry
+    2026-06-10T172339Z, data_history_days=2400): default == min_months=6 (~0 on
+    liquid names) -> mm=4 hundreds -> mm=3 ~1000s (writer reads the param
+    per-config). At mm=3 the percentile range (0.80, 0.90) clears the 30 floor
+    on all 10 names (worst NVDA p>0.90 = 57); rsi_2 control healthy 10/10;
+    reproduces Crucible section-2 mm=4 non-NaN table'
+proposal_yaml: |
+  # v19 (D138): C2 _C2_HYPOTHESIS_FAMILIES['trend_continuation'] += 'smart_money';
+  # indicator_thresholds option_momentum directional_percentile_range (0.80, 0.90)
+  #   op '>' (percentile-only, directional_range None); EV directional_range -> None;
+  # sampler _sample_option_momentum_params -> {min_months: 3, months: 6};
+  # is_threshold_skippable / sample_threshold_params gain percentile-only support.
+decided_at: '2026-06-13T01:00:00+00:00'
+decided_by: operator (effort-max session 2026-06-13 — "draft v19 activation now"; pin = trend_continuation via AskUserQuestion; recorded in D138). Ships at the next deploy ritual (docs/tasks/deploy.md).
+decision_marker: null

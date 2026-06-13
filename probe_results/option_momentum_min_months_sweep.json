@@ -1,0 +1,113 @@
+{
+  "avail_threshold": 0.0,
+  "columns": [
+    "control_rsi_2",
+    "default_avail",
+    "mm6_avail",
+    "mm4_avail",
+    "mm3_avail",
+    "mm4_select",
+    "mm3_select"
+  ],
+  "data_history_days": 2400,
+  "errors": {},
+  "min_activations_floor": 30,
+  "months": 6,
+  "percentile_window": 252,
+  "probe": "option_momentum_min_months_sweep",
+  "registry_snapshot": "registry_snapshot_2026-06-10T172339Z.json",
+  "results": {
+    "AAPL": {
+      "control_rsi_2": 419,
+      "default_avail": 8,
+      "mm3_avail": 1266,
+      "mm3_select": 287,
+      "mm4_avail": 639,
+      "mm4_select": 171,
+      "mm6_avail": 8
+    },
+    "AMD": {
+      "control_rsi_2": 420,
+      "default_avail": 0,
+      "mm3_avail": 755,
+      "mm3_select": 181,
+      "mm4_avail": 381,
+      "mm4_select": 51,
+      "mm6_avail": 0
+    },
+    "AMZN": {
+      "control_rsi_2": 438,
+      "default_avail": 0,
+      "mm3_avail": 1060,
+      "mm3_select": 296,
+      "mm4_avail": 594,
+      "mm4_select": 181,
+      "mm6_avail": 0
+    },
+    "GOOGL": {
+      "control_rsi_2": 416,
+      "default_avail": 0,
+      "mm3_avail": 457,
+      "mm3_select": 191,
+      "mm4_avail": 91,
+      "mm4_select": 26,
+      "mm6_avail": 0
+    },
+    "KO": {
+      "control_rsi_2": 410,
+      "default_avail": 84,
+      "mm3_avail": 1321,
+      "mm3_select": 435,
+      "mm4_avail": 874,
+      "mm4_select": 179,
+      "mm6_avail": 84
+    },
+    "META": {
+      "control_rsi_2": 426,
+      "default_avail": 0,
+      "mm3_avail": 1042,
+      "mm3_select": 261,
+      "mm4_avail": 321,
+      "mm4_select": 45,
+      "mm6_avail": 0
+    },
+    "MSFT": {
+      "control_rsi_2": 440,
+      "default_avail": 0,
+      "mm3_avail": 1256,
+      "mm3_select": 335,
+      "mm4_avail": 629,
+      "mm4_select": 199,
+      "mm6_avail": 0
+    },
+    "NFLX": {
+      "control_rsi_2": 439,
+      "default_avail": 0,
+      "mm3_avail": 932,
+      "mm3_select": 170,
+      "mm4_avail": 297,
+      "mm4_select": 71,
+      "mm6_avail": 0
+    },
+    "NVDA": {
+      "control_rsi_2": 437,
+      "default_avail": 2,
+      "mm3_avail": 616,
+      "mm3_select": 174,
+      "mm4_avail": 339,
+      "mm4_select": 50,
+      "mm6_avail": 2
+    },
+    "TSLA": {
+      "control_rsi_2": 432,
+      "default_avail": 0,
+      "mm3_avail": 656,
+      "mm3_select": 204,
+      "mm4_avail": 195,
+      "mm4_select": 36,
+      "mm6_avail": 0
+    }
+  },
+  "select_threshold": 0.8,
+  "snapshot_taken_at": "2026-06-10T17:23:39.132789Z"
+}

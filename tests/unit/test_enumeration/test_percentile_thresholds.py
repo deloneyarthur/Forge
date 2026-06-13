@@ -20,6 +20,7 @@ from pathlib import Path
 
 from forge.enumeration.indicator_thresholds import (
     is_percentile_emitting,
+    is_threshold_skippable,
     sample_threshold_params,
 )
 from forge.enumeration.sampler import SamplerError, sample_config
@@ -177,6 +178,40 @@ def test_mean_reversion_rsi_directional_emits_percentile() -> None:
                 saw_percentile += 1
     assert saw_percentile >= 5, (
         f"expected some mean_reversion rsi directional percentile signals; saw {saw_percentile}"
+    )
+
+
+def test_option_momentum_emits_percentile_only() -> None:
+    """v19 (D138): option_momentum is the first PERCENTILE-ONLY directional (no
+    `directional_range`). Crucible's coverage handoff showed the absolute
+    threshold is a cross-sectional inverse-IV sort; percentile over the name's
+    own history is the honest form. This also exercises the percentile-only path
+    in sample_threshold_params (percentile range present, absolute range None)."""
+    params = sample_threshold_params("option_momentum", "directional", random.Random(0))
+    assert params.get("use_percentile") is True, params
+    assert params["op"] == ">", params  # momentum: buy recent option-return winners
+    assert 0.0 <= float(params["threshold"]) <= 1.0, params
+    assert params["percentile_window"] == 252
+    assert "threshold" in params  # §13 no-empty-threshold leak still holds
+
+
+def test_option_momentum_not_skippable_despite_no_absolute_range() -> None:
+    """The percentile-only support: a directional with a percentile range but no
+    absolute range is samplable (not skippable) and percentile-emitting."""
+    assert not is_threshold_skippable("option_momentum", "directional")
+    assert is_percentile_emitting("option_momentum", "directional")
+    # No regime range AND no regime percentile range -> still skippable as a gate.
+    assert is_threshold_skippable("option_momentum", "regime_filter")
+
+
+def test_expected_value_estimator_directional_pinned_out() -> None:
+    """v19 (D138): nulling EV's directional range pins it out of the directional
+    path — admitting smart_money to trend_continuation's C2 pool (for
+    option_momentum) would otherwise make EV a directional. It stays the X2
+    fractional-kelly sizer feature; its regime/gate use is untouched."""
+    assert is_threshold_skippable("expected_value_estimator", "directional")
+    assert (
+        sample_threshold_params("expected_value_estimator", "directional", random.Random(0)) == {}
     )
 
 

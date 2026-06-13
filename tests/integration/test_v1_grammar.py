@@ -122,7 +122,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # (2) R3 pool += pre_earnings_setup incl. the ETF-incompatible sets;
     # (3) option_momentum held back — data-starved, Q39. The 21 `rules:`
     # textually unchanged).
-    assert grammar.grammar_version == "v18"  # type: ignore[attr-defined]
+    # D138 bumped v18 -> v19 (option_momentum ACTIVATED — Q39 resolved: the v18
+    # zeros were min_months=6 sparsity, not coverage. smart_money joins
+    # trend_continuation's C2 families; percentile-only directional, min_months=3;
+    # EV pinned out of the directional path. The 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v19"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

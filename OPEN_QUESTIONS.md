@@ -754,7 +754,7 @@ session (recommended options: predicate / 3 h / direct enforce / extend
 
 **Tag:** `feedback-loop`, `limiter`, `crucible-coordination`, `relates-to-D110`
 
-## 2026-06-11 — Q39 — `option_momentum` is data-starved on the current tier: 0 non-NaN bars on 6/10 probed names over ~8.5y — adoption HELD at the v18 cut despite the GO doc listing it — **MEDIUM SEVERITY, CRUCIBLE-COORDINATION**
+## 2026-06-11 — Q39 — `option_momentum` is data-starved on the current tier: 0 non-NaN bars on 6/10 probed names over ~8.5y — adoption HELD at the v18 cut despite the GO doc listing it — **RESOLVED 2026-06-13 (D138 — NOT coverage; the zeros were min_months=6 sparsity; activated in v19)**
 
 **Symptom:** the v18 pre-activation calibration probe (FeatureCacheClient activation
 sweep, 2026-06-11, `data_history_days=2400`) found `option_momentum`'s series almost
@@ -782,4 +782,24 @@ republishes or confirms; Forge re-probes (same sweep), and if ≥ the activation
 on a reasonable name set, activates in the next grammar cut with an audited range
 (+ the C2/family decision made deliberately at that point).
 
-**Tag:** `crucible-coordination`, `data-starvation`, `relates-to-D135`, `adoption-deferred`, `operator-visibility`
+**RESOLVED 2026-06-13 (D138):** Crucible's reply
+(`../Crucible/docs/handoffs/FORGE_option_momentum_coverage_response.md`, 2026-06-12)
+corrected the premise — **not coverage.** Chains are fully present; the zeros were the
+shipped default **`min_months = months = 6`** (six *consecutive* clean reconstructed-
+straddle months) × a ~40% honest per-month exit-match miss. The v18 "percentile tops out
+at 26" was the *same* `min_months=6` ceiling, not a percentile limit. Forge re-probed
+(`scripts/probe_option_momentum_min_months.py`, committed — closing the reproducibility
+gap; `probe_results/option_momentum_min_months_sweep.json`): (1) the writer reads
+`min_months` from per-config SignalSpec params (`default == mm=6 ~0 → mm=4 hundreds →
+mm=3 ~1000s`), so the unblock is **fully Forge-side, no Crucible republish**; (2) at
+`min_months=3` the percentile range (0.80, 0.90) clears the §5.3.3 floor on **all 10
+names** (worst NVDA p>0.90 = 57). The cross-name "NVDA all < −0.30" scale heterogeneity
+was real and systematic (a theta/IV-level confound) — addressed by activating
+**percentile-only** (op ">", normalizes the IV offset). **Activated in v19 (D138):**
+`smart_money` pinned to `trend_continuation`'s C2 directional families (operator pin);
+`expected_value_estimator` pinned OUT of the directional path. Open follow-up (not
+blocking): Crucible offered a **constant-maturity** straddle construction (their §20) as
+the principled fix for an *absolute*-threshold arm — request it if the funnel says
+option_momentum is worth deepening.
+
+**Tag:** `crucible-coordination`, `data-starvation`, `relates-to-D135`, `resolved-by-D138`, `operator-visibility`

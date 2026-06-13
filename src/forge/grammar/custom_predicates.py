@@ -154,7 +154,16 @@ _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
 # §3.5 C2 hypothesis → allowed directional-signal families.
 # regime_arbitrage allows any family.
 _C2_HYPOTHESIS_FAMILIES: dict[str, tuple[str, ...] | None] = {
-    "trend_continuation": ("trend",),
+    # D138 (v19): `smart_money` joins trend_continuation's directional families.
+    # option_momentum (Heston-Jones-Khorram-Li JF 2023) is a momentum/persistence
+    # factor in option returns — a continuation thesis; horizon 126 td (long)
+    # holds it at swing_long DTE. The sibling smart_money member
+    # `expected_value_estimator` is pinned OUT of the directional path (its
+    # directional range is nulled → is_threshold_skippable; it stays the X2
+    # fractional-kelly sizer feature). Operator-pinned (the deferred GO-doc
+    # item-4 family question, resolved at activation); loosening OPEN_PROPOSALS
+    # + D138.
+    "trend_continuation": ("trend", "smart_money"),
     # D062: dealer_positioning indicators (gex/vex/cex/walls/gamma-flip) double
     # as mean-reversion drivers. Call/put walls and the gamma-flip line are
     # well-documented MR magnets; positive-GEX regimes are dampening. Letting

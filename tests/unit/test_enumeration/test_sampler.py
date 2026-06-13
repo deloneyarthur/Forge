@@ -1551,30 +1551,44 @@ def test_v18_pre_earnings_setup_never_on_etf_underlying(
     assert seen > 0
 
 
-def test_v18_option_momentum_not_emitted(grammar: Grammar, registry: RegistrySnapshot) -> None:
-    """D135 (v18): option_momentum is deliberately NOT activated — the live
-    probe (2026-06-11) showed the series is data-starved on the current
-    tier (0 non-NaN bars on MSFT/AMZN/GOOGL/META/NFLX/TSLA over ~8.5y;
-    <=146 on the covered names; every parameterization lands below the
-    signal_density min_activations=30 floor). No threshold entry → never
-    samplable in any role (Q39 tracks re-activation)."""
+def test_v19_option_momentum_activated_under_trend_only(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D138 (v19): option_momentum ACTIVATED as a trend_continuation directional
+    (smart_money pinned to trend's C2 families; the Heston-et-al. option-momentum
+    continuation thesis). Percentile-only + min_months=3. Reverses the v18 hold
+    (Q39 resolved by Crucible's coverage handoff — the zeros were min_months=6
+    sparsity, not coverage). The pin: among ENUMERABLE hypotheses only
+    trend_continuation lists it; the smart_money sibling expected_value_estimator
+    stays pinned OUT of the directional path (range nulled)."""
     from forge.enumeration.indicator_thresholds import is_threshold_skippable
     from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES
 
-    assert is_threshold_skippable("option_momentum", "directional")
-    assert is_threshold_skippable("option_momentum", "regime_filter")
+    assert not is_threshold_skippable("option_momentum", "directional")  # activated
+    assert is_threshold_skippable("option_momentum", "regime_filter")  # directional-only
+    assert is_threshold_skippable("expected_value_estimator", "directional")  # EV pinned out
     reg = _v18_registry(registry)
     space = build_search_space(grammar, reg)
-    # The any-family pools (regime_arbitrage/tail_hedge) list it structurally
-    # but are never enumerated; every ENUMERABLE hypothesis's C2 family set
-    # excludes smart_money, so no pool edit was needed to hold it back.
     for hyp, pool in space.directional_indicators_by_hypothesis.items():
         if hyp in NON_ENUMERABLE_HYPOTHESES:
             continue
-        assert "option_momentum" not in pool, hyp
+        if hyp == "trend_continuation":
+            assert "option_momentum" in pool, hyp
+        else:
+            assert "option_momentum" not in pool, hyp
+    saw_om = 0
     for seed in range(300):
         cfg = sample_config(space, reg, random.Random(seed))
-        assert not any("option_momentum" in s.indicators for s in cfg.signals), cfg.name
+        for s in cfg.signals:
+            if s.role != "directional":
+                continue
+            assert "expected_value_estimator" not in s.indicators, cfg.name
+            if "option_momentum" in s.indicators:
+                assert cfg.hypothesis == "trend_continuation", cfg.name
+                assert s.params.get("use_percentile") is True, s.params
+                assert s.params.get("min_months") == 3, s.params
+                saw_om += 1
+    assert saw_om > 0, "option_momentum never emitted from the v19 registry"
 
 
 def test_v18_new_ids_rank_excluded(grammar: Grammar, registry: RegistrySnapshot) -> None:

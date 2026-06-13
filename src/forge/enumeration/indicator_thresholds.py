@@ -253,10 +253,16 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         directional_range=(-1.5, -0.5),
         regime_range=(-1.5, 1.5),
     ),
+    # D138 (v19): directional_range NULLED to pin EV out of the directional
+    # path. Admitting `smart_money` to trend_continuation's C2 pool (for
+    # option_momentum) would otherwise make EV a directional candidate; EV is the
+    # X2 fractional-kelly sizer feature (runs-DB, reference-keyed) — never an
+    # honest per-name directional. Regime/gate use (op ">") is untouched.
+    # Behavior-preserving on v18 (smart_money was in no C2 hypothesis → EV was
+    # never a directional anyway).
     "expected_value_estimator": IndicatorThresholdSpec(
-        directional_range=(0.0, 0.005),  # marginal EV
+        directional_range=None,
         regime_range=(0.0, 0.01),
-        op_directional=">",  # fire when EV > threshold
         op_regime=">",
     ),
     # ----- Realized-vol percentile rank (D077, Crucible rv_rank.py) -----
@@ -303,15 +309,27 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=None,
         op_directional=">",
     ),
-    # option_momentum: DELIBERATELY ABSENT (no spec entry → never samplable
-    # in any threshold role). The 2026-06-11 live-cache probe found the
-    # series data-starved on the current tier: 0 non-NaN bars over ~8.5y on
-    # MSFT/AMZN/GOOGL/META/NFLX/TSLA, and only 22-146 on AAPL/AMD/KO — below
-    # the §5.3.3 min_activations=30 floor at EVERY threshold (absolute and
-    # percentile). Activating it would put a provably-dead arm in the v18
-    # cohort. Q39 tracks re-activation once Crucible's chain coverage
-    # supports the monthly-straddle construction; the horizon entry (126) is
-    # already in place so activation is a one-line table add.
+    # option_momentum: ACTIVATED v19 (D138) as a trend_continuation directional
+    # (smart_money pinned to trend's C2 families). PERCENTILE-ONLY by design —
+    # Crucible's coverage handoff (2026-06-12) showed the as-built straddle
+    # return (front-expiry, ~34→4 DTE) is a near-total theta harvest whose level
+    # scales with the name's IV, so a fixed ABSOLUTE threshold is a cross-
+    # sectional inverse-IV sort (a confound their gate would reject), NOT the
+    # Heston-et-al. momentum signal. Percentile over the name's own history
+    # normalizes that offset. op ">" buys the name's recent option-return
+    # winners; (0.80, 0.90) is the top-10-20% winner extreme (mirrors the
+    # bottom-5-20% oversold percentile ranges). directional_range=None → no
+    # absolute threshold is ever sampled (the percentile-only path). The
+    # min_months=3 coverage knob rides _sample_option_momentum_params (probe-
+    # audited: clears the §5.3.3 min_activations=30 floor on all 10 probed
+    # names; scripts/probe_option_momentum_min_months.py). Horizon 126 td (long)
+    # already in signal_horizon → swing_long DTE. Regime use None.
+    "option_momentum": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=None,
+        op_directional=">",
+        directional_percentile_range=(0.80, 0.90),
+    ),
     # pre_earnings_setup: composed binary conditioner — 1.0 iff
     # days_to_earnings ∈ [enter_min, enter_max] AND rv_rank < rv_q (Chung &
     # Louis / Gao-Xing-Zhang: buy premium ~5-10 td pre-announcement when
@@ -494,8 +512,10 @@ def is_threshold_skippable(indicator_id: str, role: str = "directional") -> bool
          → gate-reject on min_oos_trade_count). The audit-test in
          `tests/unit/test_enumeration/test_no_empty_threshold_leak.py`
          enforces this invariant.
-      3. The indicator has no range for the requested role (D077: rv_rank
-         has a regime_range but no directional_range).
+      3. The indicator has no absolute AND no percentile range for the
+         requested role (D077: rv_rank has a regime_range but no
+         directional_range; D138: option_momentum is percentile-only — a
+         directional_percentile_range with no directional_range IS samplable).
 
     Such indicators are still valid in `passthrough` / `confluence`
     signals; this only excludes them from directional / regime_filter
@@ -506,9 +526,13 @@ def is_threshold_skippable(indicator_id: str, role: str = "directional") -> bool
         return True
     if spec.is_skip:
         return True
-    if role == "directional" and spec.directional_range is None:
-        return True
-    return role == "regime_filter" and spec.regime_range is None
+    # Samplable in a role iff it has EITHER an absolute range OR a percentile
+    # range for that role (D138: the percentile-only path, e.g. option_momentum).
+    if role == "directional":
+        return spec.directional_range is None and spec.directional_percentile_range is None
+    if role == "regime_filter":
+        return spec.regime_range is None and spec.regime_percentile_range is None
+    return False
 
 
 # v6 (D099): percentile-emission window. Crucible ranks the latest indicator
@@ -574,29 +598,36 @@ def sample_threshold_params(  # noqa: PLR0911 — one return per (role, percenti
     if spec is None or spec.is_skip:
         return {}
     if role == "directional":
-        if spec.directional_range is None:
-            return {}
-        # v6 (D099): percentile-eligible indicators emit a [0,1] percentile
-        # threshold + use_percentile, bypassing the native-unit auto-tightening.
+        # v6 (D099) / D138: percentile-eligible indicators emit a [0,1]
+        # percentile threshold + use_percentile, bypassing the native-unit
+        # auto-tightening. Checked BEFORE the absolute-range guard so a
+        # PERCENTILE-ONLY directional (directional_range None, percentile set —
+        # option_momentum) still emits. Dual-range indicators hit this same
+        # branch as before, consuming one rng.uniform either way, so the seeded
+        # sequence is unchanged (#6).
         if spec.directional_percentile_range is not None:
             return _percentile_params(
                 spec.directional_percentile_range,
                 spec.op_directional,
                 rng,
             )
+        if spec.directional_range is None:
+            return {}
         # D073: prefer auto-tightened range over D031 baseline when present.
         low, high = _effective_range(indicator_id, role, spec.directional_range)
         threshold = round(rng.uniform(low, high), 4) if low != high else low
         return {"threshold": threshold, "op": spec.op_directional}
     if role == "regime_filter":
-        if spec.regime_range is None:
-            return {}
+        # D138: percentile-first, mirroring the directional branch (supports a
+        # future percentile-only regime gate without an empty-params leak).
         if spec.regime_percentile_range is not None:
             return _percentile_params(
                 spec.regime_percentile_range,
                 spec.op_regime,
                 rng,
             )
+        if spec.regime_range is None:
+            return {}
         low, high = _effective_range(indicator_id, role, spec.regime_range)
         threshold = round(rng.uniform(low, high), 4) if low != high else low
         return {"threshold": threshold, "op": spec.op_regime}

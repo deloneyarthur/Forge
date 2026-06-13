@@ -132,7 +132,7 @@ is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.)
 ### C2: Directional signal family matches hypothesis
 
 **What.** The directional signal's indicator family must match the hypothesis per the table:
-- `trend_continuation` → `trend`
+- `trend_continuation` → `trend`, `smart_money` (v19, D138 — `option_momentum`, the Heston-et-al. option-momentum continuation factor; the sibling `expected_value_estimator` is pinned out of the directional path)
 - `mean_reversion` → `mean_reversion`
 - `regime_arbitrage` → any family
 - `relative_value` → `pairs`

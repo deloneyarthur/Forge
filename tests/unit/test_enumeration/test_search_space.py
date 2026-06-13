@@ -138,8 +138,15 @@ def test_indicators_by_family_keys_are_sorted(space: SearchSpace) -> None:
 
 
 def test_directional_pool_trend_continuation(space: SearchSpace) -> None:
+    """D138 (v19): `smart_money` joins trend_continuation's C2 families (for
+    option_momentum). The C2 build-pool is family-level, so the minimal
+    registry's only smart_money member, `expected_value_estimator`, appears here
+    too — but it is pinned OUT at sample time (directional range nulled →
+    is_threshold_skippable), so it is never an actual directional. The live
+    registry adds option_momentum, the real activation target."""
     assert space.directional_indicators_by_hypothesis["trend_continuation"] == (
         "ema_50",
+        "expected_value_estimator",
         "momentum_252",
     )
 

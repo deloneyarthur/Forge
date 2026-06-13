@@ -983,7 +983,30 @@ def _directional_signal_params(
     params = sample_threshold_params(indicator_id, "directional", rng)
     if indicator_id == "pairs_zscore":
         params.update(_sample_pairs_template_params(rng))
+    # D138 (v19): option_momentum's monthly-straddle coverage knob rides the
+    # same params dict as its (percentile) threshold — the rv_rank / pre_earnings
+    # precedent. Constant (no rng draw): min_months is a data-cleanliness floor,
+    # not a strategy axis.
+    if indicator_id == "option_momentum":
+        params.update(_sample_option_momentum_params())
     return params
+
+
+def _sample_option_momentum_params() -> dict[str, object]:
+    """D138 (v19) — Crucible option_momentum computation params.
+
+    `min_months=3` (= ceil(months/2)) is the probe-audited coverage floor:
+    Crucible's as-built default `min_months=months=6` requires six CONSECUTIVE
+    clean reconstructed-straddle months, which collides with a ~40% honest
+    per-month exit-match miss and reads 0 non-NaN bars on the most liquid names.
+    At `min_months=3` every probed name clears the §5.3.3 min_activations=30
+    floor (`scripts/probe_option_momentum_min_months.py`,
+    `probe_results/option_momentum_min_months_sweep.json`). Crucible's writer
+    reads these from the per-config SignalSpec params (probe-confirmed:
+    `min_months=4/3` diverge from the `=6` default → not a global constant).
+    `months=6` is the shipped formation window (Heston et al. persistence).
+    """
+    return {"min_months": 3, "months": 6}
 
 
 def _sample_pairs_template_params(rng: random.Random) -> dict[str, object]:
