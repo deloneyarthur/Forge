@@ -189,6 +189,26 @@ feature name; the daemon shadow-scores against the newest artifact in
 | `--lambda` | float | 1.0 | L2 regularization strength. |
 | `--models-dir` | path | `<config db_path parent>/models` | Artifact dir (NOT derived from `--forge-db` — that's a snapshot). |
 
+### forge ranker-model train-robustness
+
+Train the tail-aware T1 model (D140) — a deterministic ridge fit predicting a
+continuous worst-quartile gate value (default `cpcv_sharpe_p25`) instead of
+P(component). Same honest-era dataset, manual at the daily checkpoints; refuses
+when under 50 rows carry the target. Saves an append-only `robustness_model_*.json`
+artifact. Offline/analysis-side — does NOT shadow-score in the daemon yet (deferred,
+daemon-gated; see `docs/proposals/tail-aware-ranker.md`). Design: §8.3 / §1.2 (Forge
+consumes Crucible's `gate_results` values, computes none).
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML defaults (db_path, models dir). |
+| `--exports-dir` | path | exports default | Crucible exports dir (registry snapshot). |
+| `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override. |
+| `--lambda` | float | 1.0 | L2 regularization strength. |
+| `--target` | str | `target_cpcv_p25` | Continuous gate value to predict (`target_wf_median`, `target_regime_stress`). |
+| `--models-dir` | path | `<config db_path parent>/models` | Artifact dir (NOT derived from `--forge-db`). |
+
 ### forge ranker-model eval
 
 Shadow vs incumbent readout on decided verdicts (the F3 criterion: model AUC ≥
