@@ -1,0 +1,233 @@
+# Tail-Aware Ranking — Design Proposal (F-track successor)
+
+**Status: §8 DECIDED 2026-06-13 (in-session AskUserQuestion — all six decisions, all
+recommended options). T1 (regress head) + T2 shadow supply-metric greenlit to BUILD as
+shadow-only increments; T2 enforcement + T1 wiring stay gated (decision-6 criterion + the
+pending F3 go); T3a is a Crucible relay. No code yet.**
+**Origin:** the 2026-06-13 Phase-2 pool read (this session). Extends — does not replace —
+`docs/proposals/learned-ranker.md` (F1/F2/F3), the D136 per-arm floor, and the D103
+diversifier.
+**Spec anchors:** §6.2 (composite score; the `prior_promotion_proximity` learning slot),
+**§8.3** ("metric distributions … used to weight the ranker" — the sanction for this),
+**§1.2** (Forge computes NO strategy metrics — the central design constraint), §1.3.
+**Cross-system fact:** the promotion criterion is the full §8.7 battery at **portfolio**
+scope (`../Crucible/docs/handoffs/FORGE_portfolio_promotion_wiring_status.md`).
+**Decision-log home:** a `docs/DECISIONS.md` entry on approval; each shipped part its own D.
+
+---
+
+## 1. Problem — the ranker optimizes the abundant thing, not the binding thing
+
+Verified against data this session:
+
+1. **P(component) is no longer scarce — and it is *anti-correlated* with the goal.** Honest-era
+   component rate is ~3.3% (in §1.3's band); the verified-coverage assembly pool is ~200–260
+   components. F2 predicts P(component) — but components are abundant *and* the objective points
+   the wrong way: per-family individual `cpcv_p25` median (06-13, v17–19 verified pool) is **mr
+   0.74 > ve 0.61 > trend 0.505**, while component-rate is the inverse (trend 6.65%, ve 0.84%,
+   mr 0.47%, rv/em 0). So a P(component)-max ranker floods the **least** tail-robust,
+   fully-redundant sleeve (trend) and **starves** the most tail-robust regime-complement (mr).
+   It isn't merely saturating an abundant quantity — it is pointed ~180° from the binding lever.
+
+2. **The binding constraint is downstream and tail-shaped.** Promotion = the full §8.7
+   battery at **portfolio** scope. The assembled honest pool fails it on
+   `cpcv_sharpe_p25` / worst-quartile (+ DD) OOS; WF-median ~holds. Pool read: individual
+   `cpcv_p25` **median 0.53, max 1.15, 0/264 clear the 1.5 portfolio threshold**, and the
+   pool is **64% trend / 61% market-wide / 5 (family,dte) cells**. The constraint is
+   **dual** — (a) *quality*: no individually tail-strong raw material; (b) *diversity*:
+   worst-quartiles co-move (avg corr 0.024 is low, but average corr misses tail
+   co-movement).
+
+So the ranker should steer toward **worst-quartile robustness**, the thing that gates
+promotion — not P(component), an abundant quantity it already saturates.
+
+## 2. The hard constraint: Forge computes no strategy metrics (§1.2)
+
+Forge cannot run a portfolio backtest, so it **cannot directly optimize portfolio
+`cpcv_p25`** — the true objective (a candidate's *marginal contribution* to the assembled
+book's worst quartile) is Crucible-side. What Forge *can* use, without violating §1.2:
+
+- **Per-component metric values already in `verdicts.gate_results`** — `cpcv_sharpe_p25.value`,
+  `walk_forward_sharpe_median.value`, `regime_stress_p25_return.value` are present on every
+  decided row (confirmed 06-13). Forge **consumes** Crucible's computed values; it computes
+  nothing. §8.3 explicitly sanctions "metric distributions … used to weight the ranker."
+
+This forces a three-part design: **(T1)** learn the per-component worst-quartile proxy
+(unilateral), **(T2)** decorrelate tails structurally (unilateral heuristic), **(T3)** get
+the *correct* signal from Crucible (coordinated, optional).
+
+## 3. What this is NOT
+
+- **Not a gate change** (#3) — ranking only; Crucible's gate is untouched.
+- **Not a grammar change** (#1) — `grammar.yaml`/enumeration untouched.
+- **Not an LLM, not stochastic** (#5) — same deterministic pure-Python solver family as F2.
+- **Not Forge computing metrics** (§1.2) — it reads Crucible's already-computed gate values,
+  the same way feedback reads gate outcomes today.
+- **Not abandoning P(component)** — we still must submit configs that pass the gate *at all*.
+  Tail-awareness is a *second* objective layered on top.
+
+## 4. Design — three parts
+
+### T1 — Retarget the learned signal to worst-quartile robustness (extends F1 + F2)
+
+- **F1 dataset gains continuous targets** from `gate_results`: `cpcv_sharpe_p25.value`
+  (primary), `walk_forward_sharpe_median.value`, `regime_stress_p25_return.value`. Same
+  single-codepath discipline as features; skew-pinned.
+- **New model head** predicting worst-quartile robustness. Two target forms (operator
+  decision §8.1): (a) **regress** `cpcv_p25.value`; (b) **classify** `P(cpcv_p25 ≥ τ)`.
+  Same pure-Python, zero-RNG, deterministic solver family as F2 (ridge / IRLS); same
+  append-only JSON artifact with coefficients by feature name.
+- **Training-row filter (§8.2):** `cpcv_p25` is trustworthy only on **verified-coverage**
+  rows — `coverage_unverified` is the ad-hoc/CLI backtest path (degraded window). Verified-
+  only is clean but component-heavy (~264); including verified *rejects* adds low-end range
+  (rv sits at ~0.0–0.3). Decide: verified-only vs all-honest-era + a coverage-verified
+  feature flag.
+- **Shadow-first**, identical posture to F2: score in shadow, no behavior change. **New eval
+  metrics** beside AUC: Spearman rank-corr of model score vs realized `cpcv_p25`, and
+  **top-K mean `cpcv_p25`** (does ranking by the model surface more tail-robust configs than
+  the incumbent / the P(component) model?).
+
+### T2 — Regime-complement batch composition (extends D136 floor / D103 diversifier)
+
+Forge can't measure correlation, so it decorrelates tails **structurally**. The first sketch
+proposed *symmetric* concentration caps (no family > X%, market-wide ≤ Y%, a floor on
+(family,dte) cells). The 06-13 measurement says that is the wrong axis **and** the wrong shape:
+
+- **Wrong axis — orthogonality lives in the regime a strategy BETS ON, not its family or
+  underlying.** The trend bulk is one long-momentum factor spelled many ways: the 159 trend
+  components span momentum_252 / returns_12m_skip1 / donchian / rolling_sharpe / macd —
+  "diverse" by directional family yet tail-identical (all pay iff the market trends). A
+  family-% or underlying-% cap passes them as diverse. Key the axis instead on the
+  **regime-bet** = `(hypothesis × regime-gate indicator × op-direction)`. Worked example: trend
+  `gamma_flip_distance_pct >` (short-gamma / move-amplifying) and mr `gamma_flip_distance_pct <`
+  (long-gamma / dampening) are the **same indicator, opposite regime bet** (R1/R2, D107) — that
+  pair is the orthogonality unit, not the family label.
+- **Wrong shape — reserve the complement, don't just cap the dominant.** Per-family individual
+  `cpcv_p25` median (06-13, verified pool) is **mr 0.74 > ve 0.61 > trend 0.505**, while
+  component-rate is the inverse (trend 6.65%, ve 0.84%, mr 0.47%, rv/em 0). The P(component)
+  feedback — and F2/F3 — therefore *starve* the regime-complement that the worst quartile most
+  needs and that is itself the most tail-robust. A symmetric cap is far too weak against a ~14×
+  rate gap; T2 must **actively reserve** batch slots for the complement, not merely throttle the
+  leader.
+
+**Mechanism (deterministic, D136-style) — a "regime-complement floor".** After ranking:
+(1) compute the dominant regime-bet cell among recent **verified-coverage** components (same
+source as the §1 read, recomputed per batch); (2) reserve up to **Z%** of the batch for ranked
+survivors whose regime-bet is the *complement* of that cell, drawn in score order. Same
+insertion point, sorted-order determinism, and never-invents discipline as the per-arm floor —
+it reshapes only among configs that already passed the gate-eligibility term.
+
+**Two honest limits, both pointing past T2 alone:**
+1. **Still a proxy.** Regime-bet is a *better* tail-decorrelation proxy than family/underlying,
+   but it is structural, not a measured correlation — T3 validates (and can eventually replace)
+   it. The dominant-cell estimate is also the assumption that "complement of the dominant
+   regime-bet" ≈ "complement of the regime the book's p25 actually fails in"; T3a closes that.
+2. **Bounded by what enumerates.** T2 reshapes survivors — it cannot create the complement, and
+   the complement families barely exist: `relative_value` 0/1651 (Crucible pairs runner ignores
+   regime filters, D119; `pairs_zscore` ~stub, Q17), `event_momentum` 0/56 (unrankable,
+   D115/D116), mr thin. So T2 is **necessary-not-sufficient** and is coupled to *growing* the
+   complement (a producer / grammar / Crucible-handoff workstream outside this ranker proposal).
+   Without that pairing, T2 only caps trend; it does not add orthogonality. Flag the coupling
+   explicitly so T2 is never read as the whole fix.
+
+### T3 — The correct signal from Crucible (coordination) — two-step, smallest first
+
+Forge is blind to per-fold returns and to the regime identity of each CPCV fold, so T2 can only
+*guess* which complement decorrelates the tail. Two asks, cheapest first:
+
+- **T3a — "which regime is the worst quartile?" (small, earlier, de-risks T2).** Crucible
+  already computes the CPCV fold distribution; exposing the **regime label of the worst-quartile
+  fold(s)** — per component, or even just pool-level for the assembled honest book — tells Forge
+  which regime the pool actually *fails* in, hence which regime-bet T2 should reserve. This turns
+  T2's complement from a structural assumption ("not-the-dominant-cell") into a **measured**
+  target ("the regime where the book's p25 lives"). One enum/label field on the gate result; no
+  return series, no new compute Forge-side (§1.2 clean — Forge consumes, never computes).
+- **T3b — `portfolio_contribution` (the full signal).** Each candidate's marginal contribution
+  to the assembled book's `cpcv_p25`, exported via `crucible_contracts`, lets T1 train on the
+  **right** target instead of the individual-`cpcv_p25` proxy. Contract-ahead-of-need (parallels
+  the `PromotedPortfolio` work).
+
+Raise both as convergence points; do **not** block T1/T2 on either. **T3a is the cheaper, sooner
+win** and directly converts T2 from heuristic to measured — sequence it ahead of T3b.
+
+## 5. How it wires (relative to F3)
+
+F3's pending wiring sets `prior_promotion_proximity := P(component)`. This proposal makes the
+learning slot a **two-objective blend**: **P(component)** as the gate-pass eligibility term
+(submit only things that clear the gate at all) × the **tail-aware score** as the preference
+term among gate-passers; **T2** applied at batch composition (post-rank, like the floor).
+Operator decides replace-vs-blend and weights (§8.3). Sequencing: **T1 shadows** under the
+existing F2 machinery (zero behavior change) and earns wiring on its own criterion + the
+still-pending F3 go; **T2** could ship earlier as pure coverage policy (the D136 precedent)
+**iff** it only reshapes within ranked survivors and relaxes nothing — operator call.
+
+## 6. Hard-rule & invariant compliance
+
+| Rule | Posture |
+|---|---|
+| #1 grammar | Untouched — ranker policy + learned weighting only. |
+| #2 contracts-only | Reads `verdicts.gate_results` (already populated via contracts). T3 would add a contracts field, never a Crucible-internal import. |
+| #3 gate untouched | Ranks/orders; never rejects; the §8.7 gate is unchanged. |
+| #4 no auto-loosening | T2 adds coverage/diversity; relaxes nothing. T1 is shadow until gated. |
+| #5 no LLM / deterministic | Convex fit, zero-init, no RNG; T2 deterministic (sorted order). |
+| #6 deterministic enumeration | Enumeration untouched; ranking already depends on learned state, cohort-keyed via `model_id`. |
+| §1.2 no metric compute | Consumes Crucible's computed gate values; computes none. |
+
+New invariants (RED-first): continuous-target round-trip skew-proof; verified-coverage row
+filter pins out `coverage_unverified`; T1 shadow no-op (submitted set identical with/without
+the tail model); T2 reshapes only within survivors (never invents); determinism (same
+snapshot → byte-identical artifact).
+
+## 7. Risks
+
+- **Proxy gap (the central one):** individual `cpcv_p25` ≠ portfolio contribution; a set of
+  individually-robust-but-correlated components can still assemble weak. Mitigation: T2
+  (structural decorrelation) + T3 (the real signal).
+- **Goodhart:** optimizing toward Crucible's `cpcv_p25` estimator. But `cpcv_p25` is *closer*
+  to the true objective than P(component) is — net Goodhart **reduction** vs the status quo;
+  shadow-first + regularization + coefficients-by-name auditing stand.
+- **Small / biased training set:** verified-coverage rows are component-heavy and tiny-n;
+  `coverage_unverified` `cpcv` values may be optimistic. Mitigation: §8.2 decision, strong λ,
+  shadow-until-criterion.
+- **Diversity heuristic over-suppresses** a genuinely strong concentrated batch. Mitigation:
+  loose caps, shadow T2's effect on realized component/robustness mix before enforcing.
+- **Closed-loop selection bias** — same as F3; the per-arm floor (D136, live) is the
+  mitigation, plus T1's shadow baseline window.
+- **T2 starves for lack of inventory (the coupling risk):** the regime-complement T2 should
+  reserve barely enumerates today (rv/em ~0, mr thin) — T2 reshapes survivors, it cannot create
+  them. A complement floor over an empty complement just under-fills the batch. Mitigation: pair
+  T2 with a complement-growth workstream (unblock rv's regime eval / em ranking upstream; an
+  enumeration or grammar lever to raise complement supply) — outside this proposal, but T2's
+  value is contingent on it. Track complement *supply* (survivors available to reserve) as a T2
+  shadow metric so under-fill is visible before enforcement.
+
+## 8. Operator decisions — DECIDED 2026-06-13 (in-session AskUserQuestion; all recommended)
+
+1. **Target form: REGRESS `cpcv_p25.value`** — continuous worst-quartile prediction, ranked
+   directly; no arbitrary individual τ (the 1.5 bar is portfolio-scope). Winsorize/standardize
+   for heavy tails.
+2. **Training rows: ALL-honest-era + a coverage-verified feature flag** — full high/low range
+   for a discriminating ranker; the flag lets the model discount the noisier
+   `coverage_unverified` (CLI-path) cpcv values rather than dropping them.
+3. **Wiring: BLEND** — `prior_promotion_proximity := P(component)` (gate-pass eligibility) ×
+   tail score (preference among gate-passers). Blend weights set later; the slot weight stays
+   0.10 until separately raised.
+4. **T2: REGIME-COMPLEMENT FLOOR** — asymmetric reservation on the regime-bet axis
+   `(hypothesis × regime-gate × op-direction)`, not symmetric family/underlying caps. Reserve
+   fraction **Z** + dominant-regime lookback are build-time defaults; **ships as a shadow
+   supply-metric first** — the §7 coupling risk stands: enforcement is contingent on complement
+   supply, which barely enumerates today (rv/em ~0, mr thin).
+5. **T3: T3a NOW, T3b DEFERRED** — raise the worst-quartile-regime-label ask (T3a; converts T2
+   from structural guess to measured target) with the next Crucible relay / Sunday review; hold
+   `portfolio_contribution` (T3b) until T1 has shadowed.
+6. **T1 wiring criterion: MIRROR F3's STRUCTURE** — ≥3 consecutive checkpoints, each ≥150
+   honest verdicts spanning ≥5 batches; the rank-corr / top-K-mean-`cpcv_p25` margin is fixed
+   once the shadow distribution is visible (not guessed a priori).
+
+**Effect:** T1 (regress head on the F1/F2 machinery, all-honest+flag rows) and T2's shadow
+supply-metric are greenlit to BUILD as shadow-only increments — zero behavior change, each its
+own TDD pass + D-entry. **T2 enforcement and T1 wiring stay gated** (wiring on the decision-6
+criterion plus the still-pending F3 go; enforcement on complement supply). **T3a** is an
+operator relay to Crucible. No grammar/gate/loosening touched (§6). The headline change —
+**rank toward worst-quartile robustness, the thing that actually gates promotion** — is the
+producer-side answer to the binding constraint in [[promotion-gate-tiers-and-constraint]].
