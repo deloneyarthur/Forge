@@ -45,6 +45,7 @@ forge:
     batch_size: 55
     inflight_threshold: 0.55
     poll_interval_seconds: 777
+    stall_after_seconds: 7200
   feedback:
     light_consumption_after_every: 1
     full_analysis_after_every: 10
@@ -81,6 +82,9 @@ def test_no_config_uses_hardcoded_defaults(tmp_path: Path) -> None:
     assert resolved["forge_db"] is None
     # H-4: §7.3 threshold resolves to the rate-limiter default when no config.
     assert resolved["inflight_threshold"] == 0.80
+    # D137: the §7.3 stall guard is OFF by default (the no-config / dev path);
+    # production opts in via config/forge.yaml. 0 = disabled.
+    assert resolved["stall_after_seconds"] == 0
 
 
 def test_missing_config_file_falls_back_to_hardcoded_defaults(tmp_path: Path) -> None:
@@ -124,6 +128,8 @@ def test_yaml_values_seed_defaults_when_present(tmp_path: Path) -> None:
     assert resolved["forge_db"] == db_p
     # H-4: the §7.3 threshold from forge.yaml flows through (was a dead knob).
     assert resolved["inflight_threshold"] == 0.55
+    # D137: the stall-guard knob flows from forge.yaml the same way.
+    assert resolved["stall_after_seconds"] == 7200
 
 
 def test_cli_flags_override_yaml(tmp_path: Path) -> None:

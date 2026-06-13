@@ -118,6 +118,19 @@ forge run --loop --consume-feedback
 forge run --dry-run --max 100
 ```
 
+**§7.3 backpressure (yaml-only knobs under `submission:`).** Before each batch the loop
+asks `check_rate_limit` whether to submit; it can block for two independent reasons:
+
+- **Completion fraction** (`inflight_threshold`, default `0.80`): wait until ≥80% of the
+  oldest in-flight batch is gated. Journal: `blocked: oldest in-flight batch … N% gated`.
+- **Stall guard** (`stall_after_seconds`, default `10800` = 3 h; `0` disables — D137): block
+  when Crucible has had new work in its queue for ≥ that long and decided nothing (the
+  decision clock `max(decided_at)` is stale while configs submitted after it sit pending).
+  Catches the wedge the completion fraction misses — a 99%-gated front batch while newer
+  configs pile into a dead gate. Stateless and deadlock-immune (a clock left stale by
+  Forge's *own* quiet has no submission postdating it, so the guard stays silent). Journal:
+  `blocked: crucible stalled — no decisions since <ts> (<X.X>h); <N> configs pending ≥3h`.
+
 ### forge feedback
 
 Manual single-batch feedback: read Crucible's gated runs, analyze, propose grammar
@@ -354,7 +367,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | File | Controls |
 |---|---|
-| `forge.yaml` | Data paths, Crucible wiring, enumeration cap, batch size, rate-limit threshold, feedback cadence. |
+| `forge.yaml` | Data paths, Crucible wiring, enumeration cap, batch size, rate-limit threshold, stall-guard window (`submission.stall_after_seconds`, D137), feedback cadence. |
 | `grammar.yaml` | The 21 grammar rules (S/C/R/X families). Operator-owned; version-bumped + archived on change. |
 | `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation, auto-tune bounds). |
 | `ranker.yaml` | Composite-score weights + diversification method. |

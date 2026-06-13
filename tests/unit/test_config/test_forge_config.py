@@ -129,6 +129,43 @@ def test_load_rejects_missing_required_subsection(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# D137 — §7.3 stall-guard knob (submission.stall_after_seconds)
+# ---------------------------------------------------------------------------
+
+
+def test_stall_after_seconds_defaults_to_zero_when_absent(tmp_path: Path) -> None:
+    """The knob is optional; absent → 0 (guard disabled). `_DEFAULT_YAML` omits
+    it, so the happy-path config exercises the absent-disables contract."""
+    cfg = load_forge_config(_write_yaml(tmp_path))
+    assert cfg.submission.stall_after_seconds == 0
+
+
+def test_stall_after_seconds_parses_when_present(tmp_path: Path) -> None:
+    forge_section = dict(_DEFAULT_YAML["forge"])  # type: ignore[arg-type]
+    forge_section["submission"] = {
+        "batch_size": 200,
+        "inflight_threshold": 0.80,
+        "poll_interval_seconds": 600,
+        "stall_after_seconds": 10800,
+    }
+    cfg = load_forge_config(_write_yaml(tmp_path, {"forge": forge_section}))
+    assert cfg.submission.stall_after_seconds == 10800
+
+
+def test_load_rejects_negative_stall_after_seconds(tmp_path: Path) -> None:
+    forge_section = dict(_DEFAULT_YAML["forge"])  # type: ignore[arg-type]
+    forge_section["submission"] = {
+        "batch_size": 200,
+        "inflight_threshold": 0.80,
+        "poll_interval_seconds": 600,
+        "stall_after_seconds": -1,
+    }
+    path = _write_yaml(tmp_path, {"forge": forge_section})
+    with pytest.raises(ValueError):
+        load_forge_config(path)
+
+
+# ---------------------------------------------------------------------------
 # Override
 # ---------------------------------------------------------------------------
 

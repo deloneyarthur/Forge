@@ -1475,6 +1475,9 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     cross_sectional_rank: bool = True,
     # H-4: §7.3 throttle; mirrors rate_limiter._DEFAULT_THRESHOLD (0.80).
     inflight_threshold: float = 0.80,
+    # D137: §7.3 stall guard (seconds). 0 = off; production passes 10800 from
+    # forge.yaml. Off by default keeps direct callers/tests on the old contract.
+    stall_after_seconds: int = 0,
 ) -> str:
     """Run one cycle; return one of 'submitted', 'blocked', 'dry-run', 'skipped'.
 
@@ -1547,13 +1550,30 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         _t_reconcile = _time.monotonic()
         reconciled = _reconcile_pending_silently(forge_db_path, crucible_db)
         timings["reconcile"] = _time.monotonic() - _t_reconcile
-        rate = check_rate_limit(forge_db_path, crucible_db, threshold=inflight_threshold)
+        rate = check_rate_limit(
+            forge_db_path,
+            crucible_db,
+            threshold=inflight_threshold,
+            stall_after_seconds=stall_after_seconds,
+        )
         if not rate.clear:
-            typer.echo(
-                f"blocked: oldest in-flight batch {rate.blocking_batch_id} is "
-                f"{rate.pct_gated:.1%} gated ({rate.gated_count}/"
-                f"{rate.submitted_count}); waiting for >={rate.threshold:.0%}"
-            )
+            if rate.stall_blocked and rate.last_decided_at is not None:
+                # D137: distinct from the benign "prev batch N% gated" line —
+                # operators are trained to ignore that one. This one means
+                # Crucible's gate has gone quiet with our work in its queue.
+                stale_h = (utc_now() - rate.last_decided_at).total_seconds() / 3600.0
+                typer.echo(
+                    f"blocked: crucible stalled — no decisions since "
+                    f"{rate.last_decided_at:%Y-%m-%dT%H:%M:%SZ} ({stale_h:.1f}h); "
+                    f"{rate.stall_pending_count} configs pending "
+                    f">={stall_after_seconds // 3600}h"
+                )
+            else:
+                typer.echo(
+                    f"blocked: oldest in-flight batch {rate.blocking_batch_id} is "
+                    f"{rate.pct_gated:.1%} gated ({rate.gated_count}/"
+                    f"{rate.submitted_count}); waiting for >={rate.threshold:.0%}"
+                )
             return "blocked"
 
     promoted = _fetch_promoted_configs(forge_db_path, crucible_db)
@@ -1830,6 +1850,11 @@ _RUN_DEFAULT_POLL_INTERVAL_SECONDS: int = 600
 # Mirrors rate_limiter._DEFAULT_THRESHOLD; forge.yaml's submission.inflight_threshold
 # overrides it (previously parsed but never wired to check_rate_limit).
 _RUN_DEFAULT_INFLIGHT_THRESHOLD: float = 0.80
+# D137: no-config fallback for the §7.3 stall guard. OFF here (unlike the H-4
+# threshold, which mirrors production) because the guard reads the wall clock —
+# a stale-by-construction test/dev DB would false-trip it. Production turns it
+# on via config/forge.yaml (stall_after_seconds: 10800). 0 = disabled.
+_RUN_DEFAULT_STALL_AFTER_SECONDS: int = 0
 
 
 class _ResolvedRunDefaults(TypedDict):
@@ -1848,6 +1873,7 @@ class _ResolvedRunDefaults(TypedDict):
     forge_db: Path | None
     poll_interval_seconds: int
     inflight_threshold: float
+    stall_after_seconds: int
 
 
 def _resolve_run_defaults(
@@ -1876,6 +1902,7 @@ def _resolve_run_defaults(
     yaml_forge_db: Path | None = None
     yaml_poll_interval: int | None = None
     yaml_inflight_threshold: float | None = None
+    yaml_stall_after_seconds: int | None = None
     if not no_config and config.exists():
         from forge.config import load_forge_config
 
@@ -1888,6 +1915,7 @@ def _resolve_run_defaults(
         yaml_forge_db = cfg.db_path
         yaml_poll_interval = cfg.submission.poll_interval_seconds
         yaml_inflight_threshold = cfg.submission.inflight_threshold
+        yaml_stall_after_seconds = cfg.submission.stall_after_seconds
 
     return _ResolvedRunDefaults(
         seed=seed
@@ -1914,6 +1942,9 @@ def _resolve_run_defaults(
         inflight_threshold=yaml_inflight_threshold
         if yaml_inflight_threshold is not None
         else _RUN_DEFAULT_INFLIGHT_THRESHOLD,
+        stall_after_seconds=yaml_stall_after_seconds
+        if yaml_stall_after_seconds is not None
+        else _RUN_DEFAULT_STALL_AFTER_SECONDS,
     )
 
 
@@ -2050,6 +2081,7 @@ def cmd_run(
     forge_db = resolved["forge_db"]
     poll_interval_seconds = resolved["poll_interval_seconds"]
     inflight_threshold = resolved["inflight_threshold"]
+    stall_after_seconds = resolved["stall_after_seconds"]
 
     if not dry_run and inbox is None:
         typer.echo("error: --inbox is required unless --dry-run", err=True)
@@ -2090,6 +2122,7 @@ def cmd_run(
             orthogonal_yield=orthogonal_yield,
             cross_sectional_rank=cross_sectional_rank,
             inflight_threshold=inflight_threshold,
+            stall_after_seconds=stall_after_seconds,
         )
         return
 
@@ -2122,6 +2155,7 @@ def cmd_run(
                     orthogonal_yield=orthogonal_yield,
                     cross_sectional_rank=cross_sectional_rank,
                     inflight_threshold=inflight_threshold,
+                    stall_after_seconds=stall_after_seconds,
                 )
             except (KeyboardInterrupt, SchemaVersionMismatch):
                 # SIGINT stops cleanly via the outer handler; a contracts

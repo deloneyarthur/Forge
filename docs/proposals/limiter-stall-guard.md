@@ -1,9 +1,18 @@
 # §7.3 Stall Guard — Design Proposal (Q38)
 
-**Status: APPROVED 2026-06-11 — all four §8 decisions resolved (in-session
+**Status: BUILT 2026-06-13 (D137) — all four §8 decisions implemented as approved
+(decision-clock predicate, T = 3 h `stall_after_seconds: 10800`, direct enforce, extend
+`check_rate_limit`). TDD: 12 unit + 3 invariants + wiring/model tests; full suite 1,563/0,
+mypy 0/89, ruff clean. Production enabled via `config/forge.yaml`; SERVICE-INERT until the
+next D104 ritual restart (the running daemon won't reload until then). One implementation
+note vs the design: `RateLimitStatus` also carries `stall_pending_count` (the journal line's
+`<N> configs pending` needs the count, so the predicate is a COUNT not a bare EXISTS — same
+single query). Code-layer default is OFF (0); production opts in — see D137 rollout posture.**
+
+**Status (prior): APPROVED 2026-06-11 — all four §8 decisions resolved (in-session
 AskUserQuestion, every recommended option chosen): decision-clock predicate, T = 3 h
 (`stall_after_seconds: 10800`), direct enforce riding the next D104 ritual restart,
-extend `check_rate_limit`. Build greenlit; no code exists as of approval.**
+extend `check_rate_limit`.**
 **Date:** 2026-06-11. Origin: [[Q38]] — the 2026-06-10T23:55:05Z Crucible runner wedge
 (18.08 h, zero decisions, ~13,000 Forge submissions into a dead gate; evidence in
 `PROMPT_CRUCIBLE_RUNNER_WEDGE.md`; runner recovered 2026-06-11T17:59:34Z).

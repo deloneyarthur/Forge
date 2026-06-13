@@ -44,6 +44,12 @@ class SubmissionConfig(BaseModel):
     batch_size: int = Field(ge=1)
     inflight_threshold: float = Field(ge=0.0, le=1.0)
     poll_interval_seconds: int = Field(ge=1)
+    # Q38/D137 §7.3 stall guard: block submission when Crucible has had new work
+    # in hand for >= this many seconds and decided nothing. Optional; 0 (and
+    # absent) = disabled. Production opts in via config/forge.yaml (10800 = 3 h);
+    # the default-off keeps the no-config/dev path on the completion-fraction
+    # contract unchanged.
+    stall_after_seconds: int = Field(default=0, ge=0)
 
 
 class FeedbackConfig(BaseModel):
@@ -78,7 +84,7 @@ class ForgeConfig(BaseModel):
         Accepts flat kwargs that map to nested fields:
           - `db_path`, `data_root`, `log_root`     (top-level)
           - `batch_size`, `inflight_threshold`,
-            `poll_interval_seconds`                (submission.*)
+            `poll_interval_seconds`, `stall_after_seconds`  (submission.*)
           - `seed`, `max_candidates_per_batch`     (enumeration.*)
         Unknown keys raise `ValueError`.
         """
@@ -86,7 +92,12 @@ class ForgeConfig(BaseModel):
         submission_updates: dict[str, Any] = {}
         enumeration_updates: dict[str, Any] = {}
         known_top = {"db_path", "data_root", "log_root"}
-        known_submission = {"batch_size", "inflight_threshold", "poll_interval_seconds"}
+        known_submission = {
+            "batch_size",
+            "inflight_threshold",
+            "poll_interval_seconds",
+            "stall_after_seconds",
+        }
         known_enumeration = {"max_candidates_per_batch", "seed"}
         for key, value in overrides.items():
             if value is None:

@@ -17,6 +17,8 @@ forge:
     batch_size: 200
     inflight_threshold: 0.80   # wait until 80% of prev batch is gated
     poll_interval_seconds: 60  # v1 go-live; Crucible runner polls every 30s
+    stall_after_seconds: 10800 # Q38/D137 §7.3 stall guard: block if Crucible has
+                               # held new work >=3h with zero decisions (0=off)
 
   feedback:
     light_consumption_after_every: 1   # every batch

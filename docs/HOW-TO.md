@@ -101,6 +101,20 @@ Crucible. This is the rate limiter (correct behavior). If it's stuck for hours:
    systemctl --user start forge.service
    ```
 
+### Forge says "blocked: crucible stalled — no decisions since …"
+
+A *different* block from the one above (D137 stall guard, `submission.stall_after_seconds`,
+default 3 h). It means Crucible has had Forge's work in its queue for ≥3 h and decided
+nothing — its decision clock (`max(decided_at)`) is stale while configs submitted after it
+sit pending. This is the guard working: it stops Forge from pouring thousands of configs
+into a gate that has gone quiet (the 2026-06-10 wedge). It **self-clears** the moment one
+fresh decision lands — no intervention needed once Crucible recovers.
+
+What to do: this points upstream, not at Forge. Diagnose the runner (is it wedged? a
+`futex_do_wait` at 0% CPU with byte-identical exports is the signature), restart it if
+needed, and relay a wedge prompt (`PROMPT_CRUCIBLE_RUNNER_WEDGE.md` is the template). Do
+**not** lower `stall_after_seconds` to "unblock" — that just resumes feeding the dead gate.
+
 ### Exports are stale / Forge can't see results
 
 The DB is single-writer. Forge never reads `runs.duckdb` directly — it reads the

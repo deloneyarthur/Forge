@@ -31,14 +31,17 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from crucible_contracts import (
+    GatedRun,
     get_recent_gated_runs,
     load_recent_gated_runs_from_export,
 )
 from crucible_contracts.exceptions import QueryError
 
+from forge.core.clock import utc_now
 from forge.persistence.db import db_connection
 
 # D036 (2026-05-17) — tactical drop from 0.80 → 0.50 while we wait for the
@@ -80,6 +83,12 @@ class RateLimitStatus:
 
     `clear` is the only field `forge run` strictly needs; the rest are
     for the CLI's "waiting" message and for `pre_filter_logs`/audit.
+
+    Q38/D137 stall-guard fields are inert (`False`/`None`/`0`) unless a
+    positive `stall_after_seconds` is passed: `stall_blocked` is the second,
+    independent block reason (Crucible has held new work >= T and decided
+    nothing); `last_decided_at` is Crucible's decision clock for the journal
+    line; `stall_pending_count` is the number of configs caught behind it.
     """
 
     clear: bool
@@ -88,6 +97,9 @@ class RateLimitStatus:
     submitted_count: int
     gated_count: int
     threshold: float = _DEFAULT_THRESHOLD
+    stall_blocked: bool = False
+    last_decided_at: datetime | None = None
+    stall_pending_count: int = 0
 
 
 def check_rate_limit(
@@ -96,6 +108,7 @@ def check_rate_limit(
     *,
     threshold: float = _DEFAULT_THRESHOLD,
     exports_dir: Path | None = None,
+    stall_after_seconds: int = 0,
 ) -> RateLimitStatus:
     """Return whether a new batch may submit.
 
@@ -111,11 +124,25 @@ def check_rate_limit(
        holds an exclusive file lock so direct read-only DuckDB opens
        fail. Falls back to `get_recent_gated_runs` (direct DuckDB) for
        test fixtures where no exports dir exists.
-    4. Clear if `(local_gated + export_overlap) / batch_size >= threshold`.
+    4. Clear if `(local_gated + export_overlap) / batch_size >= threshold`
+       AND the stall guard (below) is not tripped.
 
     If the Forge DB has no `submitted` rows, `clear=True` — nothing is
     in flight. If both the export and direct-DB paths fail, the export
     contribution is 0 (the local gated count still counts) — conservative.
+
+    Q38/D137 stall guard (`stall_after_seconds > 0`): a second, independent
+    block reason for the wedge the completion fraction misses — Crucible's
+    gate stops deciding while its export stays fresh-by-mtime, so the oldest
+    in-flight batch reads ~100% gated (pct says "clear") while newer configs
+    pile into a dead gate. The predicate (design §4) blocks iff a `submitted`
+    row postdates Crucible's decision clock `max(decided_at)` by >= T. The
+    "postdates the clock" clause is the deadlock guard: if the clock is stale
+    only because Forge was quiet, no submission postdates it and the guard
+    stays silent. Stateless — a single fresh decision clears it next poll.
+    `stall_after_seconds=0` disables it (the production knob lives in
+    `forge.yaml`; the function default is off to keep determinism and the
+    completion-fraction contract byte-identical).
     """
     if exports_dir is None:
         exports_dir = Path.home() / "optbt_data" / "exports"
@@ -159,9 +186,7 @@ def check_rate_limit(
     # UUID. A null/sentinel run_id on a 'gated' row means "no real decision yet"
     # and must not satisfy §7.3.
     local_gated_count = sum(
-        1
-        for _h, s, r in rows
-        if str(s) == "gated" and r is not None and str(r) != _SENTINEL_RUN_ID
+        1 for _h, s, r in rows if str(s) == "gated" and r is not None and str(r) != _SENTINEL_RUN_ID
     )
 
     if submitted_count == 0:
@@ -176,6 +201,7 @@ def check_rate_limit(
         )
 
     export_overlap = 0
+    recent: list[GatedRun] = []
     if still_submitted_hashes:
         limit = max(submitted_count * _GATED_QUERY_LIMIT_FACTOR, _GATED_QUERY_MIN)
         try:
@@ -185,23 +211,83 @@ def check_rate_limit(
                 # No export present (or empty). Fall back to direct DuckDB for
                 # tests/fixtures where no writer service is running.
                 recent = get_recent_gated_runs(crucible_db_path, limit=limit)
-            export_overlap = sum(
-                1 for r in recent if r.run.config_hash in still_submitted_hashes
-            )
+            export_overlap = sum(1 for r in recent if r.run.config_hash in still_submitted_hashes)
         except QueryError:
             # Both paths failed; trust only the local gated count.
             export_overlap = 0
+            recent = []
+
+    # Q38/D137 stall guard: evaluate the decision-clock predicate over the
+    # already-fetched export slice (no extra parse) plus one COUNT on
+    # `submissions`. Inert when disabled or when no decisions are readable —
+    # the latter falls through to the conservative completion-fraction path.
+    stall_blocked, last_decided_at, stall_pending_count = _evaluate_stall_guard(
+        forge_db_path, recent, stall_after_seconds=stall_after_seconds
+    )
 
     gated_count = local_gated_count + export_overlap
     pct = gated_count / submitted_count
+    clear = pct >= threshold and not stall_blocked
     return RateLimitStatus(
-        clear=pct >= threshold,
+        clear=clear,
         pct_gated=pct,
-        blocking_batch_id=None if pct >= threshold else oldest_batch_id,
+        blocking_batch_id=None if clear else oldest_batch_id,
         submitted_count=submitted_count,
         gated_count=gated_count,
         threshold=threshold,
+        stall_blocked=stall_blocked,
+        last_decided_at=last_decided_at,
+        stall_pending_count=stall_pending_count,
     )
+
+
+def _evaluate_stall_guard(
+    forge_db_path: Path,
+    recent: list[GatedRun],
+    *,
+    stall_after_seconds: int,
+) -> tuple[bool, datetime | None, int]:
+    """Decision-clock staleness predicate (Q38/D137, design §4).
+
+    Returns `(stall_blocked, last_decided_at, pending_count)`. Blocks iff a
+    `submitted` row postdates Crucible's decision clock `max(decided_at)` and
+    is itself at least `stall_after_seconds` old — i.e. Crucible has had new
+    work in hand for >= T and decided nothing. The `submitted_at > clock`
+    clause IS the deadlock guard: a clock left stale by Forge's own quiet has
+    no submission postdating it, so the guard cannot block us for being idle.
+
+    Inert (returns `(False, None, 0)`) when disabled or when the decision clock
+    is unreadable (no export / empty) — the caller's pct path stays in charge.
+    """
+    if stall_after_seconds <= 0 or not recent:
+        return (False, None, 0)
+    # Crucible's decision clock = newest decision in the fetched slice. D061:
+    # normalize to aware UTC (export rows may be naive) for the max, then strip
+    # to naive UTC to match the `submitted_at` column convention.
+    decided_ats: list[datetime] = []
+    for gr in recent:
+        d = gr.decision.decided_at
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=UTC)
+        decided_ats.append(d)
+    last_decided_at = max(decided_ats)
+    max_decided_naive = last_decided_at.astimezone(UTC).replace(tzinfo=None)
+    cutoff_naive = (
+        (utc_now() - timedelta(seconds=stall_after_seconds)).astimezone(UTC).replace(tzinfo=None)
+    )
+    with db_connection(forge_db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM submissions
+            WHERE status = 'submitted'
+              AND submitted_at > ?
+              AND submitted_at <= ?
+            """,
+            [max_decided_naive, cutoff_naive],
+        ).fetchone()
+    pending = int(row[0]) if row is not None else 0
+    return (pending > 0, last_decided_at, pending)
 
 
 __all__ = ["RateLimitStatus", "check_rate_limit"]

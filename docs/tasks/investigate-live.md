@@ -89,8 +89,26 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
   not an OOM or leak; the systemd peak counts reclaimable page cache (D117). The
   flag-worthy signal is an `oom-kill` line, nothing else.
 
-## When "blocked" IS a wedge
+## `blocked: crucible stalled` — the D137 stall guard fired (NOT benign, but self-clearing)
 
-Hours of consecutive blocks while exports stay fresh and Crucible's runner is gating → check the
-aged-out flush watermark logic in `feedback/consumer.py` (history: D052 → D061 → D110) and whether
-the pinned oldest batch predates a code change (skip procedure: `docs/HOW-TO.md`).
+Distinct journal line from the benign `prev batch N% gated`:
+`blocked: crucible stalled — no decisions since <ts> (<X.X>h); <N> configs pending ≥3h`.
+The §7.3 stall guard (`submission.stall_after_seconds`, default 3 h) tripped — Crucible's
+decision clock `max(decided_at)` has been stale ≥3 h while Forge has work submitted after it.
+This is the guard working as designed (it would have caught the 2026-06-10 wedge at +3 h
+instead of +18 h). It is **stateless and self-clearing**: one fresh Crucible decision advances
+the clock past every pending witness and the next poll submits again — no Forge intervention.
+
+The signal points UPSTREAM. Diagnose the runner (`futex_do_wait` at 0% CPU + byte-identical
+exports = the wedge signature), restart it if wedged, and relay a wedge prompt
+(`PROMPT_CRUCIBLE_RUNNER_WEDGE.md`). Never lower the knob to "unblock" — that just resumes
+feeding the dead gate (the exact waste the guard exists to prevent). Deadlock-immune by
+construction: if the clock is stale because *Forge* was quiet (our outage/migration), no
+submission postdates it, so the guard stays silent and the next batch flows.
+
+## When "blocked" IS a wedge (the completion-fraction path)
+
+Hours of consecutive `prev batch N% gated` blocks while exports stay fresh and Crucible's runner is
+gating → check the aged-out flush watermark logic in `feedback/consumer.py` (history: D052 → D061 →
+D110) and whether the pinned oldest batch predates a code change (skip procedure: `docs/HOW-TO.md`).
+(Post-D137 this specific 18-h-blind-window wedge is caught by the stall guard above within 3 h.)

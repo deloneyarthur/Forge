@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-13 — D137 BUILT: §7.3 stall guard (Q38 design shipped) — decision-clock staleness + work-pending predicate in `check_rate_limit`; full suite 1,563/0, mypy 0/89; SERVICE-INERT until next ritual restart
+
+**Operator: "let's build the stall-guard" on the APPROVED Q38 design (`docs/proposals/limiter-stall-guard.md`). Built TDD (RED-first): predicate `stall_blocked ⇔ export readable ∧ ∃ submitted row with submitted_at > max(decided_at) ∧ ≥ T old` (T=3h, `submission.stall_after_seconds: 10800`). The fix for the 06-10 wedge — Crucible's gate quiet 18h while its export stayed fresh-by-mtime, the completion-fraction signal stayed clear (oldest batch 199/200), ~13k configs into a dead gate. Stateless (one fresh decision clears it next poll — the D110 anti-latch lesson made structural) + deadlock-immune (a clock left stale by Forge's OWN quiet has no submission postdating it → guard silent). Full record: [[D137]].**
+
+- **Shipped as designed (all four §8 options):** decision-clock predicate / T=3h / direct-enforce / extend `check_rate_limit`+`RateLimitStatus`. New fields `stall_blocked` / `last_decided_at` / `stall_pending_count`; distinct journal line `blocked: crucible stalled — no decisions since <ts> (<X.X>h); <N> configs pending ≥3h` (kept separate from the benign `prev batch N% gated`). One note: the line's `<N>` makes the predicate a COUNT (not bare EXISTS) — same single query.
+- **Rollout posture (deliberate, vs H-4):** code-layer default + no-config fallback = **0 (OFF)** because the guard reads the wall clock (a stale test DB would false-trip); **production opts in via `config/forge.yaml: stall_after_seconds: 10800`**. Keeps all 14 existing rate-limiter tests + every cmd_run/_run_one_iteration test byte-identical; "guard-off equivalence" is the literal invariant.
+- **Backtest (design §5, full verdicts history):** 2/2 true stalls fire (05-30, 06-11), 0/2 false (healthy-slow 06-04, Forge-quiet 06-07 migration silent). Would've caught the 06-10 wedge at +3h, saving ~10,800 of 13k dead submissions.
+- **Verification:** 12 unit (8 truth-table + 4 §5 replay) + 3 invariants (deadlock-immunity Hypothesis property, stateless-recovery, guard-off-equivalence) + wiring/model tests. **Full suite 1,563/0; mypy 0/89; ruff clean.** tz gotcha handled in fixtures (synthetic crucible DB not UTC-pinned → store naive-UTC for identity round-trip; production reads tz-aware export JSON, unaffected).
+- **SERVICE-INERT** — the running daemon won't reload code/config until a restart; activates at the next D104 ritual restart (no urgency — runner recovered; the next stall is what this buys down). Docs updated same commit (MANPAGE knob + §7.3 note, HOW-TO troubleshooting, investigate-live journal signal). **Next: this rides the next operator-gated restart; until then nothing changes live.**
+
+---
+
 ## 2026-06-13 — EOD CHECKPOINT #2 (05:09Z snapshot) — v18 funnel healthy (2.84% comp; honest-era 3.28%, in §1.3 band); per-arm floor delivers new-arm PRESENCE from batch 1 but 0 conversions yet; F3 eval #2 = current model PASS (+0.491) but selection-confounded → 1/3; HOST REBOOTED 22:22:12Z (clean auto-start on committed v18)
 
 **Overnight read since the v18 deploy. No fires: runner healthy and streaming (last done 05:25:12Z; the `futex_do_wait` ps-sample is the parked main thread, exports growing in size, NOT a re-wedge). Snapshot `/tmp/forge_eod2_20260611.db` (max decided 05:09:27Z).**

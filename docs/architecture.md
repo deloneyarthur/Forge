@@ -24,7 +24,8 @@ flowchart LR
 Per-batch order (§2.1, fixed): load grammar (verify version + archive) → snapshot registry →
 enumerate (lazy, seeded) → pre-filter battery (cost-ascending, short-circuit on first failure) →
 rank (§6.2 composite) → diversify (greedy, min-per-hypothesis floor) → submit (atomic, idempotent)
-→ rate-limit (block until ≥80% of the oldest in-flight batch is gated, §7.3) → consume feedback →
+→ rate-limit (§7.3: block until ≥80% of the oldest in-flight batch is gated, OR the D137 stall
+guard trips — Crucible idle ≥3h with our work pending) → consume feedback →
 analyze → propose (auto-apply tightenings; loosenings → `OPEN_PROPOSALS.md`). Cross-batch state
 lives in `~/forge_data/forge.db` only — never in process memory across runs.
 
