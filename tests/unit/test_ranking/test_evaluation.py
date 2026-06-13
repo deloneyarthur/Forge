@@ -20,13 +20,26 @@ from forge.ranking.evaluation import evaluate_shadow
 _SINCE = datetime(2026, 6, 10, 17, 17, 13)  # noqa: DTZ001 — naive-UTC convention
 
 
-def _gated_run(*, config_hash: str, decision: str, honest: bool = True):
+def _gated_run(*, config_hash: str, decision: str, honest: bool = True, cpcv: float | None = None):
     from datetime import date
 
     from crucible_contracts import GatedRun
     from crucible_contracts.models import GateResult, PromotionDecision, RunResult
 
     rid = str(uuid.uuid4())
+    gate_results = {
+        "regime_coverage": GateResult(
+            gate_name="regime_coverage",
+            passed=True,
+            value=None,
+            threshold=None,
+            detail="" if honest else "coverage_unverified",
+        ),
+    }
+    if cpcv is not None:
+        gate_results["cpcv_sharpe_p25"] = GateResult(
+            gate_name="cpcv_sharpe_p25", passed=cpcv >= 1.5, value=cpcv, threshold=1.5
+        )
     return GatedRun(
         run=RunResult(
             run_id=rid,
@@ -40,15 +53,7 @@ def _gated_run(*, config_hash: str, decision: str, honest: bool = True):
         decision=PromotionDecision(
             run_id=rid,
             decision=decision,  # type: ignore[arg-type]
-            gate_results={
-                "regime_coverage": GateResult(
-                    gate_name="regime_coverage",
-                    passed=True,
-                    value=None,
-                    threshold=None,
-                    detail="" if honest else "coverage_unverified",
-                ),
-            },
+            gate_results=gate_results,
             decided_at=datetime(2026, 6, 10, 19, 0),  # noqa: DTZ001
             decided_by="runner.forge_minimal",
         ),
@@ -145,3 +150,106 @@ def test_window_filter_excludes_older_verdicts() -> None:
 def test_no_shadow_rows_returns_empty() -> None:
     with db_connection() as conn:
         assert evaluate_shadow(conn, since=_SINCE) == ()
+
+
+# ---------------------------------------------------------------------------
+# Tail-aware eval (T1) — predicted cpcv_p25 (tail_score) vs realized cpcv_p25
+# ---------------------------------------------------------------------------
+
+
+def _seed_tail(
+    conn: duckdb.DuckDBPyConnection,
+    rows: list[tuple[str, float, float, float, bool]],
+    *,
+    tail_model_id: str = "tail111122223333",
+) -> None:
+    """rows: (config_hash, tail_score, composite_score, realized_cpcv, honest)."""
+    for config_hash, tail_score, composite_score, cpcv, honest in rows:
+        candidate_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
+            "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
+            [candidate_id, str(uuid.uuid4()), config_hash, _SINCE, "gated"],
+        )
+        conn.execute(
+            "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+            "composite_score, scored_at, tail_score, tail_model_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                candidate_id,
+                "logistic00000000",
+                0.5,
+                composite_score,
+                _SINCE,
+                tail_score,
+                tail_model_id,
+            ],
+        )
+        record_verdicts(
+            conn, [_gated_run(config_hash=config_hash, decision="reject", honest=honest, cpcv=cpcv)]
+        )
+
+
+def test_tail_eval_spearman_and_top_k() -> None:
+    from forge.ranking.evaluation import evaluate_tail_shadow
+
+    # tail_score rank-correlates with realized cpcv; composite is anti-correlated.
+    rows = [
+        ("aaaa000000000001", 0.9, 0.1, 0.95, True),
+        ("aaaa000000000002", 0.7, 0.3, 0.80, True),
+        ("aaaa000000000003", 0.5, 0.5, 0.50, True),
+        ("aaaa000000000004", 0.3, 0.7, 0.30, True),
+        ("aaaa000000000005", 0.1, 0.9, 0.10, True),
+    ]
+    with db_connection() as conn:
+        _seed_tail(conn, rows)
+        evals = evaluate_tail_shadow(conn, since=_SINCE)
+
+    assert len(evals) == 1
+    ev = evals[0]
+    assert ev.tail_model_id == "tail111122223333"
+    assert ev.n_decided == 5
+    assert ev.spearman == pytest.approx(1.0)
+    # K = top decile -> 1; top-by-tail picks the highest realized cpcv, top-by-composite the lowest.
+    assert ev.model_top_k_mean_cpcv == pytest.approx(0.95)
+    assert ev.incumbent_top_k_mean_cpcv == pytest.approx(0.10)
+    assert ev.overall_mean_cpcv == pytest.approx(0.53)
+
+
+def test_tail_eval_excludes_unverified_and_missing_cpcv() -> None:
+    from forge.ranking.evaluation import evaluate_tail_shadow
+
+    with db_connection() as conn:
+        _seed_tail(
+            conn,
+            [
+                ("aaaa000000000001", 0.9, 0.1, 0.95, True),
+                ("aaaa000000000002", 0.7, 0.3, 0.80, True),
+                ("aaaa000000000003", 0.5, 0.5, 0.99, False),  # unverified — excluded
+            ],
+        )
+        evals = evaluate_tail_shadow(conn, since=_SINCE)
+
+    assert evals[0].n_decided == 2
+
+
+def test_tail_eval_no_tail_scores_returns_empty() -> None:
+    # A shadow row without a tail_score (the pre-train / pre-restart state).
+    rows = [
+        ("aaaa000000000001", 0.9, 0.1, "component"),
+        ("aaaa000000000002", 0.1, 0.9, "reject"),
+    ]
+    with db_connection() as conn:
+        _seed(conn, rows)  # inserts NULL tail_score
+        from forge.ranking.evaluation import evaluate_tail_shadow
+
+        assert evaluate_tail_shadow(conn, since=_SINCE) == ()
+
+
+def test_spearman_corr_perfect_inverted_and_degenerate() -> None:
+    from forge.ranking.evaluation import spearman_corr
+
+    assert spearman_corr([1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]) == pytest.approx(1.0)
+    assert spearman_corr([1.0, 2.0, 3.0, 4.0], [4.0, 3.0, 2.0, 1.0]) == pytest.approx(-1.0)
+    assert spearman_corr([1.0, 1.0, 1.0], [1.0, 2.0, 3.0]) is None  # zero variance
+    assert spearman_corr([1.0], [1.0]) is None  # < 2 points

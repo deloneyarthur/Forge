@@ -235,6 +235,62 @@ def cmd_eval(
         typer.echo(f"  calibration: {cal}")
 
 
+@ranker_model_app.command("eval-robustness")
+def cmd_eval_robustness(
+    forge_db: Path | None = typer.Option(
+        None, "--forge-db", help="forge.db path (use a /tmp snapshot of the live DB)"
+    ),
+    config: Path = typer.Option(
+        Path("config/forge.yaml"), "--config", help="forge.yaml (supplies db_path default)"
+    ),
+    since: str | None = typer.Option(
+        None, "--since", help="ISO window start (default: the clean-era boundary)"
+    ),
+) -> None:
+    """Tail-aware (T1) shadow readout (D141 data): does ranking by the predicted `cpcv_p25`
+    (tail_score) surface configs with higher REALIZED worst-quartile robustness? Prints
+    Spearman(tail_score, realized cpcv_p25) + top-K mean realized cpcv (tail model vs the
+    incumbent composite) per tail_model_id, over verified-coverage decided verdicts. The
+    §8.6 criterion margin is set once the shadow distribution is visible, so this prints the
+    metrics with no PASS/FAIL yet. Design: docs/proposals/tail-aware-ranker.md."""
+    from forge.core.contracts_check import check_contracts_version
+
+    check_contracts_version()
+
+    from forge.persistence.db import db_connection
+    from forge.ranking.evaluation import evaluate_tail_shadow
+
+    forge_db = _resolve_forge_db(forge_db, config)
+    cut = _resolve_era_cut(since)
+
+    with db_connection(forge_db) as conn:
+        evaluations = evaluate_tail_shadow(conn, since=cut)
+
+    if not evaluations:
+        typer.echo(
+            f"no tail-scored verdicts decided since {cut.isoformat()} "
+            "(tail shadow not yet accruing — needs the D141 code live + a robustness model)"
+        )
+        return
+    for ev in evaluations:
+        sp = f"{ev.spearman:+.3f}" if ev.spearman is not None else "n/a"
+        typer.echo(
+            f"tail_model={ev.tail_model_id} decided={ev.n_decided} "
+            f"spearman(pred,realized cpcv_p25)={sp}"
+        )
+        mk = "n/a" if ev.model_top_k_mean_cpcv is None else f"{ev.model_top_k_mean_cpcv:.3f}"
+        ik = (
+            "n/a" if ev.incumbent_top_k_mean_cpcv is None else f"{ev.incumbent_top_k_mean_cpcv:.3f}"
+        )
+        ok = "n/a" if ev.overall_mean_cpcv is None else f"{ev.overall_mean_cpcv:.3f}"
+        typer.echo(
+            f"  top-{ev.k} mean realized cpcv_p25: tail-model={mk} vs incumbent={ik} (overall={ok})"
+        )
+    typer.echo(
+        "  criterion: §8.6 margin not yet set (fixed once the shadow distribution is visible)"
+    )
+
+
 @ranker_model_app.command("train-robustness")
 def cmd_train_robustness(
     forge_db: Path | None = typer.Option(

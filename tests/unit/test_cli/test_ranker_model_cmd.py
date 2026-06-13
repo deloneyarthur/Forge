@@ -307,6 +307,47 @@ def test_train_robustness_refuses_when_target_all_null(tmp_path: Path) -> None:
     assert "refusing to train" in result.output
 
 
+def test_eval_robustness_command(tmp_path: Path) -> None:
+    db_path = tmp_path / "forge.db"
+    _seed_training_db(db_path)  # 60 submissions + verified verdicts carrying cpcv
+    # Attach tail scores to every candidate.
+    with db_connection(db_path) as conn:
+        rows = conn.execute(
+            "SELECT forge_candidate_id FROM submissions ORDER BY config_hash"
+        ).fetchall()
+        for idx, (candidate_id,) in enumerate(rows):
+            conn.execute(
+                "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+                "composite_score, scored_at, tail_score, tail_model_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    str(candidate_id),
+                    "logistic00000000",
+                    0.5,
+                    0.5,
+                    datetime(2026, 6, 10, 17, 30),  # noqa: DTZ001
+                    idx / 60.0,
+                    "tailmodel0000001",
+                ],
+            )
+
+    result = runner.invoke(app, ["ranker-model", "eval-robustness", "--forge-db", str(db_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "tail_model=tailmodel0000001" in result.output
+    assert "decided=60" in result.output
+    assert "spearman(pred,realized cpcv_p25)=" in result.output
+    assert "top-" in result.output
+
+
+def test_eval_robustness_command_no_tail_scores(tmp_path: Path) -> None:
+    db_path = tmp_path / "forge.db"
+    _seed_training_db(db_path, n=12)  # verdicts but no tail-scored shadow rows
+    result = runner.invoke(app, ["ranker-model", "eval-robustness", "--forge-db", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "no tail-scored verdicts" in result.output
+
+
 def test_dataset_command_era_cut_override(tmp_path: Path) -> None:
     db_path = tmp_path / "forge.db"
     # Post-default-cut but pre-override: excluded under the override.
