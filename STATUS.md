@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-13 — D141 SHADOW ACTIVATED via ritual restart 19:06:50Z — `tail_score` now recording (`tail_model_id=5174039c`, 200/200 first batch); v19 + registry_hash UNCHANGED, clean deploy
+
+**Operator: "do the ritual restart to activate the shadow." D104 ritual (`docs/tasks/deploy.md`) executed: stopped 19:04:21Z (exit 143, clean `--loop` SIGTERM) → FULL UNCONTENDED SUITE 1,590/0 (the deploy gate) → code already committed (D141 `fc1e985` + D143) → reset-failed → restart 19:06:50Z (PID 1789373/1789378). Verified: `registry_loaded_from_export`, `grammar_version=v19` / `registry_hash=a7ae9ccf843fd969` UNCHANGED (pure code activation, no drift), NRestarts=0, ZERO error/traceback/mismatch lines. D141 schema migration applied to the LIVE DB (`shadow_scores += tail_score/tail_model_id`, confirmed on snapshot; the 35,600 pre-restart rows stay NULL). First post-restart batch (iteration 726): enumerated 5000 → ranked 200 → submitted → `shadow_scores_recorded recorded=200 tail_model_id=5174039c416e9082` @ 19:19:30Z, `tail_score` populated (range [−0.204, 0.747]). THE SHADOW IS LIVE.**
+
+- **Tail-aware T1 is now closed end-to-end on production:** D142 daily-trains the robustness model → D141 shadow code scores each batch → `tail_score` accrues → D143 `eval-robustness` reads it (daily + on demand). The §8.6 criterion margin gets set once the distribution accrues. No grammar/registry change → no Crucible relay needed for this deploy.
+- ⚠️ **D144 (T2 supply metric, committed 19:21:02Z — AFTER this restart) is NOT in the running daemon** (0 `regime_supply:` lines); it is inert-until-next-restart, the same posture D141 had. Whoever next bounces the service activates it.
+
+---
+
 ## 2026-06-13 — T2 regime-complement SUPPLY METRIC built (SHADOW, D144) — per-batch `regime_supply:` journal line: how much ranging/bear complement a future T2 floor could reserve, vs the passed pool; daemon-inert, NEVER reshapes a batch
 
 **Operator (AskUserQuestion): "build the T2 supply-metric (shadow)." Built TDD: new `forge.ranking.regime_supply` classifies each ranked survivor's regime-bet and rolls it up to the T3a-measured failure regimes — `trending_dominant` (trend, the 76% sleeve) / `ranging_complement` (mean_reversion, R1/D107) / `bear_complement` (tail_hedge, C2 macro) / `other`. `_run_one_iteration` logs `regime_supply:` over the submitted batch AND the pre-filter-passed pool (the reservable ceiling), leading with the ranging+bear complement share and calling out bear. Pure config-only tally (no DB / feature cache); computed post-rank, threaded nowhere near submit → submitted set byte-identical. Full record: [[D144]].**
