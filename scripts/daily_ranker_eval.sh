@@ -185,4 +185,13 @@ print(
 )
 PY
 
+# --- tail-aware (T1) readout (D143) -------------------------------------------
+#     Observation only: prints Spearman(tail_score, realized cpcv_p25) + top-K mean
+#     realized cpcv (tail model vs incumbent) so the §8.6 criterion margin can be set
+#     once the distribution is visible. No streak/gating yet; reports "not yet
+#     accruing" until the D141 shadow code is live (post-restart) + tail rows exist.
+echo "daily-ranker-eval: eval-robustness (tail T1)"
+uv run forge ranker-model eval-robustness --forge-db "$SNAP" || \
+    echo "daily-ranker-eval: eval-robustness non-zero -- continuing" >&2
+
 echo "daily-ranker-eval: done"
