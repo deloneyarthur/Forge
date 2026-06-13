@@ -163,6 +163,14 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
         PRIMARY KEY (forge_candidate_id, model_id)
     )
     """,
+    # D140 (tail-aware T1) — the tail model's predicted worst-quartile robustness
+    # (default cpcv_p25) recorded next to the P(component) shadow score, plus which
+    # robustness artifact produced it. NULL until a robustness model is trained /
+    # for pre-existing rows. Telemetry only — the production loop NEVER reads these
+    # (tail wiring is gated; this just accrues eval data). Idempotent ALTERs so the
+    # live DB picks them up at the next service restart.
+    "ALTER TABLE shadow_scores ADD COLUMN IF NOT EXISTS tail_score DOUBLE",
+    "ALTER TABLE shadow_scores ADD COLUMN IF NOT EXISTS tail_model_id VARCHAR(64)",
 )
 
 TABLE_NAMES: Final[frozenset[str]] = frozenset(

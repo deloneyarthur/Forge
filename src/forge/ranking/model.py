@@ -644,3 +644,18 @@ def load_robustness_model(path: Path) -> RobustnessModel:
         coefficients=tuple(raw["coefficients"]),
         train_metrics=metrics,
     )
+
+
+def load_latest_robustness_model(models_dir: Path) -> RobustnessModel | None:
+    """Newest valid robustness artifact by (trained_through, model_id); corrupt skipped."""
+    if not models_dir.is_dir():
+        return None
+    candidates: list[RobustnessModel] = []
+    for path in sorted(models_dir.glob("robustness_model_*.json")):
+        try:
+            candidates.append(load_robustness_model(path))
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+            _LOG.warning("robustness_model_artifact_unreadable", path=str(path), error=str(exc))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda m: (m.trained_through, m.model_id))

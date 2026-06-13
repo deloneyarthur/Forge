@@ -17,7 +17,12 @@ import polars as pl
 
 from forge.persistence.db import db_connection
 from forge.prefilters.types import PreFilterReport
-from forge.ranking.model import save_model, train_verdict_model
+from forge.ranking.model import (
+    save_model,
+    save_robustness_model,
+    train_robustness_model,
+    train_verdict_model,
+)
 from forge.ranking.shadow import run_shadow_scoring
 from forge.ranking.types import RankedCandidate
 from tests.fixtures.strategy_configs import (
@@ -47,6 +52,29 @@ def _toy_model_dir(tmp_path: Path) -> Path:
     model = train_verdict_model(pl.DataFrame(records), era_cut=_ERA_CUT)
     models_dir = tmp_path / "models"
     save_model(model, models_dir)
+    return models_dir
+
+
+def _toy_models_dir_with_tail(tmp_path: Path) -> Path:
+    """A logistic model AND a robustness model in the same dir (D140)."""
+    models_dir = _toy_model_dir(tmp_path)
+    records = []
+    for i in range(30):
+        records.append(
+            {
+                "crucible_run_id": f"run-{i:04d}",
+                "config_hash": f"hash{i:012d}",
+                "decided_at": datetime(2026, 6, 10, 18, 0, i),  # noqa: DTZ001
+                "decision": "component" if i % 5 == 0 else "reject",
+                "label": int(i % 5 == 0),
+                "target_cpcv_p25": 0.3 + 0.5 * (i % 5 == 0),
+                "coverage_verified": float(i % 4 != 0),
+                "hypothesis=mean_reversion": 1.0,
+                "f_noise": float(i % 3),
+            }
+        )
+    model = train_robustness_model(pl.DataFrame(records), era_cut=_ERA_CUT)
+    save_robustness_model(model, models_dir)
     return models_dir
 
 
@@ -84,6 +112,8 @@ def test_shadow_scores_table_created_by_ensure_schema() -> None:
         "model_score",
         "composite_score",
         "scored_at",
+        "tail_score",
+        "tail_model_id",
     }
 
 
@@ -187,6 +217,49 @@ def test_candidate_without_submission_row_is_skipped(tmp_path: Path) -> None:
         )
 
     assert recorded == 0
+
+
+def test_tail_score_populated_when_robustness_model_present(tmp_path: Path) -> None:
+    models_dir = _toy_models_dir_with_tail(tmp_path)
+    candidate = _candidate()
+    batch_id = str(uuid.uuid4())
+    with db_connection() as conn:
+        _insert_submission(conn, batch_id=batch_id, config_hash=candidate.report.config.config_hash)
+        run_shadow_scoring(
+            conn,
+            models_dir=models_dir,
+            candidates=[candidate],
+            registry=_REGISTRY,
+            batch_id=batch_id,
+            scored_at=_SCORED_AT,
+        )
+        row = conn.execute("SELECT tail_score, tail_model_id FROM shadow_scores").fetchone()
+
+    assert row is not None
+    tail_score, tail_model_id = row
+    assert tail_score is not None
+    assert tail_model_id is not None
+    assert len(tail_model_id) == 16
+
+
+def test_tail_score_null_without_robustness_model(tmp_path: Path) -> None:
+    # Only the logistic model present — tail columns stay NULL (the pre-train state).
+    models_dir = _toy_model_dir(tmp_path)
+    candidate = _candidate()
+    batch_id = str(uuid.uuid4())
+    with db_connection() as conn:
+        _insert_submission(conn, batch_id=batch_id, config_hash=candidate.report.config.config_hash)
+        run_shadow_scoring(
+            conn,
+            models_dir=models_dir,
+            candidates=[candidate],
+            registry=_REGISTRY,
+            batch_id=batch_id,
+            scored_at=_SCORED_AT,
+        )
+        row = conn.execute("SELECT tail_score, tail_model_id FROM shadow_scores").fetchone()
+
+    assert row == (None, None)
 
 
 def test_submissions_table_is_never_mutated(tmp_path: Path) -> None:

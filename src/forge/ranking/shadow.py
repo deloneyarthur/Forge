@@ -20,7 +20,12 @@ from typing import TYPE_CHECKING
 import structlog
 
 from forge.ranking.features import extract_features
-from forge.ranking.model import load_latest_model, score_features
+from forge.ranking.model import (
+    load_latest_model,
+    load_latest_robustness_model,
+    score_features,
+    score_robustness,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -49,6 +54,11 @@ def run_shadow_scoring(
         model = load_latest_model(models_dir)
         if model is None:
             return 0
+        # D140: also score the tail-aware robustness model when one exists. NULL
+        # otherwise (and for the whole pre-train history) — telemetry only; the
+        # loop never reads tail_score, so this changes no submission behavior.
+        robustness = load_latest_robustness_model(models_dir)
+        tail_model_id = robustness.model_id if robustness is not None else None
         by_hash = {c.report.config.config_hash: c for c in candidates}
         rows = conn.execute(
             "SELECT forge_candidate_id, config_hash FROM submissions WHERE forge_batch_id = ?",
@@ -60,21 +70,26 @@ def run_shadow_scoring(
             if candidate is None:
                 continue
             features = extract_features(candidate.report.config, registry).as_dict()
+            tail_score = score_robustness(robustness, features) if robustness is not None else None
             conn.execute(
                 "INSERT OR IGNORE INTO shadow_scores (forge_candidate_id, model_id, "
-                "model_score, composite_score, scored_at) VALUES (?, ?, ?, ?, ?)",
+                "model_score, composite_score, scored_at, tail_score, tail_model_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 [
                     str(candidate_id),
                     model.model_id,
                     score_features(model, features),
                     candidate.composite_score,
                     scored_at,
+                    tail_score,
+                    tail_model_id,
                 ],
             )
             recorded += 1
         _LOG.info(
             "shadow_scores_recorded",
             model_id=model.model_id,
+            tail_model_id=tail_model_id,
             batch_id=batch_id,
             recorded=recorded,
         )
