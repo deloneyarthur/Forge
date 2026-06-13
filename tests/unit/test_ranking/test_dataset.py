@@ -52,6 +52,9 @@ def _gated_run(
     honest_coverage: bool = True,
     coverage_row: bool = True,
     run_id: str | None = None,
+    cpcv: float | None = 0.8,
+    wf: float | None = 1.2,
+    regime_stress: float | None = 0.5,
 ):
     from datetime import date
 
@@ -67,6 +70,15 @@ def _gated_run(
             threshold=100.0,
         ),
     }
+    for _name, _val, _thr in (
+        ("cpcv_sharpe_p25", cpcv, 1.5),
+        ("walk_forward_sharpe_median", wf, 2.0),
+        ("regime_stress_p25_return", regime_stress, 0.0),
+    ):
+        if _val is not None:
+            gate_results[_name] = GateResult(
+                gate_name=_name, passed=_val >= _thr, value=_val, threshold=_thr
+            )
     if coverage_row:
         gate_results["regime_coverage"] = GateResult(
             gate_name="regime_coverage",
@@ -218,3 +230,99 @@ def test_verdict_without_submission_is_skipped() -> None:
         frame = build_dataset(conn, _REGISTRY)
 
     assert frame.height == 0
+
+
+def test_emits_continuous_targets_from_gate_values() -> None:
+    # T1: the worst-quartile regression targets ride along, read from
+    # gate_results[...].value (Forge consumes Crucible's computed metrics, §1.2).
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="aaaa000011112222")
+        record_verdicts(
+            conn,
+            [
+                _gated_run(
+                    config_hash="aaaa000011112222",
+                    decision="reject",
+                    cpcv=0.74,
+                    wf=1.30,
+                    regime_stress=0.82,
+                ),
+            ],
+        )
+        frame = build_dataset(conn, _REGISTRY)
+
+    assert frame["target_cpcv_p25"].to_list() == [0.74]
+    assert frame["target_wf_median"].to_list() == [1.30]
+    assert frame["target_regime_stress"].to_list() == [0.82]
+
+
+def test_missing_target_gate_is_null() -> None:
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="aaaa000011112222")
+        record_verdicts(
+            conn,
+            [_gated_run(config_hash="aaaa000011112222", decision="reject", cpcv=None)],
+        )
+        frame = build_dataset(conn, _REGISTRY)
+
+    assert frame["target_cpcv_p25"].to_list() == [None]
+
+
+def test_coverage_verified_flag_tracks_honesty_predicate() -> None:
+    # §8.2: a coverage-verified flag (=the D128 honesty predicate) rides along so
+    # the regression head can discount the noisier coverage_unverified cpcv values.
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="aaaa000011112222")
+        _insert_submission(conn, config_hash="bbbb000011112222")
+        record_verdicts(
+            conn,
+            [
+                _gated_run(
+                    config_hash="aaaa000011112222",
+                    decided_at=datetime(2026, 6, 10, 18, 0),  # noqa: DTZ001
+                    honest_coverage=True,
+                ),
+                _gated_run(
+                    config_hash="bbbb000011112222",
+                    decided_at=datetime(2026, 6, 10, 19, 0),  # noqa: DTZ001
+                    honest_coverage=False,
+                ),
+            ],
+        )
+        frame = build_dataset(conn, _REGISTRY)
+
+    # Ordered by decided_at: verified (18:00) then unverified (19:00).
+    assert frame["coverage_verified"].to_list() == [1.0, 0.0]
+
+
+def test_logistic_model_does_not_ingest_targets_or_coverage_flag() -> None:
+    # Safety invariant: the new regression targets are labels and coverage_verified
+    # is collinear with the honesty label — none may leak into the existing
+    # P(component) logistic model's feature set. Keeps F2 byte-identical.
+    from forge.ranking.model import train_verdict_model
+
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="aaaa000011112222")
+        _insert_submission(conn, config_hash="bbbb000011112222")
+        record_verdicts(
+            conn,
+            [
+                _gated_run(
+                    config_hash="aaaa000011112222",
+                    decision="component",
+                    honest_coverage=True,
+                    decided_at=datetime(2026, 6, 10, 18, 0),  # noqa: DTZ001
+                ),
+                _gated_run(
+                    config_hash="bbbb000011112222",
+                    decision="reject",
+                    honest_coverage=False,
+                    decided_at=datetime(2026, 6, 10, 19, 0),  # noqa: DTZ001
+                ),
+            ],
+        )
+        frame = build_dataset(conn, _REGISTRY)
+
+    model = train_verdict_model(frame, era_cut=_POST_CUT)
+    assert not any(name.startswith("target_") for name in model.feature_names)
+    assert "coverage_verified" not in model.feature_names

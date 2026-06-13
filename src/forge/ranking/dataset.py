@@ -38,6 +38,34 @@ if TYPE_CHECKING:
 # any reject variant is 0.
 _POSITIVE_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
 
+# Continuous worst-quartile regression targets (tail-aware ranker T1,
+# `docs/proposals/tail-aware-ranker.md`). Each reads `gate_results[gate].value`
+# — Forge consumes Crucible's already-computed metrics, never recomputes (§1.2).
+# Null when the gate is absent or carried no value. These are LABELS for the
+# regression head, never features (excluded from both models' feature sets).
+TARGET_COLUMNS: tuple[str, ...] = (
+    "target_cpcv_p25",
+    "target_wf_median",
+    "target_regime_stress",
+)
+_TARGET_GATE: tuple[tuple[str, str], ...] = (
+    ("target_cpcv_p25", "cpcv_sharpe_p25"),
+    ("target_wf_median", "walk_forward_sharpe_median"),
+    ("target_regime_stress", "regime_stress_p25_return"),
+)
+
+# A train-time conditioning feature (= the D128 honesty predicate, §8.2): lets
+# the regression head discount the noisier `coverage_unverified` cpcv values.
+# Fixed to 1.0 at score time (assume verified) to avoid train/serve skew.
+# Excluded from the P(component) logistic model — collinear with its honesty label.
+COVERAGE_FEATURE: str = "coverage_verified"
+
+
+def _gate_value(gate_results: Mapping[str, GateResult], name: str) -> float | None:
+    """The numeric value Crucible recorded for a gate, or None if absent."""
+    result = gate_results.get(name)
+    return None if result is None or result.value is None else float(result.value)
+
 
 def parse_gate_results(raw: str) -> dict[str, GateResult]:
     """Rehydrate a verdicts.gate_results JSON payload."""
@@ -91,7 +119,7 @@ def build_dataset(
     feature_names: set[str] = set()
     for run_id, config_hash, decision, decided_at, gate_results_json, config_json in rows:
         config = StrategyConfig.model_validate_json(config_json)
-        label = label_for(decision, parse_gate_results(gate_results_json))
+        gate_results = parse_gate_results(gate_results_json)
         features = extract_features(config, registry).as_dict()
         feature_names.update(features)
         records.append(
@@ -100,17 +128,25 @@ def build_dataset(
                 "config_hash": config_hash,
                 "decided_at": decided_at,
                 "decision": decision,
-                "label": label,
+                "label": label_for(decision, gate_results),
+                COVERAGE_FEATURE: float(honest_regime_coverage_row(gate_results)),
+                **{col: _gate_value(gate_results, gate) for col, gate in _TARGET_GATE},
                 **features,
             }
         )
 
+    leading = [*_IDENTITY_SCHEMA, *TARGET_COLUMNS, COVERAGE_FEATURE]
+    target_floats: dict[str, pl.DataType | type[pl.DataType]] = {
+        c: pl.Float64 for c in (*TARGET_COLUMNS, COVERAGE_FEATURE)
+    }
     if not records:
-        return pl.DataFrame(schema=dict(_IDENTITY_SCHEMA))
+        return pl.DataFrame(schema={**_IDENTITY_SCHEMA, **target_floats})
 
     ordered_features = sorted(feature_names)
     for record in records:
         for name in ordered_features:
             record.setdefault(name, 0.0)
 
-    return pl.DataFrame(records).select([*_IDENTITY_SCHEMA, *ordered_features])
+    return pl.DataFrame(records, schema_overrides=target_floats).select(
+        [*leading, *ordered_features]
+    )

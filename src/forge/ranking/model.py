@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from forge.ranking.dataset import COVERAGE_FEATURE, TARGET_COLUMNS
 from forge.ranking.features import FEATURE_SCHEMA_VERSION
 
 if TYPE_CHECKING:
@@ -44,6 +45,11 @@ _LOG = structlog.get_logger(__name__)
 
 # Frame columns that are row identity, not features (build_dataset contract).
 _IDENTITY_COLUMNS = frozenset({"crucible_run_id", "config_hash", "decided_at", "decision", "label"})
+
+# Columns the P(component) logistic model must NEVER ingest as features: the
+# regression targets (labels for the tail-aware head) and coverage_verified
+# (collinear with the honesty label). Keeps this model byte-identical to F2.
+_LOGISTIC_NON_FEATURES = _IDENTITY_COLUMNS | set(TARGET_COLUMNS) | {COVERAGE_FEATURE}
 
 # Id-level feature prefixes whose rare members collapse into "<prefix>=__other__".
 _COLLAPSIBLE_PREFIXES = ("dir_id", "regime_id", "exit")
@@ -225,7 +231,7 @@ def train_verdict_model(
         msg = f"cannot train on a single class ({n_positive}/{n_rows} positive)"
         raise ValueError(msg)
 
-    raw_names = [c for c in frame.columns if c not in _IDENTITY_COLUMNS]
+    raw_names = [c for c in frame.columns if c not in _LOGISTIC_NON_FEATURES]
     columns: dict[str, list[float]] = {
         name: [float(v) for v in frame[name].to_list()] for name in raw_names
     }
