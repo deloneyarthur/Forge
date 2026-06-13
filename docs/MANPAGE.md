@@ -430,7 +430,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 | `grammar_versions` | Grammar change history (version, sha256, operator initials). |
 | `grammar_proposals` | Refinement proposals (pending/approved/rejected/applied). |
 | `promoted_patterns` | Discovered patterns across promoted strategies. |
-| `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. Written post-submission; never read by the loop. |
+| `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. D140/D141 add `tail_score` + `tail_model_id` (the tail-aware model's predicted `cpcv_p25`, NULL until one is trained). Written post-submission; never read by the loop. |
 
 ---
 

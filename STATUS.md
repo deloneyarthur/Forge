@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-13 — tail-aware T1 SHADOW PERSISTENCE built INERT (D141) — `shadow_scores` += `tail_score`/`tail_model_id`; recorded per batch, never read; activates writes at the next ritual restart
+
+**Operator: "build the shadow-persistence increment inert" — the first of D140's deferred daemon-gated pieces (commit `fc1e985`). `shadow_scores` gains two nullable columns via idempotent ALTERs (live DB picks them up at the next `ensure_schema`); `run_shadow_scoring` now also loads the latest robustness artifact (`load_latest_robustness_model`) and records `score_robustness` per submitted candidate beside the P(component) score — NULL until a robustness model is trained. INERT: post-submission, never read by the loop → submitted set byte-identical; the running daemon won't execute it until a restart (an unplanned D104 reboot is also safe — idempotent migration, behavior-inert). Full record: [[D141]].**
+
+- **Verification:** full uncontended suite green; mypy/ruff clean; **migration smoke on a real 30k-row `shadow_scores` copy** — both columns added, all existing rows NULL, idempotent re-open. Two new shadow tests pin tail populated (robustness model present) vs NULL (logistic only).
+- **To activate:** the operator's next ritual restart re-runs `ensure_schema` (adds the columns to the live DB) and the new shadow code begins writing `tail_score` once a robustness model exists in `~/forge_data/models/` (train via `forge ranker-model train-robustness`).
+- **Still gated/remaining:** tail EVAL wiring (Spearman rank-corr + top-K mean `cpcv_p25` reading the new columns) + the T2 regime-complement supply-metric; live tail WIRING behind the §8.6 criterion + the F3 go. T3a relay operator-relayed.
+
+---
+
 ## 2026-06-13 — tail-aware ranker T1 (OFFLINE) BUILT — `cpcv_p25` regression head + dataset targets + `train-robustness` CLI (D140); 3 commits, full suite green, real-data-validated; SHADOW + T2 remain (daemon-gated)
 
 **§8 walked + DECIDED (all 6 recommended) on `docs/proposals/tail-aware-ranker.md`, then the OFFLINE T1 pipeline built TDD across 3 commits (`163dfd2` dataset → `481bfce` ridge model → `227e3f2` CLI). Analysis-side only — NOTHING in the daemon loop touched; the existing P(component) logistic model kept byte-identical (exclusion test). Full suite green. Live-snapshot smoke: 2,627 rows / 70 features, `train_r2`=0.169, and the top coefficients RECOVER the pool read (`mean_reversion` +0.036 vs `volatility_event` −0.039 on `cpcv_p25` — mr the most tail-robust family, the inverse of P(component)). Full record: [[D140]].**
