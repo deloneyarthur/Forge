@@ -803,3 +803,37 @@ the principled fix for an *absolute*-threshold arm — request it if the funnel 
 option_momentum is worth deepening.
 
 **Tag:** `crucible-coordination`, `data-starvation`, `relates-to-D135`, `resolved-by-D138`, `operator-visibility`
+
+---
+
+## 2026-06-13 — Q40 — `relative_value` is structurally weak, not a defect: 0 components in 2,383 honest-era decided, because long-options-only can't express market-neutral relative value — **LOW–MEDIUM, grammar-adjacent (operator-gated)**
+
+**Symptom (Phase 2 defect-hunt, 06-13 snapshot):** rv is 0-for across the honest era
+(0 / 2,383 decided). It has flow and trades (98% non-zero `trade_count`), so it dies at
+Crucible's gate, not upstream. Per-gate PASS-rate among rv rejects vs the component bar
+(which requires ~100% on each): `regime_coverage` 1.4%, `deflated_sharpe` 3.3%,
+`sharpe_baseline` 8.5%, `regime_stress_p25_return` 15.4%, `profit_factor` 44%,
+`min_oos_trade_count` 46% — i.e. rv fails 5–6 required gates simultaneously, deeply. Not a
+single-plumbing-gate (defect) signature.
+
+**Root cause:** rv is ALWAYS expressed as `directional: pairs_zscore` + a regime_filter.
+`pairs_zscore` identifies a relative mispricing between two names, but the grammar can only
+BUY options (no shorting the rich leg, spreads banned). So the expression takes directional
+long-options risk and pays premium/theta while waiting for reversion — it never captures the
+market-neutral RV edge. Hence broadly weak risk-adjusted returns + narrow `regime_coverage`
+(pairs divergences are rare and regime-clustered). This is a STRUCTURAL limit of options-only
+(hard rule 7), not fixable in Forge without spread structures (currently banned).
+
+**Cost:** rv is ~2,383 / ~12k honest-era decided ≈ **18% of Crucible's scarce decision
+capacity for 0 components.** Already weight-buried (rv hypothesis weight 0.050, lowest), so
+the feedback loop is correctly de-emphasizing it — but the family-agnostic prefilter still
+emits it at ~7–15% of the stream.
+
+**Question:** keep emitting a known-0% family at ~15% share, or de-emphasize it (prefilter
+calibration is auto-tighten-eligible per hard rule 4; a grammar-level de-scope is
+operator-gated) to reclaim capacity for diversifying families that serve the portfolio
+CPCV-p25 / worst-quartile bar (the real promotion constraint, see
+`FORGE_portfolio_promotion_wiring_status.md`)? Mean_reversion (1.55%) and event_momentum
+(0%, signal-sparse on `sue`) are weaker-but-not-dead neighbors to decide alongside.
+
+**Tag:** `grammar-adjacent`, `phase-2-defect-hunt`, `relates-to-Q39`, `options-only-limit`, `operator-gated`
