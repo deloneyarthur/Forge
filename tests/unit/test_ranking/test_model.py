@@ -213,3 +213,100 @@ def test_auc_perfect_and_inverted_and_ties() -> None:
 def test_auc_single_class_raises() -> None:
     with pytest.raises(ValueError, match="single class"):
         auc_score([1, 1], [0.5, 0.6])
+
+
+# ---------------------------------------------------------------------------
+# Tail-aware regression head (T1) — predicts continuous cpcv_p25 robustness
+# ---------------------------------------------------------------------------
+
+
+def _reg_frame(rows: list[dict[str, object]]) -> pl.DataFrame:
+    """build_dataset-shaped frame carrying regression targets + coverage flag."""
+    reserved = {"target_cpcv_p25", "target_wf_median", "target_regime_stress", "coverage_verified"}
+    feature_names = sorted({k for r in rows for k in r if k not in reserved})
+    records = []
+    for i, row in enumerate(rows):
+        record: dict[str, object] = {
+            "crucible_run_id": f"run-{i:04d}",
+            "config_hash": f"hash{i:012d}",
+            "decided_at": datetime(2026, 6, 10, 18, 0, i),  # noqa: DTZ001
+            "decision": "component",
+            "label": 1,
+            "target_cpcv_p25": row.get("target_cpcv_p25"),
+            "target_wf_median": row.get("target_wf_median", 1.0),
+            "target_regime_stress": row.get("target_regime_stress", 0.5),
+            "coverage_verified": float(row.get("coverage_verified", 1.0)),  # type: ignore[arg-type]
+        }
+        for name in feature_names:
+            record[name] = float(row.get(name, 0.0))  # type: ignore[arg-type]
+        records.append(record)
+    return pl.DataFrame(records)
+
+
+def _reg_rows() -> list[dict[str, object]]:
+    # target_cpcv_p25 is linear in f_good (1.1 when set, 0.3 when not) + noise;
+    # coverage_verified varies (24/6) so it survives standardization as a feature.
+    rows: list[dict[str, object]] = []
+    for i in range(30):
+        good = float(i % 2)
+        rows.append(
+            {
+                "f_good": good,
+                "f_noise": float(i % 3),
+                "coverage_verified": float(i % 5 != 0),
+                "target_cpcv_p25": 0.3 + 0.8 * good,
+            }
+        )
+    return rows
+
+
+def test_robustness_learns_continuous_target() -> None:
+    from forge.ranking.model import score_robustness, train_robustness_model
+
+    model = train_robustness_model(_reg_frame(_reg_rows()), lambda_=0.01, era_cut=_ERA_CUT)
+    high = score_robustness(model, {"f_good": 1.0})
+    low = score_robustness(model, {"f_good": 0.0})
+    assert high > low
+    assert model.target == "target_cpcv_p25"
+
+
+def test_robustness_excludes_other_targets_keeps_coverage_feature() -> None:
+    from forge.ranking.model import train_robustness_model
+
+    model = train_robustness_model(_reg_frame(_reg_rows()), era_cut=_ERA_CUT)
+    assert "coverage_verified" in model.feature_names
+    assert not any(n.startswith("target_") for n in model.feature_names)
+
+
+def test_robustness_score_defaults_coverage_verified_to_one() -> None:
+    # Score-time convention (§8.2): coverage_verified is a train-time-only signal;
+    # absent at score time it is fixed to 1.0 (predict the verified-quality value).
+    from forge.ranking.model import score_robustness, train_robustness_model
+
+    model = train_robustness_model(_reg_frame(_reg_rows()), era_cut=_ERA_CUT)
+    assert score_robustness(model, {"f_good": 1.0}) == pytest.approx(
+        score_robustness(model, {"f_good": 1.0, "coverage_verified": 1.0})
+    )
+
+
+def test_robustness_drops_null_target_rows() -> None:
+    from forge.ranking.model import train_robustness_model
+
+    rows = _reg_rows()
+    rows.append({"f_good": 1.0, "target_cpcv_p25": None})
+    model = train_robustness_model(_reg_frame(rows), era_cut=_ERA_CUT)
+    assert model.n_rows == 30  # the null-target row dropped
+
+
+def test_robustness_is_deterministic_and_round_trips(tmp_path: Path) -> None:
+    from forge.ranking.model import (
+        load_robustness_model,
+        save_robustness_model,
+        train_robustness_model,
+    )
+
+    a = train_robustness_model(_reg_frame(_reg_rows()), era_cut=_ERA_CUT)
+    b = train_robustness_model(_reg_frame(_reg_rows()), era_cut=_ERA_CUT)
+    assert a == b
+    path = save_robustness_model(a, tmp_path)
+    assert load_robustness_model(path) == a

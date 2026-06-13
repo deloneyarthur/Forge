@@ -217,39 +217,24 @@ def _collapsible_prefix(name: str) -> str | None:
     return prefix if prefix in _COLLAPSIBLE_PREFIXES else None
 
 
-def train_verdict_model(
-    frame: pl.DataFrame,
-    *,
-    lambda_: float = 1.0,
-    era_cut: datetime,
-) -> VerdictModel:
-    """Fit on a `build_dataset` frame. Raises ValueError on empty/single-class."""
-    labels = [int(v) for v in frame["label"].to_list()]
-    n_rows = len(labels)
-    n_positive = sum(labels)
-    if n_rows == 0 or n_positive in (0, n_rows):
-        msg = f"cannot train on a single class ({n_positive}/{n_rows} positive)"
-        raise ValueError(msg)
-
-    raw_names = [c for c in frame.columns if c not in _LOGISTIC_NON_FEATURES]
-    columns: dict[str, list[float]] = {
-        name: [float(v) for v in frame[name].to_list()] for name in raw_names
-    }
-
-    # Rare id-level columns collapse into per-prefix __other__ buckets.
+def _standardize_design(
+    columns: dict[str, list[float]], raw_names: list[str], n_rows: int
+) -> tuple[list[str], list[float], list[float], list[list[float]]]:
+    """Collapse rare id-level columns into per-prefix ``__other__`` buckets, drop
+    zero-variance columns, and standardize the rest. Returns
+    ``(feature_names, means, stds, x_rows)``. Shared by the logistic and ridge
+    trainers so both featurize identically (behavior pinned by their suites)."""
     merged: dict[str, list[float]] = {}
     for name in raw_names:
         values = columns[name]
         prefix = _collapsible_prefix(name)
         if prefix is not None and sum(1 for v in values if v != 0.0) < _MIN_ID_ROWS:
-            target = _other_name(prefix)
-            bucket = merged.setdefault(target, [0.0] * n_rows)
+            bucket = merged.setdefault(_other_name(prefix), [0.0] * n_rows)
             for i, v in enumerate(values):
                 bucket[i] += v
         else:
             merged[name] = values
 
-    # Drop zero-variance columns; standardize the rest.
     feature_names: list[str] = []
     means: list[float] = []
     stds: list[float] = []
@@ -267,6 +252,26 @@ def train_verdict_model(
         standardized_columns.append([(v - mean) / std for v in values])
 
     x_rows = [[col[i] for col in standardized_columns] for i in range(n_rows)]
+    return feature_names, means, stds, x_rows
+
+
+def train_verdict_model(
+    frame: pl.DataFrame,
+    *,
+    lambda_: float = 1.0,
+    era_cut: datetime,
+) -> VerdictModel:
+    """Fit on a `build_dataset` frame. Raises ValueError on empty/single-class."""
+    labels = [int(v) for v in frame["label"].to_list()]
+    n_rows = len(labels)
+    n_positive = sum(labels)
+    if n_rows == 0 or n_positive in (0, n_rows):
+        msg = f"cannot train on a single class ({n_positive}/{n_rows} positive)"
+        raise ValueError(msg)
+
+    raw_names = [c for c in frame.columns if c not in _LOGISTIC_NON_FEATURES]
+    columns = {name: [float(v) for v in frame[name].to_list()] for name in raw_names}
+    feature_names, means, stds, x_rows = _standardize_design(columns, raw_names, n_rows)
     intercept, coefficients = _fit_irls(x_rows, labels, lambda_)
 
     probs = [
@@ -422,3 +427,220 @@ def load_latest_model(models_dir: Path) -> VerdictModel | None:
     if not candidates:
         return None
     return max(candidates, key=lambda m: (m.trained_through, m.model_id))
+
+
+# ---------------------------------------------------------------------------
+# Tail-aware robustness head (T1) — ridge regression on a continuous gate value
+# ---------------------------------------------------------------------------
+
+# Regression features = everything except identity and the regression TARGETS.
+# coverage_verified IS kept here (a train-time conditioning signal, §8.2) —
+# unlike the logistic model, which drops it as label-collinear.
+_REGRESSION_NON_FEATURES = _IDENTITY_COLUMNS | set(TARGET_COLUMNS)
+
+
+@dataclass(frozen=True, slots=True)
+class RobustnessModel:
+    """A trained ridge model predicting a continuous worst-quartile gate value
+    (default ``cpcv_sharpe_p25``). Self-describing; tuples align by index."""
+
+    schema_version: int
+    model_id: str
+    trained_through: datetime
+    era_cut: datetime
+    target: str
+    n_rows: int
+    lambda_: float
+    feature_names: tuple[str, ...]
+    means: tuple[float, ...]
+    stds: tuple[float, ...]
+    target_mean: float
+    coefficients: tuple[float, ...]
+    train_metrics: tuple[tuple[str, float], ...]
+
+
+def _solve_ridge(x_rows: list[list[float]], y_centered: list[float], lambda_: float) -> list[float]:
+    """Ridge normal equations ``(XᵀX + λI)β = Xᵀy`` on standardized X (so the
+    intercept is just the unpenalized target mean). Deterministic — the same
+    dense Gaussian solve as IRLS; λ>0 keeps the system positive-definite."""
+    d = len(x_rows[0]) if x_rows else 0
+    if d == 0:
+        return []
+    ata = [[0.0] * d for _ in range(d)]
+    aty = [0.0] * d
+    for row, yi in zip(x_rows, y_centered, strict=True):
+        for j in range(d):
+            xj = row[j]
+            if xj == 0.0:
+                continue
+            aty[j] += xj * yi
+            for k in range(j, d):
+                ata[j][k] += xj * row[k]
+    for j in range(d):
+        ata[j][j] += lambda_
+        for k in range(j + 1, d):
+            ata[k][j] = ata[j][k]
+    return _solve_linear(ata, aty)
+
+
+def _robustness_fields(**fields: object) -> dict[str, object]:
+    """Canonical, model_id-free payload — the content the model_id hashes."""
+    out: dict[str, object] = {"schema_version": FEATURE_SCHEMA_VERSION, "kind": "robustness"}
+    for key, value in fields.items():
+        name = key.rstrip("_") if key == "lambda_" else key
+        if isinstance(value, datetime):
+            out[name] = value.isoformat()
+        elif isinstance(value, tuple) and value and isinstance(value[0], tuple):
+            out[name] = {k: v for k, v in value}  # train_metrics
+        elif isinstance(value, tuple):
+            out[name] = list(value)
+        else:
+            out[name] = value
+    return out
+
+
+def train_robustness_model(
+    frame: pl.DataFrame,
+    *,
+    target: str = "target_cpcv_p25",
+    lambda_: float = 1.0,
+    era_cut: datetime,
+) -> RobustnessModel:
+    """Fit a ridge model predicting ``target`` from config features (+
+    coverage_verified). Rows whose target is null are dropped; raises ValueError
+    if none carry it."""
+    if target not in frame.columns:
+        msg = f"target column {target!r} not in frame"
+        raise ValueError(msg)
+
+    target_raw = frame[target].to_list()
+    keep = [i for i, v in enumerate(target_raw) if v is not None]
+    n_rows = len(keep)
+    if n_rows == 0:
+        msg = f"no rows carry a non-null {target}"
+        raise ValueError(msg)
+    y = [float(target_raw[i]) for i in keep]
+
+    raw_names = [c for c in frame.columns if c not in _REGRESSION_NON_FEATURES]
+    raw_columns = {name: frame[name].to_list() for name in raw_names}
+    columns = {name: [float(raw_columns[name][i]) for i in keep] for name in raw_names}
+    feature_names, means, stds, x_rows = _standardize_design(columns, raw_names, n_rows)
+
+    target_mean = sum(y) / n_rows
+    coefficients = _solve_ridge(x_rows, [yi - target_mean for yi in y], lambda_)
+
+    preds = [
+        target_mean + sum(b * v for b, v in zip(coefficients, row, strict=True)) for row in x_rows
+    ]
+    ss_res = sum((t - p) ** 2 for t, p in zip(y, preds, strict=True))
+    ss_tot = sum((t - target_mean) ** 2 for t in y)
+    # Sorted so the artifact round-trips identically (load_robustness_model sorts).
+    metrics = tuple(
+        sorted(
+            (
+                ("rmse", math.sqrt(ss_res / n_rows)),
+                ("r2", 1.0 - ss_res / ss_tot if ss_tot > 0.0 else 0.0),
+            )
+        )
+    )
+
+    trained_through = max(frame["decided_at"].to_list())
+    fields = _robustness_fields(
+        target=target,
+        trained_through=trained_through,
+        era_cut=era_cut,
+        n_rows=n_rows,
+        lambda_=lambda_,
+        feature_names=tuple(feature_names),
+        means=tuple(means),
+        stds=tuple(stds),
+        target_mean=target_mean,
+        coefficients=tuple(coefficients),
+        train_metrics=metrics,
+    )
+    model_id = hashlib.sha256(_canonical(fields).encode("utf-8")).hexdigest()[:16]
+    return RobustnessModel(
+        schema_version=FEATURE_SCHEMA_VERSION,
+        model_id=model_id,
+        trained_through=trained_through,
+        era_cut=era_cut,
+        target=target,
+        n_rows=n_rows,
+        lambda_=lambda_,
+        feature_names=tuple(feature_names),
+        means=tuple(means),
+        stds=tuple(stds),
+        target_mean=target_mean,
+        coefficients=tuple(coefficients),
+        train_metrics=metrics,
+    )
+
+
+def score_robustness(model: RobustnessModel, features: Mapping[str, float]) -> float:
+    """Predicted worst-quartile value for one feature dict. ``coverage_verified``
+    is fixed to 1.0 when absent (the §8.2 score-time convention: predict the
+    verified-quality value). Unseen ids map onto their ``__other__`` bucket."""
+    index = {name: i for i, name in enumerate(model.feature_names)}
+    x = [0.0] * len(model.feature_names)
+    enriched = dict(features)
+    enriched.setdefault(COVERAGE_FEATURE, 1.0)
+    for name, value in enriched.items():
+        i = index.get(name)
+        if i is None:
+            prefix = _collapsible_prefix(name)
+            if prefix is None:
+                continue
+            i = index.get(_other_name(prefix))
+            if i is None:
+                continue
+        x[i] += value
+    pred = model.target_mean
+    for i, (coef, mean, std) in enumerate(
+        zip(model.coefficients, model.means, model.stds, strict=True)
+    ):
+        pred += coef * (x[i] - mean) / std
+    return pred
+
+
+def save_robustness_model(model: RobustnessModel, models_dir: Path) -> Path:
+    """Write the canonical artifact; content-hashed name → idempotent rewrite."""
+    models_dir.mkdir(parents=True, exist_ok=True)
+    fields = _robustness_fields(
+        target=model.target,
+        trained_through=model.trained_through,
+        era_cut=model.era_cut,
+        n_rows=model.n_rows,
+        lambda_=model.lambda_,
+        feature_names=model.feature_names,
+        means=model.means,
+        stds=model.stds,
+        target_mean=model.target_mean,
+        coefficients=model.coefficients,
+        train_metrics=model.train_metrics,
+    )
+    fields["model_id"] = model.model_id
+    stamp = model.trained_through.strftime("%Y%m%dT%H%M%S")
+    name = f"robustness_model_v{model.schema_version}_{stamp}Z_{model.model_id[:8]}.json"
+    path = models_dir / name
+    path.write_text(_canonical(fields), encoding="utf-8")
+    return path
+
+
+def load_robustness_model(path: Path) -> RobustnessModel:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    metrics = tuple(sorted((str(k), float(v)) for k, v in raw["train_metrics"].items()))
+    return RobustnessModel(
+        schema_version=int(raw["schema_version"]),
+        model_id=str(raw["model_id"]),
+        trained_through=datetime.fromisoformat(raw["trained_through"]),
+        era_cut=datetime.fromisoformat(raw["era_cut"]),
+        target=str(raw["target"]),
+        n_rows=int(raw["n_rows"]),
+        lambda_=float(raw["lambda"]),
+        feature_names=tuple(raw["feature_names"]),
+        means=tuple(raw["means"]),
+        stds=tuple(raw["stds"]),
+        target_mean=float(raw["target_mean"]),
+        coefficients=tuple(raw["coefficients"]),
+        train_metrics=metrics,
+    )
