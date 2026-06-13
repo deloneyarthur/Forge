@@ -3859,3 +3859,17 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 **Verification:** targeted suites green — shadow/model/invariants (37), persistence schema incl. the updated column-set test (8), persistence + CLI-loop integration (66); **full uncontended suite green**; mypy --strict + ruff clean. **Migration smoke on a real 30,000-row `shadow_scores` copy:** both columns added, all 30k existing rows NULL, idempotent re-open. Two new shadow tests (tail populated when a robustness model is present; NULL when only the logistic model is).
 
 **Files:** `src/forge/persistence/schemas.py` (2 ALTERs), `src/forge/ranking/model.py` (`load_latest_robustness_model`), `src/forge/ranking/shadow.py` (tail score in the insert) + `tests/unit/test_ranking/test_shadow.py`; `docs/MANPAGE.md` (the `shadow_scores` table row), this entry, `STATUS.md`. **Remaining T1/T2 (still daemon/eval-gated):** tail eval wiring (Spearman rank-corr + top-K mean `cpcv_p25` reading these columns) and the T2 regime-complement supply-metric; live tail WIRING stays behind the §8.6 criterion + the F3 go.
+
+---
+
+## D142 — 2026-06-13 — daily timer also trains the tail-aware robustness model — so D141's shadow hook has a daily-refreshed `cpcv_p25` artifact to score with
+
+**Spec section:** [[D139]] (the timer this extends), [[D140]] (the tail model), [[D141]] (the shadow hook that scores with the artifact). Origin: operator (this session) — *"add the timer line so the tail model trains daily"*, the companion to D141 (without a robustness artifact in `~/forge_data/models/`, the inert shadow hook would record NULL forever even post-restart).
+
+**What:** `scripts/daily_ranker_eval.sh` gains a `forge ranker-model train-robustness` step after the logistic train, with the SAME staging-dir → atomic-`mv` publish discipline (the 24/7 daemon never reads a half-written `robustness_model_*.json`). Independent of the logistic train — it can refuse (no cpcv rows / registry-load) without affecting it or the eval/streak. Telemetry-only; the production loop never reads the artifact (D141 is inert until a ritual restart).
+
+**Verification:** `bash -n` clean; **ran end-to-end on the live box** — published `robustness_model_v1_20260613T183137Z_5174039c` (3,089 rows, 71 features, `train_r2`=0.182; top coefs `coverage_verified` +0.076 / `mean_reversion` +0.044 / `volatility_event` −0.042 — recovers the tail-robustness ordering). The logistic train + eval + streak were unaffected (note: the separate F3 *logistic* streak independently reached 3/3 on the fresh window this run — that's the D132 criterion clock, not the tail track; F3 live wiring stays its own gate). No `src/` change → suite/mypy unaffected.
+
+**Side effects of the validation run (benign, = one extra timer cycle):** a fresh `verdict_model_*` + `robustness_model_*` published to the live `~/forge_data/models/` and one `streak.jsonl` row — exactly what the 05:00 timer does. The running (pre-D141) daemon ignores `robustness_model_*.json` (it globs `verdict_model_*`), so zero daemon impact; the robustness artifact simply pre-stages D141's activation.
+
+**Files:** `scripts/daily_ranker_eval.sh` (the train-robustness step + header), this entry. (STATUS.md had concurrent uncommitted edits this session and was left untouched; Memory: `ranker-eval-daily-timer.md`, updated, outside the repo.)
