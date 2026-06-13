@@ -1,9 +1,12 @@
 # Tail-Aware Ranking — Design Proposal (F-track successor)
 
 **Status: §8 DECIDED 2026-06-13 (in-session AskUserQuestion — all six decisions, all
-recommended options). T1 (regress head) + T2 shadow supply-metric greenlit to BUILD as
-shadow-only increments; T2 enforcement + T1 wiring stay gated (decision-6 criterion + the
-pending F3 go); T3a is a Crucible relay. No code yet.**
+recommended options). T1 offline head BUILT (D140, 3 commits); the tail-score shadow-wiring
+increment shipped INERT as D141 (`fc1e985`). T1 wiring +
+T2 enforcement stay gated (decision-6 criterion + the pending F3 go). T3a ANSWERED 2026-06-13
+(Crucible relay, §4 below): the assembled book's worst CPCV quartile is disproportionately
+BEAR (2.39× regime_lift) and RANGING (1.33×) — the T2 complement is now a MEASURED target,
+no longer a structural guess.**
 **Origin:** the 2026-06-13 Phase-2 pool read (this session). Extends — does not replace —
 `docs/proposals/learned-ranker.md` (F1/F2/F3), the D136 per-arm floor, and the D103
 diversifier.
@@ -111,37 +114,55 @@ proposed *symmetric* concentration caps (no family > X%, market-wide ≤ Y%, a f
   leader.
 
 **Mechanism (deterministic, D136-style) — a "regime-complement floor".** After ranking:
-(1) compute the dominant regime-bet cell among recent **verified-coverage** components (same
-source as the §1 read, recomputed per batch); (2) reserve up to **Z%** of the batch for ranked
-survivors whose regime-bet is the *complement* of that cell, drawn in score order. Same
+(1) identify the **target complement** = the regime-bet that pays in the regime where the book's
+worst quartile actually lives. T3a now measures that regime (BEAR primarily, RANGING secondarily
+— §4 T3a); until that label is a per-batch contract field it is a config constant from the relay,
+with the structural fallback (complement of the dominant verified-coverage regime-bet cell,
+recomputed per batch) when no measured label is available. (2) reserve up to **Z%** of the batch
+for ranked survivors whose regime-bet pays in that target regime, drawn in score order. Same
 insertion point, sorted-order determinism, and never-invents discipline as the per-arm floor —
 it reshapes only among configs that already passed the gate-eligibility term.
 
 **Two honest limits, both pointing past T2 alone:**
-1. **Still a proxy.** Regime-bet is a *better* tail-decorrelation proxy than family/underlying,
-   but it is structural, not a measured correlation — T3 validates (and can eventually replace)
-   it. The dominant-cell estimate is also the assumption that "complement of the dominant
-   regime-bet" ≈ "complement of the regime the book's p25 actually fails in"; T3a closes that.
+1. **Still a proxy — but the target regime is now measured.** Regime-bet is a *better*
+   tail-decorrelation proxy than family/underlying, but it is structural, not a measured
+   correlation — T3b (`portfolio_contribution`) validates (and can eventually replace) it. The old
+   assumption "complement of the dominant regime-bet ≈ complement of the regime the book's p25
+   fails in" is now **closed by T3a's measurement**: the book fails in BEAR/RANGING, which is *not*
+   the naive complement of trend-long-momentum — so reserve toward bear/ranging-paying regime-bets
+   directly, not toward "anything not-trend." Crucible's caveat carries into the design: target the
+   **regime_lift** signal (bear 2.39×, ranging 1.33×), NOT the raw-dominant worst-quartile regime
+   (low_vol, lift 1.00 — a base-rate artifact).
 2. **Bounded by what enumerates.** T2 reshapes survivors — it cannot create the complement, and
    the complement families barely exist: `relative_value` 0/1651 (Crucible pairs runner ignores
    regime filters, D119; `pairs_zscore` ~stub, Q17), `event_momentum` 0/56 (unrankable,
    D115/D116), mr thin. So T2 is **necessary-not-sufficient** and is coupled to *growing* the
    complement (a producer / grammar / Crucible-handoff workstream outside this ranker proposal).
    Without that pairing, T2 only caps trend; it does not add orthogonality. Flag the coupling
-   explicitly so T2 is never read as the whole fix.
+   explicitly so T2 is never read as the whole fix. **T3a sharpens the growth target:** the
+   measured complement is *bear/ranging-paying* supply — short-direction / long-gamma / defensive
+   bets (bear) and mean-reversion / range / premium-capture bets (ranging) — which is exactly the
+   thin-or-broken part of today's inventory (mr thin, rv 0/1651). The complement-growth workstream
+   now has a measured direction, not just "grow not-trend."
 
 ### T3 — The correct signal from Crucible (coordination) — two-step, smallest first
 
 Forge is blind to per-fold returns and to the regime identity of each CPCV fold, so T2 can only
 *guess* which complement decorrelates the tail. Two asks, cheapest first:
 
-- **T3a — "which regime is the worst quartile?" (small, earlier, de-risks T2).** Crucible
-  already computes the CPCV fold distribution; exposing the **regime label of the worst-quartile
-  fold(s)** — per component, or even just pool-level for the assembled honest book — tells Forge
-  which regime the pool actually *fails* in, hence which regime-bet T2 should reserve. This turns
-  T2's complement from a structural assumption ("not-the-dominant-cell") into a **measured**
-  target ("the regime where the book's p25 lives"). One enum/label field on the gate result; no
-  return series, no new compute Forge-side (§1.2 clean — Forge consumes, never computes).
+- **T3a — "which regime is the worst quartile?" — ANSWERED 2026-06-13 (Crucible relay).**
+  Taxonomy: the 6-regime §5.3.6 composite (bull · bear · low_vol · high_vol · trending · ranging),
+  SPY market-wide reference. Result (era-C 342-component book; `probe_results/worst_quartile_regime_eraC.json`,
+  Crucible-side): the worst CPCV quartile is disproportionately **BEAR (2.39× regime_lift)** and
+  secondarily **RANGING (1.33×)**; every vol/trend/bull regime sits at-or-below base rate. **Use
+  regime_lift, not the raw dominant** — the raw worst-quartile is low_vol (lift 1.00), a base-rate
+  artifact, not a signal. The tail is a **directional-drawdown (bear) problem**, consistent with the
+  maxDD −63% vol-targeting finding — not a calm-market or vol-clustering one. (Disjoint-block and
+  convex-hull labelings agree, so the convex-hull blur didn't bite this book.) This converts T2's
+  complement from a structural assumption ("not-the-dominant-cell") into a **measured** target
+  ("regime-bets that pay in bear/ranging") — §1.2 clean, Forge consumes the label, computes nothing.
+  Per-component labeling + `portfolio_contribution` ride the `PromotedPortfolio` contract (T3b),
+  as scoped.
 - **T3b — `portfolio_contribution` (the full signal).** Each candidate's marginal contribution
   to the assembled book's `cpcv_p25`, exported via `crucible_contracts`, lets T1 train on the
   **right** target instead of the individual-`cpcv_p25` proxy. Contract-ahead-of-need (parallels
@@ -216,10 +237,14 @@ snapshot → byte-identical artifact).
    `(hypothesis × regime-gate × op-direction)`, not symmetric family/underlying caps. Reserve
    fraction **Z** + dominant-regime lookback are build-time defaults; **ships as a shadow
    supply-metric first** — the §7 coupling risk stands: enforcement is contingent on complement
-   supply, which barely enumerates today (rv/em ~0, mr thin).
-5. **T3: T3a NOW, T3b DEFERRED** — raise the worst-quartile-regime-label ask (T3a; converts T2
-   from structural guess to measured target) with the next Crucible relay / Sunday review; hold
-   `portfolio_contribution` (T3b) until T1 has shadowed.
+   supply, which barely enumerates today (rv/em ~0, mr thin). **Supply-metric BUILT (D144)** —
+   `forge.ranking.regime_supply` + the per-batch `regime_supply:` journal line (shadow, daemon-inert);
+   the enforcement floor remains the next gated increment.
+5. **T3: T3a NOW (ANSWERED), T3b DEFERRED** — the worst-quartile-regime-label ask was relayed and
+   **answered 2026-06-13**: the book fails in BEAR (2.39× lift) / RANGING (1.33×), so T2 reserves
+   toward bear/ranging-paying regime-bets (measured, regime_lift-based — see §4 T3a). Hold
+   `portfolio_contribution` (T3b) until T1 has shadowed; per-component labeling rides the
+   `PromotedPortfolio` contract with it.
 6. **T1 wiring criterion: MIRROR F3's STRUCTURE** — ≥3 consecutive checkpoints, each ≥150
    honest verdicts spanning ≥5 batches; the rank-corr / top-K-mean-`cpcv_p25` margin is fixed
    once the shadow distribution is visible (not guessed a priori).
@@ -227,7 +252,8 @@ snapshot → byte-identical artifact).
 **Effect:** T1 (regress head on the F1/F2 machinery, all-honest+flag rows) and T2's shadow
 supply-metric are greenlit to BUILD as shadow-only increments — zero behavior change, each its
 own TDD pass + D-entry. **T2 enforcement and T1 wiring stay gated** (wiring on the decision-6
-criterion plus the still-pending F3 go; enforcement on complement supply). **T3a** is an
-operator relay to Crucible. No grammar/gate/loosening touched (§6). The headline change —
+criterion plus the still-pending F3 go; enforcement on complement supply). **T3a is ANSWERED**
+(§4 — bear/ranging measured); T1's offline head shipped (D140) and the tail-score shadow
+persistence shipped inert (D141). No grammar/gate/loosening touched (§6). The headline change —
 **rank toward worst-quartile robustness, the thing that actually gates promotion** — is the
 producer-side answer to the binding constraint in [[promotion-gate-tiers-and-constraint]].
