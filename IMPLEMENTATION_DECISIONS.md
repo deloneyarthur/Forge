@@ -3873,3 +3873,17 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 **Side effects of the validation run (benign, = one extra timer cycle):** a fresh `verdict_model_*` + `robustness_model_*` published to the live `~/forge_data/models/` and one `streak.jsonl` row — exactly what the 05:00 timer does. The running (pre-D141) daemon ignores `robustness_model_*.json` (it globs `verdict_model_*`), so zero daemon impact; the robustness artifact simply pre-stages D141's activation.
 
 **Files:** `scripts/daily_ranker_eval.sh` (the train-robustness step + header), this entry. (STATUS.md had concurrent uncommitted edits this session and was left untouched; Memory: `ranker-eval-daily-timer.md`, updated, outside the repo.)
+
+---
+
+## D143 — 2026-06-13 — tail-aware T1 eval wiring: `evaluate_tail_shadow` + `eval-robustness` CLI + daily readout — turns the accruing `tail_score` into a Spearman / top-K `cpcv_p25` measurement
+
+**Spec section:** §6.2 / §8.3, `docs/proposals/tail-aware-ranker.md` §4 (T1 eval metrics) + §8.6 (the criterion). [[D140]] (the model), [[D141]] (the `tail_score` this reads), [[D142]] (daily tail train). Origin: operator (this session) — *"build the tail eval wiring increment"*, the readout that makes D141's accruing data legible.
+
+**What:** `forge.ranking.evaluation` gains `evaluate_tail_shadow` (+ pure helpers `spearman_corr`, `_average_ranks`, `_top_k_mean`): per `tail_model_id`, over **verified-coverage** decided verdicts carrying a `cpcv_sharpe_p25` value, it computes **Spearman(tail_score, realized cpcv_p25)** and **top-K mean realized cpcv** for the tail model's top picks vs the incumbent composite's (K = top decile). New CLI `forge ranker-model eval-robustness [--since]` prints these per model; `daily_ranker_eval.sh` runs it each checkpoint (observation only). The verified-coverage filter makes it apples-to-apples with what the model predicts (the §8.2 score-time convention).
+
+**No PASS/FAIL yet (deliberate, §8.6):** the criterion margin (on rank-corr / top-K) is set *after* the shadow distribution is visible — the readout prints metrics + "criterion: §8.6 margin not yet set". So this accrues the evidence to set the bar; it does not gate anything (live tail wiring stays behind the §8.6 criterion + the F3 go).
+
+**Verification:** RED-first; 4 new eval tests (Spearman truth-table; top-K + overall; unverified/missing-cpcv exclusion; empty-on-no-tail-scores) + 2 CLI tests. Full ranking+CLI suite green (243); mypy --strict + ruff clean. **Smoke on the live snapshot:** graceful "no tail-scored verdicts decided … not yet accruing" — correct (every live `shadow_scores` row is NULL-`tail_score` until D141 is live post-restart).
+
+**Files:** `src/forge/ranking/evaluation.py` (+`evaluate_tail_shadow`/`spearman_corr`), `src/forge/cli/ranker_model_cmd.py` (`eval-robustness`), `scripts/daily_ranker_eval.sh` (daily readout) + `tests/unit/test_ranking/test_evaluation.py` + `tests/unit/test_cli/test_ranker_model_cmd.py`; `docs/MANPAGE.md` (the command + timer note), this entry. **Tail-aware T1 is now end-to-end** (dataset → train → shadow-persist → eval); REMAINING: the §8.6 margin (set after observation), live tail WIRING (gated), and T2 (the regime-complement floor — now with T3a's measured bear/ranging target). (Memory: `ranker-eval-daily-timer.md` updated.)

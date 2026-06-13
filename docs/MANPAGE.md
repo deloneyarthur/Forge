@@ -228,10 +228,26 @@ forge ranker-model train --forge-db /tmp/forge_snap.db
 forge ranker-model eval --forge-db /tmp/forge_snap.db --since 2026-06-11T00:00:00Z
 ```
 
+### forge ranker-model eval-robustness
+
+Tail-aware (T1, D143) readout: does ranking by the predicted `cpcv_p25` (the D141 `tail_score`)
+surface configs with higher REALIZED worst-quartile robustness? Per `tail_model_id`, over
+verified-coverage decided verdicts, prints **Spearman(tail_score, realized `cpcv_p25`)** and
+**top-K mean realized `cpcv_p25`** (tail model vs the incumbent composite). No PASS/FAIL — the
+§8.6 criterion margin is set once the shadow distribution is visible. Reports "not yet accruing"
+until the D141 shadow code is live (post-restart) and a robustness model has scored batches.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML default for the DB path. |
+| `--since` | str | clean-era boundary | ISO window start (naive = UTC). |
+
 **Automated daily** by the `forge-ranker-eval` systemd timer (05:00; `scripts/daily_ranker_eval.sh`)
 — it snapshots the DB, trains BOTH shadow models (`train` for P(component) + `train-robustness`
 for the tail-aware `cpcv_p25` model, D142; each atomic-published to `~/forge_data/models/`),
-evaluates, and appends the consecutive-PASS streak to `~/forge_data/ranker_eval/streak.jsonl`. The timer judges a **fresh
+evaluates (`eval` for the streak + `eval-robustness` for the tail readout, D143), and appends
+the consecutive-PASS streak to `~/forge_data/ranker_eval/streak.jsonl`. The timer judges a **fresh
 per-checkpoint window** (verdicts decided since the prior run), NOT the cumulative `--since` default
 — read the streak there instead of re-deriving it. The model stays shadow-only until F3 (its own
 operator gate).
@@ -451,7 +467,7 @@ systemd **user** services (`systemctl --user ...`). Start the writer first; stop
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback` | The Forge daemon: generate → submit → learn. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware robustness, D142 — + eval → `~/forge_data/ranker_eval/streak.jsonl`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware robustness, D142 — + eval & eval-robustness, D143 → `~/forge_data/ranker_eval/streak.jsonl`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:
