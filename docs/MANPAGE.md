@@ -208,6 +208,13 @@ forge ranker-model train --forge-db /tmp/forge_snap.db
 forge ranker-model eval --forge-db /tmp/forge_snap.db --since 2026-06-11T00:00:00Z
 ```
 
+**Automated daily** by the `forge-ranker-eval` systemd timer (05:00; `scripts/daily_ranker_eval.sh`)
+— it snapshots the DB, trains (atomic-publish to `~/forge_data/models/`), evaluates, and appends
+the consecutive-PASS streak to `~/forge_data/ranker_eval/streak.jsonl`. The timer judges a **fresh
+per-checkpoint window** (verdicts decided since the prior run), NOT the cumulative `--since` default
+— read the streak there instead of re-deriving it. The model stays shadow-only until F3 (its own
+operator gate).
+
 ### forge grammar list-proposals
 
 List pending refinement proposals. Recurring themes (3+ pending) tagged `[PERSISTENT]`.
@@ -353,6 +360,20 @@ confounded by infrastructure bugs. Filters by current `grammar_version`.
 .venv/bin/python scripts/requeue_high_value_configs.py --top-n 100 --dry-run
 ```
 
+### daily_ranker_eval.sh
+
+**Bash, not Python** — the `ExecStart` of the `forge-ranker-eval` timer (05:00 daily), runnable by
+hand too. Snapshots the live DB to `/tmp`, trains the verdict model into a staging dir and
+**atomically** publishes it to `~/forge_data/models/` (the daemon's `load_latest_model` never reads
+a half-written file), evaluates the live shadow model, and appends one JSON row to
+`~/forge_data/ranker_eval/streak.jsonl` carrying the F3 consecutive-PASS streak (judged on a fresh
+per-checkpoint window). Deterministic (no LLM, hard rule #5); telemetry-only — never touches
+grammar/weights/config/ranking. Trap-cleans the snapshot + staging on every exit. No args.
+
+```
+scripts/daily_ranker_eval.sh        # or: systemctl --user start forge-ranker-eval.service
+```
+
 ### check_grammar_version_bump.py / check_grammar_doc_sync.py
 
 Pre-commit hooks (no CLI args). The first enforces that a changed `grammar.yaml`
@@ -408,7 +429,7 @@ systemd **user** services (`systemctl --user ...`). Start the writer first; stop
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback` | The Forge daemon: generate → submit → learn. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00).
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily verdict-model train+eval → `~/forge_data/ranker_eval/streak.jsonl`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

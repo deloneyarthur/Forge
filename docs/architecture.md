@@ -66,6 +66,10 @@ Determinism identity: `(grammar_version, registry_hash, seed)` → same enumerat
   via editable install. A reboot auto-starts it onto whatever the tree contains (D104) — hence the
   worktree + deploy ritual in `docs/tasks/deploy.md`.
 - Crucible services/timers and start/stop order: `docs/MANPAGE.md` (PIPELINE SERVICES) and `docs/HOW-TO.md`.
+- Forge timers (units in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`):
+  `forge-ranker-eval` (05:00, `scripts/daily_ranker_eval.sh` — daily shadow-model train+eval, F3
+  streak → `~/forge_data/ranker_eval/streak.jsonl`; deterministic, telemetry-only) and
+  `forge-eod-check` (21:00, headless EOD read).
 - Forge state: `~/forge_data/forge.db` (DuckDB; live RW lock — snapshot before reading, see
   `docs/tasks/investigate-live.md`). Inter-system paths: table in `docs/HOW-TO.md`.
 
