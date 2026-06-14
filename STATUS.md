@@ -1,5 +1,11 @@
 # Forge — Status
 
+## 2026-06-14 — GRAMMAR v20 DEPLOY in progress (D149 F3 wiring + D150 mr ranging supply, batched) — gate PASSED, restart + verify pending
+
+**Operator: "deploy now."** Batched grammar deploy (D104 + grammar-change ritual). Stopped 20:43:25Z (exit 143). Edits (service stopped → no hot-reread): `grammar.yaml` v19→**v20** + header + `grammar_archive/v20.yaml` (byte-identical); GRAMMAR.md R1 synced; D150 entry. **Deploy gate: full uncontended suite green** (1616 + the v20 version-pin re-pin = all pass). Activates: **D149** (P(component)→ranking, Jaccard kill-switch) + **D150** (R1 hurst ranging gate + regime bias; mr held single-name, rank suppressed pending Q33). Relay SENT to Crucible (`PROMPT_CRUCIBLE_MR_HURST_RANK_COHERENCE.md` — operator-confirmed). **Commit + restart + verify next.**
+
+---
+
 ## 2026-06-14 — F3 wiring BUILT (D149) — `prior_promotion_proximity := P(component)` in production ranking; SERVICE-INERT, awaiting operator deploy/restart
 
 **Operator: "yes" (build the F3 wiring, D148 greenlight).** F3 criterion is MET (verdict streak 4/4); production ranking had stayed pure Jaccard. Built TDD: `rank_batch` gains `verdict_scorer` — when set, the §6.2 `prior_promotion_proximity` term is the learned **P(component)** score instead of Jaccard (which was dead weight at 0.0 with 0 promotions); `None` = the **Jaccard kill-switch**. `main.py` builds the scorer from `load_latest_model` (the SAME path `shadow.py` runs daily — glue is production-proven), gated by the `FORGE_F3_RANKER` env kill-switch (default on; `off`→Jaccard); logs `f3_ranker:` per batch. Full record: [[D149]].

@@ -28,6 +28,8 @@ from forge.grammar.custom_predicates import (
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
     _P3_DELTA_BAND_OVERRIDES,
+    _R1_GAMMA_REGIME_INDICATOR,
+    _R1_HURST_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
@@ -176,9 +178,13 @@ def test_r1_r2_r3_regime_indicator_when_applicable(
                 f"R2 violated at seed={seed}: regime={regime_id}"
             )
         elif cfg.hypothesis == "mean_reversion":
-            assert regime_id == _R1_IV_RANK_INDICATOR, (
-                f"R1 violated at seed={seed}: regime={regime_id}"
-            )
+            # D107 + D150: R1 accepts iv_rank, gamma_flip (long-gamma), or hurst
+            # (mean-reverting H<0.5) — all ranging-admitting gates.
+            assert regime_id in {
+                _R1_IV_RANK_INDICATOR,
+                _R1_GAMMA_REGIME_INDICATOR,
+                _R1_HURST_REGIME_INDICATOR,
+            }, f"R1 violated at seed={seed}: regime={regime_id}"
         elif cfg.hypothesis == "volatility_event":
             assert regime_id in _R3_EVENT_PROXIMITY_INDICATORS, (
                 f"R3 violated at seed={seed}: regime={regime_id}"
@@ -1164,6 +1170,32 @@ def test_regime_signal_params_gamma_op_flip_scoped_to_gamma_only() -> None:
     via_regime = _regime_signal_params("mean_reversion", "iv_rank", random.Random(7))
     via_raw = sample_threshold_params("iv_rank", "regime_filter", random.Random(7))
     assert via_regime == via_raw
+
+
+def test_regime_signal_params_hurst_op_is_mean_reverting_side() -> None:
+    """D150 (v20): mean_reversion's hurst regime gate fires on the mean-reverting
+    H<0.5 side (op '<'); the indicator_thresholds default '>' is R2's trend side."""
+    from forge.enumeration.sampler import _regime_signal_params
+
+    mr = _regime_signal_params("mean_reversion", "hurst", random.Random(20260614))
+    assert mr["op"] == "<"
+
+
+def test_pick_regime_biases_mean_reversion_toward_ranging_gates() -> None:
+    """D150 (v20): mean_reversion's R1 regime-gate pick is biased ~3:1 toward the
+    ranging gates (gamma_flip, hurst) vs the sparse iv_rank — iv_rank stays present
+    (weight 1.0, not zeroed) but heavily down-weighted. Uniform would split ~1/3 each."""
+    from collections import Counter
+
+    from forge.enumeration.sampler import _pick_regime
+
+    rng = random.Random(20260614)
+    regimes = ("gamma_flip_distance_pct", "hurst", "iv_rank")
+    counts = Counter(_pick_regime("mean_reversion", regimes, rng, None) for _ in range(3000))
+    iv = counts["iv_rank"]
+    ranging = counts["gamma_flip_distance_pct"] + counts["hurst"]
+    assert iv > 0  # never starved out of exploration
+    assert ranging > 2 * iv  # heavily biased toward ranging (uniform would give ~2x only)
 
 
 # ---------------------------------------------------------------------------

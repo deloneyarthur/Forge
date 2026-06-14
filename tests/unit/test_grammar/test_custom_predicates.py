@@ -1030,6 +1030,31 @@ def test_r1_mean_reversion_accepts_gamma_flip_gate() -> None:
     assert result.passed
 
 
+def test_r1_mean_reversion_accepts_hurst_gate() -> None:
+    """D150 (v20): hurst (op '<', the mean-reverting H<0.5 side) is an accepted R1
+    regime gate for mean_reversion — the purest ranging signal. Mirrors the D107
+    gamma_flip widening; directional is rsi_2 here (C4 keeps hurst single-role)."""
+    cfg = grammar_valid_baseline(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("rsi_2",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("hurst",),
+                params={"threshold": 0.45, "op": "<"},
+            ),
+        ),
+    )
+    result = evaluate(_predicate("mean_reversion_requires_iv_rank_gate"), cfg, _registry())
+    assert result.passed
+
+
 def test_r1_mean_reversion_without_iv_rank_or_gamma_fails() -> None:
     """D107: with neither iv_rank nor a gamma gate, R1 still fires and fails."""
     cfg = grammar_valid_baseline(

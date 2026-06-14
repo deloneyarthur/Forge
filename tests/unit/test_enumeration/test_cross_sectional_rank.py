@@ -371,6 +371,33 @@ def test_rank_draw_skipped_for_chain_reading_gate_configs() -> None:
     assert seen_iv_rank_gate > 0
 
 
+def test_rank_draw_skipped_for_mean_reversion_hurst_gate() -> None:
+    """D150 (v20): mean_reversion's new bar-based hurst R1 gate is NOT
+    single-name-only, so it would otherwise re-open the mr rank branch D116 closed.
+    mr stays rank-INELIGIBLE (`_RANK_INELIGIBLE_HYPOTHESES`) — hurst-gated mr rank
+    coherence on Crucible's runner is unverified (Q33). Every hurst-gated mr draw
+    stays single-name confluence even at rank share 1.0, until Crucible confirms."""
+    grammar = _grammar()
+    reg = minimal_registry_snapshot()
+    space = build_search_space(grammar, reg)
+    share = {"mean_reversion": 1.0}
+    seen_hurst_gate = 0
+    for seed in range(300):
+        cfg = sample_config(
+            space,
+            reg,
+            random.Random(seed),
+            forced_hypothesis="mean_reversion",
+            rank_combiner_share=share,
+        )
+        assert cfg.combiner.type == "confluence", cfg.name
+        assert cfg.underlying is not None, cfg.name
+        if any(s.role == "regime_filter" and "hurst" in s.indicators for s in cfg.signals):
+            seen_hurst_gate += 1
+    # Non-vacuous: hurst-gated mr WAS drawn (and the D150 guard kept it confluence).
+    assert seen_hurst_gate > 0
+
+
 # ---------------------------------------------------------------------------
 # Determinism — hard rule #6: the cold path is byte-identical
 # ---------------------------------------------------------------------------

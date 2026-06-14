@@ -293,6 +293,12 @@ _R1_IV_RANK_MAX_THRESHOLD = 50.0
 # the sampler sets; the indicator_thresholds default ">" is the trend / short-gamma
 # side). The "switch": same indicator, opposite side per hypothesis.
 _R1_GAMMA_REGIME_INDICATOR = "gamma_flip_distance_pct"
+# D150 (v20, MR side): hurst is a third accepted R1 regime gate for mean_reversion
+# — the mean-reverting H<0.5 side (op_regime "<", which the sampler sets; the
+# indicator_thresholds default ">" is R2's trend / persistent side). H<0.5 is the
+# purest ranging signal; C4 keeps hurst single-role (it can't be both this gate and
+# the directional). Same indicator, opposite side per hypothesis — the D107 pattern.
+_R1_HURST_REGIME_INDICATOR = "hurst"
 
 # H2 (v12 / D109): event_momentum's post-event TIMING gate. Unlike R1/R2/R3
 # this is NOT a grammar.yaml rule — adding a 22nd operator-owned rule would
@@ -827,6 +833,10 @@ def _r1_mean_reversion_requires_iv_rank_gate(
         # set by the sampler's op, not constrained here — like adx/hurst in R2).
         if _R1_GAMMA_REGIME_INDICATOR in inds:
             return PredicateResult(passed=True)
+        # D150: a hurst gate satisfies R1 on its own — the mean-reverting H<0.5
+        # side (op "<" set by the sampler). Same convention as the gamma gate.
+        if _R1_HURST_REGIME_INDICATOR in inds:
+            return PredicateResult(passed=True)
         if _R1_IV_RANK_INDICATOR not in inds:
             continue
         threshold = regime.params.get("threshold")  # type: ignore[attr-defined]
@@ -840,8 +850,9 @@ def _r1_mean_reversion_requires_iv_rank_gate(
         passed=False,
         detail=(
             f"R1: hypothesis=mean_reversion requires a regime_filter signal with "
-            f"{_R1_IV_RANK_INDICATOR!r} (params.threshold ≤ {_R1_IV_RANK_MAX_THRESHOLD}) "
-            f"or {_R1_GAMMA_REGIME_INDICATOR!r} (the D107 dealer-gamma regime gate)"
+            f"{_R1_IV_RANK_INDICATOR!r} (params.threshold ≤ {_R1_IV_RANK_MAX_THRESHOLD}), "
+            f"{_R1_GAMMA_REGIME_INDICATOR!r} (the D107 dealer-gamma regime gate), "
+            f"or {_R1_HURST_REGIME_INDICATOR!r} (the D150 mean-reverting regime gate)"
         ),
     )
 

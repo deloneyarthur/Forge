@@ -126,7 +126,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # zeros were min_months=6 sparsity, not coverage. smart_money joins
     # trend_continuation's C2 families; percentile-only directional, min_months=3;
     # EV pinned out of the directional path. The 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v19"  # type: ignore[attr-defined]
+    # D150 bumped v19 -> v20 (mean_reversion ranging supply: hurst joins R1 as a
+    # third ranging gate + regime-gate bias toward ranging; MR rank suppressed
+    # pending Q33. Enumeration-policy widening; the 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v20"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

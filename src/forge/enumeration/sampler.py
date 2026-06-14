@@ -104,6 +104,15 @@ _REGIME_WEIGHT_PRIOR_MEAN: float = 1.0 / 51.0
 _REGIME_EXPLORATION_FLOOR: float = 0.01
 _REGIME_CURATED_HYPOTHESIS: str = "relative_value"
 
+# D150 (v20) — bias mean_reversion's R1 regime-gate pick toward the RANGING gates
+# (gamma_flip long-gamma side, hurst H<0.5) and away from `iv_rank`, which fires
+# too sparsely to survive the prefilter (the v6 expected_trades history). iv_rank
+# stays explorable (weight 1.0, never zeroed). Grows EFFECTIVE ranging supply from
+# the same mean_reversion enumeration share; pairs with the D150 R1 hurst gate.
+_MR_HYPOTHESIS: str = "mean_reversion"
+_MR_RANGING_GATES: frozenset[str] = frozenset({"gamma_flip_distance_pct", "hurst"})
+_MR_RANGING_GATE_WEIGHT: float = 3.0
+
 # D105 — hypothesis x dte_bucket weighting. Same component-rate scale and
 # prior/floor rationale as the regime constants above: an unseen cell samples
 # at ~half a learned-good cell's weight, a learned-bad cell keeps ~a quarter of
@@ -162,6 +171,16 @@ _VOL_EVENT_POST_WINDOW_TD: int = 12
 _RANK_K_CHOICES: tuple[int, ...] = (5, 10, 20)
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
+
+# D150 — mean_reversion is rank-INELIGIBLE for now. Before D150 it never ranked
+# only INCIDENTALLY (its R1 gates iv_rank/gamma_flip are single-name-only →
+# `_uses_single_name_only_indicator` skipped the draw, D116). The D150 hurst gate is
+# bar-based (NOT single-name-only), so it would re-open the mr rank branch — but
+# whether Crucible's rank runner reads per-name hurst coherently is UNVERIFIED
+# (Q33, `rank_per_name_coherent`). Keep mr single-name until Crucible confirms; the
+# bias + hurst grow ranging SUPPLY, not the (Crucible-gated) rank breadth lever.
+# Remove mr here to re-enable once Q33 is answered — a one-line flip.
+_RANK_INELIGIBLE_HYPOTHESES: frozenset[str] = frozenset({"mean_reversion"})
 
 # D033 fallback — used when the Crucible universe export is absent.
 _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
@@ -587,7 +606,11 @@ def sample_config(
     # unaffected draw sequences are unchanged; the skipped config keeps its
     # signals and pinned underlying — full single-name sampling weight.
     combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
-    if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
+    if (
+        rank_combiner_share
+        and hypothesis in RANK_COMBINER_HYPOTHESES
+        and hypothesis not in _RANK_INELIGIBLE_HYPOTHESES  # D150: mr Q33-gated
+    ):
         share = rank_combiner_share.get(hypothesis, 0.0)
         if (
             share > 0.0
@@ -826,6 +849,12 @@ def _pick_regime(
             max(regime_weights.get(r, _REGIME_WEIGHT_PRIOR_MEAN), _REGIME_EXPLORATION_FLOOR)
             for r in regimes
         ]
+        return rng.choices(regimes, weights=weights, k=1)[0]
+    # D150 (v20): bias mean_reversion toward its ranging R1 gates vs the sparse
+    # iv_rank (which stays explorable at weight 1.0). Only engages when >1 gate is
+    # present, so a single-gate registry stays byte-identical to rng.choice.
+    if hypothesis == _MR_HYPOTHESIS and len(regimes) > 1:
+        weights = [_MR_RANGING_GATE_WEIGHT if r in _MR_RANGING_GATES else 1.0 for r in regimes]
         return rng.choices(regimes, weights=weights, k=1)[0]
     return rng.choice(regimes)
 
@@ -1109,6 +1138,10 @@ def _regime_signal_params(
     # the indicator_thresholds default op ">" is the trend / short-gamma side.
     # The regime "switch" lives here -- same gate, opposite side per hypothesis.
     if hypothesis == "mean_reversion" and regime_id == "gamma_flip_distance_pct":
+        params["op"] = "<"
+    # D150 (v20): mean_reversion's hurst gate fires on the mean-reverting H<0.5
+    # side (op "<"); the indicator_thresholds default ">" is R2's trend side.
+    if hypothesis == "mean_reversion" and regime_id == "hurst":
         params["op"] = "<"
     return params
 

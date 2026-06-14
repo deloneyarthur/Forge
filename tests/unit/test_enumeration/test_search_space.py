@@ -229,11 +229,12 @@ def test_regime_pool_trend_continuation_includes_gamma_flip() -> None:
     )
 
 
-def test_regime_pool_mean_reversion_is_iv_rank(space: SearchSpace) -> None:
-    """R1: mean_reversion regime gate is iv_rank. (The minimal fixture omits
-    gamma_flip_distance_pct; the D107 gamma-gate pool membership is covered in
-    `test_regime_pool_mean_reversion_includes_gamma_flip`.)"""
-    assert space.regime_indicators_by_hypothesis["mean_reversion"] == ("iv_rank",)
+def test_regime_pool_mean_reversion_iv_rank_and_hurst(space: SearchSpace) -> None:
+    """R1: mean_reversion regime gates. The minimal fixture carries iv_rank and
+    hurst (omits gamma_flip_distance_pct), so D150's hurst widening makes the pool
+    ('hurst', 'iv_rank'), sorted. gamma-gate membership is covered in
+    `test_regime_pool_mean_reversion_includes_gamma_flip`."""
+    assert space.regime_indicators_by_hypothesis["mean_reversion"] == ("hurst", "iv_rank")
 
 
 def test_regime_pool_mean_reversion_includes_gamma_flip() -> None:
@@ -251,6 +252,18 @@ def test_regime_pool_mean_reversion_includes_gamma_flip() -> None:
         single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
     )
     assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "iv_rank")
+
+
+def test_regime_pool_mean_reversion_includes_hurst() -> None:
+    """D150 (v20, MR side): when the registry carries `hurst`, it joins
+    mean_reversion's R1 regime pool as a third ranging gate (the mean-reverting
+    H<0.5 side). Pool is sorted. Tested on `_build_regime_pool` directly so the
+    shared minimal fixture (and golden sampler-sequence tests) stays stable."""
+    pool = _build_regime_pool(
+        {"iv_rank", "gamma_flip_distance_pct", "hurst"},
+        single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
+    )
+    assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "hurst", "iv_rank")
 
 
 def test_regime_pool_volatility_event_is_event_proximity(
