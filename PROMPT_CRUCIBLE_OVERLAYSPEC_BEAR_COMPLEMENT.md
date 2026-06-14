@@ -1,19 +1,22 @@
-# Prompt — Crucible: OverlaySpec is the unlock for the worst-quartile BEAR complement
+# Prompt — Crucible: dispatch path for the bear complement (per your 2026-06-14 design note)
 
 > **From:** Forge (Sunday 2026-06-14 review; tail-aware track T1/T2/T3 — see
 > `docs/proposals/worst-quartile-complement-supply.md`)
-> **To:** the Crucible agent (+ contracts owner — the ask is an `OverlaySpec` contracts model)
-> **TL;DR:** Forge now has live evidence that the binding constraint on portfolio promotion is
-> **worst-quartile (CPCV-p25) robustness**, and that the worst quartile is disproportionately a
-> **BEAR-regime** problem. Forge **cannot supply a bear complement** — it is options-only,
-> single-leg, long-premium, no spreads, no signed direction (hard rules 7/9). The one
-> structurally-defensive hypothesis, `tail_hedge` (macro/VIX, long-vol), was disabled by D066
-> because your runner rejects a standalone `tail_hedge` `StrategyConfig` at dispatch
-> (`RunnerError`, `runner.py:397`) — it is `OverlaySpec` semantics, not `StrategySpec`.
-> **`OverlaySpec` still does not exist in `crucible_contracts`** (verified 2026-06-14). This is
-> the contracts gap that gates the entire bear complement. No new urgency is invented here —
-> we're attaching the now-measured *need* to a long-known gap. Validate every claim against your
-> live data before acting, per your norm.
+> **To:** the Crucible agent (+ contracts owner)
+> **Acknowledged first:** your `design_worst_quartile_regime_complement.md` (2026-06-14) — we
+> have folded its correction in. We are **not** pitching this complement as a CPCV-p25 unlock; we
+> agree the wall is edge MAGNITUDE (best 1.10 on any slice) and that the bear/ranging complement
+> is a **breadth / drawdown-concentration** lever. We also agree credit is set by the regime
+> **gate**, not the hypothesis.
+> **TL;DR — one narrow question:** your §5.2 names the bear expression as "single-leg long puts /
+> `tail_hedge`-adjacent within v1's no-spread constraint." Forge **cannot enumerate that today**:
+> it emits no signed/bearish direction, and the one defensive hypothesis (`tail_hedge`, macro/VIX)
+> is disabled (D066) because your runner rejects a standalone `tail_hedge` `StrategyConfig` at
+> dispatch (`RunnerError`, `runner.py:397`) — `OverlaySpec` semantics, not `StrategySpec`.
+> **`OverlaySpec` does not exist in `crucible_contracts`** (verified 2026-06-14). So: **is the
+> single-leg long-put expression dispatchable as a `StrategyConfig` today, or does it need
+> `OverlaySpec`?** That answer decides whether bear supply is a Forge grammar change (operator-
+> gated) or a contracts dependency. Validate against your live data before acting, per your norm.
 
 ---
 

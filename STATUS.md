@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-14 — D146: Crucible's worst-quartile design note INTEGRATED — the complement is breadth/drawdown hygiene, NOT a CPCV-p25 unlock (the wall is edge MAGNITUDE) → the tail-aware track is reframed, the T2 floor down-prioritized
+
+**Operator relayed `../Crucible/docs/design_worst_quartile_regime_complement.md` (Crucible analysis, 2026-06-14).** It corrects the framing I'd been carrying. Crucible's crater decomposition: the CPCV-p25 wall is **edge MAGNITUDE, not a regime gap** — every family is positive in its best regime but **none means ≥1.5 on any slice (best 1.10)**. The worst quartile over-populates bear (2.39×)/ranging (1.33×) because the balanced frontier is all `trend·cross_sectional_rank` gated to low-vol/trending (`trend_continuation` stress Sharpe −0.13). ⇒ a bear/ranging complement is a **breadth / drawdown-concentration lever, NOT a promotion unlock**; the promotion unlock is a **higher-magnitude edge** (edge-discovery / expressivity), not diversity.
+
+- **Reframe folded in (docs-only, no code, no behavior change):** proposal §4 T2 limits 3/4, the supply work-up, the OverlaySpec relay (narrowed to the dispatch-path question + de-claims "unlock"), and the memories. The T2 enforcement floor is **down-prioritized** (tail hygiene, near-redundant with D103/D136 on selection per D144's live numbers, not a p25 unlock). Full record: [[D146]].
+- **D144's `regime_supply` classifier OVER-COUNTS** — it keys on hypothesis, but Crucible §5.1: payoff is set by the regime **gate + direction** (a component gated `rv_rank<θ`/`hurst>θ` doesn't pay in bear/ranging regardless of hypothesis). Authoritative credit = Crucible's reference-calendar JOIN (Forge can't compute, §1.2). The shadow classifier keeps running as a documented coarse proxy; a gate-aware refinement is a gated next increment (operator decision pending).
+- **T1 still worth wiring** as pool-quality/tail hygiene (ranks toward higher cpcv_p25; eval spearman +0.451) — but its pitch is corrected: NOT a promotion lever.
+- **Two operator decisions open:** (a) refine the D144 classifier gate-aware now, or defer to T3b (Crucible JOIN)? (b) does the magnitude-not-diversity reframe reprioritize the roadmap toward edge-magnitude/expressivity? Plus the still-pending D145 deploy + throughput-cut scoping.
+
+---
+
 ## 2026-06-14 — D145 BUILT (rv floor exemption) — SERVICE-INERT, awaiting operator deploy/restart — reclaims rv's ~7.5%/batch D103 floor share (Q40 RESOLVED → de-emphasize)
 
 **Operator (Sunday review, AskUserQuestion): "exempt rv only."** The review found rv's persistent ~7.5%/batch is the **D103 per-hypothesis submission floor** (`_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS=15`) — NOT prefilter emission (its learned weight is already 0.050) — i.e. the floor built to *protect* the orthogonal sleeve is now protecting a structurally-dead family (Q40: rv 0/3639, options-only can't express market-neutral RV). D145 adds `floor_exempt_hypotheses` to the diversifier and exempts `relative_value` (`queue._PRODUCTION_FLOOR_EXEMPT_HYPOTHESES`); rv keeps merit eligibility (Phase-2 fill) but loses its reservation → ~6%/batch reclaimed for trend/ve/mr. `em` deliberately KEPT on the floor (data-sparse, not structural).

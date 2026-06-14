@@ -154,6 +154,29 @@ it reshapes only among configs that already passed the gate-eligibility term.
    **"largely redundant with D103/D136 on the selection side"**: the dominant lever is the
    complement-*growth* workstream, and the T2 enforcement floor (the gated next step) should be
    re-justified against it — possibly down-prioritized — before building.
+3. **World-A magnitude cap — the complement is breadth/drawdown control, NOT a promotion unlock
+   (Crucible design note, 2026-06-14, `../Crucible/docs/design_worst_quartile_regime_complement.md`).**
+   Crucible's crater decomposition (`cpcv_crater_by_regime.json`) finds the CPCV-p25 wall is **edge
+   MAGNITUDE, not a regime gap**: every family is positive in its best regime but **none means ≥1.5
+   on any regime slice (best 1.10)**. A bear/ranging complement diversifies regime exposure and cuts
+   the worst-quartile concentration + the failing `cpcv_max_drawdown_p75` (0.396) — real and worth
+   doing — but it lifts the book's p25 only if the complement component is *itself* net-positive at
+   promotion-grade magnitude in bear/ranging, which today's bear/ranging-active family (mr,
+   best-regime ~0.62–0.65) is NOT. **So T1+T2 are tail/breadth hygiene; the promotion unlock is a
+   higher-magnitude edge somewhere in the book — an expressivity / edge-discovery problem, not
+   diversity.** Pitch the floor accordingly (hard rule 6): sold as a p25 unlock while the book still
+   fails p25 (it will, until a higher-magnitude edge appears), it reads as a gate regression rather
+   than the correct World-A outcome.
+4. **Credit the regime GATE, not the hypothesis (corrects D144's `regime_supply` classifier).**
+   Crucible §5.1: a component's complement payoff is set by its regime **gate + direction**, not its
+   hypothesis label — a component gated `rv_rank < θ` (low-vol-only) or `hurst > θ` (trending-only)
+   does **not** pay in bear/ranging *regardless of hypothesis* (it is gated out of them; the entire
+   balanced frontier is trend·`cross_sectional_rank` gated exactly this way). D144's hypothesis-keyed
+   tally therefore **over-counts** the complement. The authoritative credit is Crucible's
+   reference-calendar JOIN (`worst_quartile_regime_mix` × SPY `reference_regime_calendar`, re-pullable
+   per book in seconds), which Forge cannot compute (§1.2). Forge's structural tally is at best a
+   coarse proxy — to be refined gate-aware and ultimately replaced by the Crucible credit riding T3b
+   (`PromotedPortfolio`). See [[D146]].
 
 ### T3 — The correct signal from Crucible (coordination) — two-step, smallest first
 

@@ -20,6 +20,18 @@ constraint on promotions is **not** ranking quality:
 gap.** A perfect T1 ranker + a T2 reservation floor cannot assemble a complement the
 enumerated pool does not contain. This work-up answers "what would it take to supply it?"
 
+> **UPDATE 2026-06-14 — Crucible reframed the goal (`../Crucible/docs/design_worst_quartile_regime_complement.md`).**
+> The bear/ranging complement is a **breadth / drawdown-concentration lever, NOT a promotion
+> unlock.** Per Crucible's crater decomposition the CPCV-p25 wall is **edge MAGNITUDE, not a
+> regime gap** — every family is positive in its best regime but **none means ≥1.5 on any slice
+> (best 1.10)**. Supplying bear/ranging exposure reduces how lopsidedly the book bleeds in those
+> regimes (and helps the failing `cpcv_max_drawdown_p75`), but it lifts p25 only if the complement
+> is itself net-positive at promotion-grade magnitude there — which mr (best ~0.65) is not. So this
+> whole work-up is **tail/breadth hygiene**; the promotion unlock is a *higher-magnitude edge*
+> (an edge-discovery / expressivity problem). Frame everything below accordingly (hard rule 6).
+> Crucible also corrects the credit basis: a component's complement payoff is set by its regime
+> **gate**, not its hypothesis — see [[D146]].
+
 ## What blocks bear-paying exposure today (grounded)
 
 Forge is options-only (hard rule 7 / §13.6), single-leg long-premium (net debit, qty≥0),
@@ -73,7 +85,10 @@ the smaller half of the worst-quartile problem.
 ## Recommended sequencing
 
 1. **Relay (A) to Crucible now** — bear is 2.39× the worst quartile and is *un-suppliable in
-   Forge*; the `OverlaySpec` contract is the unlock. Highest leverage, zero Forge risk.
+   Forge*; the `OverlaySpec` contract is the supply path (a breadth/drawdown lever, NOT a
+   promotion unlock — per Crucible's own 06-14 note). The relay asks the narrow dispatch
+   question: is the single-leg long-put / `tail_hedge`-adjacent expression Crucible names in its
+   §5.2 a `StrategyConfig` today, or does it need `OverlaySpec`? Zero Forge risk.
 2. **Hold (B)** — low value until `sue`/event_momentum has data; revisit if a bearish-signal
    funnel opens.
 3. **Decide (C) with the operator** — a bounded ranging-supply loosening (R1) is the only
