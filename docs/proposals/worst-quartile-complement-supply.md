@@ -31,6 +31,14 @@ enumerated pool does not contain. This work-up answers "what would it take to su
 > (an edge-discovery / expressivity problem). Frame everything below accordingly (hard rule 6).
 > Crucible also corrects the credit basis: a component's complement payoff is set by its regime
 > **gate**, not its hypothesis — see [[D146]].
+>
+> **PARTIAL CORRECTION to "bear is un-suppliable" (see `edge-magnitude-levers.md` lever 1):**
+> `long_short` cross-sectional rank is *already enumerated* and its short leg is downside exposure
+> (Crucible's balanced-frontier `7a5a782` is `long_short`). So bear-adjacent exposure IS partially
+> expressible **today without `OverlaySpec`** — it just isn't a *dedicated* bear bet, and D144's
+> hypothesis-keyed classifier mislabels it (short leg pays in bear, config tagged trend). The
+> OverlaySpec / single-leg-long-put path below remains the *purer* bear expression; the relay now
+> asks Crucible to read `long_short`'s per-regime edge alongside it.
 
 ## What blocks bear-paying exposure today (grounded)
 
