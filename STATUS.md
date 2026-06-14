@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-14 — D144 ACTIVATED via ritual restart 07:19:16Z — the `regime_supply:` complement-supply line now live; v19 + registry_hash UNCHANGED, clean code-only deploy (1604/0 gate)
+
+**Operator (effort-max): "restart service if needed." D144's `regime_supply:` line was the ONE daemon-loop change committed after the 19:06:50Z restart (`67fcd4e`, 14 min too late), so a restart was needed to activate it. D104 ritual (`docs/tasks/deploy.md`): stopped 07:16:21Z (exit 143, clean `--loop` SIGTERM; 12h clean run, 2.6G peak = the D117 signature) → FULL UNCONTENDED SUITE **1,604/0** (1,590 + D144's 14 — the deploy gate) → code already committed (tree clean at `669499c`) → reset-failed → restart 07:19:16Z (PID 2318495). Verified: `registry_loaded_from_export`, `grammar_version=v19` / `registry_hash=a7ae9ccf843fd969` UNCHANGED (pure code activation, no drift), NRestarts=0, ZERO error/traceback/mismatch lines. Supersedes the prior block's ⚠️ — D144 is now in the running daemon. No grammar/registry change → no Crucible relay.**
+
+- **The `regime_supply:` line emits on the first UNBLOCKED ranking iteration** (per deploy.md; ~13 min, per the 19:06:50Z→19:19:30Z cadence). It logs the complement supply over the submitted batch + the pre-filter-passed pool (the reservable ceiling) + the per-cell breakdown — the live, ongoing instrument for the §7 coupling risk and tomorrow's Sunday review.
+- **Both shadow tracks now fully live:** D141 `tail_score` (T1, since 19:06:50Z) + D144 `regime_supply` (T2, since 07:19:16Z). Neither reshapes a batch; both telemetry-only. The T2 enforcement floor + the §8.6 T1-wiring margin remain the gated next steps (the margin still accruing — no decided tail-scored verdicts yet).
+
+---
+
 ## 2026-06-13 — D141 SHADOW ACTIVATED via ritual restart 19:06:50Z — `tail_score` now recording (`tail_model_id=5174039c`, 200/200 first batch); v19 + registry_hash UNCHANGED, clean deploy
 
 **Operator: "do the ritual restart to activate the shadow." D104 ritual (`docs/tasks/deploy.md`) executed: stopped 19:04:21Z (exit 143, clean `--loop` SIGTERM) → FULL UNCONTENDED SUITE 1,590/0 (the deploy gate) → code already committed (D141 `fc1e985` + D143) → reset-failed → restart 19:06:50Z (PID 1789373/1789378). Verified: `registry_loaded_from_export`, `grammar_version=v19` / `registry_hash=a7ae9ccf843fd969` UNCHANGED (pure code activation, no drift), NRestarts=0, ZERO error/traceback/mismatch lines. D141 schema migration applied to the LIVE DB (`shadow_scores += tail_score/tail_model_id`, confirmed on snapshot; the 35,600 pre-restart rows stay NULL). First post-restart batch (iteration 726): enumerated 5000 → ranked 200 → submitted → `shadow_scores_recorded recorded=200 tail_model_id=5174039c416e9082` @ 19:19:30Z, `tail_score` populated (range [−0.204, 0.747]). THE SHADOW IS LIVE.**
