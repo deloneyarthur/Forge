@@ -25,7 +25,16 @@ they expand the search so one *can* exist. Frame accordingly (hard rule 6).
 
 ## Ranked levers
 
-### 1. Lean into `long_short` cross-sectional rank — the in-reach bear-adjacent edge [Forge-side, already ON]
+### 1. ~~Lean into `long_short` cross-sectional rank — the in-reach bear-adjacent edge~~ — REFUTED 2026-06-14
+> **REFUTED by Crucible's Q2 probe** (`FORGE_bear_complement_decision.md`,
+> `longshort_shortleg_regime_edge.json`): on 8,714 `long_short` runs / ~1.7M trades the short leg
+> (long puts) is net-**negative in bear (−0.057)** and positive only in marginal ranging (+0.016).
+> Single-name rank puts are a *relative* bet on weak names, not a market hedge — in a slow bear they
+> bleed theta and weak names don't fall hardest. **So `long_short` does NOT supply a bear leg, and
+> raising its share would not add one.** Bear is closed for Forge (Crucible `tail_leg` overlay; keep
+> D066). The lever below stands on its own merits (breadth), not as a bear play. Original text kept
+> for the record:
+
 `cross_sectional_rank` (H1/D109) carries `direction_mode ∈ {long_only, long_short}`
 (`sampler.py` `_RANK_DIRECTION_MODES`), and **`long_short` is already enumerated** — Crucible's
 own balanced-frontier config `7a5a782` (WF 1.60 / cpcv-p25 1.21) is `long_short` swing_long.
@@ -57,12 +66,11 @@ Forge owns, because a regime-coherent entry has higher per-regime Sharpe than a 
 enumeration share toward the coherent (gate × direction) cells. Tuning, not new capability.
 **Regime: ranging/trending.**
 
-### 4. Bear via tail_hedge / single-leg long puts [Crucible-gated — the relay's open question]
-A *dedicated* bear bet (long puts / `tail_hedge`) is the structurally cleanest bear-magnitude
-expression (bear is where the whole pool is net-negative, so the most room to differentiate). But
-it is blocked on the dispatch question now in `PROMPT_CRUCIBLE_OVERLAYSPEC_BEAR_COMPLEMENT.md`
-(StrategyConfig vs `OverlaySpec`). **Subsumes** lever 1's partial bear leg with a purer
-expression *if* Crucible accepts single-leg long puts as a StrategyConfig. **Regime: bear.**
+### 4. ~~Bear via tail_hedge / single-leg long puts~~ — DECIDED 2026-06-14: NOT a Forge lever
+Crucible adjudicated (`FORGE_bear_complement_decision.md`, operator-approved): a *constant* bear
+hedge is negative-carry and only `tail_hedge` carries the gate exemption, so it can't gate-pass as
+an ordinary `StrategyConfig`; bear is handled by the **Crucible `tail_leg` overlay** (10%-OTM, §20),
+not Forge supply. **Keep D066; no §3.5 bearish-direction rule.** Bear is off Forge's plate.
 
 ### 5. New higher-Sharpe signal families / indicators [Crucible-gated / data-blocked]
 The largest magnitude reservoir (a genuinely new edge) but mostly out of reach: needs Crucible to
@@ -71,17 +79,20 @@ publish new indicators/families (the v11/v12 program: event_momentum/PEAD is thi
 path) or paid/intraday data (OPRA-tick option greeks, intraday dealer gamma). Track via the
 Crucible handoff backlog; not actionable unilaterally. **Regime: varies.**
 
-## Recommendation / sequencing
+## Recommendation / sequencing (UPDATED 2026-06-14 after Crucible's bear adjudication)
 
-1. **Read `long_short` rank's per-regime edge (lever 1)** — cheapest, and it may already supply
-   the bear leg the worst-quartile note wants. A Crucible-side read on `long_short` vs `long_only`
-   CPCV-by-regime answers whether to (a) lean enumeration into it (Forge-side, no contract) and
-   (b) how much the OverlaySpec long-put path (lever 4) would add on top. **Fold this into the
-   bear-dispatch relay** so Crucible answers both in one pass.
-2. **Decide the §20 constant-maturity request (lever 2)** with the relay — it's the one edge-
-   *quality* deepening already on the table.
-3. **Hold levers 3/5** — 3 is tuning that waits on the T3b magnitude-by-cell credit; 5 is the
-   Crucible/data backlog.
+Levers 1 and 4 are CLOSED (bear is not a Forge supply item — Crucible `tail_leg` overlay; keep
+D066). The promotion unlock Crucible names is a **genuinely higher-magnitude adverse-regime edge —
+"regime-orthogonal arms"** (the open Forge research problem). What remains actionable:
+1. **`mean_reversion` (ranging) supply growth** — NEW, greenlit (`FORGE_greenlight_ranker_wiring_and_ranging.md`):
+   ranging is the half of the worst-quartile complement that IS a return-seeking, gate-passable
+   Forge family (mr, ranging-active, thin: 49/342). Operator-gated grammar; ships *with* the T2
+   ranging floor. This is the near-term producer move (hygiene, not a p25 unlock).
+2. **Decide the §20 constant-maturity request (lever 2)** — the one edge-*quality* deepening on the
+   table (deepens option_momentum); request if its arm earns funnel signal.
+3. **Hold lever 3 (gamma-gate tuning)** — waits on the T3b magnitude-by-cell credit. **Lever 5
+   (new families/indicators)** is the real magnitude reservoir but Crucible-v10/data-blocked — and
+   is where the "regime-orthogonal arms" unlock would come from.
 
 ## What this does NOT propose
 No grammar/enumeration change shipped. Levers 1 and 3 become enumeration-share changes only

@@ -32,13 +32,15 @@ enumerated pool does not contain. This work-up answers "what would it take to su
 > Crucible also corrects the credit basis: a component's complement payoff is set by its regime
 > **gate**, not its hypothesis — see [[D146]].
 >
-> **PARTIAL CORRECTION to "bear is un-suppliable" (see `edge-magnitude-levers.md` lever 1):**
-> `long_short` cross-sectional rank is *already enumerated* and its short leg is downside exposure
-> (Crucible's balanced-frontier `7a5a782` is `long_short`). So bear-adjacent exposure IS partially
-> expressible **today without `OverlaySpec`** — it just isn't a *dedicated* bear bet, and D144's
-> hypothesis-keyed classifier mislabels it (short leg pays in bear, config tagged trend). The
-> OverlaySpec / single-leg-long-put path below remains the *purer* bear expression; the relay now
-> asks Crucible to read `long_short`'s per-regime edge alongside it.
+> **DECIDED 2026-06-14 — bear is CLOSED for Forge (`FORGE_bear_complement_decision.md`, operator-approved).**
+> Crucible's Q1/Q2 probe settles it: a constant bear hedge is negative-carry and only `tail_hedge`
+> is gate-exempt (can't gate-pass standalone), and `long_short`'s short leg is **net-negative in
+> bear (−0.057)** on 8,714 runs — a relative bet on weak names, NOT a market hedge. So bear is
+> neither component-suppliable nor already covered by `long_short`; it's the **Crucible `tail_leg`
+> overlay** (10%-OTM, §20). **Keep D066, no §3.5 bearish rule.** The Forge half of the complement is
+> **RANGING (`mean_reversion`) only** — grow its supply + point the T2 floor at ranging (greenlit,
+> `FORGE_greenlight_ranker_wiring_and_ranging.md`). Everything below about a Forge bear sleeve is
+> SUPERSEDED; retained as the reasoning trail.
 
 ## What blocks bear-paying exposure today (grounded)
 

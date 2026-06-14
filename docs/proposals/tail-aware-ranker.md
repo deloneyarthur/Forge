@@ -92,6 +92,17 @@ the *correct* signal from Crucible (coordinated, optional).
 
 ### T2 — Regime-complement batch composition (extends D136 floor / D103 diversifier)
 
+> **RETARGET 2026-06-14 (Crucible adjudication, operator-approved —
+> `FORGE_greenlight_ranker_wiring_and_ranging.md` Decision 1):** the T2 floor targets **RANGING
+> (`mean_reversion`) ONLY — bear is dropped.** Bear is not component-suppliable (a constant hedge is
+> negative-carry / gate-exempt only for `tail_hedge`; `long_short`'s short leg is net-negative in
+> bear, −0.057) → it's the Crucible `tail_leg` overlay, not a Forge reservation target. Reserving for
+> "bear-paying" configs would reserve for something that cannot exist. **F3 (P(component)→ranking)
+> wiring + this RANGING floor are GREENLIT** (criterion met, streak 4/4) — build with the Jaccard
+> kill-switch + shadow-compare, ship the floor *with* the `mean_reversion` supply growth (Decision 2;
+> else the floor caps trend but has ~5 ranging configs to reserve). So everywhere below reads
+> "bear/ranging" → **ranging only**; "bear-paying supply growth" → handled Crucible-side.
+
 Forge can't measure correlation, so it decorrelates tails **structurally**. The first sketch
 proposed *symmetric* concentration caps (no family > X%, market-wide ≤ Y%, a floor on
 (family,dte) cells). The 06-13 measurement says that is the wrong axis **and** the wrong shape:

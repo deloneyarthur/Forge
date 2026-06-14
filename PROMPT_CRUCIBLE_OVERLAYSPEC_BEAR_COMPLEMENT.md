@@ -1,5 +1,15 @@
 # Prompt — Crucible: long-put bear sleeve — which construct, and does `long_short` already cover it? (before a §3.5 grammar change)
 
+> **✅ ANSWERED + CLOSED 2026-06-14** (`../Crucible/docs/handoffs/FORGE_bear_complement_decision.md`,
+> operator-approved). **Decision: do NOT add a §3.5 bearish-direction rule; keep D066. Bear is a
+> Crucible-owned `tail_leg` overlay (already 10%-OTM, §20), not a Forge supply item.**
+> Q1: only `tail_hedge` carries the PF/WF/CPCV gate exemption, so a constant negative-carry hedge
+> can't gate-pass standalone (confirms our read); only a *timed* downside bet could. Q2: `long_short`
+> does NOT already supply bear — on 8,714 runs / ~1.7M trades its short leg (long puts) is
+> net-**negative in bear** (−0.057), a relative bet on weak names, not a market hedge. ⇒ **Forge's
+> half of the complement is RANGING (mean_reversion), not bear** (see Decision/greenlight below).
+> This prompt is retained as the record; no further relay needed.
+
 > **From:** Forge (Sunday 2026-06-14 review; tail-aware track T1/T2/T3 — see
 > `docs/proposals/worst-quartile-complement-supply.md`)
 > **To:** the Crucible agent (+ contracts owner)

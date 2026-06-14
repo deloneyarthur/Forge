@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-14 — Crucible bear adjudication + ranker GREENLIGHT (D148): bear CLOSED (keep D066), F3 wiring + T2 ranging-only floor + mean_reversion supply GREENLIT — builds pending operator sequencing
+
+**Operator relayed `FORGE_bear_complement_decision.md` + `FORGE_greenlight_ranker_wiring_and_ranging.md` (Crucible, operator-approved).** Answers our bear relay Q1/Q2 and greenlights the supply-side moves.
+
+- **Bear CLOSED for Forge — keep D066, NO §3.5 bearish rule.** Q1: only `tail_hedge` is gate-exempt, so a constant negative-carry hedge can't gate-pass standalone (confirms our read). Q2: `long_short`'s short leg is **net-negative in bear (−0.057)** on 8,714 runs → NOT a bear hedge (refutes the edge-magnitude lever-1 hope). Bear = the Crucible **`tail_leg` overlay** (10%-OTM, §20); off Forge's plate.
+- **GREENLIT (operator-gated builds, PENDING sequencing):** (1) **F3 P(component)→ranking wiring** — criterion MET (verdict streak 4/4); production ranking is still pure Jaccard (`prior_promotion.py`); build + deploy with the **Jaccard kill-switch + shadow-compare**. (2) **T2 regime-complement floor = RANGING only** (bear dropped). (3) **Grow `mean_reversion` (ranging) supply** (operator-gated grammar) — ship *with* the T2 floor. Full record: [[D148]].
+- **Honest (hard rule 6):** NONE unlocks promotion — World A, ranging mr best-regime ~0.62–0.65 is sub-grade; these are **selection quality + tail/breadth hygiene**. The unlock is a higher-magnitude adverse-regime edge — **"regime-orthogonal arms"** (open Forge research; the real producer #1).
+- **Docs synced (no code):** bear relay → ANSWERED/CLOSED; `edge-magnitude-levers.md` (levers 1+4 closed/refuted); `tail-aware-ranker.md` (T2 → ranging-only + F3 greenlit); `worst-quartile-complement-supply.md` (bear closed). **The F3/T2/supply builds await operator go.**
+
+---
+
 ## 2026-06-14 — T1 §8.6 streak tracker BUILT (D147) — the tail clock now ticks (pooled, telemetry-only); first row at the next 05:00 timer fire
 
 **Operator: "check T1" → "build the robustness streak tracker."** The T1 check found the §8.6 gate as loosely specified ("≥150 fresh verified-coverage tail-scored verdicts × 3 checkpoints") is **unreachable per-model**: the daily timer rolls a fresh robustness model each run, so per-model decided counts plateau (`5174039c`=85, `d40dca47`=49) well below 150 under the sparse verified-coverage+cpcv population + multi-day latency. The signal itself is strong and stable (both models spearman +0.41/+0.45; top-K realized cpcv_p25 ~0.66–0.73 vs incumbent ~0.36–0.47).
