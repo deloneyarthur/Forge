@@ -58,6 +58,7 @@ def rank_batch(
     min_per_hypothesis: int = 0,
     floor_exempt_hypotheses: AbstractSet[str] = frozenset(),
     mature_arms: AbstractSet[Arm] | None = None,
+    verdict_scorer: Callable[[StrategyConfig], float] | None = None,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
 
@@ -81,12 +82,24 @@ def rank_batch(
     `min_per_hypothesis` reservation while leaving them eligible on merit —
     for a structurally 0-yielding sleeve whose floor is pure waste (Q40).
     Empty (default) keeps the floor universal.
+
+    `verdict_scorer` (D149 — F3 wiring) sets `prior_promotion_proximity :=
+    P(component)`: when provided, the per-candidate prior term is this learned
+    score INSTEAD of the Jaccard `compute_prior_promotion_proximity`. `None`
+    (default) is the **Jaccard kill-switch** — the legacy prior, byte-identical.
+    The caller (the production loop) builds the scorer from the latest verdict
+    model under an env kill-switch and shadow-compares before trusting it; the
+    §6.2 weights and every other term are untouched (it only fills the prior slot).
     """
     scored: list[RankedCandidate] = []
     for report in reports:
         if not report.passed:
             continue
-        prior = compute_prior_promotion_proximity(report.config, promoted_strategies)
+        prior = (
+            verdict_scorer(report.config)
+            if verdict_scorer is not None
+            else compute_prior_promotion_proximity(report.config, promoted_strategies)
+        )
         composite = ranker.score(report, prior)
         scored.append(
             RankedCandidate(

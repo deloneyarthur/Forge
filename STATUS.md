@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-14 — F3 wiring BUILT (D149) — `prior_promotion_proximity := P(component)` in production ranking; SERVICE-INERT, awaiting operator deploy/restart
+
+**Operator: "yes" (build the F3 wiring, D148 greenlight).** F3 criterion is MET (verdict streak 4/4); production ranking had stayed pure Jaccard. Built TDD: `rank_batch` gains `verdict_scorer` — when set, the §6.2 `prior_promotion_proximity` term is the learned **P(component)** score instead of Jaccard (which was dead weight at 0.0 with 0 promotions); `None` = the **Jaccard kill-switch**. `main.py` builds the scorer from `load_latest_model` (the SAME path `shadow.py` runs daily — glue is production-proven), gated by the `FORGE_F3_RANKER` env kill-switch (default on; `off`→Jaccard); logs `f3_ranker:` per batch. Full record: [[D149]].
+
+- **Ranking-stage change** — enumeration byte-identity intact (hard rule 6 N/A), no grammar/gate/threshold change, no version bump, no Crucible relay. Ships via the D104 ritual restart with the kill-switch retained.
+- **Rollout (per greenlight):** keep the Jaccard kill-switch + shadow-compare. Post-wiring the F3 `eval` AUC comparison goes partly circular (the composite now contains P(component)) → reinterpret it as a monitor, not a fresh A/B. The **T1 tail-score blend (cpcv_p25)** is the SEPARATE §8.6-gated next layer (D147 clock accruing); D149 wires P(component) only.
+- **Verification:** RED-first; 2 new `rank_batch` tests + 11 queue + **353 ranking/main-loop tests green**; mypy/ruff clean. **SERVICE-INERT until the next ritual restart.** DEPLOY PENDING (operator-gated) — at restart, watch for the `f3_ranker: P(component) prior ACTIVE (model=…)` line + a shifted `ranked_top_n_by_hypothesis` distribution.
+
+---
+
 ## 2026-06-14 — Crucible bear adjudication + ranker GREENLIGHT (D148): bear CLOSED (keep D066), F3 wiring + T2 ranging-only floor + mean_reversion supply GREENLIT — builds pending operator sequencing
 
 **Operator relayed `FORGE_bear_complement_decision.md` + `FORGE_greenlight_ranker_wiring_and_ranging.md` (Crucible, operator-approved).** Answers our bear relay Q1/Q2 and greenlights the supply-side moves.

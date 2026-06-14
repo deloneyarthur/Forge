@@ -37,7 +37,7 @@ from forge.version import __version__
 
 if TYPE_CHECKING:
     import uuid
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
@@ -1716,6 +1716,36 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             f"arm_floor: mature_arms={len(mature_arms)} "
             f"(young arms reserved <=2 slots, cap 10% of batch)"
         )
+
+    # D149 — F3 wiring: prior_promotion_proximity := P(component). Build the verdict
+    # scorer from the latest model unless the kill-switch is set; rank_batch falls back
+    # to the legacy Jaccard prior when it is None. Criterion MET (verdict streak 4/4,
+    # D148 greenlight); the env kill-switch (`FORGE_F3_RANKER=off`) + the shadow eval
+    # stay so the operator can revert to Jaccard at a restart. Deterministic (linear
+    # model eval over deterministic features) — enumeration is untouched (hard rule 6).
+    import os
+
+    from forge.ranking.features import extract_features
+    from forge.ranking.model import load_latest_model, score_features
+
+    verdict_scorer: Callable[[StrategyConfig], float] | None = None
+    _f3_off = os.environ.get("FORGE_F3_RANKER", "on").strip().lower() in {"off", "0", "false", "no"}
+    _vmodel = None if _f3_off else load_latest_model(forge_db_path.parent / "models")
+    if _vmodel is not None:
+        _f3_model = _vmodel  # non-None binding for the closure
+
+        def _f3_score(config: StrategyConfig) -> float:
+            return score_features(_f3_model, extract_features(config, registry).as_dict())
+
+        verdict_scorer = _f3_score
+        typer.echo(f"f3_ranker: P(component) prior ACTIVE (model={_f3_model.model_id})")
+    else:
+        typer.echo(
+            "f3_ranker: Jaccard prior (kill-switch off)"
+            if _f3_off
+            else "f3_ranker: Jaccard prior (no verdict model yet)"
+        )
+
     ranked = rank_batch(
         ranker,
         reports,
@@ -1729,6 +1759,8 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         # from that floor so their guaranteed share is reclaimed by merit.
         floor_exempt_hypotheses=_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
         mature_arms=mature_arms,
+        # D149 — None = Jaccard kill-switch.
+        verdict_scorer=verdict_scorer,
     )
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")

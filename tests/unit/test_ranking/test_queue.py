@@ -235,6 +235,43 @@ def test_returns_ranked_candidates() -> None:
 
 
 # ---------------------------------------------------------------------------
+# D149 — F3 wiring: prior_promotion_proximity := P(component) via verdict_scorer.
+# When a scorer is injected it REPLACES the Jaccard prior term; None falls back to
+# the legacy Jaccard prior (the kill-switch path).
+# ---------------------------------------------------------------------------
+
+
+def test_rank_batch_verdict_scorer_drives_the_prior() -> None:
+
+    ranker = Ranker(weights=_default_weights())
+    # Two passing reports, identical filter scores -> composite differs only via the
+    # prior term. The verdict scorer makes "b" the high-P(component) pick.
+    reports = [_report("a", signals=("sa1", "sa2")), _report("b", signals=("sb1", "sb2"))]
+    p_component = {"a": 0.0, "b": 1.0}
+
+    def verdict_scorer(config: StrategyConfig) -> float:
+        return p_component[config.name]
+
+    out = rank_batch(ranker, reports, promoted_strategies=(), n=2, verdict_scorer=verdict_scorer)
+    assert [c.report.config.name for c in out] == ["b", "a"]  # the scorer drives order
+    by_name = {c.report.config.name: c for c in out}
+    # prior_promotion_score now reflects P(component), not Jaccard(=0 with no promotions)
+    assert by_name["b"].prior_promotion_score == pytest.approx(1.0)
+    assert by_name["a"].prior_promotion_score == pytest.approx(0.0)
+
+
+def test_rank_batch_verdict_scorer_none_is_legacy_jaccard() -> None:
+    """The kill-switch path: verdict_scorer=None reproduces the legacy Jaccard prior
+    (0.0 with no promotions) byte-for-byte."""
+    ranker = Ranker(weights=_default_weights())
+    reports = [_report(f"c{i}", signals=(f"s{i}a", f"s{i}b")) for i in range(4)]
+    legacy = rank_batch(ranker, reports, promoted_strategies=(), n=4)
+    explicit_none = rank_batch(ranker, reports, promoted_strategies=(), n=4, verdict_scorer=None)
+    assert [c.report.config.name for c in legacy] == [c.report.config.name for c in explicit_none]
+    assert all(c.prior_promotion_score == 0.0 for c in explicit_none)
+
+
+# ---------------------------------------------------------------------------
 # Determinism: same inputs -> same selection order
 # ---------------------------------------------------------------------------
 
