@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-14 — D145 DEPLOYED via ritual restart 17:52:49Z — rv floor exemption now LIVE; v19 + registry_hash UNCHANGED, clean code-only deploy (1608/0 gate)
+
+**Operator: "lets deploy."** D104 ritual (`docs/tasks/deploy.md`): stopped 17:50:12Z (exit 143, clean `--loop` SIGTERM; 3G peak / 10.5h run = D117 signature) → FULL UNCONTENDED SUITE **1608/0** (the deploy gate; 1604 baseline + D145's 4 tests) → code already committed (tree clean at `980100a`) → reset-failed → restart 17:52:49Z (PID 2753090). Verified: `registry_loaded_from_export`, `grammar_version=v19` / `registry_hash=a7ae9ccf843fd969` **UNCHANGED** (ranking-stage change, no grammar/registry drift), NRestarts=0, **ZERO error/traceback/mismatch lines**. D145 (the only daemon-affecting commit since the 07:19:16Z D144 restart) is now in the running daemon; D146 + the proposals + the relay were docs-only.
+
+- **D145 effect confirms on the first UNBLOCKED ranking iteration:** `ranked_top_n_by_hypothesis: relative_value=` should drop from the ~10–14/200 baseline (pre-restart: 14, then 10) toward **~0–2** as the D103 floor no longer reserves rv; the ~6%/batch reclaimed shows as more trend/ve/mr. (Per deploy.md the change-specific line can be minutes out; background watch running.)
+- **No grammar/registry change → no Crucible relay needed.** rv configs remain valid; Crucible simply receives fewer.
+
+---
+
 ## 2026-06-14 — TWO SCOPING PROPOSALS written (edge-magnitude levers + throughput cut) — operator picks; no code
 
 **Operator (effort-max): picked "scope edge-magnitude levers" + "wire T1 hygiene" + relay the bear-Q; then added "scope the throughput cut + create a proposal."** Two proposals delivered (analysis only):
