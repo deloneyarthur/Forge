@@ -83,5 +83,7 @@ pollution** until the dispatch-valid path and the construct are confirmed.
 
 *Relay status: drafted 2026-06-14; revised same day after Crucible's agent suggested ordinary
 `StrategyConfig` enumeration — re-pivoted to Q1 (construct + standalone gate-passability) + Q2
-(`long_short` short-leg bear edge), OverlaySpec demoted to fallback. Awaiting operator relay (see
-`docs/tasks/crucible-handoff.md`).*
+(`long_short` short-leg bear edge), OverlaySpec demoted to fallback. **RELAYED to Crucible
+2026-06-14 — awaiting their Q1/Q2 answer.** Next step (Forge-side) is gated on that answer: scope
+the §3.5 signed-direction grammar change only if Q1 names a gate-passable construct AND Q2 says
+`long_short` doesn't already cover the bear leg.*
