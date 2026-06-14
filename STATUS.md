@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-14 — T1 §8.6 streak tracker BUILT (D147) — the tail clock now ticks (pooled, telemetry-only); first row at the next 05:00 timer fire
+
+**Operator: "check T1" → "build the robustness streak tracker."** The T1 check found the §8.6 gate as loosely specified ("≥150 fresh verified-coverage tail-scored verdicts × 3 checkpoints") is **unreachable per-model**: the daily timer rolls a fresh robustness model each run, so per-model decided counts plateau (`5174039c`=85, `d40dca47`=49) well below 150 under the sparse verified-coverage+cpcv population + multi-day latency. The signal itself is strong and stable (both models spearman +0.41/+0.45; top-K realized cpcv_p25 ~0.66–0.73 vs incumbent ~0.36–0.47).
+
+- **Fix (D147):** `evaluate_tail_shadow_pooled` pools all verified-cpcv tail-scored verdicts across the daily models (valid — `tail_score` is a `cpcv_p25` prediction in the same units), and the daily timer appends a fresh-per-checkpoint-window row to `~/forge_data/ranker_eval/robustness_streak.jsonl` — mirroring the F3 verdict `streak.jsonl`. **Live dry-run: pooled n=144, spearman +0.456, verdict PASS** (vs the per-model 85/49 that never reach a 150 bar).
+- **PROVISIONAL criterion** (`_TAIL_SPEARMAN_CRITERION=0.30`, `MIN_FRESH_TAIL=50`) — the row records the RAW pooled spearman + n every run so the operator finalizes the §8.6 margin without a re-run. **Reaching 3/3 wires NOTHING** (T1 live wiring stays its own operator gate, like F3).
+- **Telemetry-only, NO forge.service restart** — it's invoked by the `forge-ranker-eval` timer (05:00 daily), which picks up the committed script + CLI via the editable install. First `robustness_streak.jsonl` row lands at the next 05:00 fire (window = clean era → cumulative baseline). Full record: [[D147]]. RED-first; 2 new tests + 8 existing eval tests green; mypy/ruff clean; `bash -n` OK.
+
+---
+
 ## 2026-06-14 — D145 DEPLOYED via ritual restart 17:52:49Z — rv floor exemption now LIVE; v19 + registry_hash UNCHANGED, clean code-only deploy (1608/0 gate)
 
 **Operator: "lets deploy."** D104 ritual (`docs/tasks/deploy.md`): stopped 17:50:12Z (exit 143, clean `--loop` SIGTERM; 3G peak / 10.5h run = D117 signature) → FULL UNCONTENDED SUITE **1608/0** (the deploy gate; 1604 baseline + D145's 4 tests) → code already committed (tree clean at `980100a`) → reset-failed → restart 17:52:49Z (PID 2753090). Verified: `registry_loaded_from_export`, `grammar_version=v19` / `registry_hash=a7ae9ccf843fd969` **UNCHANGED** (ranking-stage change, no grammar/registry drift), NRestarts=0, **ZERO error/traceback/mismatch lines**. D145 (the only daemon-affecting commit since the 07:19:16Z D144 restart) is now in the running daemon; D146 + the proposals + the relay were docs-only.

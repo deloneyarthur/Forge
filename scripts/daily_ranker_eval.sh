@@ -4,8 +4,10 @@
 # Automates the manual checkpoint rhythm (STATUS: "cp snapshot -> ranker-model
 # train -> eval"): snapshot the live forge.db, refresh BOTH shadow-model artifacts
 # (the P(component) verdict model, D134; and the tail-aware cpcv_p25 robustness
-# model, D140/D141), evaluate the live shadow model, and append the F3
-# consecutive-PASS streak to a JSONL log so the operator reads the clock at a glance.
+# model, D140/D141), evaluate the live shadow models, and append TWO consecutive-PASS
+# clocks to JSONL logs so the operator reads them at a glance: the F3 verdict-model
+# streak (streak.jsonl) and the §8.6 tail-robustness streak (robustness_streak.jsonl,
+# D147 — pooled across the daily-rolling tail models).
 #
 # Deterministic Python only (hard rule #5 -- no LLM in this loop). Telemetry only:
 # it NEVER touches grammar.yaml, weights, config, the ranking path, or any service.
@@ -38,6 +40,11 @@ STAGING="$HOME/forge_data/models_staging_$$"
 OUT_DIR="$HOME/forge_data/ranker_eval"
 STREAK_LOG="$OUT_DIR/streak.jsonl"
 MIN_FRESH=150   # F3: >=150 fresh shadow-scored verdicts for a checkpoint to count
+ROBUSTNESS_STREAK_LOG="$OUT_DIR/robustness_streak.jsonl"   # §8.6 tail (T1) clock, D147
+# §8.6 tail min-fresh: the verified-coverage+cpcv population is ~10-100x sparser than
+# the full verdict stream, so the per-checkpoint floor is far below F3's 150. PROVISIONAL
+# (operator finalizes the §8.6 margin once the pooled distribution is visible).
+MIN_FRESH_TAIL=50
 
 cleanup() { rm -rf -- "$SNAP" "$STAGING"; }
 trap cleanup EXIT
@@ -193,5 +200,107 @@ PY
 echo "daily-ranker-eval: eval-robustness (tail T1)"
 uv run forge ranker-model eval-robustness --forge-db "$SNAP" || \
     echo "daily-ranker-eval: eval-robustness non-zero -- continuing" >&2
+
+# --- tail (T1) §8.6 streak (D147) ---------------------------------------------
+#     The §8.6 clock. POOLED across the daily-rolling tail models (tail_score is a
+#     cpcv_p25 prediction in the SAME units, so pooling dodges the per-model
+#     sparsity the daily roll creates), judged on a FRESH per-checkpoint window like
+#     the verdict streak above. Records the raw pooled Spearman + n every run so the
+#     operator can re-judge at any threshold; verdict/streak use the PROVISIONAL
+#     _TAIL_SPEARMAN_CRITERION + MIN_FRESH_TAIL. Telemetry only -- T1 live wiring is
+#     its own operator gate (reaching 3/3 wires NOTHING).
+echo "daily-ranker-eval: tail streak (§8.6)"
+uv run python - "$SNAP" "$ROBUSTNESS_STREAK_LOG" "$MIN_FRESH_TAIL" <<'PY'
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from forge.cli.ranker_model_cmd import _TAIL_SPEARMAN_CRITERION as CRIT
+from forge.core.clock import utc_now
+from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
+from forge.persistence.db import db_connection
+from forge.ranking.evaluation import evaluate_tail_shadow, evaluate_tail_shadow_pooled
+
+snap, streak_log_path, min_fresh = sys.argv[1], Path(sys.argv[2]), int(sys.argv[3])
+
+
+def verdict_of(ev):
+    if ev is None or ev.spearman is None:
+        return "INSUFFICIENT"
+    return "PASS" if ev.spearman >= CRIT else "FAIL"
+
+
+def show(ev, label):
+    if ev is None:
+        print(f"    {label}: no verified-coverage cpcv-bearing tail verdicts in window")
+        return
+    sp = "n/a" if ev.spearman is None else f"{ev.spearman:+.3f}"
+    mk = "n/a" if ev.model_top_k_mean_cpcv is None else f"{ev.model_top_k_mean_cpcv:.3f}"
+    ik = "n/a" if ev.incumbent_top_k_mean_cpcv is None else f"{ev.incumbent_top_k_mean_cpcv:.3f}"
+    print(
+        f"    {label}: pooled n={ev.n_decided} spearman={sp} "
+        f"top{ev.k} cpcv tail={mk} vs incumbent={ik} -> {verdict_of(ev)}"
+    )
+
+
+# Fresh-window start = previous run's ts (per-checkpoint window). First run -> clean era.
+since_fresh = CLEAN_ERA_LABEL_CUT
+if streak_log_path.exists():
+    prior = [ln for ln in streak_log_path.read_text().splitlines() if ln.strip()]
+    if prior:
+        since_fresh = datetime.fromisoformat(json.loads(prior[-1])["ts"])
+
+with db_connection(Path(snap)) as conn:
+    cumulative = evaluate_tail_shadow_pooled(conn, since=CLEAN_ERA_LABEL_CUT)
+    fresh = evaluate_tail_shadow_pooled(conn, since=since_fresh)
+    fresh_per_model = evaluate_tail_shadow(conn, since=since_fresh)
+
+print(f"  [cumulative since {CLEAN_ERA_LABEL_CUT.isoformat()} -- matches manual eval-robustness pool]")
+show(cumulative, "cumulative")
+print(f"  [fresh since {since_fresh.isoformat()} -- drives the streak]")
+show(fresh, "fresh")
+
+if fresh is None:
+    print("  no tail verdicts in the fresh window -- nothing to record")
+    sys.exit(0)
+
+verdict = verdict_of(fresh)
+qualifies = fresh.n_decided >= min_fresh and fresh.spearman is not None
+
+record = {
+    "ts": utc_now().isoformat(),
+    "window_since": since_fresh.isoformat(),
+    "fresh_decided": fresh.n_decided,
+    "n_models_fresh": len(fresh_per_model),
+    "spearman": fresh.spearman,
+    "k": fresh.k,
+    "model_top_k_mean_cpcv": fresh.model_top_k_mean_cpcv,
+    "incumbent_top_k_mean_cpcv": fresh.incumbent_top_k_mean_cpcv,
+    "criterion": CRIT,
+    "verdict": verdict,
+    "qualifies": qualifies,
+}
+with streak_log_path.open("a") as fh:
+    fh.write(json.dumps(record) + "\n")
+
+# Streak = trailing consecutive *qualifying* PASS (mirrors the verdict streak above).
+streak = 0
+for line in reversed([ln for ln in streak_log_path.read_text().splitlines() if ln.strip()]):
+    row = json.loads(line)
+    if not row.get("qualifies"):
+        continue
+    if row.get("verdict") == "PASS":
+        streak += 1
+    else:
+        break
+
+sp_str = "n/a" if fresh.spearman is None else f"{fresh.spearman:+.3f}"
+note = "" if qualifies else f"  (NOT counted: fresh={fresh.n_decided}<{min_fresh} or spearman=None)"
+print(
+    f"daily-ranker-eval: tail pooled n={fresh.n_decided} spearman={sp_str} "
+    f"verdict={verdict} -> consecutive PASS streak = {streak}/3{note}"
+)
+PY
 
 echo "daily-ranker-eval: done"

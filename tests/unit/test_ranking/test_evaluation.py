@@ -246,6 +246,50 @@ def test_tail_eval_no_tail_scores_returns_empty() -> None:
         assert evaluate_tail_shadow(conn, since=_SINCE) == ()
 
 
+def test_tail_eval_pooled_across_models() -> None:
+    # The §8.6 robustness-streak gate pools across the daily-rolling tail models:
+    # tail_score is a prediction of cpcv_p25 in the same units, so pooling is valid
+    # and dodges the per-model sparsity from the daily roll.
+    from forge.ranking.evaluation import evaluate_tail_shadow, evaluate_tail_shadow_pooled
+
+    with db_connection() as conn:
+        _seed_tail(
+            conn,
+            [
+                ("aaaa000000000001", 0.9, 0.1, 0.95, True),
+                ("aaaa000000000002", 0.7, 0.3, 0.80, True),
+                ("aaaa000000000003", 0.5, 0.5, 0.50, True),
+            ],
+            tail_model_id="aaaamodel0000001",
+        )
+        _seed_tail(
+            conn,
+            [
+                ("bbbb000000000001", 0.3, 0.7, 0.30, True),
+                ("bbbb000000000002", 0.1, 0.9, 0.10, True),
+            ],
+            tail_model_id="bbbbmodel0000002",
+        )
+        per_model = evaluate_tail_shadow(conn, since=_SINCE)
+        pooled = evaluate_tail_shadow_pooled(conn, since=_SINCE)
+
+    assert len(per_model) == 2  # per-model split is unchanged
+    assert pooled is not None
+    assert pooled.tail_model_id == "pooled"
+    assert pooled.n_decided == 5  # pooled across both daily models
+    assert pooled.spearman == pytest.approx(1.0)  # tail_score orders realized cpcv across the pool
+    assert pooled.model_top_k_mean_cpcv == pytest.approx(0.95)  # K=1; top tail-score pick
+    assert pooled.incumbent_top_k_mean_cpcv == pytest.approx(0.10)  # top composite pick
+    assert pooled.overall_mean_cpcv == pytest.approx(0.53)
+
+
+def test_tail_eval_pooled_empty_returns_none() -> None:
+    from forge.ranking.evaluation import evaluate_tail_shadow_pooled
+
+    with db_connection() as conn:
+        assert evaluate_tail_shadow_pooled(conn, since=_SINCE) is None
+
+
 def test_spearman_corr_perfect_inverted_and_degenerate() -> None:
     from forge.ranking.evaluation import spearman_corr
 

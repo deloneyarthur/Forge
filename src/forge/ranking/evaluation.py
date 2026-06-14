@@ -201,12 +201,19 @@ def _top_k_mean(pairs: list[tuple[float, float]], k: int) -> float | None:
     return sum(value for _, value in top) / len(top)
 
 
-def evaluate_tail_shadow(
+# tail_model_id sentinel for the cross-model pooled evaluation (§8.6 streak). The
+# daily timer rolls a fresh robustness model each run, so per-model windows stay
+# sparse; tail_score is a prediction of `cpcv_p25` in the SAME units across models,
+# so pooling the (score, realized) pairs is the apples-to-apples methodology check.
+_POOLED_TAIL_MODEL_ID = "pooled"
+
+
+def _tail_triples_by_model(
     conn: duckdb.DuckDBPyConnection, *, since: datetime
-) -> tuple[TailEvaluation, ...]:
-    """One eval per tail_model_id over the window. Restricted to verified-coverage
-    rows carrying a `cpcv_sharpe_p25` value — apples-to-apples with what the tail
-    model predicts (the §8.2 score-time convention assumes verified coverage)."""
+) -> dict[str, list[tuple[float, float, float]]]:
+    """`(tail_score, composite_score, realized cpcv_p25)` per tail_model_id over the
+    window. Restricted to verified-coverage rows carrying a `cpcv_sharpe_p25` value —
+    apples-to-apples with what the tail model predicts (§8.2 assumes verified coverage)."""
     cut = since
     if cut.tzinfo is not None:
         cut = cut.astimezone(UTC).replace(tzinfo=None)
@@ -233,24 +240,44 @@ def evaluate_tail_shadow(
         by_model.setdefault(tail_model_id, []).append(
             (float(tail_score), float(composite_score), float(cpcv.value))
         )
+    return by_model
 
-    evaluations: list[TailEvaluation] = []
-    for tail_model_id in sorted(by_model):
-        triples = by_model[tail_model_id]
-        n = len(triples)
-        tail_scores = [t for t, _, _ in triples]
-        composites = [c for _, c, _ in triples]
-        cpcvs = [v for _, _, v in triples]
-        k = max(1, n // 10)
-        evaluations.append(
-            TailEvaluation(
-                tail_model_id=tail_model_id,
-                n_decided=n,
-                spearman=spearman_corr(tail_scores, cpcvs),
-                k=k,
-                model_top_k_mean_cpcv=_top_k_mean(list(zip(tail_scores, cpcvs, strict=True)), k),
-                incumbent_top_k_mean_cpcv=_top_k_mean(list(zip(composites, cpcvs, strict=True)), k),
-                overall_mean_cpcv=(sum(cpcvs) / n if n else None),
-            )
-        )
-    return tuple(evaluations)
+
+def _build_tail_eval(
+    tail_model_id: str, triples: list[tuple[float, float, float]]
+) -> TailEvaluation:
+    n = len(triples)
+    tail_scores = [t for t, _, _ in triples]
+    composites = [c for _, c, _ in triples]
+    cpcvs = [v for _, _, v in triples]
+    k = max(1, n // 10)
+    return TailEvaluation(
+        tail_model_id=tail_model_id,
+        n_decided=n,
+        spearman=spearman_corr(tail_scores, cpcvs),
+        k=k,
+        model_top_k_mean_cpcv=_top_k_mean(list(zip(tail_scores, cpcvs, strict=True)), k),
+        incumbent_top_k_mean_cpcv=_top_k_mean(list(zip(composites, cpcvs, strict=True)), k),
+        overall_mean_cpcv=(sum(cpcvs) / n if n else None),
+    )
+
+
+def evaluate_tail_shadow(
+    conn: duckdb.DuckDBPyConnection, *, since: datetime
+) -> tuple[TailEvaluation, ...]:
+    """One eval per tail_model_id over the window (journal/CLI breakdown)."""
+    by_model = _tail_triples_by_model(conn, since=since)
+    return tuple(_build_tail_eval(model_id, by_model[model_id]) for model_id in sorted(by_model))
+
+
+def evaluate_tail_shadow_pooled(
+    conn: duckdb.DuckDBPyConnection, *, since: datetime
+) -> TailEvaluation | None:
+    """One eval POOLED across every tail_model_id in the window — the §8.6 streak
+    statistic. `None` when no verified-coverage cpcv-bearing tail-scored verdict
+    decided in the window (a checkpoint with nothing to judge)."""
+    by_model = _tail_triples_by_model(conn, since=since)
+    pooled = [triple for model_id in sorted(by_model) for triple in by_model[model_id]]
+    if not pooled:
+        return None
+    return _build_tail_eval(_POOLED_TAIL_MODEL_ID, pooled)

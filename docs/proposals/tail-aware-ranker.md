@@ -286,6 +286,14 @@ snapshot → byte-identical artifact).
 6. **T1 wiring criterion: MIRROR F3's STRUCTURE** — ≥3 consecutive checkpoints, each ≥150
    honest verdicts spanning ≥5 batches; the rank-corr / top-K-mean-`cpcv_p25` margin is fixed
    once the shadow distribution is visible (not guessed a priori).
+   **OPERATIONALIZED 2026-06-14 (D147), with a correction:** the per-model ≥150 is *unreachable*
+   (the daily timer rolls a fresh robustness model each run → per-model decided plateaus ~85/49).
+   The §8.6 streak therefore **pools across the daily tail models** (`evaluate_tail_shadow_pooled`;
+   valid because `tail_score` is a `cpcv_p25` prediction in the same units) and uses a PROVISIONAL
+   `_TAIL_SPEARMAN_CRITERION=0.30` + a far-lower `MIN_FRESH_TAIL=50` (the verified-coverage+cpcv
+   population is far sparser than the full verdict stream). The daily timer appends a fresh-window
+   row to `robustness_streak.jsonl` recording the raw pooled spearman + n; the operator finalizes
+   the margin from that log. Live: pooled n=144, spearman +0.456, PASS.
 
 **Effect:** T1 (regress head on the F1/F2 machinery, all-honest+flag rows) and T2's shadow
 supply-metric are greenlit to BUILD as shadow-only increments — zero behavior change, each its

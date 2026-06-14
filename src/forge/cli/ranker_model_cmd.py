@@ -33,6 +33,16 @@ _MIN_TRAIN_POSITIVES = 5
 
 _AUC_MARGIN_CRITERION = 0.05
 
+# §8.6 tail (T1) streak criterion — PROVISIONAL, pending operator finalization of the
+# margin once the pooled distribution is visible (D147). A checkpoint PASSes when the
+# pooled Spearman(tail_score, realized cpcv_p25) clears this; the streak counts
+# consecutive qualifying PASSes. 0.30 is a deliberately modest bar (both live models
+# sit ~+0.41/+0.45); the raw Spearman is recorded per row so the operator can re-judge
+# at any threshold without a re-run. The per-checkpoint min-n is the daily script's
+# MIN_FRESH_TAIL (well below F3's 150 — the verified-coverage+cpcv population is far
+# sparser than the full verdict stream).
+_TAIL_SPEARMAN_CRITERION = 0.30
+
 
 def _resolve_forge_db(forge_db: Path | None, config: Path) -> Path:
     if forge_db is not None:
