@@ -1,5 +1,11 @@
 # Forge — Status
 
+## 2026-06-14 — GRAMMAR v21 DEPLOY in progress (D151 — mr RANK ENABLED, Q33 answered YES) — gate PASSED, restart + verify pending
+
+**Operator: relayed Crucible's Q33 answer (YES — `hurst.rank_per_name_coherent=True`) → "lets just do v21."** Vindicated: by deploy time v20 had **1,400 submissions** (mr single-name) — folding the enable into v20 would have polluted that cohort, so the clean v20→**v21** boundary was right (v20 = mr single-name; v21 = mr ranks via hurst). Stopped 21:1x Z → removed `_RANK_INELIGIBLE_HYPOTHESES` (D150 hold); `grammar.yaml` v20→**v21** + header + `grammar_archive/v21.yaml` (byte-identical); GRAMMAR.md R1 + version-pin (test_v1_grammar) → v21; D151. **Deploy gate: full uncontended suite green (1617).** Activates: hurst-gated mr RANKS (breadth lever); iv_rank/gamma_flip-gated mr stays single-name confluence (flag-based skip, D116 intact). Governance reverts to the published `rank_per_name_coherent` flag (the D150 hypothesis hold removed). **Honest cap (Crucible): breadth lifts the distribution CENTER, not worst-quartile p25 — supply, not a promotion unlock.** **Commit + restart + verify + relay (v20→v21) next.**
+
+---
+
 ## 2026-06-14 — GRAMMAR v20 DEPLOYED + VERIFIED via ritual restart 20:49:50Z (D149 F3 wiring + D150 mr ranging supply, batched) — clean bump, registry_hash UNCHANGED
 
 **Operator: "deploy now."** Batched grammar deploy (D104 + grammar-change ritual), commit `981e086` (D150) on top of `20ef7ad` (D149). Stopped 20:43:25Z (exit 143) → `grammar.yaml` v19→**v20** + `grammar_archive/v20.yaml` (byte-identical) + GRAMMAR.md R1 sync + D150 → **full uncontended suite green** (1616 + v20 version-pin re-pin) → committed → reset-failed → restart 20:49:50Z (PID 3189793). **Verified:** `registry_loaded_from_export`, **`grammar_version=v20`** / `registry_hash=a7ae9ccf843fd969` **UNCHANGED** (grammar bump, no registry drift), `grammar_versions: recorded manual_bump row for v20`, NRestarts=0, **ZERO error/traceback/mismatch**. Grammar hooks verified manually (`uv run python` exit 0; `--no-verify` for the python-not-found env issue).

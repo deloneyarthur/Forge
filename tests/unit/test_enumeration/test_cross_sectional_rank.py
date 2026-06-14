@@ -303,10 +303,12 @@ def test_rank_draw_skipped_for_dealer_signal_configs() -> None:
     multiplies a per-bar greek grid across the universe.
 
     D116 (v14) re-pin: the non-dealer MR draws used to take the rank branch;
-    they are iv_rank-gated (R1) and iv_rank is chain-reading, so they now skip
-    too — every MR draw stays single-name. Both shapes are still asserted
-    distinctly so the dealer-skip and chain-skip mechanisms stay individually
-    covered."""
+    they are iv_rank-gated (R1) and iv_rank is chain-reading, so they skip too.
+    D151 (v21) re-pin: MR's hurst gate is bar-based and per-name-coherent (Q33),
+    so a hurst-gated MR config now RANKS — the skip applies ONLY to the
+    single-name-only families (dealer, chain-reading iv_rank). Assert confluence
+    for those gates specifically; hurst-gated MR is covered by
+    `test_mean_reversion_hurst_gate_ranks_chain_gate_does_not`."""
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
@@ -322,34 +324,38 @@ def test_rank_draw_skipped_for_dealer_signal_configs() -> None:
             forced_hypothesis="mean_reversion",
             rank_combiner_share=share,
         )
-        assert cfg.combiner.type == "confluence", cfg.name
-        assert cfg.underlying is not None, cfg.name
-        if any(ind in dealer for s in cfg.signals for ind in s.indicators):
-            seen_dealer += 1
-        else:
-            # No dealer signal -> the skip was the chain-reading iv_rank gate.
-            seen_chain_only += 1
+        sig_inds = {ind for s in cfg.signals for ind in s.indicators}
+        has_dealer = any(ind in dealer for ind in sig_inds)
+        has_iv_rank = "iv_rank" in sig_inds
+        if has_dealer or has_iv_rank:
+            # the single-name-only skip (dealer D112 / chain-reading iv_rank D116)
+            # keeps these confluence even at share 1.0 — D151 left this guard intact.
+            assert cfg.combiner.type == "confluence", cfg.name
+            assert cfg.underlying is not None, cfg.name
+            if has_dealer:
+                seen_dealer += 1
+            else:
+                seen_chain_only += 1
     # Both skip mechanisms must actually be exercised, or the test is vacuous.
     assert seen_dealer > 0
     assert seen_chain_only > 0
 
 
 # ---------------------------------------------------------------------------
-# D116 (v14) — chain-reading indicators are single-name only: MR never ranks
+# D116 (v14) — chain-reading indicators are single-name only: they never rank.
+# (D151/v21: this is now gate-specific — the hurst-gated MR draw DOES rank.)
 # ---------------------------------------------------------------------------
 
 
 def test_rank_draw_skipped_for_chain_reading_gate_configs() -> None:
-    """D116 (v14): a config that drew ANY chain-reading signal (iv_rank,
-    put_call_flow — Q33, Crucible's fail-open sweep) must not take the rank
-    branch even at share 1.0. On Crucible's rank path the chain underlying is
-    read from ``params["underlying"]`` (default SPY) regardless of the ranked
-    name, so iv_rank fires on noise (SPY's chain IV interpolated at the name's
-    spot) and put_call_flow is a hidden uniform SPY gate. §3.5 R1 pins
-    mean_reversion's regime pool to {iv_rank, gamma_flip_distance_pct} and both
-    are single-name only → EVERY mean_reversion draw stays single-name
-    confluence; the rank branch is structurally unreachable for MR until a
-    coherent reference-underlying gate exists Crucible-side (the Q33 trigger)."""
+    """D116 (v14): a config that drew a chain-reading regime gate (iv_rank,
+    put_call_flow) must not take the rank branch even at share 1.0 — on Crucible's
+    rank path those default their chain underlying to SPY regardless of the ranked
+    name (iv_rank fires on noise, Q33 fail-open sweep), so they stay single-name.
+    D151 (v21) re-pin: this is now keyed on the published `rank_per_name_coherent`
+    flag (`space.rank_excluded_ids`) — iv_rank (False) stays confluence; the
+    bar-based hurst gate (True) ranks (covered separately). Assert confluence
+    specifically for the iv_rank-gated draw."""
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
@@ -363,25 +369,28 @@ def test_rank_draw_skipped_for_chain_reading_gate_configs() -> None:
             forced_hypothesis="mean_reversion",
             rank_combiner_share=share,
         )
-        assert cfg.combiner.type == "confluence", cfg.name
-        assert cfg.underlying is not None, cfg.name
         if any(s.role == "regime_filter" and "iv_rank" in s.indicators for s in cfg.signals):
+            # chain-reading gate → flag-based skip keeps it single-name confluence
+            assert cfg.combiner.type == "confluence", cfg.name
+            assert cfg.underlying is not None, cfg.name
             seen_iv_rank_gate += 1
     # Non-vacuous: the chain-gated shape (the v13 noise-gated arm) was drawn.
     assert seen_iv_rank_gate > 0
 
 
-def test_rank_draw_skipped_for_mean_reversion_hurst_gate() -> None:
-    """D150 (v20): mean_reversion's new bar-based hurst R1 gate is NOT
-    single-name-only, so it would otherwise re-open the mr rank branch D116 closed.
-    mr stays rank-INELIGIBLE (`_RANK_INELIGIBLE_HYPOTHESES`) — hurst-gated mr rank
-    coherence on Crucible's runner is unverified (Q33). Every hurst-gated mr draw
-    stays single-name confluence even at rank share 1.0, until Crucible confirms."""
+def test_mean_reversion_hurst_gate_ranks_chain_gate_does_not() -> None:
+    """D151 (v21): Q33 ANSWERED YES — `hurst.rank_per_name_coherent = True` (the rank
+    runner reads each name's own price-autocorrelation hurst, no reference chain). So
+    hurst-gated mean_reversion now RANKS (the breadth lever); the D150
+    `_RANK_INELIGIBLE_HYPOTHESES` hold is removed. The chain-reading iv_rank gate
+    stays single-name confluence via the flag-based skip (`space.rank_excluded_ids`,
+    keyed on the published `rank_per_name_coherent` flag) — D116 stays correct for it."""
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
     share = {"mean_reversion": 1.0}
-    seen_hurst_gate = 0
+    hurst_rank = 0
+    iv_rank_seen = 0
     for seed in range(300):
         cfg = sample_config(
             space,
@@ -390,12 +399,15 @@ def test_rank_draw_skipped_for_mean_reversion_hurst_gate() -> None:
             forced_hypothesis="mean_reversion",
             rank_combiner_share=share,
         )
-        assert cfg.combiner.type == "confluence", cfg.name
-        assert cfg.underlying is not None, cfg.name
-        if any(s.role == "regime_filter" and "hurst" in s.indicators for s in cfg.signals):
-            seen_hurst_gate += 1
-    # Non-vacuous: hurst-gated mr WAS drawn (and the D150 guard kept it confluence).
-    assert seen_hurst_gate > 0
+        regimes = {ind for s in cfg.signals if s.role == "regime_filter" for ind in s.indicators}
+        if "hurst" in regimes and cfg.combiner.type == "cross_sectional_rank":
+            hurst_rank += 1
+        if "iv_rank" in regimes:
+            # chain-reader: D116 flag-based skip keeps it single-name confluence
+            assert cfg.combiner.type == "confluence", f"chain-gated mr ranked: {cfg.name}"
+            iv_rank_seen += 1
+    assert hurst_rank > 0  # D151: hurst-gated mr now ranks (the enable)
+    assert iv_rank_seen > 0  # non-vacuous: iv_rank drawn + stayed confluence (flag-based skip)
 
 
 # ---------------------------------------------------------------------------

@@ -129,7 +129,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D150 bumped v19 -> v20 (mean_reversion ranging supply: hurst joins R1 as a
     # third ranging gate + regime-gate bias toward ranging; MR rank suppressed
     # pending Q33. Enumeration-policy widening; the 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v20"  # type: ignore[attr-defined]
+    # D151 bumped v20 -> v21 (Q33 answered YES — hurst per-name-coherent; the MR-rank
+    # hold removed, hurst-gated MR now ranks. Enumeration-policy; rules unchanged).
+    assert grammar.grammar_version == "v21"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

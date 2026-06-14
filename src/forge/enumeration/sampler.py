@@ -172,15 +172,16 @@ _RANK_K_CHOICES: tuple[int, ...] = (5, 10, 20)
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 
-# D150 — mean_reversion is rank-INELIGIBLE for now. Before D150 it never ranked
-# only INCIDENTALLY (its R1 gates iv_rank/gamma_flip are single-name-only →
-# `_uses_single_name_only_indicator` skipped the draw, D116). The D150 hurst gate is
-# bar-based (NOT single-name-only), so it would re-open the mr rank branch — but
-# whether Crucible's rank runner reads per-name hurst coherently is UNVERIFIED
-# (Q33, `rank_per_name_coherent`). Keep mr single-name until Crucible confirms; the
-# bias + hurst grow ranging SUPPLY, not the (Crucible-gated) rank breadth lever.
-# Remove mr here to re-enable once Q33 is answered — a one-line flip.
-_RANK_INELIGIBLE_HYPOTHESES: frozenset[str] = frozenset({"mean_reversion"})
+# D151 (v21) — mean_reversion rank ENABLED. D150 held it rank-ineligible pending Q33;
+# Crucible answered YES (FORGE_q33_hurst_rank_coherence_response.md): `hurst` is
+# per-name-coherent on the rank path (`rank_per_name_coherent = True` — the runner
+# reads each name's own price-autocorrelation hurst, not a reference chain). So the
+# D150 hypothesis guard is removed; governance reverts to the FLAG-based skip
+# (`space.rank_excluded_ids`, keyed on the published `rank_per_name_coherent`): a
+# hurst-gated mr config ranks, while the chain-reading iv_rank/gamma_flip gates stay
+# single-name confluence (D116 stays correct for them). Honest cap (Crucible, hard
+# rule 6): breadth lifts the distribution CENTER, not the worst-quartile p25 — supply,
+# not a promotion unlock. Short-history (<~101 sessions) names fail-open on hurst.
 
 # D033 fallback — used when the Crucible universe export is absent.
 _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
@@ -606,11 +607,7 @@ def sample_config(
     # unaffected draw sequences are unchanged; the skipped config keeps its
     # signals and pinned underlying — full single-name sampling weight.
     combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
-    if (
-        rank_combiner_share
-        and hypothesis in RANK_COMBINER_HYPOTHESES
-        and hypothesis not in _RANK_INELIGIBLE_HYPOTHESES  # D150: mr Q33-gated
-    ):
+    if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
         share = rank_combiner_share.get(hypothesis, 0.0)
         if (
             share > 0.0
