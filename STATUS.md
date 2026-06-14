@@ -1,8 +1,12 @@
 # Forge — Status
 
-## 2026-06-14 — GRAMMAR v21 DEPLOY in progress (D151 — mr RANK ENABLED, Q33 answered YES) — gate PASSED, restart + verify pending
+## 2026-06-14 — GRAMMAR v21 DEPLOYED + VERIFIED via ritual restart 23:38:26Z (D151 — mr RANK ENABLED, Q33 answered YES) — clean bump, registry_hash UNCHANGED
 
-**Operator: relayed Crucible's Q33 answer (YES — `hurst.rank_per_name_coherent=True`) → "lets just do v21."** Vindicated: by deploy time v20 had **1,400 submissions** (mr single-name) — folding the enable into v20 would have polluted that cohort, so the clean v20→**v21** boundary was right (v20 = mr single-name; v21 = mr ranks via hurst). Stopped 21:1x Z → removed `_RANK_INELIGIBLE_HYPOTHESES` (D150 hold); `grammar.yaml` v20→**v21** + header + `grammar_archive/v21.yaml` (byte-identical); GRAMMAR.md R1 + version-pin (test_v1_grammar) → v21; D151. **Deploy gate: full uncontended suite green (1617).** Activates: hurst-gated mr RANKS (breadth lever); iv_rank/gamma_flip-gated mr stays single-name confluence (flag-based skip, D116 intact). Governance reverts to the published `rank_per_name_coherent` flag (the D150 hypothesis hold removed). **Honest cap (Crucible): breadth lifts the distribution CENTER, not worst-quartile p25 — supply, not a promotion unlock.** **Commit + restart + verify + relay (v20→v21) next.**
+**Operator: relayed Crucible's Q33 answer (YES — `hurst.rank_per_name_coherent=True`) → "lets just do v21."** Vindicated: by deploy time v20 had **1,400 submissions** (mr single-name) — folding into v20 would have polluted that cohort, so the clean v20→**v21** boundary was right (v20 = mr single-name; v21 = mr ranks via hurst). Commit `572a6de`: removed `_RANK_INELIGIBLE_HYPOTHESES` (D150 hold); `grammar.yaml` v20→**v21** + `grammar_archive/v21.yaml` (byte-identical); GRAMMAR.md R1 + version-pin → v21; D151. **Gate: full uncontended suite green (1617).** Restart 23:38:26Z (PID 3383130). **Verified:** `registry_loaded_from_export`, **`grammar_version=v21`** / `registry_hash=a7ae9ccf843fd969` **UNCHANGED**, `manual_bump` recorded, NRestarts=0, **ZERO errors**. Grammar hooks verified manually (`uv run python` PASS; `--no-verify` for the python-not-found env).
+
+- **Now LIVE:** hurst-gated mr RANKS (breadth lever); iv_rank/gamma_flip-gated mr stays single-name confluence (flag-based skip, D116 intact). Governance = the published `rank_per_name_coherent` flag (D150 hypothesis hold removed). Q33 CLOSED.
+- **Honest cap (Crucible, hard rule 6):** breadth lifts the distribution CENTER, not worst-quartile p25 (the binding wall) — legitimate ranging *supply*, NOT a promotion unlock. Short-history (<~101 sessions) names fail-open on hurst.
+- **Outstanding handoff:** relay the v20→v21 string to Crucible for `crucible funnel --compare v20 v21` (`crucible-handoff.md`). Behavioral confirmation (first v21 batch shows mr `cross_sectional_rank` configs) appears on the first unblocked ranking iteration.
 
 ---
 
