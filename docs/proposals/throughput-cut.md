@@ -1,6 +1,10 @@
 # Proposal: throughput cut — bound the submission queue + match Crucible's drain rate
 
-Status: **PROPOSAL — operator-gated (submission policy). No code yet; recommends a build + a deploy.**
+Status: **PROPOSAL — option A (queue-depth brake) build DECLINED by operator 2026-06-14; not building.**
+The queue runaway (41,842, +10k/day) is accepted for now — per [[D146]] the un-drained capacity has
+**no promotion cost** (the wall is edge magnitude, not volume); the residual cost is Crucible
+inbox bloat + multi-day-stale feedback. Revisit if either bites. Option B (top-N cut) likewise
+not building. Kept as the diagnosis-of-record (the §7.3 straggler loophole).
 Date: 2026-06-14 (Sunday review lever #1). Relates to: §7.3 (`src/forge/submission/rate_limiter.py`),
 [[D137]] (stall guard, the sibling block reason), [[D146]] (why cut capacity has nowhere better to go),
 [[pipeline-vision-roadmap]] Phase 4 ("concentrate the stream"). Snapshot: `forge_sunday_160016.db`.
