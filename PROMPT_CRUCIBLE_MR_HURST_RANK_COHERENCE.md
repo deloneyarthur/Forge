@@ -40,5 +40,6 @@ path. v20 ships single-name mr regardless; the rank-enable is a separate, gated 
 
 ---
 
-*Relay status: drafted 2026-06-14 with the D150/v20 deploy; awaiting operator relay + the v19→v20
+*Relay status: drafted 2026-06-14 with the D150/v20 deploy; **SENT to Crucible 2026-06-14**
+(operator-confirmed). Awaiting Crucible's Q33 hurst-rank-coherence answer + the v19→v20
 `crucible funnel --compare` (`docs/tasks/crucible-handoff.md`).*

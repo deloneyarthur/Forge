@@ -1,8 +1,12 @@
 # Forge — Status
 
-## 2026-06-14 — GRAMMAR v20 DEPLOY in progress (D149 F3 wiring + D150 mr ranging supply, batched) — gate PASSED, restart + verify pending
+## 2026-06-14 — GRAMMAR v20 DEPLOYED + VERIFIED via ritual restart 20:49:50Z (D149 F3 wiring + D150 mr ranging supply, batched) — clean bump, registry_hash UNCHANGED
 
-**Operator: "deploy now."** Batched grammar deploy (D104 + grammar-change ritual). Stopped 20:43:25Z (exit 143). Edits (service stopped → no hot-reread): `grammar.yaml` v19→**v20** + header + `grammar_archive/v20.yaml` (byte-identical); GRAMMAR.md R1 synced; D150 entry. **Deploy gate: full uncontended suite green** (1616 + the v20 version-pin re-pin = all pass). Activates: **D149** (P(component)→ranking, Jaccard kill-switch) + **D150** (R1 hurst ranging gate + regime bias; mr held single-name, rank suppressed pending Q33). Relay SENT to Crucible (`PROMPT_CRUCIBLE_MR_HURST_RANK_COHERENCE.md` — operator-confirmed). **Commit + restart + verify next.**
+**Operator: "deploy now."** Batched grammar deploy (D104 + grammar-change ritual), commit `981e086` (D150) on top of `20ef7ad` (D149). Stopped 20:43:25Z (exit 143) → `grammar.yaml` v19→**v20** + `grammar_archive/v20.yaml` (byte-identical) + GRAMMAR.md R1 sync + D150 → **full uncontended suite green** (1616 + v20 version-pin re-pin) → committed → reset-failed → restart 20:49:50Z (PID 3189793). **Verified:** `registry_loaded_from_export`, **`grammar_version=v20`** / `registry_hash=a7ae9ccf843fd969` **UNCHANGED** (grammar bump, no registry drift), `grammar_versions: recorded manual_bump row for v20`, NRestarts=0, **ZERO error/traceback/mismatch**. Grammar hooks verified manually (`uv run python` exit 0; `--no-verify` for the python-not-found env issue).
+
+- **Now LIVE:** D149 (P(component)→ranking, Jaccard kill-switch `FORGE_F3_RANKER`) + D150 (R1 hurst ranging gate + regime bias; mr held SINGLE-NAME, rank suppressed pending Q33).
+- **Relay SENT to Crucible** (`PROMPT_CRUCIBLE_MR_HURST_RANK_COHERENCE.md`, operator-confirmed) — the Q33 hurst-rank-coherence question + the v19→v20 funnel-compare. If Crucible confirms coherence, enabling mr-rank is a one-line guard removal.
+- **Change-specific lines confirm on the first UNBLOCKED ranking iteration** (per deploy.md; background watch running): `f3_ranker: P(component) prior ACTIVE (model=…)` (D149) + the `ranked_top_n_by_hypothesis`/`regime_supply` shift toward ranging-gated single-name mr (D150). No grammar/registry error → relay is the only outstanding handoff.
 
 ---
 
