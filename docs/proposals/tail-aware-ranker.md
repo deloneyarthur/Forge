@@ -144,6 +144,16 @@ it reshapes only among configs that already passed the gate-eligibility term.
    bets (bear) and mean-reversion / range / premium-capture bets (ranging) — which is exactly the
    thin-or-broken part of today's inventory (mr thin, rv 0/1651). The complement-growth workstream
    now has a measured direction, not just "grow not-trend."
+   **Live-confirmed (D144, first `regime_supply:` line 07:33:28Z) — supply IS the bind, and the
+   existing floors already work the selection side.** The reservable ceiling measured **88.7% trend
+   / 1.8% ranging / 0% bear** (pool of 1,105), yet the submitted batch *over*-represents the
+   complement (ranging 7.5% > pool 1.8%) because D103 `min_per_hypothesis` + D136 already pull ~15
+   of the 20 available ranging configs in. A T2 enforcement floor therefore has **~5 configs of
+   ranging headroom and *nil* for bear** — the selection-side gap is already near-closed by the
+   existing floors; what is missing is *supply*. This strengthens "necessary-not-sufficient" toward
+   **"largely redundant with D103/D136 on the selection side"**: the dominant lever is the
+   complement-*growth* workstream, and the T2 enforcement floor (the gated next step) should be
+   re-justified against it — possibly down-prioritized — before building.
 
 ### T3 — The correct signal from Crucible (coordination) — two-step, smallest first
 
@@ -220,7 +230,10 @@ snapshot → byte-identical artifact).
   T2 with a complement-growth workstream (unblock rv's regime eval / em ranking upstream; an
   enumeration or grammar lever to raise complement supply) — outside this proposal, but T2's
   value is contingent on it. Track complement *supply* (survivors available to reserve) as a T2
-  shadow metric so under-fill is visible before enforcement.
+  shadow metric so under-fill is visible before enforcement — **BUILT + live (D144).** First
+  reading (07:33:28Z): pool ceiling **1.8% ranging / 0% bear**, and D103/D136 already over-select
+  it (submitted 7.5% > pool 1.8%) — so the under-fill is a *supply* problem, not a ranking one,
+  and a T2 enforcement floor has minimal headroom over the existing floors.
 
 ## 8. Operator decisions — DECIDED 2026-06-13 (in-session AskUserQuestion; all recommended)
 
@@ -238,8 +251,10 @@ snapshot → byte-identical artifact).
    fraction **Z** + dominant-regime lookback are build-time defaults; **ships as a shadow
    supply-metric first** — the §7 coupling risk stands: enforcement is contingent on complement
    supply, which barely enumerates today (rv/em ~0, mr thin). **Supply-metric BUILT (D144)** —
-   `forge.ranking.regime_supply` + the per-batch `regime_supply:` journal line (shadow, daemon-inert);
-   the enforcement floor remains the next gated increment.
+   `forge.ranking.regime_supply` + the per-batch `regime_supply:` journal line (shadow, daemon-inert).
+   The enforcement floor stays gated — and the first live reading (§4 T2 / §7) now shows it has
+   minimal headroom over D103/D136 (supply is the bind), so re-justify it against the
+   complement-growth workstream before building, rather than treating it as the automatic next step.
 5. **T3: T3a NOW (ANSWERED), T3b DEFERRED** — the worst-quartile-regime-label ask was relayed and
    **answered 2026-06-13**: the book fails in BEAR (2.39× lift) / RANGING (1.33×), so T2 reserves
    toward bear/ranging-paying regime-bets (measured, regime_lift-based — see §4 T3a). Hold
