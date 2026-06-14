@@ -37,6 +37,16 @@ if TYPE_CHECKING:
 # crowding event — a safety net, not a target. Tunable.
 _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS: int = 15
 
+# D145 — hypotheses exempt from the D103 floor above. The floor was built to
+# PROTECT the orthogonal relative_value sleeve; Q40 (2026-06-13) established that
+# rv is structurally 0-yielding under options-only (long-premium, no spreads,
+# 0/3639 honest-era), so guaranteeing it ~7.5% of every batch is pure waste.
+# Exempting it reclaims those slots for the merit-ranked pool; rv still competes
+# on its (heavily down-weighted) composite. Enumeration is untouched (ranking-
+# stage only). Re-evaluate if Crucible ships OverlaySpec / a bear-paying path
+# that makes rv viable (PROMPT_CRUCIBLE_OVERLAYSPEC_BEAR_COMPLEMENT.md).
+_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES: frozenset[str] = frozenset({"relative_value"})
+
 
 def rank_batch(
     ranker: Ranker,
@@ -46,6 +56,7 @@ def rank_batch(
     *,
     similarity_fn: Callable[[StrategyConfig, StrategyConfig], float] = jaccard_signal_ids,
     min_per_hypothesis: int = 0,
+    floor_exempt_hypotheses: AbstractSet[str] = frozenset(),
     mature_arms: AbstractSet[Arm] | None = None,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
@@ -65,6 +76,11 @@ def rank_batch(
     floor — young `(role, indicator_id)` arms get reserved slots so a new
     grammar arm can't be starved at ranking by the learned weights (the
     v17 cold-start lesson). `None` keeps the legacy selection exactly.
+
+    `floor_exempt_hypotheses` (D145) drops named hypotheses from the D103
+    `min_per_hypothesis` reservation while leaving them eligible on merit —
+    for a structurally 0-yielding sleeve whose floor is pure waste (Q40).
+    Empty (default) keeps the floor universal.
     """
     scored: list[RankedCandidate] = []
     for report in reports:
@@ -84,6 +100,7 @@ def rank_batch(
         n,
         similarity_fn=similarity_fn,
         min_per_hypothesis=min_per_hypothesis,
+        floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
     )
 

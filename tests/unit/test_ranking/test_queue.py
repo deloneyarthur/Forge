@@ -13,7 +13,11 @@ import pytest
 from crucible_contracts import SignalSpec, StrategyConfig
 
 from forge.prefilters.types import FilterResult, PreFilterReport
-from forge.ranking.queue import rank_batch
+from forge.ranking.queue import (
+    _PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
+    _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
+    rank_batch,
+)
 from forge.ranking.scorer import Ranker
 from forge.ranking.types import RankedCandidate, RankerWeights
 from tests.fixtures.strategy_configs import minimal_strategy_config
@@ -312,3 +316,63 @@ def test_rank_batch_forwards_mature_arms_to_the_arm_floor() -> None:
     assert "young" in [c.report.config.name for c in floored]
     legacy = rank_batch(ranker, reports, promoted_strategies=(), n=10)
     assert "young" not in [c.report.config.name for c in legacy]
+
+
+def test_rank_batch_exempts_relative_value_from_the_d103_floor() -> None:
+    """D145 — the production floor-exemption set reaches the diversifier: a
+    starved relative_value sleeve is NOT rescued by the D103 floor (its share is
+    reclaimed), while the same floor still rescues it once the exemption is
+    removed. Locks both the production constant and the wiring."""
+    ranker = Ranker(weights=_default_weights())
+
+    def _hyp_report(
+        name: str, hypothesis: str, signals: tuple[str, ...], *, strong: bool
+    ) -> PreFilterReport:
+        score = 1.0 if strong else 0.0
+        rep = _report(
+            name,
+            signals=signals,
+            signal_density=score,
+            novelty=score,
+            regime_exposure=score,
+            permutation_test=score,
+        )
+        cfg = rep.config.model_copy(update={"hypothesis": hypothesis})
+        return PreFilterReport(
+            config=cfg,
+            passed=True,
+            filter_results=rep.filter_results,
+            diagnostic_notes=(),
+            composite_score=None,
+        )
+
+    reports = [
+        _hyp_report(f"mr{i}", "mean_reversion", (f"mrd{i}", f"mrr{i}"), strong=True)
+        for i in range(30)
+    ]
+    reports += [
+        _hyp_report(f"rv{i}", "relative_value", (f"rvd{i}", f"rvr{i}"), strong=False)
+        for i in range(5)
+    ]
+
+    assert "relative_value" in _PRODUCTION_FLOOR_EXEMPT_HYPOTHESES
+    exempt = rank_batch(
+        ranker,
+        reports,
+        promoted_strategies=(),
+        n=20,
+        min_per_hypothesis=_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
+        floor_exempt_hypotheses=_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
+    )
+    n_rv_exempt = sum(1 for c in exempt if c.report.config.hypothesis == "relative_value")
+    assert n_rv_exempt == 0  # exempt -> share reclaimed by the merit-ranked mr pool
+
+    floored = rank_batch(
+        ranker,
+        reports,
+        promoted_strategies=(),
+        n=20,
+        min_per_hypothesis=_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
+    )
+    n_rv_floored = sum(1 for c in floored if c.report.config.hypothesis == "relative_value")
+    assert n_rv_floored >= 1  # rescued when NOT exempt — proves the exemption is the cause

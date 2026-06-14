@@ -836,4 +836,15 @@ CPCV-p25 / worst-quartile bar (the real promotion constraint, see
 `FORGE_portfolio_promotion_wiring_status.md`)? Mean_reversion (1.55%) and event_momentum
 (0%, signal-sparse on `sue`) are weaker-but-not-dead neighbors to decide alongside.
 
-**Tag:** `grammar-adjacent`, `phase-2-defect-hunt`, `relates-to-Q39`, `options-only-limit`, `operator-gated`
+**RESOLVED 2026-06-14 (Sunday review) → de-emphasize, via [[D145]].** Operator chose "exempt rv
+only." The review corrected the mechanism in this question: rv's ~7.5%/batch share is NOT
+prefilter emission — its learned weight is already crushed (0.050) — it is the **D103
+per-hypothesis submission floor** (`queue._PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS=15`), the floor
+originally built to *protect* rv as the orthogonal sleeve. D145 exempts `relative_value` from
+that floor (`_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES`), reclaiming ~6%/batch for the merit-ranked
+pool while rv still competes on merit. Ranking-stage only (enumeration byte-identity intact, no
+grammar bump). `em` kept on the floor (data-sparse, not structural). The grammar de-scope half
+(spreads / bear-paying expressivity) stays operator-gated and is now folded into
+`docs/proposals/worst-quartile-complement-supply.md` + the OverlaySpec relay to Crucible.
+
+**Tag:** `grammar-adjacent`, `phase-2-defect-hunt`, `relates-to-Q39`, `options-only-limit`, `operator-gated`, `RESOLVED-D145`

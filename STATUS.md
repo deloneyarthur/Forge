@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-14 — D145 BUILT (rv floor exemption) — SERVICE-INERT, awaiting operator deploy/restart — reclaims rv's ~7.5%/batch D103 floor share (Q40 RESOLVED → de-emphasize)
+
+**Operator (Sunday review, AskUserQuestion): "exempt rv only."** The review found rv's persistent ~7.5%/batch is the **D103 per-hypothesis submission floor** (`_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS=15`) — NOT prefilter emission (its learned weight is already 0.050) — i.e. the floor built to *protect* the orthogonal sleeve is now protecting a structurally-dead family (Q40: rv 0/3639, options-only can't express market-neutral RV). D145 adds `floor_exempt_hypotheses` to the diversifier and exempts `relative_value` (`queue._PRODUCTION_FLOOR_EXEMPT_HYPOTHESES`); rv keeps merit eligibility (Phase-2 fill) but loses its reservation → ~6%/batch reclaimed for trend/ve/mr. `em` deliberately KEPT on the floor (data-sparse, not structural).
+
+- **Ranking-stage change — enumeration byte-identity intact (hard rule #6 N/A), grammar.yaml untouched (no version bump, no Crucible relay).** Tightening-direction (hard rule #4 satisfied) but a deterministic-output behavior change → ships via the D104 ritual restart, NOT hot. **SERVICE-INERT until the next restart** (a reboot is safe — behavior-inert until then). Full record: [[D145]].
+- **Verification:** RED-first; 3 diversifier tests + 1 queue policy test (locks the `{"relative_value"}` constant + wiring); ranking + phase4/phase6 invariants green (209); 163 cli.main/rank_batch-touching tests green; mypy --strict + ruff clean. Committed (docs + code + Q40 resolution + this block), tree clean.
+- **DEPLOY PENDING (operator-gated):** next ritual restart activates D145 **and** D144 was already live (07:19:16Z) — so a restart now carries only D145. Watch the post-restart `ranked_top_n_by_hypothesis:` — expect `relative_value` to drop from 15 toward ~0–2, the reclaimed slots showing as more trend/ve/mr.
+
+---
+
 ## 2026-06-14 ~15:43Z — SUNDAY REVIEW done (snapshot /tmp/forge_sunday_160016.db) — component rate up to 5% (Goodhart composition, NOT progress); the worst-quartile gap is now diagnosed as a GRAMMAR-EXPRESSIVITY gap (bear supply = 0), not a ranking gap
 
 **Read (honest-era, decided_at ≥ 2026-06-10 17:17:13Z; clean = v17+v18+v19).** Component rate **4.99% overall / v18 5.58% / v19 4.87%** — UP from 3.28% (cp#2 06-13) and across the §1.3 >5% line on v18. Cause is COMPOSITION, not quality: the 73.6%-trend submission cohort now dominates decisions and trend gate-passes at 9.33%, so the blend rises toward trend's rate. Per-hypothesis honest-era: trend 9.33% (687/7363) · ve 4.88% (254/5204) · mr 2.05% (88/4291) · **rv 0% (0/3639)** · em 0% (0/117). More correlated trend components WORSEN portfolio CPCV-p25 (the binding constraint) → the rising rate argues FOR the diversity/throughput levers. Promotions still **0**.

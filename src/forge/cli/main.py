@@ -1701,7 +1701,10 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     typer.echo(f"enumerated={len(reports)} passed_prefilter={passed}")
 
     _t_rank = _time.monotonic()
-    from forge.ranking.queue import _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS
+    from forge.ranking.queue import (
+        _PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
+        _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
+    )
 
     # D136 — per-arm exploration floor: young (role, indicator_id) arms get
     # reserved diversifier slots (≤2/arm, ≤10% of batch) so a new grammar
@@ -1722,6 +1725,9 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         # the orthogonal relative_value sleeve can't be starved by a feedback
         # oscillation (the midday mean_reversion flood).
         min_per_hypothesis=_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
+        # D145 — but exempt structurally 0-yielding sleeves (relative_value, Q40)
+        # from that floor so their guaranteed share is reclaimed by merit.
+        floor_exempt_hypotheses=_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
         mature_arms=mature_arms,
     )
     timings["rank"] = _time.monotonic() - _t_rank

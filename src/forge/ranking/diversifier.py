@@ -67,6 +67,7 @@ def select_top_n(
     *,
     similarity_fn: Callable[[StrategyConfig, StrategyConfig], float] = jaccard_signal_ids,
     min_per_hypothesis: int = 0,
+    floor_exempt_hypotheses: AbstractSet[str] = frozenset(),
     mature_arms: AbstractSet[Arm] | None = None,
     arm_floor_slots: int = ARM_FLOOR_SLOTS_PER_ARM,
     arm_floor_batch_fraction: float = ARM_FLOOR_BATCH_FRACTION,
@@ -88,6 +89,12 @@ def select_top_n(
     ~0 by a higher-scoring hypothesis monopolizing the composite (the
     midday mean_reversion-flood failure mode). `0` (default) keeps the
     legacy unfloored greedy exactly.
+
+    ``floor_exempt_hypotheses`` (D145) drops named hypotheses from the D103
+    reservation: an exempt hypothesis gets NO guaranteed slots but still
+    competes on merit in the fill phase. Use for a hypothesis whose floor is
+    pure waste because it is structurally 0-yielding (relative_value under
+    options-only, Q40). Empty (default) keeps the D103 floor universal.
 
     ``mature_arms`` (D136) activates the per-arm exploration floor: any
     `(role, indicator_id)` arm NOT in the set is *young* (this naturally
@@ -112,6 +119,7 @@ def select_top_n(
             n,
             similarity_fn,
             min_per_hypothesis,
+            floor_exempt_hypotheses=floor_exempt_hypotheses,
             mature_arms=mature_arms,
             arm_floor_slots=arm_floor_slots,
             arm_floor_batch_fraction=arm_floor_batch_fraction,
@@ -212,6 +220,7 @@ def _select_top_n_floored(
     similarity_fn: Callable[[StrategyConfig, StrategyConfig], float],
     min_per_hypothesis: int,
     *,
+    floor_exempt_hypotheses: AbstractSet[str] = frozenset(),
     mature_arms: AbstractSet[Arm] | None = None,
     arm_floor_slots: int = ARM_FLOOR_SLOTS_PER_ARM,
     arm_floor_batch_fraction: float = ARM_FLOOR_BATCH_FRACTION,
@@ -310,6 +319,8 @@ def _select_top_n_floored(
     for hyp in sorted(by_hyp):
         if len(selected_idx) >= n:
             break
+        if hyp in floor_exempt_hypotheses:  # D145 — no reserved slots; merit only
+            continue
         _take(by_hyp[hyp], min(min_per_hypothesis, len(by_hyp[hyp])))
 
     _take(range(len(candidates)), n - len(selected_idx))

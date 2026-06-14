@@ -346,6 +346,72 @@ def test_d103_floor_deterministic() -> None:
 
 
 # ---------------------------------------------------------------------------
+# D145 — per-hypothesis floor exemption. The D103 floor was built to PROTECT
+# the orthogonal relative_value sleeve; Q40 (2026-06-13) established that rv is
+# structurally 0-yielding under options-only (long-premium, no spreads), so its
+# guaranteed slot share is pure waste. `floor_exempt_hypotheses` drops a named
+# hypothesis from the D103 reservation while leaving it eligible on merit in the
+# fill phase (it does NOT touch the deterministic enumeration sequence).
+# ---------------------------------------------------------------------------
+
+
+def test_floor_exempt_hypothesis_is_not_rescued() -> None:
+    """An exempt hypothesis is not reserved by the D103 floor — a starved exempt
+    sleeve stays starved while non-exempt sleeves are still floored."""
+    cands = [
+        _candidate_h(f"mr_{i}", "mean_reversion", (f"mrd{i}", f"mrr{i}"), 0.9) for i in range(30)
+    ]
+    cands += [
+        _candidate_h(f"rv_{i}", "relative_value", (f"rvd{i}", f"rvr{i}"), 0.2) for i in range(5)
+    ]
+    floored = select_top_n(
+        cands,
+        20,
+        min_per_hypothesis=3,
+        floor_exempt_hypotheses=frozenset({"relative_value"}),
+    )
+    n_rv = sum(1 for c in floored if c.report.config.hypothesis == "relative_value")
+    assert n_rv == 0  # exempt -> not rescued; loses on merit to the 0.9 mr pool
+    assert len(floored) == 20
+
+
+def test_floor_exempt_hypothesis_still_competes_on_merit() -> None:
+    """Exemption removes the RESERVATION, not eligibility — a high-scoring exempt
+    candidate is still selected in the fill phase."""
+    cands = [
+        _candidate_h(f"rv_{i}", "relative_value", (f"rvd{i}", f"rvr{i}"), 0.95) for i in range(5)
+    ]
+    cands += [
+        _candidate_h(f"mr_{i}", "mean_reversion", (f"mrd{i}", f"mrr{i}"), 0.1) for i in range(10)
+    ]
+    floored = select_top_n(
+        cands,
+        8,
+        min_per_hypothesis=3,
+        floor_exempt_hypotheses=frozenset({"relative_value"}),
+    )
+    n_rv = sum(1 for c in floored if c.report.config.hypothesis == "relative_value")
+    assert n_rv == 5  # wins on merit (0.95 > 0.1) despite being floor-exempt
+
+
+def test_floor_exempt_empty_is_legacy_identical() -> None:
+    """The default empty exemption set reproduces D103 behavior byte-for-byte."""
+    cands = [
+        _candidate_h(f"mr_{i}", "mean_reversion", (f"mrd{i}", f"mrr{i}"), 0.9) for i in range(30)
+    ]
+    cands += [
+        _candidate_h(f"rv_{i}", "relative_value", (f"rvd{i}", f"rvr{i}"), 0.2) for i in range(5)
+    ]
+    baseline = select_top_n(cands, 20, min_per_hypothesis=3)
+    explicit_empty = select_top_n(
+        cands, 20, min_per_hypothesis=3, floor_exempt_hypotheses=frozenset()
+    )
+    assert [c.report.config.name for c in baseline] == [
+        c.report.config.name for c in explicit_empty
+    ]
+
+
+# ---------------------------------------------------------------------------
 # D136 — per-arm exploration floor (young-arm reservation phase)
 # ---------------------------------------------------------------------------
 
