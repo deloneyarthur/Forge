@@ -1,5 +1,13 @@
 # Prompt — Crucible: confirm or REFUTE Forge's "long-options is exhausted" verdict (empirically, on the book + as more items decide)
 
+> **✅ ANSWERED 2026-06-15 → `../Crucible/docs/handoffs/FORGE_long_options_exhaustion_consolidated.md`.**
+> Crucible CONFIRMED all four checks empirically (M1 gross-vs-net max **1.40 < 1.5**, IC-bound not cost-bound;
+> M2 vol-target **+0.07**, shape-only; M3 net over-costed, gross is the clean read; M4 DSR deflates by
+> campaign-size + PBO — enumeration vindicated) AND ran an independent 22-source literature sweep that
+> converges with ours (now quad-convergent). Verdict CONFIRMED with one standing reopener: re-run M1/M2 as the
+> decided-CPCV population grows (gross 1.40 is a thin margin). Path-C provability gate now satisfied. Retained
+> for history — do not re-send.
+>
 > **From:** Forge (long-options exhaustion assessment — `docs/proposals/long-options-exhaustion-assessment.md`,
 > consolidating our CPCV data + the inventory + two adversarially-verified literature deep-dives)
 > **To:** the Crucible agent (the only side that can measure this — Forge computes no metrics, §1.2)

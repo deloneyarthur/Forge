@@ -1,25 +1,38 @@
 # Long-options exhaustion assessment (consolidated) — can a long-premium book reach promotion-grade Sharpe/CPCV?
 
-Status: **CONSOLIDATED FINDING, 2026-06-14.** Combines our Crucible data + the long-options inventory +
-two adversarially-verified deep-research scans. Companion to `regime-orthogonal-arms.md`,
+Status: **CONSOLIDATED FINDING, 2026-06-14 → CRUCIBLE-CONFIRMED 2026-06-15
+(`../Crucible/docs/handoffs/FORGE_long_options_exhaustion_consolidated.md`).** Combines our Crucible data +
+the long-options inventory + two adversarially-verified deep-research scans, now confirmed by Crucible's
+empirical 4-check battery + an independent 22-source literature sweep. Companion to `regime-orthogonal-arms.md`,
 `edge-magnitude-levers.md`, [[promotion-gate-tiers-and-constraint]], [[exhaust-long-options-before-v2-spreads]].
 
-## Verdict (up top) — PROVISIONAL (literature + our current data; NOT solid until Crucible agrees + more items decide)
+## Verdict (up top) — CONFIRMED by Crucible (empirical 4/4 + independent literature sweep; QUAD-convergent). One standing reopener: the population-growth monitor (gross 1.40 is a thin margin).
 
-**Provisional verdict: long-options appears EXHAUSTED for promotion-grade (CPCV-p25 ≈ 1.5) magnitude in the
-adverse regimes (bear / ranging).** No lever — signal, book construction, sizing, strike/DTE/exit,
-signal-combination, underlying-selection, or overfit-robust construction — appears to close the gap from a
-structurally net-negative long-premium base to a robust ~1.5 net-of-cost. *If it holds*, the honest path to
-adverse-regime magnitude is a **scope expansion that harvests the VRP instead of paying it**, entered at its
-*minimal, least-risky* point — a **long-debit vertical** (still net-debit, still defined-risk, covered short
-leg — NOT naked premium-selling).
+**Verdict: long-options is EXHAUSTED for promotion-grade (CPCV-p25 ≈ 1.5) magnitude in the adverse regimes
+(bear / ranging).** No lever — signal, book construction, sizing, strike/DTE/exit, signal-combination,
+underlying-selection, or overfit-robust construction — closes the gap from a structurally net-negative
+long-premium base to a robust ~1.5 net-of-cost. The honest path to adverse-regime magnitude is a **scope
+expansion that harvests the VRP instead of paying it**, entered at its *minimal, least-risky* point — a
+**long-debit vertical** (still net-debit, still defined-risk, covered short leg — NOT naked premium-selling).
 
-**This is NOT solid yet (operator, 2026-06-14).** It rests on literature + our current (finite) era-C data.
-Before we treat it as final or consider any scope change, we require: (1) **Crucible's empirical agreement
-or refutation** — the 4 confirm/refute checks in `PROMPT_CRUCIBLE_LONG_OPTIONS_EXHAUSTION.md` (a single
-"gross ≥ 1.5 somewhere" or "vol-targeting lifts p25" finding reopens long-options); and (2) **more decided
-CPCV items** — re-assess as the decided population grows, since a bear/ranging cell's gross could creep
-toward 1.5 with more data. Default stance: over-test long-options before concluding we must expand scope.
+**Crucible empirically AGREED (2026-06-15, `FORGE_long_options_exhaustion_consolidated.md`) — all four
+confirm/refute checks confirm, and their own independent 22-source literature sweep converges with ours
+(now QUAD-convergent: our 2 deep-dives + Crucible's empirical battery + Crucible's literature sweep):**
+- **M1 (decisive, gross-vs-net):** honest-era max **gross CPCV-p25 = 1.40 < 1.5**, cost ratio 1.00–1.10 →
+  **IC-bound, not cost-bound** (Path B does NOT unlock it — the raw edge isn't there). The only ≥1.5
+  "components" are `$0-slippage` WF-failing pre-cost-floor artifacts (filter `avg_slippage > 0`).
+- **M2 (vol-target the convex book):** lifts p25 only **+0.07** (→ ~1.27), tail-shape; the real effect is
+  drawdown (DD-p75 +0.27–0.33). The one residual lever is a **risk/shape lever, not a 1.5 path** — closed.
+- **M3 (effective spread):** Crucible can't measure true spread (`bid==ask==mark`, no NBBO), but their §7.2
+  model sits at Cao-Han's **pessimistic** end → net is if anything *over*-costed; **gross (1.40) is the clean
+  read and is unchanged**. Best-execution can't lift net above gross, so it can't reopen M1 either.
+- **M4 (deflation):** §8.7 DSR deflates by **selection-campaign size + PBO**, not raw enumeration → **our
+  enumeration method is sound** (vindicated); the edge is simply absent, not hidden by overfitting.
+
+**The one standing reopener (operator's "more decided items", now a defined monitor):** honest max gross is
+**1.40 — Crucible flags this as "not a comfortable margin."** Their instruction: **re-run M1/M2 as the
+decided-CPCV population grows** — if a bear/ranging cell's gross creeps to ≥1.5 with more data, the verdict
+flips back into long-options. This is the *sole* thing that reopens it. Until then, the verdict stands.
 
 ## The evidence chain (triple-convergent, one-directional)
 
@@ -52,6 +65,8 @@ toward 1.5 with more data. Default stance: over-test long-options before conclud
    tails symmetrically, but the right tail IS the long-option edge, and IV is already high when you'd buy).
    It plausibly improves the worst-quartile *shape* but is **unproven for options** — and it's **cheaply
    testable in Forge's own backtest** on the existing long-option arms. This is the only residual lever.
+   **→ MEASURED & CLOSED (Crucible M2, 2026-06-15): +0.07 to p25 (→ ~1.27), tail-shape only; the real effect
+   is drawdown (DD-p75 +0.27–0.33). Confirmed a risk/shape lever, NOT a 1.5 path.**
 2. **Forge's enumeration is NOT condemned — it needs deflation, which we already have.** The overfitting
    indictment bites on *raw* trial count; Forge's grammar variants are highly **correlated** → much smaller
    *effective N*. The fix is DSR / effective-N (ONC) deflation — which **Crucible's `deflated_sharpe` gate
@@ -65,19 +80,33 @@ toward 1.5 with more data. Default stance: over-test long-options before conclud
    operator flagged as last resort (which carries the correlated short-vol-crash tail). So "Path C" is a
    *spectrum*: debit verticals (minimal) → … → naked premium-selling (true last resort).
 
-## Three cheap in-Forge checks to fully close "exhausted" (before any scope change)
+## Three cheap in-Forge checks — ANSWERED by Crucible (2026-06-15); verdict closed on current data
 
-These are measurable from our own data/backtest — no scope change, no literature:
-1. **Vol-targeting on the convex book** — does inverse-vol / vol-target sizing of the existing long-option
-   arms lift the *book* CPCV-p25 (nuance #1)? Forge/Crucible backtest.
-2. **Effective option spread** — is our single-name/ETF universe nearer Cao-Han's 50% (no-trade) or
-   Muravyev-Pearson's ~20–25% (edge survives)? Measurable from our fill/quote data; gates the cost wall.
-3. **Confirm `deflated_sharpe` uses effective-N deflation** — verify Crucible's gate deflates by trial
-   count, not raw Sharpe (nuance #2). If yes, our enumeration method is vindicated.
+These were the residual measurements before declaring "closed." Crucible has now run all three (Forge
+computes no metrics, §1.2):
+1. **Vol-targeting on the convex book →** +0.07 to p25 (M2): a risk/drawdown lever, not a 1.5 path. Closed.
+2. **Effective option spread →** unmeasurable on their data (`bid==ask==mark`, no NBBO), but their §7.2 model
+   sits at Cao-Han's *pessimistic* end → net is *over*-costed; gross (1.40) is the clean read (M3).
+3. **`deflated_sharpe` effective-N →** confirmed: deflates by selection-campaign size + PBO, not raw
+   enumeration (M4) → our enumeration method is vindicated.
 
-If all three confirm the verdict (very likely), long-options is **definitively exhausted** and the next
-move is the Path-C decision — starting with the minimal **debit-vertical** step, sized by the Crucible
-magnitude/cost relay's part 3 (the net-of-cost per-regime magnitude of defined-risk structures).
+**Inventory is also complete (Crucible §3):** their 52 indicators span the documented conditioner taxonomy
+— no missing long-premium conditioner surfaced. The six "untried" levers do NOT reopen the case:
+`iv_term_slope` / `vix_term_slope` / `iv_minus_rv` are **low-EV as long-only gates** (their real edge is the
+L/S straddle's *short* leg); skew/risk-reversal are seller signals; **VOV and IVOL are ADVERSE for long
+premium** → Crucible **withdrew** its earlier "buy cheap-vol names" long-trigger framing and reframed them as
+**exclusion filters** (avoid high-VOV/high-IVOL long buys), not triggers; constant-maturity construction
+expresses a signal but creates no long-side edge.
+
+## The only remaining IN-SCOPE long-options actions (both very-low-EV; operator-gated)
+
+Crucible's "cheap residual" — the literal last exhaustion steps, **expectations now very low**:
+1. **Enumerate the 3 published conditioners (`iv_term_slope`/`vix_term_slope`/`iv_minus_rv`) as gates** — a
+   near-free *confirmation* that our single-name net-debit book agrees with the index-level literature (NOT
+   an edge hunt). Costs a grammar bump + a cohort + funnel-compare; do only if we want airtight closure.
+2. **VOV/IVOL as EXCLUSION filters** on the existing long book (screen out the worst long buys) — hygiene,
+   not a new arm; needs Crucible to publish the indicators first. Lower priority.
+Neither is a promotion path. Do **not** build skew/VOV/IVOL as long *triggers* (wrong-signed).
 
 ## Bottom line for the roadmap
 The producer's promotion unlock is **not** more long-premium search — that frontier is closed, and CPCV
@@ -85,3 +114,10 @@ guarantees weak long-option edges fail OOS. The unlock is a **defined-risk scope
 the VRP**, entered at its safest point (**debit verticals**), gated by the safety probe+test program in
 `regime-orthogonal-arms.md`. Long-options stays the *base* (trend/ve/mr hygiene, now well-tuned via
 D145–D151); the *growth* comes from the new defined-risk side. Hard rule 3 holds throughout (same §8.7 bar).
+
+**The Path-C provability gate the operator set is now SATISFIED** (long-options provably can't clear the bar
+— confirmed on both the empirical and theoretical axes, inventory complete). The Path-C *decision* is
+unblocked — but it stays the operator's call, **debit-verticals-first**, gated by the safety probe+test
+program. Crucible's sell-side VRP probe (`vrp_short_premium_by_regime.json`: short-vol positive *every*
+regime, strongest in low-vol/calm) corroborates the direction and their sizing is in flight. **Standing
+monitor:** re-run M1/M2 as the decided-CPCV population grows (gross 1.40 is thin) — the sole reopener.

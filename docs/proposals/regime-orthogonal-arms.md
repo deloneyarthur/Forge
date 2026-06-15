@@ -6,6 +6,14 @@ greenlight + the "regime-orthogonal arms" pointer), `edge-magnitude-levers.md` (
 inventory), `worst-quartile-complement-supply.md`. Backing data (Crucible-side):
 `probe_results/cpcv_crater_by_regime.json`, `regime_durability.json`, `worst_quartile_regime_eraC.json`.
 
+> **UPDATE 2026-06-15 — the long-options exhaustion is CRUCIBLE-CONFIRMED** (`long-options-exhaustion-assessment.md`,
+> `../Crucible/docs/handoffs/FORGE_long_options_exhaustion_consolidated.md`): all four empirical checks confirm
+> (gross max 1.40 < 1.5, IC-bound), inventory complete, theory quad-convergent. **The operator's Path-C
+> provability gate ("only open v2 if long-options provably can't clear the bar") is now SATISFIED.** Path C
+> below is unblocked as a *decision* — still operator-gated, **debit-verticals-first**, safety-program-gated.
+> Crucible's sell-side VRP probe (`vrp_short_premium_by_regime.json`: short-vol positive every regime) and
+> their sizing-in-flight corroborate the direction. Standing reopener: re-run M1/M2 as the population grows.
+
 ## Why this exists — the one lever that can actually move promotions
 
 Everything shipped so far (T1 ranker, T2 ranging supply D150/D151, rv de-emphasis D145) is
