@@ -4,15 +4,22 @@ Status: **CONSOLIDATED FINDING, 2026-06-14.** Combines our Crucible data + the l
 two adversarially-verified deep-research scans. Companion to `regime-orthogonal-arms.md`,
 `edge-magnitude-levers.md`, [[promotion-gate-tiers-and-constraint]], [[exhaust-long-options-before-v2-spreads]].
 
-## Verdict (up top)
+## Verdict (up top) — PROVISIONAL (literature + our current data; NOT solid until Crucible agrees + more items decide)
 
-**Long-options is EXHAUSTED for promotion-grade (CPCV-p25 ≈ 1.5) magnitude in the adverse regimes
-(bear / ranging).** No lever — signal, book construction, sizing, strike/DTE/exit, signal-combination,
-underlying-selection, or overfit-robust construction — closes the gap from a structurally net-negative
-long-premium base to a robust ~1.5 net-of-cost. The honest path to adverse-regime magnitude is a
-**scope expansion that harvests the VRP instead of paying it** — and the *minimal, least-risky* entry is
-**long-debit verticals** (still net-debit, still defined-risk, covered short leg — NOT naked premium-
-selling). Three cheap in-Forge checks remain before declaring it 100% closed (below).
+**Provisional verdict: long-options appears EXHAUSTED for promotion-grade (CPCV-p25 ≈ 1.5) magnitude in the
+adverse regimes (bear / ranging).** No lever — signal, book construction, sizing, strike/DTE/exit,
+signal-combination, underlying-selection, or overfit-robust construction — appears to close the gap from a
+structurally net-negative long-premium base to a robust ~1.5 net-of-cost. *If it holds*, the honest path to
+adverse-regime magnitude is a **scope expansion that harvests the VRP instead of paying it**, entered at its
+*minimal, least-risky* point — a **long-debit vertical** (still net-debit, still defined-risk, covered short
+leg — NOT naked premium-selling).
+
+**This is NOT solid yet (operator, 2026-06-14).** It rests on literature + our current (finite) era-C data.
+Before we treat it as final or consider any scope change, we require: (1) **Crucible's empirical agreement
+or refutation** — the 4 confirm/refute checks in `PROMPT_CRUCIBLE_LONG_OPTIONS_EXHAUSTION.md` (a single
+"gross ≥ 1.5 somewhere" or "vol-targeting lifts p25" finding reopens long-options); and (2) **more decided
+CPCV items** — re-assess as the decided population grows, since a bear/ranging cell's gross could creep
+toward 1.5 with more data. Default stance: over-test long-options before concluding we must expand scope.
 
 ## The evidence chain (triple-convergent, one-directional)
 

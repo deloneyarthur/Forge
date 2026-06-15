@@ -1,5 +1,10 @@
 # Prompt — Crucible: per-family × per-regime MAGNITUDE + COST decomposition (directs Forge's edge-magnitude program)
 
+> **⚠️ SUPERSEDED 2026-06-14 by `PROMPT_CRUCIBLE_LONG_OPTIONS_EXHAUSTION.md`** — which folds this
+> decomposition in as check #1 and reframes the whole ask as "confirm or REFUTE the long-options-exhausted
+> verdict" (+ the vol-target / effective-spread / deflated-Sharpe-effective-N checks). Send that one, not this.
+> Retained for history.
+
 > **From:** Forge (edge-magnitude / regime-orthogonal-arms scoping — `docs/proposals/regime-orthogonal-arms.md`)
 > **To:** the Crucible agent (the only side that can measure this — Forge computes no metrics, §1.2)
 > **TL;DR:** Your World-A verdict is that the CPCV-p25 wall is **edge magnitude** — every family is
