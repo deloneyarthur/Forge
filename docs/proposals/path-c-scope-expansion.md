@@ -8,15 +8,15 @@ first step; it does **not** re-derive the analysis — the detail lives in the d
 > magnitude (D152); the operator's Path-C provability gate is **satisfied**; the operator chose to **hold**
 > the scope-expansion exploration rather than open it now. Nothing is sent, nothing is built.
 
-> **⚠ UPDATE 2026-06-15 ([[D153]]) — the exhaustion precondition is REOPENED; Path-C resume pushed out.** The
-> operator reopened long-options on conditioning-completeness grounds: the D152 verdict was measured over a
-> population that never conditioned on the vega/IV-cost axis (`iv_rank` is a NaN stub → §3.5 R1 unsatisfiable),
-> never computed theta/vega, and conditioned marginally. The in-scope **Path-A rich-conditioning sweep** is
-> now ACTIVE (`path-a-rich-conditioning.md` — light up `iv_rank`, joint-gate the entry, learn the conditioner).
-> Path-C's "provability gate SATISFIED" is now **"satisfied *pending* that sweep."** Resume only after Path-A
-> returns negative (off-ramp §3: "no in-scope lever clears" now requires the *rich* sweep, not just the crude
-> one). The structural verdict (long premium net-negative at source; the big arm is sell-side) is unchanged —
-> so Path C remains the *likely* eventual unlock; it is just deferred behind the cheap in-scope sweep.
+> **⚠ UPDATE 2026-06-15 ([[D154]]) — a brief D153 "precondition reopening" was RETRACTED the same day; the
+> provability gate stands SATISFIED.** D153 reopened long-options on the belief the vega/IV-cost axis was dark
+> (`iv_rank` a NaN stub → §3.5 R1 unsatisfiable). **That was a stale-doc error** — Crucible confirmed `iv_rank`
+> has been live since D031 (2026-05-15), and the **strongest vega-conditioned near-miss craters on CPCV
+> (0.70).** So the exhaustion is reinforced, not reopened; Path-C's provability gate ([[D152]]) is **SATISFIED**
+> (no "pending" qualifier). Two **low-EV** in-scope residual threads remain (joint conditioning; learned
+> conditioner — `path-a-rich-conditioning.md`), pending an operator decision; they do not block Path C. Path C
+> stays **PARKED by operator choice** (the original reason — last-resort, cross-system, thin margin), not by a
+> missing precondition.
 
 ## 1. The parked decision (what + why)
 

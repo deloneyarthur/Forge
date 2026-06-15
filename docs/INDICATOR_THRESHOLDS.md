@@ -8,6 +8,20 @@
 
 This document is the **threshold map** that informs Forge's per-indicator threshold sampling.
 
+> **⚠ STALE in part — this is a 2026-05-14 pre-D031 audit. For indicator *liveness*, trust the CODE
+> (`src/forge/enumeration/indicator_thresholds.py`) + Crucible's `RegistrySnapshot`, NOT this narrative.**
+> D030's "stub" framing below (§9 — `iv_rank`, `vix_level`, `pairs_zscore`, `put_call_flow`,
+> `expected_value_estimator`) was **obsoleted by D031 (2026-05-15)**: Crucible shipped real `version=2`
+> implementations of all five; `indicator_thresholds.py:18-22` treats them identically to other bounded
+> indicators, and each has a live threshold spec (e.g. `iv_rank` `regime_range=(10,50)`, honoring §3.5 R1).
+> Crucible re-confirmed coverage 2026-06-15 (`../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`):
+> `iv_rank` non-NaN ~100% single-name (used in 3,998 runs / 77 components — impossible for a NaN stub),
+> `iv_term_slope` 94–100%, `iv_minus_rv` 98–99%. **The §9 "skip-list" and the "§3.5 R1 structurally
+> unsatisfiable" caveat are WRONG as of D031** — corrected inline below. (One genuine IV-surface gap remains:
+> **skew / risk-reversal is absent** — no indicator built — but it is a *seller* signal, wrong-signed for
+> long premium.) Root cause of a 2026-06-15 mis-derivation ([[D154]]): an audit read this stale doc instead
+> of the code. See [[indicator-thresholds-doc-stale-pre-d031]].
+
 ---
 
 ## Categories
@@ -80,15 +94,20 @@ This document is the **threshold map** that informs Forge's per-indicator thresh
 
 **Recommendation:** Forge should NOT generate threshold signals on these. Use them only in `passthrough` or comparison signals where the predicate compares two indicators rather than indicator-vs-constant.
 
-### 9. Stubs (NaN-only on real data) (4 indicators)
+### 9. ~~Stubs (NaN-only on real data)~~ — **SUPERSEDED by D031 (2026-05-15): all five are LIVE.**
 
-| Indicator | Why NaN | Threshold suggestion |
+> **This entire section is obsolete.** It reflects the 2026-05-14 audit *before* Crucible shipped real
+> implementations. Per `indicator_thresholds.py:18-22` (D031) and Crucible's 2026-06-15 coverage handoff,
+> all five compute real values and are enumerated with live threshold specs. **Do NOT skip them.** The table
+> below is retained only as a historical record of the pre-D031 state; the "skip" suggestions are WRONG today.
+
+| Indicator | ~~Why NaN (pre-D031)~~ | **Live status (D031+, current)** |
 |---|---|---|
-| `iv_rank` | needs ATM IV history; chain_snapshots may not have computable IV for all dates | **skip in enumeration** until Crucible ships real IV cache |
-| `expected_value_estimator` | needs prior trade history; signal-self-referential | **skip** until Crucible ships EV pipeline |
-| `pairs_zscore` | needs ticker-pair definitions; SPY-only data | **skip** until pair registry ships |
-| `put_call_flow` | needs options-flow data; chain_snapshots lack call/put volume | **skip** until flow ingest ships |
-| `vix_level` | needs VIX bars; not in `bars_underlying/symbol=SPY/` | **skip** until VIX ingest ships |
+| `iv_rank` | ~~needs ATM IV history~~ | **LIVE** — non-NaN ~100% single-name; spec `directional_range=(20,40)`, `regime_range=(10,50)` (R1 ≤ 50 honored). The §3.5 R1 mean_reversion gate. |
+| `expected_value_estimator` | ~~needs prior trade history~~ | **LIVE** (v2); now the X2 fractional-Kelly sizer feature (D138 nulled its directional range). |
+| `pairs_zscore` | ~~needs pair definitions~~ | **LIVE** (v2); relative_value's directional pool. |
+| `put_call_flow` | ~~needs options-flow data~~ | **LIVE** (v2). |
+| `vix_level` | ~~needs VIX bars~~ | **LIVE** (v2); calm-regime gate `regime_range=(15,30)`. |
 
 ### 10. Microstructure (low signal on SPY) (1 indicator)
 
@@ -119,19 +138,23 @@ def _sample_threshold(indicator_id: str, role: str, rng: Random) -> dict:
 
 `_INDICATOR_THRESHOLD_TABLE` lives in a new `forge.enumeration.indicator_thresholds` module with one entry per indicator family.
 
-**Skip-list (5 indicators)** — never enumerate threshold signals on stubs:
-- `iv_rank`, `expected_value_estimator`, `pairs_zscore`, `put_call_flow`, `vix_level`
+**~~Skip-list (5 indicators)~~ — OBSOLETE (D031):** `iv_rank`, `expected_value_estimator`, `pairs_zscore`,
+`put_call_flow`, `vix_level` are **all LIVE** and enumerated. The only true skips are the price-scale
+indicators (`ema`, `ema_50`, `sma`) and raw $-scale (`gex`/`vex`/`cex`/`atr`), per `_SKIP_SPEC` in
+`indicator_thresholds.py`.
 
 **Skip from directional** but allow as passthrough/comparison **(3 indicators)** — price-scale:
 - `ema`, `ema_50`, `sma`
 
 **Conditional skip** — `days_to_earnings` only enumerable for non-SPY (single-name) underlyings; v1 SPY-only so skip.
 
-**Grammar impact (§3.5 R1 / X2 caveats):**
-- §3.5 R1 says mean_reversion strategies must use `iv_rank` as the regime gate. If `iv_rank` is a stub, **R1 is structurally unsatisfiable** until Crucible ships real IV. Two paths:
-  - (a) Drop R1 from v1 grammar until IV ships; document as Phase 9 v4 dependency
-  - (b) Accept that all mean_reversion configs fail at the signal_density / pre-filter stage until IV ships
-- §3.5 X2 says fractional Kelly sizer requires `expected_value_estimator`. Same constraint; same paths.
+**~~Grammar impact (§3.5 R1 / X2 caveats)~~ — OBSOLETE (D031): both constraints are satisfied.**
+- §3.5 R1: `iv_rank` is **live**, so R1 is **satisfiable** and `iv_rank` is a valid mean_reversion regime gate
+  (`regime_range=(10,50)`). Caveat that *is* current (D150, not stale): the sampler **de-weights** `iv_rank`
+  3:1 vs the ranging proxies (`gamma_flip`/`hurst`) for mean_reversion because it *fires sparsely* (trade-count
+  prefilter), but it stays explorable (weight 1.0, never zeroed). It is also excluded from the
+  `cross_sectional_rank` path (D116, `rank_per_name_coherent=false`) — single-name path only.
+- §3.5 X2: `expected_value_estimator` is **live**; the fractional-Kelly sizer constraint is satisfied.
 
 These are **operator-decision** items beyond this audit's scope.
 

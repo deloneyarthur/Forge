@@ -1,6 +1,16 @@
 # Prompt — Crucible: ship a computable ATM-IV history so `iv_rank` goes live — light up the long-options VEGA / IV-cost axis (the in-scope step we skipped before declaring long-options exhausted)
 
-> **DRAFTED — ready for operator to relay** (`docs/tasks/crucible-handoff.md`). Thread-1 first action of the
+> **❌ ANSWERED 2026-06-15 — PREMISE FALSIFIED; NOT SENT, do not send.**
+> (`../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`, [[D154]].) Ask #1 is **moot**: there is
+> **nothing to ship** — `iv_rank` has been **live since D031 (2026-05-15)** (Crucible v4 2026-06-10), non-NaN
+> ~100% single-name, used in 3,998 runs / 77 components. The "NaN stub" premise came from a **stale Forge doc**
+> (`docs/INDICATOR_THRESHOLDS.md`, since corrected), not Crucible state. The unblock is **Forge-side** (doc fix
+> [done] + an optional low-EV mr re-enumeration; see `path-a-rich-conditioning.md` thread 1). **Ask #2 surfaced
+> the one genuine gap:** `skew / risk-reversal` is **absent** (no indicator) — the only unbuilt IV-surface
+> conditioner — but it is a *seller* signal (wrong-signed for long premium), so it is **Path-C-relevant, not a
+> Path-A long conditioner**; do NOT request the build for Path A. Retained for history.
+>
+> ~~DRAFTED — ready for operator to relay~~ (`docs/tasks/crucible-handoff.md`). Thread-1 first action of the
 > Path-A rich-conditioning sweep (`docs/proposals/path-a-rich-conditioning.md`).
 >
 > **From:** Forge. **To:** the Crucible agent (the only side that computes indicators, §1.2).

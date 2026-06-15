@@ -1,17 +1,35 @@
 # Path A — rich-conditioning sweep of long options (in-scope): light up the vega axis, joint-gate the entry, learn the conditioner
 
-Status: **ACTIVE — operator-launched 2026-06-15.** The in-scope, active counterpart to the parked
-Path-C dossier (`path-c-scope-expansion.md`). Where Path C *expands scope* (grammar v2, hard rule 9,
-defined-risk multi-leg), Path A stays **entirely within v1's single-leg net-debit long-premium grammar**
-and asks the question the exhaustion verdict skipped: *did we condition long options well, or did we declare
-them exhausted over a crudely-conditioned population?*
+Status: **SUBSTANTIALLY WALKED BACK 2026-06-15 ([[D154]]) — thread-1 premise FALSIFIED; reopening reduced to
+two low-EV threads, pending operator decision.** Launched 2026-06-15 ([[D153]]); corrected the same day when
+Crucible refuted the load-bearing fact.
 
-> **One-line state:** the long-options exhaustion verdict ([[D152]]) was measured over an enumerated
-> population that (a) could **not** condition on the vega / IV-cost axis — the canonical gate `iv_rank` is a
-> **NaN-only stub**, which makes §3.5 R1 *"structurally unsatisfiable"* (`docs/INDICATOR_THRESHOLDS.md:131`)
-> — (b) does **not compute theta / vega / delta** as conditionable features at all, and (c) conditions
-> **marginally** (one regime gate per entry), never on the *joint* Greek state. Before accepting the failure
-> we run the rich-conditioning sweep we skipped.
+> **⚠ CORRECTION ([[D154]], `../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`).** This
+> program was launched on the belief that the vega / IV-cost axis was **dark** — that `iv_rank` is a NaN stub
+> making §3.5 R1 "structurally unsatisfiable." **That was wrong.** It came from a **stale 2026-05-14 doc**
+> (`docs/INDICATOR_THRESHOLDS.md`, now corrected); the *code* has treated `iv_rank` as live since **D031
+> (2026-05-15)**, and Crucible confirms it computes **non-NaN ~100%** single-name and was **used in 3,998 runs
+> / 77 components**. So the vega axis was **live and used** during the "gross 1.40" population — and its
+> **strongest near-miss is a vega-conditioned config** (`iv_rank × days_to_opex`, WF 1.43 / **CPCV-p25 0.70**)
+> that **craters on CPCV.** That *reinforces* the exhaustion verdict on this axis, it does not reopen it.
+> **Net effect on the three threads:** thread 1's premise is gone (→ a doc fix [done] + an optional *low-EV*
+> mr experiment); threads 2 (joint conditioning) and 3 (learned conditioner) survive as **genuinely untried
+> but low-EV** (they never depended on `iv_rank` being a stub — single-gate-per-entry is real). The verdict
+> leans **back toward exhausted**; the residual decision is whether the low-EV joint/learned threads are worth
+> the build. **Read §0–§1 with this correction in force.**
+
+The in-scope counterpart to the parked Path-C dossier (`path-c-scope-expansion.md`). Where Path C *expands
+scope* (grammar v2, hard rule 9, defined-risk multi-leg), Path A stays **entirely within v1's single-leg
+net-debit long-premium grammar.**
+
+> **One-line state (corrected):** the exhaustion verdict ([[D152]]) was measured over a population that
+> conditioned on the vega/IV-cost axis **for vol_event** (`iv_rank` live, directional + gate) but **not for
+> mean_reversion** (the sampler de-weights `iv_rank` 3:1 vs `gamma_flip`/`hurst` because it fires too sparsely
+> — D150, a *current* reason, not the stale "stub" belief), does **not** compute theta/delta as conditioners
+> (`iv_rank`/`iv_term_slope`/`iv_minus_rv` ARE live IV-cost features), lacks **skew/risk-reversal** (genuine
+> gap, but a seller signal), and conditions **marginally** (one regime gate per entry — confirmed in code,
+> `sampler.py`). The only un-swept territory is *joint* and *learned* conditioning — both low-EV given that the
+> best single-gate vega config already craters on CPCV.
 
 ## 0. What is and is NOT reopened (read this first — honesty up top)
 
@@ -23,21 +41,26 @@ The exhaustion verdict has two separable claims. Only one is reopened.
   and *how much* VRP you pay — it cannot flip the sign.** No amount of clever conditioning or ML turns a
   long-premium book into the seller's edge. The big adverse-regime magnitude (bear worst-quartile ~2.39×) is
   sell-side and structurally out of long-only reach. This half stands exactly as [[D152]] recorded it.
-- **The search / magnitude claim — reopened.** "Max **gross** CPCV-p25 = 1.40 < 1.5" is a fact about a
-  *crudely-conditioned* book, not yet about a *richly-conditioned* one. The population behind 1.40 never had
-  a working vol-cost gate, never computed theta/vega, and never conjoined conditioners. So 1.40 bounds *our
-  current grammar's expressiveness on the long side*, not the asset class. That is the gap this sweep closes.
+- **The search / magnitude claim — ~~reopened~~ → mostly intact ([[D154]] correction).** I originally argued
+  "1.40 was measured over a population that never had a working vol-cost gate." **That is false:** `iv_rank`
+  was live and `vol_event` used it; the strongest near-miss (`iv_rank × days_to_opex`) *is* vega-conditioned
+  and craters on CPCV (0.70). So the vega axis does **not** reopen the search claim — it reinforces it. The
+  *only* genuinely un-swept dimensions are **joint conditioning** (one regime gate per entry — real, confirmed
+  in `sampler.py`) and a **learned market-aware conditioner** (none exists). Those remain technically untried,
+  so the search claim is not *closed* — but the evidence now leans toward "exhausted," not away from it.
 
-**Calibrated EV — do not over-promise.** The realistic prize is **closing the thin 1.40 → 1.5 pocket in a
-narrow conditional region**, not finding the 2.39× arm. Crucible's own literature prior is that IV
-conditioners are **low-EV for long-only** (assessment "Inventory complete": `iv_term_slope` / `iv_minus_rv`
-edges live on the L/S straddle's *short* leg). But that prior was formed (i) from index-level literature, not
-from measuring *our* single-name net-debit book, and (ii) over a book whose vol-cost gate was **inert**. So
-the sweep is worth running — cheaply, in-scope — rather than conceding on a prior. **Two clean outcomes, both
-decision-useful:**
-1. A thread finds a clearing conditional pocket → we got a **cheap, in-scope** arm; Path C stays parked longer.
-2. All three come back negative → that is the **real** exhaustion, measured on a *properly-conditioned* book
-   — a **stronger** verdict than [[D152]] — and Path C's parking is vindicated, not undermined.
+**Calibrated EV — now LOW, and honest about it.** The realistic prize was only ever **closing the thin
+1.40 → 1.5 pocket**, never the 2.39× arm (sell-side, Path C). With the correction, even that is unlikely:
+Crucible's literature prior already rates IV conditioners **low-EV for long-only**, and we now know the
+*best* vega-conditioned config in the live book craters on CPCV. So the residual threads (2 joint, 3 learned)
+are **low-EV bets on a thin pocket**, against evidence that the pocket isn't there. **Two clean outcomes:**
+1. A thread finds a clearing conditional pocket → a **cheap, in-scope** arm; Path C stays parked longer. *(now
+   judged unlikely.)*
+2. They come back negative → the **real** exhaustion, on a properly-conditioned book — a **stronger** verdict
+   than [[D152]] — and Path C's parking is vindicated. *(now judged the likely outcome.)*
+
+**So the live question for the operator is no longer "run the sweep" but "is a low-EV joint/learned probe
+worth the build cost, or do we accept the reinforced exhaustion and re-park?"** (See §0-decision at the end.)
 
 This is **in-scope** (no hard-rule-9 touch — still single-leg net-debit long premium), **cheap and safe**
 relative to Path C, and it *is* the operator's "exhaust long-options before v2 spreads" discipline
@@ -45,27 +68,29 @@ relative to Path C, and it *is* the operator's "exhaust long-options before v2 s
 
 ## 1. The three threads (risk / cost-ordered)
 
-### Thread 1 — light up the vega axis (IV-cost conditioning). Cheapest; needs **no grammar change**.
+### Thread 1 — ~~light up the vega axis~~ — **PREMISE FALSIFIED ([[D154]]); collapses to a doc fix + an optional low-EV experiment.**
 
-**The gap (grounded):** the operator's "long options cost most with volatility" axis is the one we condition
-on least. The canonical "only buy when vol is cheap" gate, `iv_rank`, is a **NaN-only stub** in our registry
-(`docs/INDICATOR_THRESHOLDS.md:83,87,123` — "skip in enumeration until Crucible ships real IV cache"). §3.5
-R1 *mandates* `iv_rank` as the mean_reversion regime gate, so with it stubbed **R1 is structurally
-unsatisfiable** (`:131`) — which is exactly why D107 (v11) added `gamma_flip_distance_pct` and D150 (v20)
-added `hurst` as *alternative* R1 gates. Net: mean_reversion has been gating on **dealer-gamma and Hurst
-persistence (regime *shape*)**, never on **vol-cheapness**. The IV conditioning that *is* live — `iv_minus_rv`
-(v17, directional) and `iv_term_slope` (v18) — is recent, thin (`iv_minus_rv` was 2/600 in one snapshot), and
-runs as a directional trigger, not a vol-cost gate.
+**What I claimed (WRONG):** that `iv_rank` is a NaN stub → §3.5 R1 "structurally unsatisfiable" → the vega
+axis is dark. **Reality:** `iv_rank` is **live since D031 (2026-05-15)** (Crucible v4 2026-06-10), non-NaN
+~100% single-name, with a real spec (`regime_range=(10,50)`, R1 ≤ 50 honored — `indicator_thresholds.py:236`).
+The "stub" came from a **stale 2026-05-14 doc** (now corrected). R1 is **satisfiable.** The vega axis was
+**live and used** in the "gross 1.40" population — `vol_event` conditioned on `iv_rank` directionally *and* as
+a gate (3,998 runs / 77 components), and the **strongest near-miss in the whole pool is `iv_rank × days_to_opex`
+at WF 1.43 / CPCV-p25 0.70** — a vega-conditioned long config that **craters on CPCV.**
 
-**The plan:** Crucible ships a computable ATM-IV history (the data dependency) → `iv_rank` goes non-NaN →
-§3.5 R1 becomes satisfiable → **re-enumerate mean_reversion with a real "buy-vol-cheap" gate** and
-funnel-compare against the proxy-gated cohort. **No grammar change is needed** — `iv_rank` is *already* the
-R1 canonical gate; it is merely inert. The re-enumeration *is* the test.
+**The one current, non-stale nuance:** `mean_reversion` *specifically* rarely gates on `iv_rank` — not because
+it's a stub, but because the sampler **de-weights it 3:1** vs `gamma_flip`/`hurst` (D150: `iv_rank` "fires too
+sparsely to survive the prefilter"). It stays explorable (weight 1.0, never zeroed) and is correctly excluded
+from the `cross_sectional_rank` path (D116). mr is the **weakest family** (0 mr-rank components; thin
+single-name mr).
 
-**First action:** `PROMPT_CRUCIBLE_IV_CACHE_DEPENDENCY.md` (drafted — ready for operator to relay).
-**Gating:** Crucible data dependency (§1.2 — they compute the indicator). **EV:** Crucible's prior is
-low-EV for long-only IV conditioners, but we have **never** measured our single-name net-debit book with the
-vol-cost gate *live* — this makes that measurement possible for the first time.
+**What remains (small):** (i) **doc fix — DONE** (`docs/INDICATOR_THRESHOLDS.md` corrected; the root cause of
+the error). (ii) **Optional, low-EV:** temporarily lift `iv_rank`'s mr R1 weight (override the D150 3:1
+de-weighting) on the single-name path and re-enumerate, to measure mr-gated-on-vol-cheapness. Crucible agrees
+it is "worth running — cheap, in-scope" **but low-EV** (mr is weakest; the de-weighting exists for a real
+sparseness reason, so the cohort may just be prefilter-rejected; and the best `iv_rank` config — in vol_event —
+already craters on CPCV). **Gating:** a sampler-weight change → enumeration change → operator-gated.
+**No Crucible relay needed** (`PROMPT_CRUCIBLE_IV_CACHE_DEPENDENCY.md` is ANSWERED/moot).
 
 ### Thread 2 — joint-gate the entry (in-scope grammar enrichment). Operator-gated.
 

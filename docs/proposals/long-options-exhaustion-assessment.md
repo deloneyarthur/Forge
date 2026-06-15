@@ -7,23 +7,19 @@ empirical 4-check battery + an independent 22-source literature sweep. Companion
 `edge-magnitude-levers.md`, `path-a-rich-conditioning.md`, [[promotion-gate-tiers-and-constraint]],
 [[exhaust-long-options-before-v2-spreads]].
 
-> **⚠ QUALIFIED 2026-06-15 (operator, [[D153]]) — the search/magnitude claim is REOPENED for a
-> rich-conditioning sweep; the structural/sign claim below STANDS.** The verdict has two separable halves.
-> **(1) Structural — NOT reopened:** long premium is net-negative at source; the high-Sharpe edge is
-> sell-side; conditioning cannot flip that sign (Bakshi-Kapadia, Coval-Shumway). Everything below about *why*
-> long premium loses is intact. **(2) Search/magnitude — reopened:** "max **gross** CPCV-p25 = 1.40" (M1) was
-> measured over a population that **could not condition on the vega/IV-cost axis** — `iv_rank` is a NaN stub,
-> so §3.5 R1 is *"structurally unsatisfiable"* (`docs/INDICATOR_THRESHOLDS.md:131`) and mean_reversion gates
-> on `gamma_flip`/`hurst` *shape* proxies, never on vol-cheapness — **does not compute theta/vega/delta** as
-> conditionable features, and conditions **marginally** (one regime gate per entry), never on the joint Greek
-> state. So 1.40 bounds *our grammar's long-side expressiveness*, not the asset class. The operator launched
-> the **Path-A rich-conditioning sweep** (`path-a-rich-conditioning.md`: thread 1 = light up `iv_rank` via a
-> Crucible IV cache; thread 2 = joint-gate the entry; thread 3 = a deterministic learned conditioner — ML *is*
-> allowed in-loop, only LLMs are banned, rule #5) before accepting the failure. Calibrated EV: the realistic
-> prize is closing the thin 1.40→1.5 pocket, **not** the 2.39× arm — a negative sweep makes this verdict
-> *stronger* (measured on a properly-conditioned book) and vindicates Path-C's parking. **Net: "EXHAUSTED"
-> below = "exhausted for *crude* conditioning"; the *rich* sweep is pending. Path-C's provability gate
-> ([[D152]]) is now "satisfied *pending the rich-conditioning sweep*."**
+> **⚠ NOTE 2026-06-15 — a brief D153 "reopening" was largely RETRACTED the same day ([[D154]]); the verdict
+> below STANDS, reinforced.** Timeline: (1) the operator asked to brainstorm before declaring long-options a
+> failure; (2) an audit (reading a *stale* doc) claimed the vega/IV-cost axis was dark — `iv_rank` a NaN stub,
+> §3.5 R1 "unsatisfiable" — and [[D153]] reopened the search/magnitude claim on that basis; (3) **Crucible
+> refuted it** (`../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`): `iv_rank` has been **live
+> since D031 (2026-05-15)**, non-NaN ~100%, used in 3,998 runs / 77 components — the "stub" was a stale-doc
+> artifact, since corrected. **The structural/sign claim was never in question.** And the search/magnitude
+> claim is **reinforced, not reopened:** the vega axis *was* live and used (vol_event), and its **strongest
+> near-miss — `iv_rank × days_to_opex`, WF 1.43 / CPCV-p25 0.70 — craters on CPCV.** The only genuinely
+> un-swept dimensions are **joint conditioning** and a **learned conditioner** (both real, both **low-EV** given
+> the above) — tracked in `path-a-rich-conditioning.md` as residual threads pending an operator decision, **not**
+> as an active reopening. **Path-C's provability gate ([[D152]]) stands SATISFIED** (the D153 "pending"
+> qualifier is withdrawn). Rule-#5 aside (still true): ML *is* allowed in-loop; only LLMs are banned.
 
 ## Verdict (up top) — CONFIRMED by Crucible (empirical 4/4 + independent literature sweep; QUAD-convergent). One standing reopener: the population-growth monitor (gross 1.40 is a thin margin).
 
