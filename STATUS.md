@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-15 — D156 HOLD REVERSED (operator, D157): grammar/enumeration is NOT held — RUN the untried in-scope long-options levers before accepting exhaustion
+
+**Operator: "d156 should be reversed, we aren't holding on grammar changes; things are not exhausted yet."** The genuinely-untried in-scope levers get RUN/measured, not declined on a low-EV prior. Un-holds (all in-scope, single-leg long premium, NO Path-C touch):
+- **Joint/AND-gate conditioning** — §3.5 C3 already allows ≤4 ANDed signals; sampler emits 2 → a **sampler change, no grammar bump** (D150/D151 class).
+- **Realized-vol cheapness gate (Q41)** — wire the orphaned `volatility` family / `vol_regime` so mr gets a denser buy-cheap-vol gate than the sparse `iv_rank`.
+- **mr warm-up** (lift the D150 `iv_rank` de-weight, single-name) — D156 called it "dominated"; operator elects to MEASURE it.
+- Thread 3 (learned conditioner) + state-conditioned selection stay the bigger/cross-system items, sequenced after.
+- **Honest caveat (D156 still applies):** more conditioning → fewer trades → fights CPCV's trade-count penalty; each lever must be MEASURED (production-grounded/shadow — offline `enumerate`/`prefilter` is demo-registry-ungrounded). Grammar/sampler changes stay operator-gated (hard rules 1/4/10). **Path C stays HELD; standalone §8.7/1.5 criterion stands.** The just-revised relay Q1 asks Crucible to PRIORITIZE these levers. **Next: scope the cheapest (AND-gate + Q41 cheap-vol gate) as a measurable increment, and/or send the relay for prioritization.** Full record: [[D157]].
+
+---
+
 ## 2026-06-15 — OPERATOR DIRECTIVE: options arm = PRIMARY, STANDALONE vehicle (NOT the §6.1 overlay) → exhaust the last in-scope levers FIRST; Path C becoming realistic but HELD; relay REVISED per operator answers
 
 **Operator, explicit: DECLINES Crucible's WORLD_A §6.1 (Forge's edge as a diversifying overlay to the PTS equity alpha). The options arm is the PRIMARY vehicle, judged as STANDALONE as possible.** PTS/QuantIQ = a reference for data/info; the ONLY equities→options channel is a *variation of ENTRY* (entry/regime/momentum signal), not a portfolio dependency. **This supersedes the prior block's overlay framing.**
