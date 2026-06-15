@@ -111,6 +111,11 @@ generation work is **pool-quality / anti-monoculture hygiene** — real, World-A
   accept the World-A cap and keep the stream-quality hygiene incremental?
 - **(c)** Sequence the conditioner (2.2) only as Path-C tooling, confirmed?
 
+**Decision (2026-06-15, operator): HOLD (a)** — build nothing now; accrue the §8.6 tail streak and revisit the
+§6.1 sampler-reward retarget + the T1 BLEND wiring when it clears 3/3. (b) Path-C reconsideration and (c) the
+conditioner are deferred with it. The `forge-ranker-eval` daily timer accrues the streak automatically;
+`scripts/tail_verified_alignment.py` tracks the verified slice on demand.
+
 **Nothing ships off this doc** (mirrors `path-a-rich-conditioning.md`). Each elected lever is its own
 operator-gated increment with a D-entry; the standing M1/M2 long-options monitor and the §8.6 tail streak run
 regardless.

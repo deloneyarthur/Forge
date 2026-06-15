@@ -17,7 +17,7 @@
 
 - **The box (hard rules):** any generation model = a frozen artifact feeding the seeded sampler (#6 byte-identical, artifact-keyed), deterministic non-LLM (#5/#8), trains on Crucible's returned labels (§1.2). **The [[D155]] target lesson:** optimize verified `cpcv`-robustness, NOT gate-pass (gate-pass breeds the trend monoculture that threatens promotion).
 - **Honest ceiling (hard rule 6):** within v1 long-premium the magnitude is exhausted → **no generation model unlocks promotion**; in-scope generation is pool-quality / anti-monoculture hygiene. The unlock stays Path C (parked).
-- **Cheapest positive-EV increment scoped:** retarget the sampler reward toward verified `cpcv_p25` (a `feedback/rejection_weights` change, shadow-diff first, enumeration-affecting → ritual deploy). No code this turn — awaiting operator pick (doc §7).
+- **Cheapest positive-EV increment scoped:** retarget the sampler reward toward verified `cpcv_p25` (a `feedback/rejection_weights` change, shadow-diff first, enumeration-affecting → ritual deploy). No code this turn. **OPERATOR DECISION: HOLD (models workstream) — accrue the §8.6 tail streak (the `forge-ranker-eval` daily timer appends `robustness_streak.jsonl` automatically; first row at the next 05:00 fire), monitor the verified slice via `scripts/tail_verified_alignment.py`, and revisit the T1 BLEND wiring + the generation levers (doc §7) when the streak clears 3/3.** Nothing to build or deploy. (Converges with the enum/grammar side's D156 hold — both lanes parked pending evidence.)
 
 ---
 
