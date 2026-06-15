@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-15 — HYPOTHESIS-LAYER exploration (operator Q): no missing hypothesis (gap is SCOPE — short-premium — not taxonomy); producing core = trend/ve/mr (none clear 1.5); generation-coverage finding logged as Q41
+
+**Operator: "gaps in hypotheses? which work in long options? improve generation via vol/volume/options measures?" Read-only exploration (data + grammar/registry inventory); no code.**
+- **Gaps:** 7 hypotheses, but 5 enumerable / 4 long-premium / **3 producing** (trend_continuation, volatility_event, mean_reversion). regime_arbitrage disabled (D098), tail_hedge overlay-only (Crucible-owned), relative_value market-neutral-dead (0 comp, verified cpcv −0.01), event_momentum thin/near-dead (1 signal `sue`). **No missing archetype** — the gap is SCOPE (the profitable option edges are short-premium → Path C), not taxonomy.
+- **Which work (honest-era):** trend 9.75% comp / verified cpcv-med 0.415 (breadth, lowest robustness); ve 5.75% / 0.544; mr 1.98% / **0.669** (best robustness, thin). **0 of all configs clear cpcv 1.5** (max 1.318) → magnitude exhaustion confirmed at the hypothesis level.
+- **Vol/volume measures → Q41:** a generation-COVERAGE gap — ~9 live measures (esp. an orphaned `volatility` family, 7 of 9 unreachable) Forge never enumerates. LOW-EV (long premium IC-bound; conditioning fights CPCV; most orphans redundant) — breadth lever, not unlock. One candidate: a realized-vol cheapness gate for mr (fixes D150 `iv_rank`-sparseness). Logged Q41 for the enum/grammar lane (D156, held); operator-gated.
+- **Per-hypothesis generation model (operator Q):** appealing but data-starved (verified mr ~131 rows); the statistically-correct form is hypothesis×feature INTERACTIONS in one pooled model, not N separate models; within-hypothesis hygiene, not a magnitude unlock — sits behind the same HOLD.
+
+---
+
 ## 2026-06-15 — Path-A rich-conditioning sweep CLOSED after scoping (D156): warm-up dominated, thread-2 HELD; long-options exhaustion stands REINFORCED — converges with the generation-model-levers (2.2) read
 
 **Operator chose, after scoping, "hold thread 2; accept the reinforced exhaustion."** Closes the brainstorm → D153 reopen → D154 retract → "pursue the builds" arc. Scoping findings (Forge-side, code-verified):

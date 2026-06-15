@@ -848,3 +848,20 @@ grammar bump). `em` kept on the floor (data-sparse, not structural). The grammar
 `docs/proposals/worst-quartile-complement-supply.md` + the OverlaySpec relay to Crucible.
 
 **Tag:** `grammar-adjacent`, `phase-2-defect-hunt`, `relates-to-Q39`, `options-only-limit`, `operator-gated`, `RESOLVED-D145`
+
+---
+
+## 2026-06-15 — Q41 — Strategy generation UNDER-COVERS the live volatility/options indicator inventory: ~9 live, mostly threshold-ready measures have no enumeration path — **LOW (breadth-only; long-premium is IC-bound so EV is low), enum/grammar lane, operator-gated**
+
+**Question (for the enum/grammar lane + operator):** D152 holds the long-premium conditioner *taxonomy* is complete (52 indicators; Crucible's 22-source sweep). A hypothesis-layer exploration this session (code-verified against the live registry + `grammar/custom_predicates.py` C2/R-rule pools + `enumeration/search_space.py` + `enumeration/indicator_thresholds.py`) found that Forge's *generator* nonetheless leaves ~9 live measures with **no enumeration path** — a generation-COVERAGE gap distinct from taxonomy completeness. Should any be wired (regime gate / directional)?
+
+**The gap (live = in the registry; ready = has an audited threshold range):**
+- **Orphaned `volatility` family — the main one.** 9 members, only 2 reachable (`realized_vol` via the X1 sizer chain; `rv_rank` as the trend R2 gate). The other 7 — `parkinson_vol`, `garman_klass_vol`, `yang_zhang_vol`, `atr_pct`, `vol_regime`, `amihud`, `atr` — have NO enumeration path (the `volatility` family is in no C2 directional map; only rv_rank/realized_vol are pinned into R-rule/X1 pools); 6 carry audited ranges (ready). Only `vol_regime` (a regime classifier) and a realized-vol *cheapness* gate are non-redundant; the rest are correlated estimators of vol that rv_rank/realized_vol already express.
+- **`vix_term_slope`, `cs_dispersion`** — live but threshold-table-absent → used nowhere (vix_term_slope is one of D152's "6 untried levers," low-EV long-only; cs_dispersion is a breadth measure with no home).
+- **`amihud`** (liquidity) — audited range but no family slot → unreachable. **`vix_level`** — reachable only via the non-enumerable `tail_hedge` → effectively dark.
+
+**What I did instead (logged, not acted):** nothing wired. (1) Long premium is **IC-bound, not conditioner-bound** (D152: gross CPCV-p25 1.40; best vega-conditioned near-miss `iv_rank×days_to_opex` craters at 0.70) → more/better vol gates don't lift the book over 1.5; (2) more conditioning = fewer trades = fights CPCV (D156); (3) most orphans are redundant. So this is a **breadth/diversity hygiene** lever, not a promotion path. The one candidate with a rationale: give **mean_reversion a realized-vol cheapness gate** (e.g. `vol_regime`) to fix the D150 problem where its `iv_rank` "buy-cheap-vol" gate fires too sparsely (D154's live concern) — a sampler/pool edit (D150/D151 class; no rules-gate or promotion-bar change; hard rules 3/6 intact).
+
+**Severity:** LOW. Models-lane is on HOLD (accrue the §8.6 streak); this is enum/grammar-lane (D156, also held). Surfaced so D152's "inventory complete" reads precisely as "*taxonomy* complete; *generation* under-covers." Cross-ref `docs/proposals/generation-model-levers.md` §2.1.
+
+**Tag:** `enum-grammar-lane`, `generation-coverage`, `low-EV`, `breadth-not-magnitude`, `operator-gated`, `relates-to-D152/D154/D156`
