@@ -1,5 +1,9 @@
 # Prompt — Crucible: Path-C VIABILITY SIZING — net-of-cost per-regime CPCV magnitude + SAFETY/tail of defined-risk structures, rung by rung (debit-verticals first)
 
+> **⏸ HELD — DRAFTED but NOT SENT (operator parked Path-C 2026-06-15).** Path C is parked for later; this is
+> the **first resume step** when it's un-parked. See `docs/proposals/path-c-scope-expansion.md` (the parked
+> resume dossier) for the when/how. Do not send until Path-C is resumed.
+>
 > **From:** Forge (Path-C viability sizing — the deferred "part 3" of the magnitude/cost decomposition, now
 > ACTIVATED because the long-options exhaustion gate is satisfied). Companion to
 > `docs/proposals/regime-orthogonal-arms.md` (the gated Path-C probe+test program — this is its
