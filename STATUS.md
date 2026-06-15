@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-15 — PTS CORRECTION + Forge reframed as the DIVERSIFYING OVERLAY to QuantIQ's LIVE PTS equity alpha (WORLD_A §6.1); Q41 reconciliation folded; models lane stays HOLD
+
+**Operator corrected a stale read: PTS ("PraiseTheSun") is NOT dead — it is QuantIQ's LIVE, validated equity-alpha arm** (paper-trading via IBKR since 2026-06-03; cross-seed equity Sharpe ~1.52, combined equity+options book Sharpe 4.66 / +649.7% vs SPY +153.7%, DSR 0.99 / CPCV PBO 0.21 — `QuantIQ/STRATEGY_OVERVIEW.md` 2026-05-10). The "~0 alpha" I'd cited was the narrow 2026-05-02 per-trade-*entry*-signal stress test, which QuantIQ USED to build the refined regime-gated/concentrated/options-paired portfolio that now works. Memory corrected ([[pts-quantiq-equity-arm]]).
+- **Strategic reframe (the session's key takeaway):** PTS's edge is realized by HOLDING THE STOCK (+ options overlay), so it still doesn't *port* to Forge's long-options book (which pays the VRP) — but per Crucible's `WORLD_A_EVIDENCE_PACKAGE.md` §6.1, **Forge's long-vol output is the diversifying OVERLAY to the PTS equity alpha**, valuable even at ~1.0 standalone CPCV-Sharpe because it's low-correlated. ⇒ "0 promotions at the 1.5 STANDALONE bar" may be the wrong lens for Forge — its real job is marginal contribution to the tandem. A Crucible/QuantIQ criterion question (cross-system), surfaced for the operator.
+- **Q41 reconciliation folded:** momentum × vol_event is expressible TODAY via confluence (C2 restricts only the directional family — verified `custom_predicates.py:154`); the combine question is sampling-coverage, and the right form is a vol-COST exclusion (cheap-vol gate), not vol-event inclusion (which pays the seller's premium).
+- **Next steps:** models lane stays HOLD (accrue §8.6 streak); enum/grammar held (D156); Q41 low-EV held. The one live strategic question is the overlay-vs-standalone success criterion (above). No code this turn.
+
+---
+
 ## 2026-06-15 — HYPOTHESIS-LAYER exploration (operator Q): no missing hypothesis (gap is SCOPE — short-premium — not taxonomy); producing core = trend/ve/mr (none clear 1.5); generation-coverage finding logged as Q41
 
 **Operator: "gaps in hypotheses? which work in long options? improve generation via vol/volume/options measures?" Read-only exploration (data + grammar/registry inventory); no code.**
