@@ -8,6 +8,16 @@ first step; it does **not** re-derive the analysis — the detail lives in the d
 > magnitude (D152); the operator's Path-C provability gate is **satisfied**; the operator chose to **hold**
 > the scope-expansion exploration rather than open it now. Nothing is sent, nothing is built.
 
+> **⚠ UPDATE 2026-06-15 ([[D153]]) — the exhaustion precondition is REOPENED; Path-C resume pushed out.** The
+> operator reopened long-options on conditioning-completeness grounds: the D152 verdict was measured over a
+> population that never conditioned on the vega/IV-cost axis (`iv_rank` is a NaN stub → §3.5 R1 unsatisfiable),
+> never computed theta/vega, and conditioned marginally. The in-scope **Path-A rich-conditioning sweep** is
+> now ACTIVE (`path-a-rich-conditioning.md` — light up `iv_rank`, joint-gate the entry, learn the conditioner).
+> Path-C's "provability gate SATISFIED" is now **"satisfied *pending* that sweep."** Resume only after Path-A
+> returns negative (off-ramp §3: "no in-scope lever clears" now requires the *rich* sweep, not just the crude
+> one). The structural verdict (long premium net-negative at source; the big arm is sell-side) is unchanged —
+> so Path C remains the *likely* eventual unlock; it is just deferred behind the cheap in-scope sweep.
+
 ## 1. The parked decision (what + why)
 
 **What:** we are NOT, for now, pursuing a hard-rule-9 grammar v2 scope expansion to defined-risk multi-leg
