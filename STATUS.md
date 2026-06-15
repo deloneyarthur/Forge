@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-15 — GENERATION-MODEL LEVERS scoped → `docs/proposals/generation-model-levers.md` (selection → generation); cheapest in-scope lever = retarget the sampler reward toward verified cpcv-robustness (hygiene, NOT a promotion unlock)
+
+**Operator: "[the models] are good for selection; what levers for a model that CREATES the strategy?" Scoped the generation side (config-shaping), distinct from the verdict/tail selection models. Docs-only; no code.** Frame: we already have a coarse learned generation model (`rejection_weights`→`sampler.py`); what's missing is a market-aware "trader." Three insertion points — **(2.1) composition** (sampler reweighting on the `hypothesis×regime-gate×direction` cell + tail-orthogonal bias; in-scope, deterministic), **(2.2) conditioning** (learn the joint entry gate/thresholds — the "trader"; grammar-gated; = path-a Threads 2-3; LOW-EV for long premium per [[D154]], payoff gated on Path-C), **(2.3) exploration** (active-learning over under-sampled cells; extends D136).
+
+- **The box (hard rules):** any generation model = a frozen artifact feeding the seeded sampler (#6 byte-identical, artifact-keyed), deterministic non-LLM (#5/#8), trains on Crucible's returned labels (§1.2). **The [[D155]] target lesson:** optimize verified `cpcv`-robustness, NOT gate-pass (gate-pass breeds the trend monoculture that threatens promotion).
+- **Honest ceiling (hard rule 6):** within v1 long-premium the magnitude is exhausted → **no generation model unlocks promotion**; in-scope generation is pool-quality / anti-monoculture hygiene. The unlock stays Path C (parked).
+- **Cheapest positive-EV increment scoped:** retarget the sampler reward toward verified `cpcv_p25` (a `feedback/rejection_weights` change, shadow-diff first, enumeration-affecting → ritual deploy). No code this turn — awaiting operator pick (doc §7).
+
+---
+
 ## 2026-06-15 — TAIL-AWARE (T1) MODEL STATIC AUDIT (D155): validated on verified-coverage (tail_score↔cpcv_p25 Spearman +0.35 vs P(component) +0.12, ~3×) but value is verified-only + weak; §1 "anti-correlated" premise SOFTENED; no leakage, underfit-not-overfit
 
 **Operator: "ensure the [learning] model is doing what we expected and doing it well." Audited the verdict model (live, F3) + the tail/robustness model (shadow, T1) on a /tmp snapshot — read-only, NO code/grammar/deploy.** Verdict model: honest eval, real OOS skill (4/4 PASS, AUC ~0.9), keys on structure NOT the trend flag (Goodhart not realized) — a *selection* tool that cannot move promotions (still 0; magnitude-bound). Tail-model static audit:
