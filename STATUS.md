@@ -6,7 +6,8 @@
 
 - **Now LIVE:** hurst-gated mr RANKS (breadth lever); iv_rank/gamma_flip-gated mr stays single-name confluence (flag-based skip, D116 intact). Governance = the published `rank_per_name_coherent` flag (D150 hypothesis hold removed). Q33 CLOSED.
 - **Honest cap (Crucible, hard rule 6):** breadth lifts the distribution CENTER, not worst-quartile p25 (the binding wall) — legitimate ranging *supply*, NOT a promotion unlock. Short-history (<~101 sessions) names fail-open on hurst.
-- **Outstanding handoff:** relay the v20→v21 string to Crucible for `crucible funnel --compare v20 v21` (`crucible-handoff.md`). Behavioral confirmation (first v21 batch shows mr `cross_sectional_rank` configs) appears on the first unblocked ranking iteration.
+- **BEHAVIORAL CONFIRMATION (first v21 batch, 23:57:01Z):** `f3_ranker: P(component) prior ACTIVE` (D149); mr **74/200 (37%)**, `regime_supply` ranging **37% selected / 24% pool** (vs old 7.5%/2% — ~12× pool growth, D150); **24 hurst-gated mr-RANK** configs (`mr_RANK=24/74`), all hurst — iv_rank/gamma_flip-mr stayed confluence (flag-based skip intact). D150 guard held (0 hurst-mr-rank during v20's 1,400 subs); D151 enable working. (All-time query also surfaced 562 *historical* mr-rank from the pre-D116-skip 06-09 era — the noise D116 later closed; not current.)
+- **Relay v20→v21 to Crucible: SENT** (operator-confirmed) for `crucible funnel --compare v20 v21`. T2 ranging track COMPLETE end-to-end: supply growth + rank breadth, both live + Crucible-validated.
 
 ---
 
