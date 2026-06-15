@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-14 — SCOPED the edge-magnitude / regime-orthogonal-arms work (the promotion unlock) — `docs/proposals/regime-orthogonal-arms.md`
+
+**Operator: "scope the edge-magnitude / regime-orthogonal arms work."** The unlock = an arm with promotion-grade per-regime magnitude (CPCV ≥1.5) in an adverse regime (bear/ranging), orthogonal to trend/ve. Structural finding: within v1's **net-debit long-premium** grammar (`LONG_CALL/LONG_PUT/FLAT`, spreads banned), the adverse-regime high-magnitude edges are **out of scope** — ranging's natural edge is premium-SELLING (theta), bear's is short/spread or the (Crucible-owned) tail overlay; long premium pays the VRP headwind (Carr-Wu: unconditioned premium ~no edge; Goyal-Saretto: the conditional edge is **cost-bound**). So the unlock is a **signal-IC / cost / scope** problem, not a search one — three paths: **(A)** higher-IC conditioner (Crucible-publishes-indicator; skew/var-term-slope/dealer-vanna), **(B)** execution-cost reduction (§20 constant-maturity, offered), **(C)** scope expansion to defined-risk spreads/premium-selling (hard-rule-9, operator+Crucible — the structural fix, biggest lift).
+
+- **Recommended first move (cheapest, directs everything):** relay to Crucible for the **per-family × per-regime magnitude + cost decomposition** (extend `cpcv_crater_by_regime.json`) — is each adverse cell's gap IC or cost? That picks Path A vs B vs C. Then a literature deep-research scan (Path-A candidates), the §20 decision (B), and a Path-C feasibility study if magnitude is structurally unreachable in long-premium.
+- **Honest cap:** the hard, uncertain frontier — likely a multi-step Crucible-coupled research program, and the answer may be "needs a scope expansion (C), not more search." Everything prior (T1/T2/D145–D151) is hygiene; THIS is the only lever that moves promotions. No code; nothing deployed.
+
+---
+
 ## 2026-06-14 — GRAMMAR v21 DEPLOYED + VERIFIED via ritual restart 23:38:26Z (D151 — mr RANK ENABLED, Q33 answered YES) — clean bump, registry_hash UNCHANGED
 
 **Operator: relayed Crucible's Q33 answer (YES — `hurst.rank_per_name_coherent=True`) → "lets just do v21."** Vindicated: by deploy time v20 had **1,400 submissions** (mr single-name) — folding into v20 would have polluted that cohort, so the clean v20→**v21** boundary was right (v20 = mr single-name; v21 = mr ranks via hurst). Commit `572a6de`: removed `_RANK_INELIGIBLE_HYPOTHESES` (D150 hold); `grammar.yaml` v20→**v21** + `grammar_archive/v21.yaml` (byte-identical); GRAMMAR.md R1 + version-pin → v21; D151. **Gate: full uncontended suite green (1617).** Restart 23:38:26Z (PID 3383130). **Verified:** `registry_loaded_from_export`, **`grammar_version=v21`** / `registry_hash=a7ae9ccf843fd969` **UNCHANGED**, `manual_bump` recorded, NRestarts=0, **ZERO errors**. Grammar hooks verified manually (`uv run python` PASS; `--no-verify` for the python-not-found env).
