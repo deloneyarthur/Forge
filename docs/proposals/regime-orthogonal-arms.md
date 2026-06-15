@@ -148,6 +148,44 @@ net-of-cost per-regime magnitude first.* (5 overclaims were killed by adversaria
 the single-name IV-term-slope cross-section and "order-flow is the single strongest predictor" — so the
 shortlist above is what survived skeptical voting.)
 
+## Path C — the probe + test program (if we open scope)
+
+A scope expansion to **defined-risk spreads / premium-selling** is NOT a grammar flag — it's a
+cross-system program, and the binding question is **safety**, not just viability. Sequence it as
+hard gates, cheapest first; do NOT build any machinery until the edge is proven.
+
+**Gate 0 — Viability sizing (cheap, Crucible-side, FIRST).** The relay's Part 3: net-of-cost
+per-regime Sharpe of candidate defined-risk structures (put/call vertical, iron condor, collar,
+put-ratio) on the era-C book. **If it doesn't clear the bar → STOP** (the wall is just hard; no
+expansion). Everything below is gated on this passing. Hard rule 3 holds: the spread sleeve must
+clear the SAME §8.7 portfolio bar — the expansion adds expressivity, it never lowers the gate.
+
+**Track 1 — Viability deepening (Crucible).** Full §8.7 + CPCV battery on a hand-authored spread
+sleeve, regime-attributed. Does it actually lift the portfolio worst-quartile p25 (the binding wall),
+or just the center?
+
+**Track 2 — SAFETY / risk (the hard part; the massive probe).**
+- **Correlated book-level tail.** Defined-risk caps loss *per trade* but NOT the book: many capped
+  losses fire *simultaneously* in a vol spike → a large aggregate drawdown (Feb-2018 / "volmageddon"
+  short-vol crash). The portfolio risk model + CPCV worst-quartile + `max_drawdown_ceiling` must
+  capture this — it's the single failure mode that kills a viable-but-unsafe short-premium book.
+- **Mechanics under stress.** Assignment / early-exercise / pin risk; whether the "defined" risk
+  actually holds through gaps and realistic multi-leg fills (the net debit/credit at true fills —
+  the cost question, worse for multi-leg). Probe a candidate sleeve through 2018 / 2020 / 2022.
+- **Sizing.** The fractional-Kelly / vol-target sizer assumes long-premium payoffs; capped-loss
+  short-premium needs a different risk-of-ruin model.
+
+**Track 3 — Cross-system plumbing (only if Tracks 1-2 pass).** Each is substantial: a **multi-leg
+`StrategyConfig`** in `crucible_contracts` (contract gap, hard rule 2); a **multi-leg backtest runner**
+(per-leg fills, greeks, assignment) Crucible-side; **§8.7 gates calibrated for spread payoffs**; new
+**§3.5 grammar** (leg structure, width, ratio) + a spread-aware sizer/selector Forge-side; **QuantIQ**
+multi-leg live execution + margin. This is a multi-quarter, all-three-systems lift — which is exactly
+why **Gate 0 must come first**: never build this machinery on an unproven edge.
+
+**Discipline:** the program is *gated and abortable at every step*. The cheap measurement (Gate 0)
+decides whether it's worth opening at all; the safety probe (Track 2) can kill it even if viable. Bring
+the operator a go/no-go at Gate 0, and a separate go/no-go after the safety probe — not one big commit.
+
 ## Honest cap (hard rule 6)
 This is the genuinely hard, uncertain frontier — and it may not be fully solvable inside v1's
 long-premium scope. Forge cannot manufacture magnitude; it can express archetypes, lean enumeration,
