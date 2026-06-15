@@ -29,14 +29,22 @@ question). We don't want to guess.
    - **execution cost** (the gross→net drag: bid-ask, slippage, theta-bleed/roll, the Goyal-Saretto wedge).
    I.e., for the best adverse-regime cells, is gross already <1.5 (IC-bound → Path A), or is gross ≥1.5
    but net <1.5 (cost-bound → Path B)?
-3. **Path-C sizing (optional, for comparison).** For the same bear/ranging regimes, do you have (or can you
-   cheaply estimate) the net-of-cost magnitude of the *out-of-our-scope* structures — premium-selling /
-   defined-risk spreads (short strangle / condor in ranging; put spread in bear)? This sizes the upside of
-   relaxing Forge's long-premium-only constraint (hard rule 9) — an operator decision we won't make blind.
+3. **Path-C sizing — now the PRIORITY ask** (a 2026-06-14 literature deep-dive, adversarially verified,
+   bumped this up). The verdict: within single-leg long-premium there is **no documented net-of-cost,
+   bear/ranging-conditional edge near 1.5** — long premium is structurally net-negative and the VRP is
+   dominated by left-jump-tail compensation that accrues to the **seller**; the **ranging** arm in
+   particular has *no* long-premium support and is "fundamentally a short-premium problem." So the
+   literature points hard at Path C. **What we need from you: the net-of-cost per-regime Sharpe of the
+   defined-risk / premium-selling structures in bear & ranging** — short strangle / iron condor / theta in
+   ranging; put spread / collar / put-ratio in bear (the literature established the *side* is right but did
+   NOT quantify these). That number sizes the hard-rule-9 scope-expansion decision; we won't make it blind.
 
 ## What Forge does with each answer
-- **IC-bound cells →** we pursue Path A (a higher-IC conditioner; we'll relay specific indicator asks —
-  skew / variance-term-slope / dealer-vanna — for you to publish).
+- **IC-bound cells →** we pursue Path A. The deep-dive's surviving (gross/index-level, cost-fragile)
+  candidates, IF an adverse cell is IC-bound + EOD-computable: **IV term-structure SLOPE** as a
+  long-premium timing gate (buy low/inverted slope), **left-jump-tail / VRP** (IV²−RV, far-OTM-put jump
+  intensity), and **inverse VOV / inverse IVOL** underlying screens — we'd relay the specific indicator
+  asks for you to publish. (Expectations low: all are gross + mostly index-level in the literature.)
 - **Cost-bound cells →** Path B: we request your §20 constant-maturity construction + tune the selector
   toward liquid/wide-DTE; you'd model the cost reduction.
 - **Structurally unreachable in long-premium →** Path C: we bring the operator a scoped hard-rule-9

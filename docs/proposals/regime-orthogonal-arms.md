@@ -102,6 +102,52 @@ per-regime magnitude + cost decomposition** (extend `cpcv_crater_by_regime.json`
    magnitude is structurally unreachable in long-premium (likely) AND the operator wants to re-open
    hard rule 9. The biggest, slowest, highest-upside path.
 
+## Deep-research findings (2026-06-14, adversarially verified — 26 sources, 25 claims, 5 killed)
+
+A literature deep-dive (the `deep-research` workflow; full report in the run transcript) returned a
+**decisive, sobering verdict** that confirms this scoping's structural hypothesis with external evidence:
+
+- **Path A has NO documented net-of-cost, bear/ranging-conditional, single-leg long-premium edge near
+  1.5 Sharpe.** Every in-scope candidate fails ≥1 of {net-of-cost, regime-conditional, EOD-computable,
+  single-name (not index)}. The premise is *confirmed* (3-0): unconditioned long premium is structurally
+  net-**negative** (SPX variance assets incl. straddles, ann. Sharpe −0.25 to −1.44, Johnson JFQA 2017),
+  and the VRP is **dominated by left-jump-tail / "fear" compensation** (59.8% of the VRP from left tails,
+  Bollerslev-Todorov JF 2011) — which accrues to the **seller**, the wrong side for this book.
+- **Costs are first-order / binding** (3-0): term-structure-slope straddles 27.1%→12.3% net (~55%
+  erosion, Vasquez JFQA 2017); the IVOL strategy 1.40%→0.17% (statistically dead at 50% of quoted
+  spread, Cao-Han JFE 2013); single-name quoted spreads ~19-20%. So net single-leg magnitude is
+  **unestablished, not merely small**.
+- **RANGING is the worst-supported regime** — every regime-conditional signal found (CDS-slope,
+  order-flow) concentrates in **bear/high-vol** and is **absent in ranging**. The honest read: *the
+  ranging arm is fundamentally a short-premium (Path C) problem*, not a long-premium one.
+
+**Path-A shortlist (direction only — pursue a candidate ONLY if Crucible's decomposition says its
+adverse cell is IC-bound AND EOD-computable; all are gross/index-level/cost-fragile):**
+1. **IV term-structure SLOPE** as a long-premium *timing* gate (buy when slope low/inverted) — the
+   strongest direct long-premium-return evidence, but index-level + gross (the *single-name* cross-section
+   was refuted 1-2). EOD: VIX/VIX3M spread or per-name IV term slope.
+2. **Left-jump-tail / "fear" (VRP = IV²−RV; far-OTM-put risk-neutral jump intensity / LJV analog)** — the
+   active predictive ingredient. EOD-computable.
+3. **Inverse VOV + inverse IVOL underlying screens** (favor LOW-vol-of-vol, LOW-idio-vol names — high-VOV/
+   IVOL buyers systematically lose) — but established on *delta-hedged* returns → partial conditioner only.
+4. **Order-flow / put-call-flow imbalance** (price impact ~doubles in crisis → bear-amplifying) — but
+   transient, cost-fragile, wants intraday flow (2-1 vote).
+5. **Cross-sectional option momentum** as a ranking tilt — full-sample, not regime-specific (weakest).
+
+**Path C verdict (3-0):** the magnitude advantage of premium-selling / defined-risk spreads is real and
+is the **structurally correct (seller) side** of the dominant left-tail/VRP compensation — *"the single
+change most likely to unlock a promotion-grade bear/ranging arm."* It is the only documented route to a
+high-Sharpe **ranging** arm. **Caveat:** the specific net-of-cost per-regime Sharpe of short strangle /
+iron condor / put-spread / collar was **not independently quantified** → size it first (the Crucible
+relay's part 3 / open question #1).
+
+**Net implication:** within v1's long-premium-only scope, the literature gives **direction, not a
+validated edge** — and the highest-leverage producer move is likely the **Path-C scope expansion**
+(hard rule 9, operator + Crucible), now backed by verified evidence, *contingent on Crucible sizing the
+net-of-cost per-regime magnitude first.* (5 overclaims were killed by adversarial verification — incl.
+the single-name IV-term-slope cross-section and "order-flow is the single strongest predictor" — so the
+shortlist above is what survived skeptical voting.)
+
 ## Honest cap (hard rule 6)
 This is the genuinely hard, uncertain frontier — and it may not be fully solvable inside v1's
 long-premium scope. Forge cannot manufacture magnitude; it can express archetypes, lean enumeration,

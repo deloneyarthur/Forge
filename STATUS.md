@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-14 — DEEP-RESEARCH verdict on the edge-magnitude unlock: Path A (long-premium) is direction-only; **Path C (scope expansion) is the likely unlock** — evidence-backed
+
+**Adversarially-verified literature scan (`deep-research` workflow: 26 sources, 25 claims, 5 overclaims killed; folded into `regime-orthogonal-arms.md`).** Decisive: within v1's single-leg long-premium scope there is **NO documented net-of-cost, bear/ranging-conditional edge near 1.5 Sharpe.** Confirmed — unconditioned long premium is net-NEGATIVE (VRP headwind); the VRP is **left-jump-tail "fear" comp that accrues to the SELLER** (wrong side); costs are first-order/binding; **RANGING has NO long-premium support — "fundamentally a short-premium problem."** ⇒ **Path C (defined-risk spreads / premium-selling, hard rule 9) is the structurally-correct unlock** — a major operator+Crucible decision, now evidence-backed, contingent on Crucible sizing the net-of-cost per-regime magnitude. Path-A shortlist is direction-only (gross/index/cost-fragile): IV-term-structure SLOPE timing gate, left-jump-tail/VRP, inverse-VOV/IVOL screens.
+
+- **Both research threads converge:** the Crucible magnitude/cost relay (`PROMPT_CRUCIBLE_MAGNITUDE_COST_DECOMPOSITION.md`, sharpened — **part 3 / Path-C sizing now the priority ask**) + the literature scan both point at Path C. The relay's answer (per-cell IC-vs-cost-vs-unreachable + the Path-C net-of-cost magnitude) is the gate for whether to bring the operator a hard-rule-9 scope-expansion proposal.
+- **Honest:** the producer's promotion unlock probably needs a SCOPE EXPANSION, not more long-premium search. Everything shipped today (D145–D151, v21) is hygiene; this names the real lever. No code; nothing deployed. Relay ready for operator to send.
+
+---
+
 ## 2026-06-14 — SCOPED the edge-magnitude / regime-orthogonal-arms work (the promotion unlock) — `docs/proposals/regime-orthogonal-arms.md`
 
 **Operator: "scope the edge-magnitude / regime-orthogonal arms work."** The unlock = an arm with promotion-grade per-regime magnitude (CPCV ≥1.5) in an adverse regime (bear/ranging), orthogonal to trend/ve. Structural finding: within v1's **net-debit long-premium** grammar (`LONG_CALL/LONG_PUT/FLAT`, spreads banned), the adverse-regime high-magnitude edges are **out of scope** — ranging's natural edge is premium-SELLING (theta), bear's is short/spread or the (Crucible-owned) tail overlay; long premium pays the VRP headwind (Carr-Wu: unconditioned premium ~no edge; Goyal-Saretto: the conditional edge is **cost-bound**). So the unlock is a **signal-IC / cost / scope** problem, not a search one — three paths: **(A)** higher-IC conditioner (Crucible-publishes-indicator; skew/var-term-slope/dealer-vanna), **(B)** execution-cost reduction (§20 constant-maturity, offered), **(C)** scope expansion to defined-risk spreads/premium-selling (hard-rule-9, operator+Crucible — the structural fix, biggest lift).
