@@ -32,6 +32,16 @@ Verified against data this session:
    fully-redundant sleeve (trend) and **starves** the most tail-robust regime-complement (mr).
    It isn't merely saturating an abundant quantity — it is pointed ~180° from the binding lever.
 
+   > **CORRECTION ([[D155]], 2026-06-15 — measured on the live snapshot, split on `honest_regime_coverage_row`).**
+   > "~180° / anti-correlated" is **too strong.** On VERIFIED-coverage rows P(component) is *weakly POSITIVE* vs
+   > realized `cpcv_p25` (Spearman **+0.119**), not negative; `tail_score` reaches **+0.350** there (~3× better) —
+   > so the tail head IS the right corrective, but the honest framing is "P(component) is a much weaker,
+   > family-tilted predictor," not "180° wrong." The inversion is at the HYPOTHESIS level (P(component) favors
+   > ve/trend, disfavors mr): on verified rows mr 0.669 > ve 0.544 > trend 0.415 holds, but on the UNVERIFIED
+   > majority (~76% of decided-with-cpcv) the ordering COLLAPSES and tail ≈ P(component) (both +0.219). So T1's
+   > value is real but **confined to the ~24% verified slice** and weak in magnitude (train R² ≈ 0.19). Full
+   > audit + leakage/redundancy/stability checks: [[D155]].
+
 2. **The binding constraint is downstream and tail-shaped.** Promotion = the full §8.7
    battery at **portfolio** scope. The assembled honest pool fails it on
    `cpcv_sharpe_p25` / worst-quartile (+ DD) OOS; WF-median ~holds. Pool read: individual

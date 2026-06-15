@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-15 — TAIL-AWARE (T1) MODEL STATIC AUDIT (D155): validated on verified-coverage (tail_score↔cpcv_p25 Spearman +0.35 vs P(component) +0.12, ~3×) but value is verified-only + weak; §1 "anti-correlated" premise SOFTENED; no leakage, underfit-not-overfit
+
+**Operator: "ensure the [learning] model is doing what we expected and doing it well." Audited the verdict model (live, F3) + the tail/robustness model (shadow, T1) on a /tmp snapshot — read-only, NO code/grammar/deploy.** Verdict model: honest eval, real OOS skill (4/4 PASS, AUC ~0.9), keys on structure NOT the trend flag (Goodhart not realized) — a *selection* tool that cannot move promotions (still 0; magnitude-bound). Tail-model static audit:
+
+- **Clean + sound:** 0 leakage (0/10,400 + 0/9,400, frozen-at-submit), non-redundant with P(component) (corr +0.14/+0.16), and **underfit not overfit** — trains on **4,194 rows** (the "144" was the eval slice), R²≈0.19, coefficients stable across daily retrains.
+- **Validated on its designed population:** split on `honest_regime_coverage_row`, VERIFIED rows (n=371) tail_score↔realized cpcv_p25 Spearman **+0.350** vs P(component) **+0.119** (~3×); ground truth mr 0.669 > ve 0.544 > trend 0.415 (doc premise holds). On the UNVERIFIED ~76% they TIE (+0.219) and the mr ordering collapses. **Value confined to the ~24% verified slice + weak in magnitude.**
+- **Doc corrected:** `tail-aware-ranker.md` §1 "P(component) anti-correlated (~180°)" SOFTENED to "weaker + family-tilted wrong" (it is weakly +0.119, not negative). Wiring posture unchanged — static half justifies the planned BLEND on verified candidates; generalization waits on the §8.6 streak. Tracking: `scripts/tail_verified_alignment.py`. Full record: [[D155]].
+- **Generation-model question raised (open, no code):** the learned models are *selection* (a "librarian" ranking finished configs); operator asked for *generation* levers — a "trader" model that shapes the config sent to Crucible. Maps onto the sampler's learned weights (live, coarse — `sampler.py`) + path-a-rich-conditioning Thread 3 "learn the conditioner" (LOW-EV for long premium per [[D154]]; higher-EV only post-Path-C). Design answer in progress.
+
+---
+
 ## 2026-06-15 — D153 reopening **LARGELY RETRACTED** — `iv_rank` was NEVER a stub (stale doc); vega axis was live + its best near-miss CRATERS on CPCV → exhaustion REINFORCED (D154)
 
 **Crucible refuted the load-bearing fact behind D153** (`../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`). The "reopen on conditioning grounds" rested on "`iv_rank` is a NaN stub → §3.5 R1 structurally unsatisfiable → the vega/IV-cost axis is dark." **That was wrong — a stale-doc error.** `iv_rank` has been **live since D031 (2026-05-15)** (Crucible v4 2026-06-10), non-NaN ~100% single-name, **used in 3,998 runs / 77 components** (impossible for a NaN-only indicator). The "stub" lived only in `docs/INDICATOR_THRESHOLDS.md` (a 2026-05-14 pre-D031 audit); the *code* (`indicator_thresholds.py:18-22,236`) has treated it as live for a month. My audit read the stale doc instead of the code.
