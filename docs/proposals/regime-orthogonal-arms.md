@@ -148,7 +148,44 @@ net-of-cost per-regime magnitude first.* (5 overclaims were killed by adversaria
 the single-name IV-term-slope cross-section and "order-flow is the single strongest predictor" — so the
 shortlist above is what survived skeptical voting.)
 
-## Path C — the probe + test program (if we open scope)
+## Priority order (operator decision, 2026-06-14): EXHAUST long-options (A+B) first; Path C is the LAST RESORT
+
+The deep-dive says Path C is the most *likely* unlock — but it's the most *expensive and dangerous*
+(cross-system build + correlated short-vol tail risk). So the order is: **fully exhaust the in-scope,
+safe long-premium levers (Path A + B) before opening v2 for spreads.** A+B are cheap to rule out and
+carry no short-vol-blowup risk; Path C's cost is only warranted once we've *proven* long-options can't
+clear the bar. Path C stays scoped (below) but **deferred to "v2," last resort.**
+
+### The long-options exhaustion inventory (work through these before v2)
+
+**Already shipped — confirm each is pulling its weight per-regime** (the Crucible IC-vs-cost read tells us):
+`iv_rank` (IV cheap), `iv_minus_rv` (Goyal-Saretto IV−RV), `iv_term_slope`, `option_momentum` (Heston),
+trend/momentum (`momentum_252`, …), `hurst`, `adx`, dealer `gamma_flip`, mr oscillators (`rsi`/`bb_pct`/`zscore`).
+
+**Path A — conditioners NOT yet tried (the deep-dive shortlist), by reach:**
+1. **IV term-structure SLOPE as a long-premium TIMING gate** (buy when slope low/inverted) — we have
+   `iv_term_slope` as a *directional*; the deep-dive's strongest evidence is the *timing-gate* use. **Likely
+   Forge-side** (re-apply the existing indicator as a regime gate) — cheapest, do first.
+2. **Left-jump-tail / skew conditioner** (far-OTM-put risk-neutral jump intensity; VRP = IV²−RV) — the
+   active VRP ingredient. `iv_minus_rv` is VRP-adjacent; a true SKEW/left-tail measure is **Crucible
+   indicator**.
+3. **Inverse VOV / inverse IVOL underlying screen** (favor low-vol-of-vol, low-idio-vol names) — **Crucible
+   indicator** (VOV) / possibly Forge-side (IVOL from EOD returns).
+4. **Put-call-flow imbalance** as a single-name conditioner — `put_call_flow` exists (chain-reader caveats);
+   **Forge-side** to test.
+5. **Cross-asset / macro stress** (credit spreads, MOVE, VIX term) as a regime gate — **Crucible indicator**
+   (macro data); bear-concentrated per the deep-dive.
+
+**Path B — execution-cost reduction (a magnitude lever in itself, costs bind):**
+1. **§20 constant-maturity straddle** (Crucible-offered, held) — request it; cleans the option_momentum/vol
+   edge of theta-bleed cost confound.
+2. **Liquid-universe / wider-DTE selection** tuning — Forge-side (selector), lowers bid-ask drag.
+
+**Director:** the Crucible **IC-vs-cost decomposition** (relay parts 1-2, now the priority) says, per
+adverse cell, whether the gap is IC (→ add the right Path-A conditioner) or cost (→ Path B). Work the
+inventory guided by it. **Only when this is exhausted with no cell clearing the bar do we open v2 (Path C).**
+
+## Path C (LAST RESORT — v2; only after A+B is exhausted) — the probe + test program
 
 A scope expansion to **defined-risk spreads / premium-selling** is NOT a grammar flag — it's a
 cross-system program, and the binding question is **safety**, not just viability. Sequence it as

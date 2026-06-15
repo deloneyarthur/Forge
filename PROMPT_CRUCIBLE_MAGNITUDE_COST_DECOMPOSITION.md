@@ -29,15 +29,14 @@ question). We don't want to guess.
    - **execution cost** (the gross→net drag: bid-ask, slippage, theta-bleed/roll, the Goyal-Saretto wedge).
    I.e., for the best adverse-regime cells, is gross already <1.5 (IC-bound → Path A), or is gross ≥1.5
    but net <1.5 (cost-bound → Path B)?
-3. **Path-C sizing — now the PRIORITY ask** (a 2026-06-14 literature deep-dive, adversarially verified,
-   bumped this up). The verdict: within single-leg long-premium there is **no documented net-of-cost,
-   bear/ranging-conditional edge near 1.5** — long premium is structurally net-negative and the VRP is
-   dominated by left-jump-tail compensation that accrues to the **seller**; the **ranging** arm in
-   particular has *no* long-premium support and is "fundamentally a short-premium problem." So the
-   literature points hard at Path C. **What we need from you: the net-of-cost per-regime Sharpe of the
-   defined-risk / premium-selling structures in bear & ranging** — short strangle / iron condor / theta in
-   ranging; put spread / collar / put-ratio in bear (the literature established the *side* is right but did
-   NOT quantify these). That number sizes the hard-rule-9 scope-expansion decision; we won't make it blind.
+3. **Path-C sizing — DEFERRED (last resort).** A 2026-06-14 literature deep-dive does point at Path C
+   (premium-selling/spreads) as the *likely* unlock, but the operator's call is to **exhaust the in-scope
+   long-premium levers (Paths A + B) first** — they're cheap, safe, and carry no short-vol-blowup risk;
+   the cross-system + tail-risk cost of a scope expansion is only warranted once we've *proven* long-options
+   can't clear the bar. So **do not size Path C yet.** We'll ask for the net-of-cost per-regime magnitude of
+   the defined-risk structures (short strangle/condor in ranging; put-spread/collar in bear) **only if** the
+   IC-vs-cost decomposition (parts 1-2) shows the long-options exhaustion is hitting a wall. **Parts 1-2 are
+   the ask; part 3 is a placeholder for later.**
 
 ## What Forge does with each answer
 - **IC-bound cells →** we pursue Path A. The deep-dive's surviving (gross/index-level, cost-fragile)
