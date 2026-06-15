@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-15 — Path-A rich-conditioning sweep CLOSED after scoping (D156): warm-up dominated, thread-2 HELD; long-options exhaustion stands REINFORCED — converges with the generation-model-levers (2.2) read
+
+**Operator chose, after scoping, "hold thread 2; accept the reinforced exhaustion."** Closes the brainstorm → D153 reopen → D154 retract → "pursue the builds" arc. Scoping findings (Forge-side, code-verified):
+- **Warm-up (force `iv_rank` as mr's solo gate): DOMINATED.** Already answered NEGATIVE by production evidence — D150 de-weighted `iv_rank` for mr because it "fires too sparsely to survive the prefilter"; Crucible saw 0 mr-rank components. The offline re-test (`forge enumerate`/`prefilter`) uses the demo registry + risks the synthetic-cache noise fallback → ungrounded; not worth a production deploy either.
+- **Thread 2 (joint conditioning): structurally cheap, but hits a fundamental constraint.** §3.5 **C3 already allows 4 signals** (AND-composed); the sampler just emits 2 (`sampler.py:519-534`) → the AND-gate form is a **sampler change, no grammar bump.** BUT every AND-gate → more selective → fewer trades → fights the trade-count prefilters + CPCV (same failure mode as the warm-up). "More conditioning = fewer trades" is a fundamental long-options tension.
+- **The only trade-count-neutral joint conditioning is state-conditioned SELECTION** (adapt strike/DTE to vol state, not gate entries out) — durable infra + the home for a learned conditioner, but **cross-system** (`crucible_contracts.SelectorSpec` + Crucible backtester), low long-options EV. **Deferred to be designed once, around the operator's conditioner interface.**
+- **Convergence:** this matches the operator's `generation-model-levers.md` independently — its (2.2) "conditioning = path-a Threads 2-3, LOW-EV for long premium per D154, payoff gated on Path-C." Both sides reached the same read.
+- **Net:** long-options exhaustion ([[D152]] + [[D154]] correction) **stands reinforced**; Path-C provability gate SATISFIED, Path C PARKED by choice; the **M1/M2 monitor** is the only active long-options watch. Thread 3 (learned model) stays the operator's parallel workstream ([[D155]] + `generation-model-levers.md`). Division: operator → models, this agent → enumeration/grammar (held). No code/grammar/deploy.
+
+---
+
 ## 2026-06-15 — GENERATION-MODEL LEVERS scoped → `docs/proposals/generation-model-levers.md` (selection → generation); cheapest in-scope lever = retarget the sampler reward toward verified cpcv-robustness (hygiene, NOT a promotion unlock)
 
 **Operator: "[the models] are good for selection; what levers for a model that CREATES the strategy?" Scoped the generation side (config-shaping), distinct from the verdict/tail selection models. Docs-only; no code.** Frame: we already have a coarse learned generation model (`rejection_weights`→`sampler.py`); what's missing is a market-aware "trader." Three insertion points — **(2.1) composition** (sampler reweighting on the `hypothesis×regime-gate×direction` cell + tail-orthogonal bias; in-scope, deterministic), **(2.2) conditioning** (learn the joint entry gate/thresholds — the "trader"; grammar-gated; = path-a Threads 2-3; LOW-EV for long premium per [[D154]], payoff gated on Path-C), **(2.3) exploration** (active-learning over under-sampled cells; extends D136).

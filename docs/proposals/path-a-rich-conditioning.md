@@ -1,8 +1,31 @@
 # Path A — rich-conditioning sweep of long options (in-scope): light up the vega axis, joint-gate the entry, learn the conditioner
 
-Status: **SUBSTANTIALLY WALKED BACK 2026-06-15 ([[D154]]) — thread-1 premise FALSIFIED; reopening reduced to
-two low-EV threads, pending operator decision.** Launched 2026-06-15 ([[D153]]); corrected the same day when
-Crucible refuted the load-bearing fact.
+Status: **HELD / CLOSED 2026-06-15 ([[D156]]) — sweep scoped, no build; long-options exhaustion stands
+REINFORCED.** Arc: launched ([[D153]]) → thread-1 premise falsified, walked back ([[D154]]) → operator "pursue
+the builds" → scoped → operator "hold thread 2; accept the reinforced exhaustion" ([[D156]]).
+
+> **⏸ SCOPING OUTCOME ([[D156]]) — recorded so thread 2 isn't re-derived if revisited:**
+> - **Warm-up (force `iv_rank` as mr's solo gate): DOMINATED.** Already answered NEGATIVE by production
+>   evidence (D150: `iv_rank` "fires too sparsely to survive the prefilter"; Crucible: 0 mr-rank components).
+>   Offline re-test is ungrounded (`forge enumerate`/`prefilter` use the demo registry + risk the
+>   synthetic-cache noise fallback). Not built.
+> - **Thread 2 — AND-gate form: a SAMPLER change, NO grammar bump.** §3.5 **C3 already permits 4 signals**
+>   (1 directional + ≤3 supporting, AND-composed); the sampler only emits 2 (`sampler.py:519-534`). But each
+>   AND-gate → more selective → fewer trades → fights the trade-count prefilters + CPCV (the warm-up's failure
+>   mode). Likely dominated. Not built.
+> - **Thread 2 — state-conditioned SELECTION: the only trade-count-neutral joint conditioning** (adapt
+>   strike/DTE to vol state instead of gating entries out). Durable infra + the home for a learned conditioner,
+>   but **cross-system** (`crucible_contracts.SelectorSpec` + Crucible backtester) — a Path-C-scale lift, low
+>   long-options EV. **Deferred** to be designed once, around the operator's conditioner interface (the
+>   thread-2 ↔ thread-3 seam).
+> - **Thread 3 (learned conditioner): the operator's parallel workstream** ([[D155]] tail model;
+>   `generation-model-levers.md`). Its (2.2) "conditioning = path-a threads 2-3, LOW-EV for long premium"
+>   independently converges with this scoping.
+>
+> **Decision: held.** Neither residual form is a strong near-term long-options bet. The exhaustion verdict
+> ([[D152]] + [[D154]]) stands reinforced; Path C stays parked by operator choice; the **M1/M2 monitor** is the
+> only active long-options watch. Revisit thread 2 (state-conditioned selection) only when the learned
+> conditioner's interface is defined, so it's designed once.
 
 > **⚠ CORRECTION ([[D154]], `../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`).** This
 > program was launched on the belief that the vega / IV-cost axis was **dark** — that `iv_rank` is a NaN stub
