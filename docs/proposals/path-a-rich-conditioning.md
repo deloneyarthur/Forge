@@ -1,8 +1,11 @@
 # Path A — rich-conditioning sweep of long options (in-scope): light up the vega axis, joint-gate the entry, learn the conditioner
 
-Status: **HELD / CLOSED 2026-06-15 ([[D156]]) — sweep scoped, no build; long-options exhaustion stands
-REINFORCED.** Arc: launched ([[D153]]) → thread-1 premise falsified, walked back ([[D154]]) → operator "pursue
-the builds" → scoped → operator "hold thread 2; accept the reinforced exhaustion" ([[D156]]).
+Status: **UN-HELD 2026-06-15 ([[D157]]) — D156's hold reversed; operator chose to RUN/measure the untried
+levers. Thread 2 (joint/AND-gate) is now SCOPED for build in `conditioning-levers.md` ([[D159]]).** Arc:
+launched ([[D153]]) → thread-1 premise falsified, walked back ([[D154]]) → "pursue the builds" → held
+([[D156]]) → un-held ([[D157]]). **The §0 "is the probe worth the build?" question below is now ANSWERED
+(run it) — read the threads as historical context; the actionable change surfaces live in
+`conditioning-levers.md`.**
 
 > **⏸ SCOPING OUTCOME ([[D156]]) — recorded so thread 2 isn't re-derived if revisited:**
 > - **Warm-up (force `iv_rank` as mr's solo gate): DOMINATED.** Already answered NEGATIVE by production
