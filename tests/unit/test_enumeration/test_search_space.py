@@ -230,11 +230,15 @@ def test_regime_pool_trend_continuation_includes_gamma_flip() -> None:
 
 
 def test_regime_pool_mean_reversion_iv_rank_and_hurst(space: SearchSpace) -> None:
-    """R1: mean_reversion regime gates. The minimal fixture carries iv_rank and
-    hurst (omits gamma_flip_distance_pct), so D150's hurst widening makes the pool
-    ('hurst', 'iv_rank'), sorted. gamma-gate membership is covered in
-    `test_regime_pool_mean_reversion_includes_gamma_flip`."""
-    assert space.regime_indicators_by_hypothesis["mean_reversion"] == ("hurst", "iv_rank")
+    """R1: mean_reversion regime gates. The minimal fixture carries iv_rank, hurst,
+    and rv_rank (omits gamma_flip_distance_pct), so D150's hurst + D167's rv_rank
+    widenings make the pool ('hurst', 'iv_rank', 'rv_rank'), sorted. gamma-gate
+    membership is covered in `test_regime_pool_mean_reversion_includes_gamma_flip`."""
+    assert space.regime_indicators_by_hypothesis["mean_reversion"] == (
+        "hurst",
+        "iv_rank",
+        "rv_rank",
+    )
 
 
 def test_regime_pool_mean_reversion_includes_gamma_flip() -> None:
@@ -264,6 +268,25 @@ def test_regime_pool_mean_reversion_includes_hurst() -> None:
         single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
     )
     assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "hurst", "iv_rank")
+
+
+def test_regime_pool_mean_reversion_includes_rv_rank() -> None:
+    """D167 (v22, MR side): when the registry carries `rv_rank`, it joins
+    mean_reversion's R1 regime pool as a fourth gate (cheap realized vol, the
+    calm/reversion-friendly regime — Crucible: rv_rank ⟂ and DOMINATES hurst).
+    rv_rank is rank-coherent (NOT single-name-only), so the universe-template
+    exclusion doesn't touch the single-name MR pool. Pool is sorted. Tested on
+    `_build_regime_pool` directly so the shared minimal fixture stays stable."""
+    pool = _build_regime_pool(
+        {"iv_rank", "gamma_flip_distance_pct", "hurst", "rv_rank"},
+        single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
+    )
+    assert pool["mean_reversion"] == (
+        "gamma_flip_distance_pct",
+        "hurst",
+        "iv_rank",
+        "rv_rank",
+    )
 
 
 def test_regime_pool_volatility_event_is_event_proximity(

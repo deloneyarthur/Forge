@@ -31,6 +31,7 @@ from forge.grammar.custom_predicates import (
     _R1_GAMMA_REGIME_INDICATOR,
     _R1_HURST_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
+    _R1_RV_RANK_REGIME_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
     _S5_HYPOTHESIS_EXITS,
@@ -178,12 +179,14 @@ def test_r1_r2_r3_regime_indicator_when_applicable(
                 f"R2 violated at seed={seed}: regime={regime_id}"
             )
         elif cfg.hypothesis == "mean_reversion":
-            # D107 + D150: R1 accepts iv_rank, gamma_flip (long-gamma), or hurst
-            # (mean-reverting H<0.5) — all ranging-admitting gates.
+            # D107 + D150 + D167: R1 accepts iv_rank, gamma_flip (long-gamma),
+            # hurst (mean-reverting H<0.5), or rv_rank (cheap realized vol) —
+            # all ranging/calm-admitting gates.
             assert regime_id in {
                 _R1_IV_RANK_INDICATOR,
                 _R1_GAMMA_REGIME_INDICATOR,
                 _R1_HURST_REGIME_INDICATOR,
+                _R1_RV_RANK_REGIME_INDICATOR,
             }, f"R1 violated at seed={seed}: regime={regime_id}"
         elif cfg.hypothesis == "volatility_event":
             assert regime_id in _R3_EVENT_PROXIMITY_INDICATORS, (
@@ -1196,6 +1199,61 @@ def test_pick_regime_biases_mean_reversion_toward_ranging_gates() -> None:
     ranging = counts["gamma_flip_distance_pct"] + counts["hurst"]
     assert iv > 0  # never starved out of exploration
     assert ranging > 2 * iv  # heavily biased toward ranging (uniform would give ~2x only)
+
+
+def test_mr_ranging_gates_includes_rv_rank() -> None:
+    """D167 (v22): rv_rank joins the MR ranging-gate bias set so the sampler
+    prefers it (the densest, rank-coherent cheap-realized-vol gate) over the
+    prefilter-sparse iv_rank, alongside gamma_flip + hurst (D150). Crucible
+    (FORGE_mr_rv_hurst_overlap_response): rv_rank ⟂ and DOMINATES hurst."""
+    from forge.enumeration.sampler import _MR_RANGING_GATES
+
+    assert "rv_rank" in _MR_RANGING_GATES
+
+
+def test_pick_regime_biases_mean_reversion_toward_rv_rank() -> None:
+    """D167 (v22): with rv_rank in MR's pool, the pick is biased toward the
+    ranging gates {gamma_flip, hurst, rv_rank} and away from the sparse iv_rank
+    (which stays present at weight 1.0, never zeroed)."""
+    from collections import Counter
+
+    from forge.enumeration.sampler import _pick_regime
+
+    rng = random.Random(20260615)
+    regimes = ("gamma_flip_distance_pct", "hurst", "iv_rank", "rv_rank")
+    counts = Counter(_pick_regime("mean_reversion", regimes, rng, None) for _ in range(4000))
+    iv = counts["iv_rank"]
+    rv = counts["rv_rank"]
+    assert iv > 0  # never starved out of exploration
+    assert rv > 2 * iv  # rv_rank ranging-weighted (3.0) vs iv_rank (1.0) → ~3x; uniform would tie
+
+
+def test_exit_params_event_passed_samples_widened_ladder() -> None:
+    """D169 (v22): _exit_params emits event_passed_exit.n_bars_after_entry sampled
+    from the Crucible-recommended loosening ladder {3, 5, 8, 13, 21} (was inert →
+    Crucible's runtime default 3). The fresh wider-threshold cohort is the [[D168]]
+    fair test of the time-cut suspect."""
+    from forge.enumeration.sampler import _EVENT_PASSED_NBARS_LADDER, _exit_params
+
+    seen: set[object] = set()
+    for s in range(200):
+        params = _exit_params("event_passed_exit", random.Random(s))
+        assert set(params) == {"n_bars_after_entry"}
+        assert params["n_bars_after_entry"] in _EVENT_PASSED_NBARS_LADDER
+        seen.add(params["n_bars_after_entry"])
+    assert seen == set(_EVENT_PASSED_NBARS_LADDER)  # the full ladder is reachable
+
+
+def test_exit_params_other_exits_unchanged() -> None:
+    """D169: only event_passed_exit (+ the E3 trailing_atr activation) carry sampler
+    params; every other exit stays empty so Crucible reads its runtime default."""
+    from forge.enumeration.sampler import _exit_params
+
+    assert _exit_params("premium_stop_loss", random.Random(0)) == {}
+    assert _exit_params("time_stop", random.Random(0)) == {}  # cross-hypothesis; deferred
+    atr = _exit_params("trailing_atr", random.Random(0))
+    assert set(atr) == {"activate_after_gain_pct"}
+    assert 0.30 <= atr["activate_after_gain_pct"] <= 0.50  # type: ignore[operator]
 
 
 # ---------------------------------------------------------------------------
