@@ -109,8 +109,12 @@ _REGIME_CURATED_HYPOTHESIS: str = "relative_value"
 # too sparsely to survive the prefilter (the v6 expected_trades history). iv_rank
 # stays explorable (weight 1.0, never zeroed). Grows EFFECTIVE ranging supply from
 # the same mean_reversion enumeration share; pairs with the D150 R1 hurst gate.
+# D167 (v22) — rv_rank (cheap realized vol) joins the ranging-gate bias set: it is
+# the densest, rank-coherent gate and Crucible-validated as dominating hurst, so the
+# sampler should prefer it over the prefilter-sparse iv_rank (the "prefer rv_rank"
+# economy call — R1 stays an OR, so configs pick one gate; this biases the pick).
 _MR_HYPOTHESIS: str = "mean_reversion"
-_MR_RANGING_GATES: frozenset[str] = frozenset({"gamma_flip_distance_pct", "hurst"})
+_MR_RANGING_GATES: frozenset[str] = frozenset({"gamma_flip_distance_pct", "hurst", "rv_rank"})
 _MR_RANGING_GATE_WEIGHT: float = 3.0
 
 # D105 — hypothesis x dte_bucket weighting. Same component-rate scale and
@@ -1176,8 +1180,30 @@ def _sample_pre_earnings_setup_params(rng: random.Random) -> dict[str, object]:
     }
 
 
+# D169 (v22) — event_passed_exit time-cut loosening ladder (Crucible fair test,
+# [[D168]]; FORGE_v22_exit_timecut_fairtest_response.md §1). The exit's
+# `n_bars_after_entry` was emitted as nothing → Crucible's runtime default of 3
+# trading days (a hard bar-3 cut that suppresses the convex upside). Sampling the
+# wider ladder gives fresh config_hashes, selected/CPCV'd from scratch, which strip
+# the post-hoc in-sample optimism (Ask 3). Anchored to the exit ladder, not a
+# guessed DTE: event_passed 3 < time_stop 5 < theta_cliff (mandatory cap), and 21
+# reaches the theta_cliff envelope for these ~swing genomes. Vol_event-scoped →
+# DISJOINT from the Lever B mr gate (one v22 bump, two slices). `time_stop` is NOT
+# widened here (cross-hypothesis → would dirty the mr slice; and it masks a widened
+# event_passed past 5 anyway — Ask 4) — deferred to a follow-on.
+_EVENT_PASSED_NBARS_LADDER: tuple[int, ...] = (3, 5, 8, 13, 21)
+
+
 def _exit_params(exit_id: str, rng: random.Random) -> dict[str, object]:
-    """E3: ``trailing_atr`` requires ``activate_after_gain_pct ≥ 0.30``."""
+    """E3: ``trailing_atr`` requires ``activate_after_gain_pct ≥ 0.30``.
+
+    D169 (v22): ``event_passed_exit`` samples ``n_bars_after_entry`` from the
+    loosening ladder so a fresh cohort tests whether widening the early time-cut
+    recovers the tail give-back ([[D168]]). Deterministic via the seed hierarchy
+    (the rng is the per-config exit rng) — hard rules #6/#8 preserved.
+    """
     if exit_id == "trailing_atr":
         return {"activate_after_gain_pct": round(rng.uniform(0.30, 0.50), 2)}
+    if exit_id == "event_passed_exit":
+        return {"n_bars_after_entry": rng.choice(_EVENT_PASSED_NBARS_LADDER)}
     return {}

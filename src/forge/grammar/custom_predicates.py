@@ -299,6 +299,14 @@ _R1_GAMMA_REGIME_INDICATOR = "gamma_flip_distance_pct"
 # purest ranging signal; C4 keeps hurst single-role (it can't be both this gate and
 # the directional). Same indicator, opposite side per hypothesis — the D107 pattern.
 _R1_HURST_REGIME_INDICATOR = "hurst"
+# D167 (v22, MR side): rv_rank (cheap REALIZED-vol percentile, op_regime "<" = LOW =
+# the calm / reversion-friendly regime — its indicator_thresholds default op is
+# already "<") is a fourth accepted R1 regime gate for mean_reversion. Crucible's
+# causal attribution (FORGE_mr_rv_hurst_overlap_response): rv_rank is INDEPENDENT of
+# (Spearman ≈ -0.036) and DOMINATES the v21 hurst gate, and is rank-coherent (works on
+# MR's confluence AND rank genomes). Added per the D107/D150 widening pattern; the
+# sampler biases toward it over the prefilter-sparse iv_rank.
+_R1_RV_RANK_REGIME_INDICATOR = "rv_rank"
 
 # H2 (v12 / D109): event_momentum's post-event TIMING gate. Unlike R1/R2/R3
 # this is NOT a grammar.yaml rule — adding a 22nd operator-owned rule would
@@ -837,6 +845,11 @@ def _r1_mean_reversion_requires_iv_rank_gate(
         # side (op "<" set by the sampler). Same convention as the gamma gate.
         if _R1_HURST_REGIME_INDICATOR in inds:
             return PredicateResult(passed=True)
+        # D167 (v22): an rv_rank gate satisfies R1 on its own — cheap realized vol
+        # (op "<" = LOW = calm/reversion-friendly, the rv_rank default side). Same
+        # op-agnostic convention as the gamma/hurst gates (no threshold cap).
+        if _R1_RV_RANK_REGIME_INDICATOR in inds:
+            return PredicateResult(passed=True)
         if _R1_IV_RANK_INDICATOR not in inds:
             continue
         threshold = regime.params.get("threshold")  # type: ignore[attr-defined]
@@ -852,7 +865,8 @@ def _r1_mean_reversion_requires_iv_rank_gate(
             f"R1: hypothesis=mean_reversion requires a regime_filter signal with "
             f"{_R1_IV_RANK_INDICATOR!r} (params.threshold ≤ {_R1_IV_RANK_MAX_THRESHOLD}), "
             f"{_R1_GAMMA_REGIME_INDICATOR!r} (the D107 dealer-gamma regime gate), "
-            f"or {_R1_HURST_REGIME_INDICATOR!r} (the D150 mean-reverting regime gate)"
+            f"{_R1_HURST_REGIME_INDICATOR!r} (the D150 mean-reverting regime gate), "
+            f"or {_R1_RV_RANK_REGIME_INDICATOR!r} (the D167 cheap-realized-vol regime gate)"
         ),
     )
 

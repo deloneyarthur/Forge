@@ -131,7 +131,12 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # pending Q33. Enumeration-policy widening; the 21 `rules:` textually unchanged).
     # D151 bumped v20 -> v21 (Q33 answered YES — hurst per-name-coherent; the MR-rank
     # hold removed, hurst-gated MR now ranks. Enumeration-policy; rules unchanged).
-    assert grammar.grammar_version == "v21"  # type: ignore[attr-defined]
+    # D167+D169 bumped v21 -> v22 (two enumeration-policy changes on disjoint slices:
+    # (A) rv_rank joins R1 as a fourth mean_reversion ranging gate — Crucible-validated
+    # dominant over hurst; (B) event_passed_exit.n_bars_after_entry samples the loosening
+    # ladder {3,5,8,13,21}, the D168 time-cut fair test. The 21 `rules:` textually
+    # unchanged — R1's accepted-gate set widens in custom_predicates, not the rule text).
+    assert grammar.grammar_version == "v22"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

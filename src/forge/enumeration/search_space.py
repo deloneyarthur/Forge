@@ -39,6 +39,7 @@ from forge.grammar.custom_predicates import (
     _R1_GAMMA_REGIME_INDICATOR,
     _R1_HURST_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
+    _R1_RV_RANK_REGIME_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
     _S5_HYPOTHESIS_EXITS,
@@ -338,13 +339,17 @@ def _build_regime_pool(
         elif hyp == "mean_reversion":
             # D107 (v11): gamma_flip_distance_pct joins iv_rank as an R1 regime gate
             # (long-gamma / ranging). D150 (v20): hurst (mean-reverting H<0.5 side)
-            # joins as a third ranging gate — the purest ranging signal.
+            # joins as a third ranging gate — the purest ranging signal. D167 (v22):
+            # rv_rank (cheap realized vol) joins as a fourth gate — Crucible-validated
+            # as independent of and dominant over hurst; rank-coherent (works on both
+            # MR's confluence and rank genomes, unlike the chain-reading iv_rank).
             pool[hyp] = tuple(
                 sorted(
                     {
                         _R1_IV_RANK_INDICATOR,
                         _R1_GAMMA_REGIME_INDICATOR,
                         _R1_HURST_REGIME_INDICATOR,
+                        _R1_RV_RANK_REGIME_INDICATOR,
                     }
                     & registry_ids
                 )

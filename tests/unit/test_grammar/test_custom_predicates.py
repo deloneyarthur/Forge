@@ -1055,6 +1055,33 @@ def test_r1_mean_reversion_accepts_hurst_gate() -> None:
     assert result.passed
 
 
+def test_r1_mean_reversion_accepts_rv_rank_gate() -> None:
+    """D167 (v22): rv_rank (op '<', cheap realized vol — the calm, reversion-
+    friendly regime) is a fourth accepted R1 regime gate for mean_reversion,
+    alongside iv_rank / gamma_flip / hurst. Crucible (FORGE_mr_rv_hurst_overlap_
+    response): rv_rank is independent of and DOMINATES the v21 hurst gate. Mirrors
+    the D107/D150 widenings; directional is rsi_2 (C4 keeps rv_rank single-role)."""
+    cfg = grammar_valid_baseline(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("rsi_2",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("rv_rank",),
+                params={"threshold": 25.0, "op": "<"},
+            ),
+        ),
+    )
+    result = evaluate(_predicate("mean_reversion_requires_iv_rank_gate"), cfg, _registry())
+    assert result.passed
+
+
 def test_r1_mean_reversion_without_iv_rank_or_gamma_fails() -> None:
     """D107: with neither iv_rank nor a gamma gate, R1 still fires and fails."""
     cfg = grammar_valid_baseline(
