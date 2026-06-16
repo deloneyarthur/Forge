@@ -63,6 +63,52 @@ trust the printed `registry_hash`.
 forge enumerate --seed 7 --max 50 --summary
 ```
 
+### forge king
+
+Meta-king generator (FORGE meta-king A3). Reads Crucible's published durable-score
+oracle (`~/optbt_data/exports/meta_king_oracle_latest.json`), searches `--search`
+grammar-valid genomes, scores each with the oracle, dedups against the gated-runs
+export, and ranks the top-`--top-k` by predicted `cpcv_sharpe_p25` ("kings").
+
+**Without `--submit` it is a DRY-RUN preview** (writes nothing to Crucible).
+**With `--submit`** it stamps each king `source="meta_king"` + `search_n_trials=N`
+(both hash-excluded in contracts 1.19.0 → `config_hash` unchanged), records them in
+Forge's `submissions`/`batch_summaries` (idempotent on the `config_hash` unique
+index, hard rule #9), and writes them to Crucible's inbox — where they run the
+full, unchanged §8.7 gauntlet as proposals (hard rule #3/#6). `--search` is the
+DSR trial count `N` Crucible folds into the single-config DSR (the A3 §4
+trial-laundering guard). Kings are realistically portfolio **components**, not
+promoted standalones (oracle max predicted ~0.78 « the 1.5 promotion wall). The
+unbiased oracle-argmax is a `mean_reversion/swing_short` monoculture, so pass
+`--per-cell` when submitting to queue a decorrelated set.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--seed` | int | `0` | RNG root seed (determinism, hard rule #6). |
+| `--search`, `-n` | int | `2000` | Genomes to score against the oracle (the DSR trial count `N`; min 1). |
+| `--top-k`, `-k` | int | `10` | Number of kings to surface (min 1). |
+| `--oracle` | path | latest published | Override the durable-score oracle JSON. |
+| `--out` | path | stdout only | Also write the kings (with full configs) as JSON here. |
+| `--no-dedup` | flag | off | Skip the gated-export dedup pass. |
+| `--per-cell` | int | `0` | Diversity quota: max kings per `(hypothesis,dte)` cell (`0` = global top-K). Use a small cap (e.g. 2) to break the oracle-argmax monoculture into a decorrelated set. |
+| `--submit` | flag | off | Submit the kings to Crucible's inbox + record them (default: dry-run). |
+| `--inbox` | path | forge.yaml | Crucible inbox dir for `--submit` (else `crucible.inbox_path`). |
+| `--forge-db` | path | forge.yaml | Forge state DB for `--submit` (else `db_path`). |
+| `--config` | path | — | `forge.yaml` path for the `--inbox`/`--forge-db` fallback under `--submit`. |
+
+```
+forge king --search 2500 --top-k 15 --seed 1 --per-cell 3            # dry-run preview
+forge king --search 2500 --top-k 15 --per-cell 3 --submit \
+  --inbox ~/optbt_data/inbox --forge-db ~/forge_data/king_submissions.db
+```
+
+**Live-fire routing (D178):** point `--inbox` at the real inbox but `--forge-db` at a
+**separate** king DB — NOT the shared `forge.yaml` `db_path`. The `forge.service`
+daemon holds an intermittent RW lock on the live `forge.db`, so a second writer there
+would collide; the separate king DB also keeps `meta_king` submissions out of the forge
+ranker's feedback (arms-independent). Vary `--seed` across fires to grow the stream
+(same seed → same kings → idempotent skip).
+
 ### forge prefilter
 
 Run the §5.2 pre-filter battery against enumerated candidates and report per-filter

@@ -39,7 +39,11 @@ from crucible_contracts import (
 # 9995f81, shipped 2026-06-08 00:10Z in response to the D105 yield-map reply's
 # "export carries no version field" note). extra="forbid" makes this a
 # REQUIRED adoption: pre-1.15.0 readers reject the new export rows outright.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.18.0"
+# 1.19.0 (D176): hash-excluded StrategyConfig.source + search_n_trials for the
+# meta-king A3 submission arm (Crucible 30b8fa9; D096 provenance pattern, no
+# config_hash churn). Required adoption — installed contracts is 1.19.0, so the
+# pin must match or check_contracts_version fails every CLI startup.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.19.0"
 
 
 def check_contracts_version() -> str:

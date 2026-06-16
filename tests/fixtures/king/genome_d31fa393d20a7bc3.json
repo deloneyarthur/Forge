@@ -1,0 +1,82 @@
+{
+  "combiner": {
+    "direction_mode": null,
+    "direction_strategy": "k_of_n",
+    "k": 1,
+    "rank_k": 0,
+    "rebalance_frequency": null,
+    "type": "confluence"
+  },
+  "dte_bucket": "swing_short",
+  "equity_hedge_metadata": null,
+  "exits": [
+    {
+      "id": "earnings_exit",
+      "params": {}
+    },
+    {
+      "id": "expiry_exit",
+      "params": {}
+    },
+    {
+      "id": "liquidity_exit",
+      "params": {}
+    },
+    {
+      "id": "theta_cliff_exit",
+      "params": {}
+    },
+    {
+      "id": "zscore_reversion_exit",
+      "params": {}
+    }
+  ],
+  "grammar_version": "v18",
+  "hypothesis": "mean_reversion",
+  "name": "forge_mean_reversion_swing_short_2093c3eb",
+  "selector": {
+    "delta_target": 0.419,
+    "delta_tolerance": 0.05,
+    "dte_max": 18,
+    "dte_min": 15,
+    "max_bid_ask_spread_pct": 0.1,
+    "min_open_interest": 100,
+    "min_volume": 10,
+    "prefer_monthly_expiry": false
+  },
+  "signals": [
+    {
+      "id": "sig_directional",
+      "indicators": [
+        "call_wall_distance_pct"
+      ],
+      "params": {
+        "op": "<",
+        "threshold": 0.0186
+      },
+      "role": "directional",
+      "type": "threshold"
+    },
+    {
+      "id": "sig_regime",
+      "indicators": [
+        "iv_rank"
+      ],
+      "params": {
+        "op": "<",
+        "threshold": 45.0639
+      },
+      "role": "regime_filter",
+      "type": "threshold"
+    }
+  ],
+  "sizer": {
+    "kelly_fraction": 0.25,
+    "max_concurrent_risk_pct": 0.15,
+    "mode": "fixed_risk_pct",
+    "per_trade_risk_pct": 0.0172,
+    "vol_target_annual": 0.2
+  },
+  "tier": 2,
+  "underlying": "PLTR"
+}
