@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-15 — Indicator-THRESHOLD axis AUDITED + CLOSED (D171): per-config CPCV-p25 is FLAT across threshold value → third confirmed-flat selection lever; D073 tightener not Goodharting; nothing to pursue. DOCS-ONLY
+
+**Operator probe: "anything to probe in indicator parameter/threshold sweeping?" Cheap Forge-side read-only audit. No code.**
+- Thresholds are NOT inert (unlike exits): swept per-config (absolute + percentile) AND auto-learned (D073 `threshold_proposer`→`auto_tightened_thresholds.yaml`, optimizes trade-count). Probe: is it Goodharting?
+- **Audit (10,004 component rows / 2,016 verified, terciled per indicator vs median CPCV-p25, split on `honest_regime_coverage_row`): the verified threshold-response is FLAT** — momentum/adx/hurst flat; rv_rank faint cheap-tilt (~0.06); iv_rank faint mid-hump (~0.10). Per-config CPCV-p25 is insensitive to the threshold value.
+- **Verdict:** D073 NOT Goodharting (no gradient to miss); faint gradients are per-trade **center** effects (rv_rank per-trade +0.095 → ~+0.06 per-config), not tail. **Third confirmed-flat selection lever** — entry ([[D161]]) · exit ([[D165]]/[[D168]]) · threshold (this). The wall is **edge magnitude = a generation problem** (World-A). **Nothing to pursue** on the threshold axis; frontier stays magnitude/generation (Path C / learned conditioner, [[D155]]). Logged Q43 / [[D171]].
+
+---
+
 ## 2026-06-15 — grammar v22 BUILT + DEPLOYED (D170): (A) `rv_rank` mr R1 gate + (B) `event_passed_exit` time-cut ladder {3,5,8,13,21}; full suite 1623 passed; deployed v21→v22. PRODUCTION CHANGE
 
 **Operator approved (A) ([[D167]]) + relayed Crucible's (B) range answer + "perform deploy ritual." Built in worktree, deployed to the live service.**

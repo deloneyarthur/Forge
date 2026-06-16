@@ -4357,3 +4357,21 @@ Keyed on `IndicatorMetadata.family == "dealer_positioning"` (new `DEALER_POSITIO
 **Deploy (D104 ritual, `docs/tasks/deploy.md`):** built in worktree (service stayed up) → stop service → land `4c4ce84` to main → full suite (live tree) → restart → journal verify (`grammar_version=v22`). Deploy timestamp + journal evidence in `STATUS.md`. **Relay v21→v22 to Crucible** for the hypothesis-sliced `funnel --compare v21 v22` (mr slice = (A); vol slice = (B)).
 
 **Action:** v22 deployed; relays `FORGE_mr_rv_hurst_overlap_response`/`FORGE_v22_exit_timecut_fairtest_response` ANSWERED+folded; `exit-tail-shaping.md` + `lever-b-rv-rank-v22-build.md` marked BUILT; `STATUS.md` + this entry. Crucible funnel-compare relay to follow.
+
+---
+
+## D171 — 2026-06-15 — INDICATOR-THRESHOLD axis AUDITED (operator probe): per-config CPCV-p25 is FLAT across threshold value for every indicator → the threshold axis is the THIRD confirmed-flat selection lever; D073 trade-count tightener is NOT Goodharting (no edge gradient to miss); nothing to pursue
+
+**Spec section:** §8.7 / CPCV-p25 (the tail metric), §5 / D073 (the auto-tightening threshold proposer), hard rule #6 (center-vs-tail; the magnitude wall). Source: operator — "what about sweeping parameters/thresholds for indicators — anything to probe?" Cheap Forge-side read-only audit on `/tmp/forge_thresh_audit.db` (`investigate-live.md`). **DOCS-ONLY; no code.**
+
+**Why this axis is different from entry/exit:** thresholds are NOT inert — they're the most-machined axis: swept per-config from audited ranges (`indicator_thresholds.py`, absolute + percentile modes), AND auto-LEARNED via the D073 `threshold_proposer` → `config/auto_tightened_thresholds.yaml` (16 live tightenings). The proposer optimizes toward **trade-count** (avoid zero-trade thresholds, ≥10-trade floor), not edge. The probe question: is it Goodharting — missing an edge gradient the tail cares about?
+
+**Audit (10,004 component rows w/ non-null `cpcv_sharpe_p25.value`, 2,016 verified; threshold terciled per indicator, median CPCV-p25, split on `honest_regime_coverage_row` per [[D155]]):** the **verified-slice threshold-response is FLAT** for every indicator — momentum_252 +0.360/+0.358/+0.370, adx +0.344/+0.318/+0.329, hurst +0.468/+0.458/+0.454, rv_rank +0.493/+0.436/+0.434 (faint cheap-tilt ~0.06), iv_rank +0.613/**+0.717**/+0.650 (faint mid-hump ~0.10). Largest gradient ~0.10; most <0.06. **Per-config CPCV-p25 is insensitive to where in the audited range a threshold sits.**
+
+**Conclusions:** **(1)** The D073 trade-count tightener is **NOT Goodharting** — there is no meaningful edge gradient for it to miss, so re-targeting it trade-count→cpcv buys ~nothing. **(2)** Where a faint gradient shows (rv_rank cheaper-best, hurst more-mean-reverting-best), it matches Crucible's per-TRADE direction but is **much smaller per-config** (rv_rank's per-trade **+0.095** ([[D161]]) → only ~+0.06 per-config cpcv) → a per-trade **CENTER** effect that barely reaches the tail. **(3)** The threshold axis is the **THIRD confirmed-flat selection lever** — entry-gate ([[D161]]) · exit-timing ([[D165]]/[[D168]]) · threshold-value (this) — all flat on the worst-quartile. The wall is **edge magnitude = a generation problem** (World-A).
+
+**Caveat (honest):** this is per-config CPCV-p25, a coarser proxy than Crucible's per-trade causal attribution — so "flat on the tail" is clean, but small per-trade *center* gradients can still exist (rv_rank is proof one does). That only reinforces the verdict.
+
+**Recommendation:** nothing to pursue on the threshold axis — don't re-target D073, don't relay a per-trade threshold probe (it would at most find a center effect, = the generation thread, not a tail unlock). Logged Q43. **The residual frontier stays the magnitude/generation problem** (Path C, or a learned generation conditioner — [[D155]]/`generation-model-levers.md`), not selection.
+
+**Action:** this entry; Q43 in `OPEN_QUESTIONS.md`; `STATUS.md` top block. No production change.

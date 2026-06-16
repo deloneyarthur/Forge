@@ -890,3 +890,15 @@ grammar bump). `em` kept on the floor (data-sparse, not structural). The grammar
 **ADDENDUM 2026-06-15 ([[D168]], `FORGE_exit_tail_attribution_addendum.md`, commit 81a4e15) — PARTIALLY REOPENED:** the D165 "non-tail" was premature for the 2 wall-setters that compose `event_passed_exit` — stripping that over-tight early time-cut flips their worst-quartile crater net **−$2.9k→+$31.9k** and drops never-peaked loss **76%→44%** (a slice that read "structural" was cut-too-early-to-peak → exit-shapeable). **The lever is LOOSENING early time-exits (`event_passed_exit.n_bars_after_entry`, `time_stop.n_bars`), NOT truncating** — fits the convex payoff. Hard-caveated (in-sample optimism; single-config; NOT trade-count-neutral) → a **suspect for a fair OOS test**, not a win. **Disposition: fair test = emit wider time-exit thresholds → Crucible re-selects fresh (OOS) → funnel-compare; sequenced as the NEXT exit experiment AFTER the clean Lever B v22 (not batched).** The magnitude-wall close is softened on the exit axis.
 
 **Tag:** `enum-grammar-lane`, `generation-coverage`, `exit-axis`, `tail-shaped`, `trade-count-neutral`, `low-EV`, `ANSWERED-non-tail`, `operator-gated`, `relates-to-D146/D152/D156/D161/D165`
+
+---
+
+## 2026-06-15 — Q43 — Indicator-THRESHOLD axis: is there a sweep/calibration lever beyond entry + exit? — **AUDITED + CLOSED (flat on the tail), [[D171]]**
+
+**Question (operator):** we explored entry-gate composition + exit timing; is there a probe-able lever in sweeping indicator parameters/thresholds?
+
+**What I did (cheap Forge-side read-only audit, `/tmp` snapshot):** unlike exits, thresholds are NOT inert — swept per-config from audited ranges (`indicator_thresholds.py`, absolute + percentile) AND auto-learned (D073 `threshold_proposer` → `auto_tightened_thresholds.yaml`, optimizing trade-count). Terciled each indicator's threshold (10,004 component rows / 2,016 verified) vs median CPCV-p25, split on `honest_regime_coverage_row`. **Result: the verified threshold-response is FLAT** (momentum/adx/hurst flat; rv_rank faint cheap-tilt ~0.06; iv_rank faint mid-hump ~0.10) — per-config CPCV-p25 is insensitive to the threshold value.
+
+**Verdict:** the D073 tightener is NOT Goodharting (no edge gradient to miss); the threshold axis is the **third confirmed-flat selection lever** (entry [[D161]] · exit [[D165]]/[[D168]] · threshold). Faint gradients are per-trade **center** effects (rv_rank's per-trade +0.095 → ~+0.06 per-config), not tail. **Nothing to pursue** — the frontier stays magnitude/generation (Path C / learned conditioner), not selection.
+
+**Severity:** LOW (confirms exhaustion from a third angle). **Tag:** `selection-axis`, `threshold`, `AUDITED-flat-on-tail`, `magnitude-wall`, `relates-to-D155/D161/D165/D171`
