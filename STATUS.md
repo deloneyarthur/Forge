@@ -1,5 +1,18 @@
 # Forge — Status
 
+## 2026-06-16 — CPCV lever-map + component-ADMISSION throttle FOUND (D172): `regime_coverage` is start-bound (92.4% fail on start≤30, 0 on span) → options-derived ranging complement structurally locked out; trade-floor anti-selects cpcv; relay SENT. DOCS-ONLY
+
+**Operator: "what knobs move CPCV + how" → pool-composition + 3-lever deep probes → "trade count matters less, find a better number" → "(a) size the coverage fix, (b) draft the relay" → "log + I relayed." Read-only (`forge.db` snap 2026-06-16T04:21Z, honest-era verdicts). No code/bump.**
+- **Pool (subs 7d):** trend **68%** (plateaued from the 76% read, never falling), ranging 13%, **bear 0%**, other 19%. **Edge (lever 3) exhausted, quantified:** 0/7566 single-config cpcv ≥1.5; FLAT across v9→v22 (p95 ~0.83). No single config promotion-grade (WF≥2.0 at 0.1%) → promotion is portfolio-assembly → only in-scope levers = floor+dispersion (feed the assembler decorrelated complement). Lever 3 = Path C (parked).
+- **The inversion:** mr verified cpcv-p25 **0.638** (best family) but **1.72%** component-rate vs trend 0.410/**9.96%**. Cause = two component-ADMISSION gates (NOT §8.7).
+- **Trade floor** (per-bucket 30/60/100): doesn't buy cpcv reliability — std flat, Spearman(tc,cpcv) trend −0.22 / mr −0.17 / vol +0.25; low-tc cpcv downward-*biased* → per-component cpcv is the wrong statistic for a portfolio leg.
+- **`regime_coverage` = window-START gate (CORRECTS the prior "in-target-regime" framing):** **27,662/29,924 (92.4%) fail on start≤30 sessions; 0 on span≥1460.** Start is data-availability (options indicators start 866 sessions vs price 363) → options-derived ranging complement (mr: iv_rank/gamma_flip/rsi_2) **2.9% pass, structurally locked out**.
+- **Dispersion is SUPPLY-bound, not ranker-bound:** `regime_supply:` journal — ranker selects complement ABOVE pool share (ranging 39–61% sel / 25–34% pool); bear **0/0 always**. Lever is upstream (admission gates + grammar), not the ranker.
+- **Prize (upper bound):** relax start → ~932 cpcv≥0.5 unlock incl **~175 mr** → ~doubles verified mr (207→~382); trade-floor→30 adds ~51. No grammar / §8.7 change. **Bear = separate grammar supply gap** (tail_hedge ~0 all-era; `PROMPT_CRUCIBLE_OVERLAYSPEC_BEAR_COMPLEMENT.md`).
+- **Relay SENT** `PROMPT_CRUCIBLE_COMPONENT_ADMISSION_LEVERS.md` (RELAYED 2026-06-16): (1) start-at-floor relaxable? (2) data-floor calendar (~866 sessions)? (3) trade-floor→30? Await Crucible → fold as D173. Full: [[D172]].
+
+---
+
 ## 2026-06-15 — Indicator-THRESHOLD axis AUDITED + CLOSED (D171): per-config CPCV-p25 is FLAT across threshold value → third confirmed-flat selection lever; D073 tightener not Goodharting; nothing to pursue. DOCS-ONLY
 
 **Operator probe: "anything to probe in indicator parameter/threshold sweeping?" Cheap Forge-side read-only audit. No code.**
