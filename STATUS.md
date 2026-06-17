@@ -1,5 +1,26 @@
 # Forge — Status
 
+## 2026-06-17 — contracts 1.19.0 DEPLOYED to live service (D176 adoption via the D104 ritual): daemon restarted, v22 verified, NRestarts=0, deploy-gate suite 1652. PRODUCTION
+
+**Operator: "Let's do 1 [restart] just so it's fresh." Ran the full D104 ritual — the daemon's 08:10 process was still on 1.18.0-in-memory (the operator's earlier restart hadn't taken; missing `--user`).**
+- **Ritual:** stop (`exit 143` = normal --loop SIGTERM) → **full UNCONTENDED suite 1652 passed** (deploy gate) → reset-failed → start. Code already committed (`1f4782e`); pre-flight confirmed **no uncommitted code** (only docs dirty).
+- **✅ DONE 2026-06-17T00:24:08 UTC** (17:24:08 PDT): new MainPID `944020`, `grammar_version=v22 registry_hash=622855f59c1ce044`, `registry_loaded_from_export`, NRestarts=0, **no traceback / SchemaVersionMismatch / GrammarVersionError** → **contracts 1.19.0 adopted in-memory** (installed==pin==1.19.0). The `forge.king` code is now in the running daemon but stays inert to `forge run` (only invoked via `forge king`).
+- **Benign journal items (not deploy issues):** `exit 143`/`Failed exit-code` at stop = normal --loop SIGTERM; a pre-restart `skipped: real feature cache unavailable` = the safety refusing the synthetic fallback (transient); `stuck_state: 50 zero-promotion batches` = pre-existing (the promotion-is-portfolio-assembly reality the meta_king arm targets).
+- Tree: STATUS committed; operator's `PROMPT_*` + `FORGE_THROTTLE_BACKPRESSURE_PROPOSAL.md` left dirty (theirs). Full record: [[D176]]/[[D178]].
+
+---
+
+## 2026-06-16 — meta_king cohort grown to 510 for A4 + committed to main (1f4782e); THROTTLE assessed; daemon restart did NOT take (now resolved above). OPERATIONAL
+
+**Operator: "submit 500 kings for sample size" + "is the throttle working?" + "daemon restarted." Committed the arm, fired the cohort, assessed throttle, found the restart didn't take.**
+- **Committed `1f4782e` to main** — the full meta-king arm (D174-D178, 26 files); operator's 3 in-flight `PROMPT_CRUCIBLE_*` left unstaged.
+- **Cohort = 510 meta_king kings** (seeds 1-34, `--search 2500 --top-k 15 --per-cell 3`, ~15 unique/seed, low overlap), tracked in `~/forge_data/king_submissions.db` (34 batches). For Crucible's A4 read (`runs.source`, bar 2.37%).
+- **THROTTLE (answer):** §7.3 limiter governs the **forge daemon** and is **working** — steady 200/batch per ~25 min cycle (prefetch ~20min dominates), gating healthy, reconciling, no errors/blocks. **meta_king bypasses §7.3 BY DESIGN** (separate `forge king --submit` arm, no rate cap) → the 500-burst was unthrottled: **255 of mine still queued in the inbox** (455 total = 255 mk + 200 forge) + 510 added to Crucible's backtest queue. So the "large queue" is the unthrottled meta_king burst + Crucible backtest throughput, NOT a throttle bug.
+- **Daemon restart did NOT take** — still MainPID/ActiveEnter `08:10:18`, NRestarts=0, no `Started` marker since 08:10. The daemon runs on **1.18.0 in-memory** (healthy; submits bare configs → watcher defaults `source=forge`). Correct cmd: **`systemctl --user restart forge.service`** (likely missing `--user`). Low urgency (tree committed + reboot-safe).
+- **Recommendation:** the king arm has no rate cap — **pace future volume** (smaller bursts / a `forge-king-submit` timer with intervals / a §7.3-style king throttle) so the inbox doesn't pile up. Offered.
+
+---
+
 ## 2026-06-16 — FIRST LIVE meta_king submission FIRED (D178): 15 kings → live inbox (source=meta_king, search_n_trials=2500, v22), diverse mr/vol/trend; daemon untouched + healthy. Routing corrected to a SEPARATE king DB (forge.db lock + arms-independence). STREAM IS LIVE.
 
 **Operator: "Let's start the next steps to fire" (coordinated with Crucible's A4 wiring). Fired + verified.**
