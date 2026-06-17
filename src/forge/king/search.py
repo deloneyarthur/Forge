@@ -67,7 +67,7 @@ def search_kings(
     top_k: int,
     tried_hashes: Iterable[str] = (),
     per_cell_cap: int | None = None,
-    min_score: float = 0.5,
+    min_score: float = -1.0,
 ) -> KingSearchResult:
     """Search ``n_search`` grammar-valid genomes; return the surfaced kings.
 
@@ -84,15 +84,27 @@ def search_kings(
     ``mean_reversion/swing_short`` monoculture so the stream can feed a
     decorrelated complement ([[D172]]).
 
-    ``min_score`` is the per-cell admission floor. For the published P(component)
-    oracle (the durable score is a ~[0,1] probability, D179) the default 0.5
-    admits only better-than-even genomes; pass the corpus base rate (~0.39) for
-    a looser above-average floor. (The legacy cpcv oracle was unbounded/signed,
-    where 0.0 was the meaningful floor.)
+    ``min_score`` is the per-cell admission floor, and it is *objective-relative*
+    — the live oracle's score range moves when Crucible flips the target (cpcv ->
+    p_component -> min_margin, D180). For the published ``min_margin`` oracle the
+    durable score is an all-gate margin in roughly ``[-4.2, -0.2]`` (every value
+    negative — no single component clears the gauntlet); the default ``-1.0`` is
+    the corpus median, which a dry-run confirms keeps an above-median, *diverse*
+    top-K spanning ~7 ``(hypothesis, dte)`` cells. A tighter floor (e.g. the
+    relay-suggested ``-0.8`` top-quartile) collapses back to the single strongest
+    cell — the monoculture per-cell mode exists to break — so prefer the median.
+    (P(component) wanted ``0.5``; cpcv wanted ``0.0``. Always set the floor from
+    the live score range, never a value carried over from the prior objective.)
+
+    A floor above *every* scored genome is a mis-set floor, not an empty result:
+    per-cell mode raises rather than silently surfacing nothing (so ``--submit``
+    can never queue an empty batch when the objective flips out from under a
+    stale floor).
 
     Raises:
-        ValueError: ``n_search`` or ``top_k`` is non-positive, or
-            ``per_cell_cap`` is non-positive when supplied.
+        ValueError: ``n_search`` or ``top_k`` is non-positive, ``per_cell_cap``
+            is non-positive when supplied, or per-cell selection admitted zero of
+            the scored genomes (every one fell below ``min_score``).
         forge.enumeration.EnumerationCapped: the registry slice is too sparse to
             yield ``n_search`` configs within the enumerator's retry budget.
     """
@@ -130,10 +142,22 @@ def search_kings(
         scored.append(King(config=config, predicted_score=predicted))
 
     scored.sort(key=lambda king: (-king.predicted_score, king.config.config_hash))
+    selected = _select_diverse(scored, top_k=top_k, per_cell_cap=per_cell_cap, min_score=min_score)
+    if per_cell_cap is not None and scored and not selected:
+        # The floor rejected every scored genome — a stale floor for the live
+        # objective, not a real empty result. Fail loud with the live target and
+        # the observed score range so the operator can set a floor that bites.
+        lo = scored[-1].predicted_score
+        hi = scored[0].predicted_score
+        msg = (
+            f"per-cell selection admitted 0 of {len(scored)} scored genomes: every one "
+            f"scored below min_score={min_score} (oracle target={oracle.target!r}, scores "
+            f"ranged [{lo:.4f}, {hi:.4f}]). The floor is mis-set for this objective — set "
+            f"--min-score within the observed range (the corpus median is the diverse default)."
+        )
+        raise ValueError(msg)
     return KingSearchResult(
-        kings=tuple(
-            _select_diverse(scored, top_k=top_k, per_cell_cap=per_cell_cap, min_score=min_score)
-        ),
+        kings=tuple(selected),
         n_searched=n_searched,
         n_deduped=n_deduped,
         n_unique=len(seen),

@@ -173,10 +173,11 @@ def cmd_king(  # noqa: PLR0915 — one command: search + dry-run preview + submi
         help="diversity quota: max kings per (hypothesis,dte) cell (0 = global top-K)",
     ),
     min_score: float = typer.Option(
-        0.5,
+        -1.0,
         "--min-score",
-        help="per-cell admission floor on predicted score (P(component) oracle ~[0,1]; "
-        "default 0.5; ignored in global top-K mode)",
+        help="per-cell admission floor on predicted score; objective-relative — the live "
+        "min_margin oracle scores ~[-4.2,-0.2], default -1.0 is the corpus median (diverse). "
+        "Ignored in global top-K mode",
     ),
     submit: bool = typer.Option(
         False,

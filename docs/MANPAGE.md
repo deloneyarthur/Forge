@@ -67,10 +67,12 @@ forge enumerate --seed 7 --max 50 --summary
 
 Meta-king generator (FORGE meta-king A3). Reads Crucible's published durable-score
 oracle (`~/optbt_data/exports/meta_king_oracle_latest.json` — currently the
-**P(component)** objective, `target="p_component"`, score is a ~[0,1] probability;
-the legacy cpcv oracle is rollback-only, D179), searches `--search` grammar-valid
-genomes, scores each, dedups against the gated-runs export, and ranks the
-top-`--top-k` ("kings").
+**M(component)** all-gate-margin objective, `target="min_margin"`: the standalone
+min-margin across the *whole* §8.7 gauntlet (weakest gate binding), ~`[-4.2,-0.2]`
+— every value negative (0% clear the gauntlet alone — that's why the portfolio
+stage exists), strongest = **least-negative**, D180. Prior objectives (cpcv,
+p_component) are rollback-only.), searches `--search` grammar-valid genomes, scores
+each, dedups against the gated-runs export, and ranks the top-`--top-k` ("kings").
 
 **Without `--submit` it is a DRY-RUN preview** (writes nothing to Crucible).
 **With `--submit`** it stamps each king `source="meta_king"` + `search_n_trials=N`
@@ -87,8 +89,14 @@ in one `(hypothesis,dte)` cell, so pass `--per-cell` to queue a decorrelated set
 **VOLUME BOUND (D179, Crucible directive):** `meta_king` grades on an absolute
 priority lane — a flood starves the forge queue and destabilised the single-writer
 (an OOM-kill at ~2.5k kings). Resume bounded: **≤20 kings/cycle
-(`--per-cell 3 --top-k 20 --min-score 0.5`), ≤1 cycle/day** (aligned to the 07:00
-PDT oracle republish), keep `--search 2000`, keep dedup on.
+(`--per-cell 3 --top-k 20`, default `--min-score -1.0`), ≤1 cycle/day** (aligned to
+the 07:00 PDT oracle republish), keep `--search 2000`, keep dedup on.
+
+**§20 / DSR dependency (D180):** an M-king still carries `search_n_trials=N`, so it
+hits the `deflated_sharpe` gate and **rejects at component-eligibility regardless of
+strength** until Crucible's §20 `king-component-dsr-scope` resolves (its v2
+portfolio-OOS campaign adjudicates it). M-kings gate *honestly* but won't reach
+`component` yet — a 0-component A4 read is the DSR gate, not the oracle.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -99,16 +107,16 @@ PDT oracle republish), keep `--search 2000`, keep dedup on.
 | `--out` | path | stdout only | Also write the kings (with full configs) as JSON here. |
 | `--no-dedup` | flag | off | Skip the gated-export dedup pass. |
 | `--per-cell` | int | `0` | Diversity quota: max kings per `(hypothesis,dte)` cell (`0` = global top-K). Use `3` to break the oracle-argmax monoculture into a decorrelated set. |
-| `--min-score` | float | `0.5` | Per-cell admission floor on predicted score. For P(component) (~[0,1]) the default admits only better-than-even genomes (base rate ~0.39); ignored in global top-K mode. |
+| `--min-score` | float | `-1.0` | Per-cell admission floor on predicted score, **objective-relative**. For min_margin (~`[-4.2,-0.2]`) the default is the corpus median → an above-median, *diverse* top-K (~7 cells); a tighter floor (e.g. `-0.8`) collapses back to the single strongest cell. A floor above *every* scored genome RAISES (no silent empty submit, D180). Ignored in global top-K mode. |
 | `--submit` | flag | off | Submit the kings to Crucible's inbox + record them (default: dry-run). |
 | `--inbox` | path | forge.yaml | Crucible inbox dir for `--submit` (else `crucible.inbox_path`). |
 | `--forge-db` | path | forge.yaml | Forge state DB for `--submit` (else `db_path`). |
 | `--config` | path | — | `forge.yaml` path for the `--inbox`/`--forge-db` fallback under `--submit`. |
 
 ```
-forge king --search 2000 --top-k 20 --per-cell 3 --min-score 0.5 --seed 1   # dry-run preview
+forge king --search 2000 --top-k 20 --per-cell 3 --seed 1   # dry-run preview (default floor -1.0)
 # bounded live fire (≤20/cycle, ≤1/day per the D179 volume bound):
-forge king --search 2000 --top-k 20 --per-cell 3 --min-score 0.5 --submit \
+forge king --search 2000 --top-k 20 --per-cell 3 --submit \
   --inbox ~/optbt_data/inbox --forge-db ~/forge_data/king_submissions.db
 ```
 

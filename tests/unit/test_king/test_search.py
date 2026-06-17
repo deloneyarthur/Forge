@@ -137,3 +137,28 @@ def test_per_cell_cap_zero_raises(
 ) -> None:
     with pytest.raises(ValueError, match="per_cell_cap"):
         search_kings(grammar, registry, oracle, seed=0, n_search=10, top_k=5, per_cell_cap=0)
+
+
+def test_per_cell_empty_admission_raises(
+    grammar: Grammar, registry: RegistrySnapshot, oracle: DurableOracle
+) -> None:
+    """A floor above every scored genome must FAIL LOUD, never silently submit
+    nothing (D180).
+
+    The stale-floor trap: when Crucible flips the oracle objective (cpcv ->
+    p_component -> min_margin) the score *range* shifts, so a floor tuned for the
+    old objective can reject every genome. Per-cell mode then surfaced an empty
+    selection and ``--submit`` queued nothing without complaint. The guard turns
+    that into a raise that names the live target and the observed score range.
+    """
+    with pytest.raises(ValueError, match="admitted 0"):
+        search_kings(
+            grammar,
+            registry,
+            oracle,
+            seed=11,
+            n_search=50,
+            top_k=20,
+            per_cell_cap=3,
+            min_score=1e9,
+        )
