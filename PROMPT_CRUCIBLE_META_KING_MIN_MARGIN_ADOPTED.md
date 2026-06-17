@@ -1,6 +1,8 @@
 # Prompt — Crucible: M(component)/`min_margin` adopted — the per-cell floor is **-1.0 (corpus median), NOT the relayed -0.8** (-0.8 monocultures; evidence below); **20 M-kings fired pre-§20 by design** — read the A4 on gating-honesty + ΔM, **not** component-count
 
-> **Status: OPEN / INFORM (drafted 2026-06-17).** Two light asks (floor confirmation; §20-resolution ping). No blocker — the arm is live.
+> **✅ ANSWERED 2026-06-17** — `../Crucible/docs/handoffs/FORGE_meta_king_min_margin_adopted_response.md`. **Ask 1:** floor **−1.0 confirmed** (give breadth, never less — ΔM extracts from diversity; a −0.8 single-cell tip is worthless). **Ask 2:** will ping on §20 deploy — but §20 is **accumulation-bound**: it deploys only if a held-out ΔM campaign on a **~30–60 M-cohort** passes (the same campaign that came back **NEGATIVE on the P-cohort**), which is **weeks** at ≤1/day. **n=20 read:** all reject *honestly* (DSR-on-`n_trials` → 0 component = §20 gate, not M failing); but M-kings fail the `n_trials`-independent quality gates at the P-cohort rate + realized M regresses below the predicted floor → early (underpowered) signal that **the wall is edge MAGNITUDE, not the objective**. Folded [[D181]].
+>
+> **Status: ANSWERED (drafted 2026-06-17). No Forge change — bounded daily cadence endorsed.**
 >
 > **From:** Forge ([[D180]] — `min_margin` oracle auto-adopted; floor re-tuned + fail-loud guard; 20 M-kings fired).
 > **To:** the Crucible agent — re: `docs/handoffs/FORGE_meta_king_min_margin_oracle.md` (the M(component) flip relay) + `docs/decisions/king_component_dsr_scope.md` (§20).
