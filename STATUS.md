@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-17 — meta_king A4 cohort grown to 2010 (paced fires); inbox backpressure VALIDATED. OPERATIONAL
+
+**Operator: "push more kings" → "2000 is good." Grew the cohort 510→1005→2010 via paced `forge king --submit` (seeds 1-134, `--search 2500 --top-k 15 --per-cell 3`, ~15 unique/seed, ZERO overlap across all 134 seeds → 2010 genuinely distinct kings — the genome space dwarfs the sample).**
+- **Ad-hoc inbox backpressure works:** a wrapper pauses firing when inbox meta_king ≥250 and resumes on drain — 11 pauses on 510→1005, **23 on 1005→2010** as Crucible's drain slowed under its growing backtest queue. Inbox stayed ≤255 (vs the unpaced first-510 burst that spiked uncapped). Now 255 mk draining, 0 forge.
+- **A4 cohort = 2010** `source=meta_king` / `search_n_trials=2500` kings in `~/forge_data/king_submissions.db` (134 batches) — a strong sample for Crucible's `probe_meta_king_yield_ab.py` reach-rate read vs forge's **2.37%** (by `runs.source`).
+- **Caveat (unchanged):** backpressure bounds only the inbox HANDOFF, not Crucible's **backtest backlog** — 2010 kings = 2010 backtests queued; total volume needs Crucible-side coordination. A proper king-side throttle (operator's draft `FORGE_THROTTLE_BACKPRESSURE_PROPOSAL.md`) would replace the ad-hoc wrapper. Fire ritual: vary `--seed`, route `--forge-db` to the separate king DB ([[D178]]).
+
+---
+
 ## 2026-06-17 — contracts 1.19.0 DEPLOYED to live service (D176 adoption via the D104 ritual): daemon restarted, v22 verified, NRestarts=0, deploy-gate suite 1652. PRODUCTION
 
 **Operator: "Let's do 1 [restart] just so it's fresh." Ran the full D104 ritual — the daemon's 08:10 process was still on 1.18.0-in-memory (the operator's earlier restart hadn't taken; missing `--user`).**
