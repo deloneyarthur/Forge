@@ -1,13 +1,13 @@
 # Forge — Status
 
-## 2026-06-17 — meta-king oracle CUT OVER cpcv→P(component) (auto-adopted + 1 floor re-tune); VOLUME BOUND folded → stream PAUSED (the 2010 flood starved forge + OOM-killed the writer). CODE+DOCS, STREAM PAUSED
+## 2026-06-17 — meta-king oracle CUT OVER cpcv→P(component) (auto-adopted + `min_score` re-tune); VOLUME BOUND folded after the 2010 flood starved forge + OOM-killed the writer → BOUNDED RESUME started (11 P(component) kings, ≤20/cycle). CODE+DOCS+BOUNDED FIRE
 
 **Two Crucible relays folded (`..._component_oracle_cutover.md` + `..._volume_bound.md`). The cpcv A4 = 0/273 (wrong objective); the 2010 volume was harmful. Re-tuned the one line; PAUSED the stream.**
 - **Cutover (cpcv→P(component)), auto-adopted:** cpcv ranked components at AUC 0.54 (~chance); the component objective hits 0.86. New oracle `target="p_component"`, 85 feat, model_ic **0.60** (was 0.30), n_train 3893. **Forge's no-cache schema-pinned reader adopted it with ZERO code change** ([[D174]]); featurizer covers all 85 features (no divergence); golden cpcv fixture still pins the math.
 - **One re-tune:** `search.py` per-cell floor `<=0.0` → configurable **`min_score` (default 0.5)** + CLI `--min-score` (global mode unchanged). Live dry-run: argmax shifted to **`volatility_event/swing_short` P=0.86**; `--per-cell 3 --min-score 0.5` → 12 diverse kings ≥0.5. 30 king tests · mypy · ruff clean.
 - **VOLUME BOUND (hard correction):** `meta_king` grades on an **absolute priority lane** — the **2010-king flood starved forge ~7–17h** (84,768 forge runs queued behind) + drove Crucible's writer into an **OOM-kill (106GB/9h, auto-recovered)** (the [[D176]]-restart `feature cache unavailable` line was its symptom). I'd flagged the volume risk myself but executed "push to 2000" without insisting on a bound — own it. The 2010 cohort is also wrong-objective (cpcv) → will mostly reject.
-- **PAUSED per Crucible.** Let the existing kings gate → Crucible reads A4 (does any P(component) king reach `component`?) → **resume bounded: ≤20/cycle (`--per-cell 3 --top-k 20 --min-score 0.5`), ≤1/day**, keep `--search 2000` (DSR honesty — do NOT shrink), dedup on. Crucible adds a priority-lane fair-share cap (their side).
-- **NOT firing more.** MANPAGE updated (objective/`--min-score`/volume bound). Operator's `FORGE_THROTTLE_BACKPRESSURE_PROPOSAL.md` would harden the spigot. Full record: [[D179]].
+- **BOUNDED RESUME STARTED (2026-06-17, operator "push some P(component)"):** fired **one bounded batch = 11 P(component) kings** (`--search 2000 --top-k 20 --per-cell 3 --min-score 0.5 --seed 1000`; the 0.5 floor admitted 11 of ≤20), diverse volatility_event/mr/trend, P 0.84→0.53, `search_n_trials=2000`. **Time-separable from the 2010 cpcv flood** (submitted post-cutover) → the clean A4 cohort on the new objective. King DB 2010→2021. **≤20/cycle ≤1/day respected — no more today.**
+- **Policy (Crucible):** resume bounded ≤20/cycle (`--per-cell 3 --top-k 20 --min-score 0.5`), ≤1/day aligned to the 07:00 PDT oracle republish, keep `--search 2000` (DSR honesty — do NOT shrink), dedup on. Crucible reads A4 on the P(component) kings (does any reach `component` where cpcv got 0/273?) + adds a priority-lane fair-share cap their side. MANPAGE updated. Operator's `FORGE_THROTTLE_BACKPRESSURE_PROPOSAL.md` would harden the spigot. Full record: [[D179]].
 
 ---
 
