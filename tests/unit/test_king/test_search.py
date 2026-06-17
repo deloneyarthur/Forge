@@ -104,14 +104,32 @@ def test_rejects_bad_args(
 def test_per_cell_diversity_caps_each_cell(
     grammar: Grammar, registry: RegistrySnapshot, oracle: DurableOracle
 ) -> None:
+    # min_score=0.0 keeps the legacy "positive scores" behaviour for this
+    # (cpcv, signed) golden fixture; the floor itself is tested below.
     result = search_kings(
-        grammar, registry, oracle, seed=11, n_search=50, top_k=20, per_cell_cap=2
+        grammar, registry, oracle, seed=11, n_search=50, top_k=20, per_cell_cap=2, min_score=0.0
     )
-    assert result.kings, "expected at least one positively-scored king"
+    assert result.kings
     cells = Counter((k.config.hypothesis, k.config.dte_bucket) for k in result.kings)
     assert all(count <= 2 for count in cells.values())
-    # Per-cell mode only surfaces positively-scored kings.
-    assert all(k.predicted_score > 0.0 for k in result.kings)
+    assert all(k.predicted_score >= 0.0 for k in result.kings)
+
+
+def test_per_cell_min_score_floor(
+    grammar: Grammar, registry: RegistrySnapshot, oracle: DurableOracle
+) -> None:
+    """The per-cell admission floor drops genomes below ``min_score`` (D179)."""
+    loose = search_kings(
+        grammar, registry, oracle, seed=11, n_search=50, top_k=20, per_cell_cap=3, min_score=-1e9
+    )
+    assert loose.kings
+    scores = sorted(k.predicted_score for k in loose.kings)
+    floor = scores[len(scores) // 2]  # median — guarantees the floor actually bites
+    strict = search_kings(
+        grammar, registry, oracle, seed=11, n_search=50, top_k=20, per_cell_cap=3, min_score=floor
+    )
+    assert all(k.predicted_score >= floor for k in strict.kings)
+    assert len(strict.kings) <= len(loose.kings)
 
 
 def test_per_cell_cap_zero_raises(

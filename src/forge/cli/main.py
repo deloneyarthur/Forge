@@ -172,6 +172,12 @@ def cmd_king(  # noqa: PLR0915 — one command: search + dry-run preview + submi
         min=0,
         help="diversity quota: max kings per (hypothesis,dte) cell (0 = global top-K)",
     ),
+    min_score: float = typer.Option(
+        0.5,
+        "--min-score",
+        help="per-cell admission floor on predicted score (P(component) oracle ~[0,1]; "
+        "default 0.5; ignored in global top-K mode)",
+    ),
     submit: bool = typer.Option(
         False,
         "--submit",
@@ -228,6 +234,7 @@ def cmd_king(  # noqa: PLR0915 — one command: search + dry-run preview + submi
         top_k=top_k,
         tried_hashes=tried,
         per_cell_cap=per_cell or None,
+        min_score=min_score,
     )
 
     select_mode = f"per-cell<={per_cell}" if per_cell else "global top-K"

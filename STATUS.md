@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-17 — meta-king oracle CUT OVER cpcv→P(component) (auto-adopted + 1 floor re-tune); VOLUME BOUND folded → stream PAUSED (the 2010 flood starved forge + OOM-killed the writer). CODE+DOCS, STREAM PAUSED
+
+**Two Crucible relays folded (`..._component_oracle_cutover.md` + `..._volume_bound.md`). The cpcv A4 = 0/273 (wrong objective); the 2010 volume was harmful. Re-tuned the one line; PAUSED the stream.**
+- **Cutover (cpcv→P(component)), auto-adopted:** cpcv ranked components at AUC 0.54 (~chance); the component objective hits 0.86. New oracle `target="p_component"`, 85 feat, model_ic **0.60** (was 0.30), n_train 3893. **Forge's no-cache schema-pinned reader adopted it with ZERO code change** ([[D174]]); featurizer covers all 85 features (no divergence); golden cpcv fixture still pins the math.
+- **One re-tune:** `search.py` per-cell floor `<=0.0` → configurable **`min_score` (default 0.5)** + CLI `--min-score` (global mode unchanged). Live dry-run: argmax shifted to **`volatility_event/swing_short` P=0.86**; `--per-cell 3 --min-score 0.5` → 12 diverse kings ≥0.5. 30 king tests · mypy · ruff clean.
+- **VOLUME BOUND (hard correction):** `meta_king` grades on an **absolute priority lane** — the **2010-king flood starved forge ~7–17h** (84,768 forge runs queued behind) + drove Crucible's writer into an **OOM-kill (106GB/9h, auto-recovered)** (the [[D176]]-restart `feature cache unavailable` line was its symptom). I'd flagged the volume risk myself but executed "push to 2000" without insisting on a bound — own it. The 2010 cohort is also wrong-objective (cpcv) → will mostly reject.
+- **PAUSED per Crucible.** Let the existing kings gate → Crucible reads A4 (does any P(component) king reach `component`?) → **resume bounded: ≤20/cycle (`--per-cell 3 --top-k 20 --min-score 0.5`), ≤1/day**, keep `--search 2000` (DSR honesty — do NOT shrink), dedup on. Crucible adds a priority-lane fair-share cap (their side).
+- **NOT firing more.** MANPAGE updated (objective/`--min-score`/volume bound). Operator's `FORGE_THROTTLE_BACKPRESSURE_PROPOSAL.md` would harden the spigot. Full record: [[D179]].
+
+---
+
 ## 2026-06-17 — meta_king A4 cohort grown to 2010 (paced fires); inbox backpressure VALIDATED. OPERATIONAL
 
 **Operator: "push more kings" → "2000 is good." Grew the cohort 510→1005→2010 via paced `forge king --submit` (seeds 1-134, `--search 2500 --top-k 15 --per-cell 3`, ~15 unique/seed, ZERO overlap across all 134 seeds → 2010 genuinely distinct kings — the genome space dwarfs the sample).**

@@ -66,39 +66,49 @@ forge enumerate --seed 7 --max 50 --summary
 ### forge king
 
 Meta-king generator (FORGE meta-king A3). Reads Crucible's published durable-score
-oracle (`~/optbt_data/exports/meta_king_oracle_latest.json`), searches `--search`
-grammar-valid genomes, scores each with the oracle, dedups against the gated-runs
-export, and ranks the top-`--top-k` by predicted `cpcv_sharpe_p25` ("kings").
+oracle (`~/optbt_data/exports/meta_king_oracle_latest.json` — currently the
+**P(component)** objective, `target="p_component"`, score is a ~[0,1] probability;
+the legacy cpcv oracle is rollback-only, D179), searches `--search` grammar-valid
+genomes, scores each, dedups against the gated-runs export, and ranks the
+top-`--top-k` ("kings").
 
 **Without `--submit` it is a DRY-RUN preview** (writes nothing to Crucible).
 **With `--submit`** it stamps each king `source="meta_king"` + `search_n_trials=N`
 (both hash-excluded in contracts 1.19.0 → `config_hash` unchanged), records them in
 Forge's `submissions`/`batch_summaries` (idempotent on the `config_hash` unique
 index, hard rule #9), and writes them to Crucible's inbox — where they run the
-full, unchanged §8.7 gauntlet as proposals (hard rule #3/#6). `--search` is the
-DSR trial count `N` Crucible folds into the single-config DSR (the A3 §4
-trial-laundering guard). Kings are realistically portfolio **components**, not
-promoted standalones (oracle max predicted ~0.78 « the 1.5 promotion wall). The
-unbiased oracle-argmax is a `mean_reversion/swing_short` monoculture, so pass
-`--per-cell` when submitting to queue a decorrelated set.
+full, unchanged §8.7 gauntlet as proposals (hard rule #3/#6). `--search` is the DSR
+trial count `N` Crucible folds into the single-config DSR (the A3 §4
+trial-laundering guard) — **do NOT reduce it** (shrinking it makes the king's DSR
+dishonestly easy); bound the OUTPUT (`--top-k`/`--per-cell`) instead. Kings are
+component-grade proposals, not promoted standalones. The oracle-argmax concentrates
+in one `(hypothesis,dte)` cell, so pass `--per-cell` to queue a decorrelated set.
+
+**VOLUME BOUND (D179, Crucible directive):** `meta_king` grades on an absolute
+priority lane — a flood starves the forge queue and destabilised the single-writer
+(an OOM-kill at ~2.5k kings). Resume bounded: **≤20 kings/cycle
+(`--per-cell 3 --top-k 20 --min-score 0.5`), ≤1 cycle/day** (aligned to the 07:00
+PDT oracle republish), keep `--search 2000`, keep dedup on.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `--seed` | int | `0` | RNG root seed (determinism, hard rule #6). |
-| `--search`, `-n` | int | `2000` | Genomes to score against the oracle (the DSR trial count `N`; min 1). |
-| `--top-k`, `-k` | int | `10` | Number of kings to surface (min 1). |
+| `--search`, `-n` | int | `2000` | Genomes scored against the oracle = the DSR trial count `N` (min 1). **Do not reduce** — it's the trial-laundering correction. |
+| `--top-k`, `-k` | int | `10` | Number of kings to surface (min 1). Bound this (≤20) for the volume policy. |
 | `--oracle` | path | latest published | Override the durable-score oracle JSON. |
 | `--out` | path | stdout only | Also write the kings (with full configs) as JSON here. |
 | `--no-dedup` | flag | off | Skip the gated-export dedup pass. |
-| `--per-cell` | int | `0` | Diversity quota: max kings per `(hypothesis,dte)` cell (`0` = global top-K). Use a small cap (e.g. 2) to break the oracle-argmax monoculture into a decorrelated set. |
+| `--per-cell` | int | `0` | Diversity quota: max kings per `(hypothesis,dte)` cell (`0` = global top-K). Use `3` to break the oracle-argmax monoculture into a decorrelated set. |
+| `--min-score` | float | `0.5` | Per-cell admission floor on predicted score. For P(component) (~[0,1]) the default admits only better-than-even genomes (base rate ~0.39); ignored in global top-K mode. |
 | `--submit` | flag | off | Submit the kings to Crucible's inbox + record them (default: dry-run). |
 | `--inbox` | path | forge.yaml | Crucible inbox dir for `--submit` (else `crucible.inbox_path`). |
 | `--forge-db` | path | forge.yaml | Forge state DB for `--submit` (else `db_path`). |
 | `--config` | path | — | `forge.yaml` path for the `--inbox`/`--forge-db` fallback under `--submit`. |
 
 ```
-forge king --search 2500 --top-k 15 --seed 1 --per-cell 3            # dry-run preview
-forge king --search 2500 --top-k 15 --per-cell 3 --submit \
+forge king --search 2000 --top-k 20 --per-cell 3 --min-score 0.5 --seed 1   # dry-run preview
+# bounded live fire (≤20/cycle, ≤1/day per the D179 volume bound):
+forge king --search 2000 --top-k 20 --per-cell 3 --min-score 0.5 --submit \
   --inbox ~/optbt_data/inbox --forge-db ~/forge_data/king_submissions.db
 ```
 

@@ -69,6 +69,8 @@ def test_king_submit_to_tmp_inbox(tmp_path: Path) -> None:
             "1",
             "--per-cell",
             "2",
+            "--min-score",
+            "0.0",
             "--submit",
             "--inbox",
             str(inbox),

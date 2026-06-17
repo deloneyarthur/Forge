@@ -67,6 +67,7 @@ def search_kings(
     top_k: int,
     tried_hashes: Iterable[str] = (),
     per_cell_cap: int | None = None,
+    min_score: float = 0.5,
 ) -> KingSearchResult:
     """Search ``n_search`` grammar-valid genomes; return the surfaced kings.
 
@@ -75,12 +76,19 @@ def search_kings(
     — they were trials.
 
     Selection (see :func:`_select_diverse`): with ``per_cell_cap is None`` the
-    result is the global top-``top_k`` by predicted score. With ``per_cell_cap``
+    result is the global top-``top_k`` by predicted score (``min_score`` is
+    ignored — global ranking already prefers the best). With ``per_cell_cap``
     set it is Crucible's recommended diversity quota (A3 response) — at most
-    ``per_cell_cap`` kings from each ``(hypothesis, dte_bucket)`` cell the oracle
-    scores positively, capped at ``top_k`` — which breaks the
+    ``per_cell_cap`` kings from each ``(hypothesis, dte_bucket)`` cell whose
+    predicted score clears ``min_score``, capped at ``top_k`` — which breaks the
     ``mean_reversion/swing_short`` monoculture so the stream can feed a
     decorrelated complement ([[D172]]).
+
+    ``min_score`` is the per-cell admission floor. For the published P(component)
+    oracle (the durable score is a ~[0,1] probability, D179) the default 0.5
+    admits only better-than-even genomes; pass the corpus base rate (~0.39) for
+    a looser above-average floor. (The legacy cpcv oracle was unbounded/signed,
+    where 0.0 was the meaningful floor.)
 
     Raises:
         ValueError: ``n_search`` or ``top_k`` is non-positive, or
@@ -123,7 +131,9 @@ def search_kings(
 
     scored.sort(key=lambda king: (-king.predicted_score, king.config.config_hash))
     return KingSearchResult(
-        kings=tuple(_select_diverse(scored, top_k=top_k, per_cell_cap=per_cell_cap)),
+        kings=tuple(
+            _select_diverse(scored, top_k=top_k, per_cell_cap=per_cell_cap, min_score=min_score)
+        ),
         n_searched=n_searched,
         n_deduped=n_deduped,
         n_unique=len(seen),
@@ -135,22 +145,24 @@ def _select_diverse(
     *,
     top_k: int,
     per_cell_cap: int | None,
+    min_score: float,
 ) -> list[King]:
     """Pick which kings to surface from the score-sorted candidates.
 
     ``scored`` must already be sorted by descending predicted score. Global mode
-    (``per_cell_cap is None``) returns the first ``top_k``. Per-cell mode keeps
-    at most ``per_cell_cap`` positively-scored kings per ``(hypothesis,
-    dte_bucket)`` cell, preserving the global score order, then caps at
-    ``top_k`` — Crucible's A3-response diversity quota (a king predicted <= 0 is
-    never surfaced, so an all-negative cell contributes nothing).
+    (``per_cell_cap is None``) returns the first ``top_k`` (no floor — the global
+    ranking already prefers the best). Per-cell mode keeps at most
+    ``per_cell_cap`` kings whose score clears ``min_score`` per ``(hypothesis,
+    dte_bucket)`` cell, preserving the global score order, then caps at ``top_k``
+    — Crucible's A3-response diversity quota. A king below ``min_score`` is never
+    surfaced, so a cell with no clearing genomes contributes nothing.
     """
     if per_cell_cap is None:
         return scored[:top_k]
     per_cell: dict[tuple[str, str], int] = {}
     chosen: list[King] = []
     for king in scored:
-        if king.predicted_score <= 0.0:
+        if king.predicted_score < min_score:
             continue
         cell = (king.config.hypothesis, king.config.dte_bucket)
         if per_cell.get(cell, 0) >= per_cell_cap:
