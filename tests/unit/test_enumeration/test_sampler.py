@@ -20,6 +20,7 @@ from crucible_contracts import (
     StrategyConfig,
 )
 
+from forge.enumeration.iterator import enumerate_candidates
 from forge.enumeration.sampler import SamplerError, sample_config
 from forge.enumeration.search_space import build_search_space
 from forge.grammar import Grammar, load_grammar, validate
@@ -1689,3 +1690,338 @@ def test_v18_new_ids_rank_excluded(grammar: Grammar, registry: RegistrySnapshot)
     space = build_search_space(grammar, reg)
     for ind in ("iv_term_slope", "option_momentum", "pre_earnings_setup"):
         assert ind in space.rank_excluded_ids, ind
+
+
+# ---------------------------------------------------------------------------
+# Cohort-yield axis (§3 of Crucible's 2026-06-17 yield-map refresh,
+# FORGE_structural_yield_map_refresh.md): the cohort draw (cross_sectional_rank
+# vs confluence) becomes YIELD-DRIVEN instead of the fixed rank_combiner_share
+# coin-flip. Default OFF (no map / empty map) == byte-identical to the H1 draw.
+# ---------------------------------------------------------------------------
+
+_COHORT_TREND = "trend_continuation"
+
+# Golden hashes captured from the PRE-refactor sampler (the inline
+# `if rank_combiner_share and ...` block) at seed 4242, rank_combiner_share
+# {trend/mr/em: 0.5}. The refactor to `_cohort_xsect_probability` MUST reproduce
+# this exact rng sequence when cohort_yield_weights is None (hard rule #6).
+_COHORT_GOLDEN_PRE_REFACTOR = [
+    "dc125d8f4e014630",
+    "4710371b04fac3d0",
+    "ab843a6efc8108ca",
+    "174df1ffb521246b",
+    "d6441978c5b40ea4",
+    "6de7ce1f9fbd6159",
+    "c784f43ffe11d57a",
+    "c7aada72922e629c",
+    "9c25b03b9c6e087a",
+    "7d5cd3832a6d3f50",
+    "03f034017a2f2a19",
+    "81190566b6460088",
+    "9c367489d250a1d5",
+    "8ab1942dd0a1591d",
+    "0b1fdb9d7bdd2c5c",
+]
+
+
+def test_cohort_xsect_probability_yield_driven_and_clamped() -> None:
+    """Yield-driven cohort probability: p = w_xsect / (w_xsect + w_single),
+    clamped to the exploration band so neither cohort is starved to 0."""
+    from forge.enumeration.sampler import _COHORT_EXPLORATION_FLOOR, _cohort_xsect_probability
+
+    fav_xsect = {
+        (_COHORT_TREND, "momentum_252", "swing_long", "xsect"): 0.40,
+        (_COHORT_TREND, "momentum_252", "swing_long", "single"): 0.01,
+    }
+    p = _cohort_xsect_probability(
+        _COHORT_TREND,
+        "momentum_252",
+        "swing_long",
+        cohort_yield_weights=fav_xsect,
+        rank_combiner_share={_COHORT_TREND: 0.33},
+    )
+    assert p == pytest.approx(1.0 - _COHORT_EXPLORATION_FLOOR)  # 0.976 -> ceiling
+    fav_single = {
+        (_COHORT_TREND, "momentum_252", "swing_long", "xsect"): 0.01,
+        (_COHORT_TREND, "momentum_252", "swing_long", "single"): 0.40,
+    }
+    p_rev = _cohort_xsect_probability(
+        _COHORT_TREND,
+        "momentum_252",
+        "swing_long",
+        cohort_yield_weights=fav_single,
+        rank_combiner_share={_COHORT_TREND: 0.33},
+    )
+    assert p_rev == pytest.approx(_COHORT_EXPLORATION_FLOOR)  # 0.024 -> floor
+
+
+def test_cohort_xsect_probability_falls_back_to_fixed_share() -> None:
+    """No cohort map, or a map with no evidence for THIS recipe -> the fixed
+    rank_combiner_share (byte-identical to the pre-cohort H1 draw)."""
+    from forge.enumeration.sampler import _cohort_xsect_probability
+
+    assert _cohort_xsect_probability(
+        _COHORT_TREND,
+        "momentum_252",
+        "swing_long",
+        cohort_yield_weights=None,
+        rank_combiner_share={_COHORT_TREND: 0.33},
+    ) == pytest.approx(0.33)
+    assert _cohort_xsect_probability(
+        _COHORT_TREND,
+        "momentum_252",
+        "swing_long",
+        cohort_yield_weights={("mean_reversion", "rsi_2", "swing_short", "xsect"): 0.5},
+        rank_combiner_share={_COHORT_TREND: 0.33},
+    ) == pytest.approx(0.33)
+
+
+def test_cohort_xsect_probability_zero_for_non_rank_hypothesis() -> None:
+    """Hypotheses outside RANK_COMBINER_HYPOTHESES are never rank-eligible -> 0.0
+    (the sampler then draws NO rng for the cohort, confluence stays). Also 0.0
+    when neither a cohort map nor a share is supplied (the cold path)."""
+    from forge.enumeration.sampler import _cohort_xsect_probability
+
+    assert (
+        _cohort_xsect_probability(
+            "relative_value",
+            "pairs_zscore",
+            "swing_mid",
+            cohort_yield_weights={
+                ("relative_value", "pairs_zscore", "swing_mid", "xsect"): 0.9,
+                ("relative_value", "pairs_zscore", "swing_mid", "single"): 0.01,
+            },
+            rank_combiner_share={"relative_value": 0.5},
+        )
+        == 0.0
+    )
+    assert (
+        _cohort_xsect_probability(
+            _COHORT_TREND,
+            "momentum_252",
+            "swing_long",
+            cohort_yield_weights=None,
+            rank_combiner_share=None,
+        )
+        == 0.0
+    )
+
+
+def test_cohort_yield_cold_start_byte_identical(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Hard rule #6: cohort_yield_weights is an ADDED input behind the flag. When
+    None/empty the sampler must reproduce the H1 fixed-share rng sequence
+    EXACTLY — pinned against a golden captured from the pre-refactor code, so a
+    restart with the flag unset can never silently change submissions (D104)."""
+    share = {"trend_continuation": 0.5, "mean_reversion": 0.5, "event_momentum": 0.5}
+    none_run = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar,
+            registry,
+            4242,
+            max_candidates=15,
+            rank_combiner_share=share,
+            cohort_yield_weights=None,
+        )
+    ]
+    empty_run = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar,
+            registry,
+            4242,
+            max_candidates=15,
+            rank_combiner_share=share,
+            cohort_yield_weights={},
+        )
+    ]
+    assert none_run == _COHORT_GOLDEN_PRE_REFACTOR
+    assert empty_run == _COHORT_GOLDEN_PRE_REFACTOR
+
+
+def test_cohort_yield_tilts_cohort_draw_by_yield(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """End-to-end through sample_config: cohort weights favoring xsect for the
+    momentum_252 trend recipe raise the cross_sectional_rank share well above the
+    fixed 0.5 baseline; weights favoring single push it below. The cohort draw is
+    now driven by learned component-yield, not a constant."""
+    space = build_search_space(grammar, registry)
+    fav_xsect = {}
+    fav_single = {}
+    for bucket in ("swing_long", "swing_mid"):
+        fav_xsect[(_COHORT_TREND, "momentum_252", bucket, "xsect")] = 0.40
+        fav_xsect[(_COHORT_TREND, "momentum_252", bucket, "single")] = 0.01
+        fav_single[(_COHORT_TREND, "momentum_252", bucket, "xsect")] = 0.01
+        fav_single[(_COHORT_TREND, "momentum_252", bucket, "single")] = 0.40
+
+    def _xsect_share(cohort_weights: dict | None) -> float:
+        xs = total = 0
+        for seed in range(400):
+            cfg = sample_config(
+                space,
+                registry,
+                random.Random(seed),
+                forced_hypothesis=_COHORT_TREND,
+                rank_combiner_share={_COHORT_TREND: 0.5},
+                cohort_yield_weights=cohort_weights,
+            )
+            directional = next(s for s in cfg.signals if s.role == "directional").indicators[0]
+            if directional != "momentum_252":
+                continue
+            total += 1
+            if cfg.combiner.type == "cross_sectional_rank":
+                xs += 1
+        return xs / total if total else 0.0
+
+    baseline = _xsect_share(None)
+    xsect_tilted = _xsect_share(fav_xsect)
+    single_tilted = _xsect_share(fav_single)
+    assert 0.0 < baseline < 1.0  # the fixed-share baseline draws both cohorts
+    assert xsect_tilted > baseline + 0.2  # yield evidence pulls strongly to xsect
+    assert single_tilted < baseline - 0.2  # and the reverse pulls to single
+
+
+# ---------------------------------------------------------------------------
+# Regime-gate-yield axis (§2/§4 of Crucible's 2026-06-17 yield-map refresh):
+# the regime draw composes the learned (hyp, directional, bucket, regime)
+# component-rate onto the D150/uniform base — down-weighting sink gates
+# (gamma_flip) and up-weighting minting ones. relative_value never composed
+# (D119). Default OFF (no map) == byte-identical.
+# ---------------------------------------------------------------------------
+
+# Golden hashes from the PRE-refactor sampler (plain enumerate, seed 7777) — the
+# regime draw fires for every config, so this pins that adding the learned param
+# preserves the D150/uniform rng sequence when the map is absent (hard rule #6).
+_REGIME_GOLDEN_PRE = [
+    "93caf046c1d3ea80",
+    "5ca73cb9010aa051",
+    "5d9a069f03702cf5",
+    "8a544b31ee7454e8",
+    "23a84bcddef209ac",
+    "0e6f61d70f81162c",
+    "ae0700d3adbce2e9",
+    "09e33bc848443ddc",
+    "6132886f1be9c461",
+    "71fef98d23a281d6",
+    "c82d5490f221b353",
+    "a5a4d48c3720f95e",
+    "9b510202bffbd679",
+    "2e4054a200aca442",
+    "5b0c7bd6a1772e0d",
+]
+
+
+def test_pick_regime_learned_downweights_sink_gate() -> None:
+    """Composition: a sink regime gate (gamma_flip, ~0 posterior) is drawn far
+    less than a minting one (hurst) — the §4 gamma_flip-sink avoidance."""
+    from collections import Counter
+
+    from forge.enumeration.sampler import _pick_regime
+
+    regimes = ("hurst", "adx", "gamma_flip_distance_pct")
+    learned = {"hurst": 0.08, "adx": 0.05, "gamma_flip_distance_pct": 0.001}
+    rng = random.Random(1)
+    counts = Counter(
+        _pick_regime("trend_continuation", regimes, rng, None, learned) for _ in range(3000)
+    )
+    assert counts["hurst"] > counts["adx"] > counts["gamma_flip_distance_pct"]
+    assert counts["gamma_flip_distance_pct"] < counts["hurst"] * 0.2  # sink crushed
+
+
+def test_pick_regime_learned_preserves_d150_on_dead_triple() -> None:
+    """A DEAD triple (all regimes ~equal posterior) must leave the D150 mr
+    ranging-bias intact — base * posterior stays proportional to base, so the
+    deliberate diversity lever is refined by evidence, never silently discarded."""
+    from collections import Counter
+
+    from forge.enumeration.sampler import _pick_regime
+
+    regimes = ("hurst", "iv_rank")  # hurst is a D150 ranging gate (x3), iv_rank x1
+    flat = {"hurst": 0.002, "iv_rank": 0.002}  # dead triple, equal posteriors
+    rng_l = random.Random(7)
+    with_learned = Counter(
+        _pick_regime("mean_reversion", regimes, rng_l, None, flat) for _ in range(4000)
+    )
+    rng_b = random.Random(7)
+    base_only = Counter(
+        _pick_regime("mean_reversion", regimes, rng_b, None, None) for _ in range(4000)
+    )
+    # D150 favours the ranging gate ~3:1 in BOTH (flat learned doesn't disturb it)
+    assert with_learned["hurst"] > 2.5 * with_learned["iv_rank"]
+    assert base_only["hurst"] > 2.5 * base_only["iv_rank"]
+
+
+def test_pick_regime_relative_value_never_composed_d119() -> None:
+    """D119: relative_value's runner ignores the gate, so learned weights must
+    NEVER bias its regime draw — it stays uniform even with a lopsided map."""
+    from collections import Counter
+
+    from forge.enumeration.sampler import _pick_regime
+
+    regimes = ("rv_rank", "rsi_2")
+    lopsided = {"rv_rank": 0.9, "rsi_2": 0.001}  # would crush rsi_2 if applied
+    rng = random.Random(3)
+    counts = Counter(
+        _pick_regime("relative_value", regimes, rng, None, lopsided) for _ in range(3000)
+    )
+    # uniform: neither gate dominates (rv never composes the learned map)
+    assert 0.4 < counts["rv_rank"] / 3000 < 0.6
+
+
+def test_regime_gate_yield_cold_start_byte_identical(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Hard rule #6: regime_gate_yield_weights is an ADDED input behind the flag.
+    None/empty must reproduce the D150/uniform regime rng sequence EXACTLY —
+    pinned against a golden captured from the pre-refactor code."""
+    none_run = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar, registry, 7777, max_candidates=15, regime_gate_yield_weights=None
+        )
+    ]
+    empty_run = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar, registry, 7777, max_candidates=15, regime_gate_yield_weights={}
+        )
+    ]
+    assert none_run == _REGIME_GOLDEN_PRE
+    assert empty_run == _REGIME_GOLDEN_PRE
+
+
+def test_regime_gate_yield_tilts_regime_draw(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """End-to-end through sample_config: regime weights favouring hurst and
+    crushing adx shift the trend regime-gate distribution accordingly — the draw
+    is now driven by learned component-yield, not a flat draw."""
+    space = build_search_space(grammar, registry)
+    weights: dict[tuple[str, str, str, str], float] = {}
+    for d in space.directional_indicators_by_hypothesis["trend_continuation"]:
+        for b in space.dte_buckets:
+            weights[("trend_continuation", d, b, "hurst")] = 0.50
+            weights[("trend_continuation", d, b, "adx")] = 0.001
+            weights[("trend_continuation", d, b, "rv_rank")] = 0.05
+
+    def _regime_dist(rw: dict | None) -> dict[str, float]:
+        from collections import Counter
+
+        c: Counter[str] = Counter()
+        for seed in range(500):
+            cfg = sample_config(
+                space,
+                registry,
+                random.Random(seed),
+                forced_hypothesis="trend_continuation",
+                regime_gate_yield_weights=rw,
+            )
+            c[next(s for s in cfg.signals if s.role == "regime_filter").indicators[0]] += 1
+        total = sum(c.values())
+        return {k: v / total for k, v in c.items()}
+
+    base = _regime_dist(None)
+    tilted = _regime_dist(weights)
+    assert tilted.get("adx", 0.0) < base.get("adx", 1.0) - 0.15  # adx crushed
+    assert tilted.get("hurst", 0.0) > base.get("hurst", 0.0) + 0.1  # hurst favoured

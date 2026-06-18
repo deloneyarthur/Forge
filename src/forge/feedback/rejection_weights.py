@@ -878,6 +878,174 @@ def compute_hypothesis_directional_bucket_weights(
     )
 
 
+def _cohort_of(cfg: Mapping[str, object]) -> str | None:
+    """The cohort of a serialized config: ``"xsect"`` for a ``cross_sectional_rank``
+    combiner (the H1 breadth lever — underlying=None, the runner ranks the
+    universe), ``"single"`` for ``confluence`` (a pinned single name). ``None``
+    when the combiner is absent/malformed or carries an unrecognized type.
+
+    Cohort is NOT a first-class StrategyConfig field — it is exactly
+    ``combiner.type``, the same value the sampler sets at its final draw
+    (sampler.py H1 block). It is the §3 axis of Crucible's 2026-06-17 yield-map
+    refresh: the largest within-stratum component-rate spread (cross-sectional
+    momentum 40.4% vs single-name 0.96% on the identical recipe)."""
+    combiner = cfg.get("combiner")
+    if not isinstance(combiner, dict):
+        return None
+    ctype = combiner.get("type")
+    if ctype == "cross_sectional_rank":
+        return "xsect"
+    if ctype == "confluence":
+        return "single"
+    return None
+
+
+def compute_cohort_yield_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
+    prior_strength: float = COMPONENT_HIER_PRIOR_STRENGTH,
+) -> dict[tuple[str, str, str, str], float]:
+    """``(hypothesis, directional, dte_bucket, cohort)`` component-rate posterior,
+    shrunk toward its ``(hypothesis, directional, dte_bucket)`` D106 triple.
+
+    Crucible's 2026-06-17 yield-map refresh found COHORT (cross-sectional vs
+    single-name) is the largest within-stratum yield axis: the identical
+    ``momentum_252 | hurst | swing_long`` trend recipe mints 40.4%
+    cross-sectional vs 0.96% single-name. The D105 pair and D106 triple cannot
+    express it, and the sampler draws the cohort from a FIXED
+    ``rank_combiner_share`` coin-flip, blind to yield. This weighter learns the
+    cohort component-rate so the sampler can tilt its (last) cohort draw toward
+    the higher-minting cohort of the already-chosen recipe.
+
+    The quad is anchored on the D106 triple (``key[:3]``) exactly as the triple
+    is anchored on the D105 pair: zero cohort-specific evidence reproduces the
+    triple posterior, so the sampler's fallback chain (cohort -> triple -> share)
+    stays scale-coherent. This is a WITHIN-hypothesis reallocation
+    (single<->xsect for a fixed ``(hypothesis, directional)``) — it never shifts
+    the cross-hypothesis mix, which lives in the hypothesis weights (so it cannot
+    by itself deepen the trend monoculture). Same engine, estimand and version
+    scoping (D081) as the D105/D106 weighters; empty gated_runs -> ``{}``
+    (cold-start: the sampler keeps the fixed share, byte-identical — hard rule #6).
+    """
+
+    def _hyp_dir_bucket_cohort_of(cfg: Mapping[str, object]) -> tuple[str, str, str, str] | None:
+        hyp = cfg.get("hypothesis")
+        bucket = cfg.get("dte_bucket")
+        directional = _directional_indicator_of(cfg)
+        cohort = _cohort_of(cfg)
+        if (
+            isinstance(hyp, str)
+            and isinstance(bucket, str)
+            and directional is not None
+            and cohort is not None
+        ):
+            return (hyp, directional, bucket, cohort)
+        return None
+
+    quad_sums = _component_rate_sums(
+        db,
+        gated_runs,
+        _hyp_dir_bucket_cohort_of,
+        tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
+    return _hierarchical_posteriors(
+        quad_sums,
+        lambda key: (key[0], key[1], key[2]),
+        alpha=alpha,
+        beta=beta,
+        prior_strength=prior_strength,
+    )
+
+
+def compute_regime_gate_yield_weights(
+    db: duckdb.DuckDBPyConnection,
+    gated_runs: Sequence[GatedRun],
+    *,
+    alpha: float = COMPONENT_ALPHA,
+    beta: float = COMPONENT_BETA,
+    tiebreak_weight: float = COMPONENT_TIEBREAK_WEIGHT,
+    quality_weight: float = COMPONENT_QUALITY_WEIGHT,
+    current_grammar_version: str | None = None,
+    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
+    cold_start_hypotheses: frozenset[str] = frozenset(),
+    prior_strength: float = COMPONENT_HIER_PRIOR_STRENGTH,
+) -> dict[tuple[str, str, str, str], float]:
+    """``(hypothesis, directional, dte_bucket, regime_gate)`` component-rate
+    posterior, shrunk toward its ``(hypothesis, directional, dte_bucket)`` D106
+    triple — increment 2 of Crucible's 2026-06-17 yield-map refresh (§2/§4).
+
+    Within a fixed triple the regime GATE moves the component rate (live Forge
+    data: trend|momentum_252|swing_long mints hurst 8.1% vs gamma_flip 0.0% —
+    the §4 "gamma_flip regime gate is a near-universal yield sink" replicates).
+    This learns that lift so the sampler's regime draw avoids the sink gates and
+    favours the minting ones, on top of the §3.5 R-rule pool (hard rule #1: the
+    pool is unchanged; only the draw WITHIN it is re-weighted).
+
+    **D119 GUARD — relative_value is EXCLUDED.** Its ``pairs_convergence`` runner
+    evaluates NO regime filter (`pairs_convergence.py`, D118/D119), so an rv
+    regime label is a dead tag: weighting it would repeat the D119 sampling-
+    artifact mistake (gate-id↔outcome correlation with no causal path). Every
+    other hypothesis's runner (composable_long_options / cross_sectional_rank)
+    DOES evaluate the gate, so the lift is causal. Cohort is deliberately NOT in
+    the key: the regime is drawn BEFORE the cohort in `sample_config`, so it
+    cannot be conditioned on it (a cohort-conditioned regime is the cohort-
+    reorder increment); the quad is cohort-blended.
+
+    Same engine, estimand and version scoping (D081) as the D105/D106/cohort
+    weighters; empty gated_runs -> ``{}`` (cold-start: the sampler keeps its
+    D150/uniform regime draw, byte-identical — hard rule #6).
+    """
+
+    def _hyp_dir_bucket_regime_of(cfg: Mapping[str, object]) -> tuple[str, str, str, str] | None:
+        hyp = cfg.get("hypothesis")
+        # D119: relative_value's pairs runner never evaluates the gate — the label
+        # is dead, so it must not contribute a learned cell (excluded here AND
+        # guarded again at the draw site in `_pick_regime`).
+        if hyp == "relative_value":
+            return None
+        bucket = cfg.get("dte_bucket")
+        directional = _directional_indicator_of(cfg)
+        regime = _regime_indicator_of(cfg)
+        if (
+            isinstance(hyp, str)
+            and isinstance(bucket, str)
+            and directional is not None
+            and regime is not None
+        ):
+            return (hyp, directional, bucket, regime)
+        return None
+
+    quad_sums = _component_rate_sums(
+        db,
+        gated_runs,
+        _hyp_dir_bucket_regime_of,
+        tiebreak_weight=tiebreak_weight,
+        quality_weight=quality_weight,
+        current_grammar_version=current_grammar_version,
+        prior_version_weight=prior_version_weight,
+        cold_start_hypotheses=cold_start_hypotheses,
+    )
+    return _hierarchical_posteriors(
+        quad_sums,
+        lambda key: (key[0], key[1], key[2]),
+        alpha=alpha,
+        beta=beta,
+        prior_strength=prior_strength,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Orthogonal-yield marginal-value discount (H4; NEW_HYPOTHESES_V11_PLAN).
 #

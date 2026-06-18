@@ -81,6 +81,76 @@ def test_h4_orthogonal_yield_flag_off_byte_identical(grammar: Grammar) -> None:
     assert base == off_none == off_empty
 
 
+def test_cohort_yield_flag_off_byte_identical(grammar: Grammar) -> None:
+    """Cohort-yield (§3 of Crucible's 2026-06-17 yield-map refresh) makes the
+    final cohort draw yield-driven, but it is an ADDED sampler input behind an
+    A/B flag — hard rule #6: with the flag OFF (cohort_yield_weights None/empty)
+    enumeration must reproduce the H1 fixed-share sequence byte-for-byte, so a
+    restart/reboot with the flag unset can never silently change submissions (the
+    D104 lesson). Uses the minimal registry (rank-eligible trend directional
+    momentum_252) with rank_combiner_share set, so the cohort path is genuinely
+    exercised rather than skipped."""
+    registry = minimal_registry_snapshot()
+    seed = 4242
+    n = 60
+    share = {"trend_continuation": 0.5, "mean_reversion": 0.5, "event_momentum": 0.5}
+    base = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar, registry, seed, max_candidates=n, rank_combiner_share=share
+        )
+    ]
+    off_none = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar,
+            registry,
+            seed,
+            max_candidates=n,
+            rank_combiner_share=share,
+            cohort_yield_weights=None,
+        )
+    ]
+    off_empty = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar,
+            registry,
+            seed,
+            max_candidates=n,
+            rank_combiner_share=share,
+            cohort_yield_weights={},
+        )
+    ]
+    assert base == off_none == off_empty
+
+
+def test_regime_gate_yield_flag_off_byte_identical(grammar: Grammar) -> None:
+    """Regime-gate-yield (§2 of the 2026-06-17 yield-map refresh) composes a
+    learned regime-yield onto the D150/uniform draw, but it is an ADDED input
+    behind an A/B flag — hard rule #6: with the flag OFF (None/empty) enumeration
+    must reproduce the base regime sequence byte-for-byte (the regime draw fires
+    for every config), so a restart with the flag unset can never silently change
+    submissions (the D104 lesson)."""
+    registry = minimal_registry_snapshot()
+    seed = 7777
+    n = 60
+    base = [c.config_hash for c in enumerate_candidates(grammar, registry, seed, max_candidates=n)]
+    off_none = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar, registry, seed, max_candidates=n, regime_gate_yield_weights=None
+        )
+    ]
+    off_empty = [
+        c.config_hash
+        for c in enumerate_candidates(
+            grammar, registry, seed, max_candidates=n, regime_gate_yield_weights={}
+        )
+    ]
+    assert base == off_none == off_empty
+
+
 # ---------------------------------------------------------------------------
 # D112 (v13) — dealer_positioning indicators are single-name only
 # ---------------------------------------------------------------------------

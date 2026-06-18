@@ -176,6 +176,14 @@ _RANK_K_CHOICES: tuple[int, ...] = (5, 10, 20)
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 
+# Cohort-yield exploration band (§3 of Crucible's 2026-06-17 yield-map refresh).
+# When the cohort draw is yield-driven (`cohort_yield_weights` supplied), clamp
+# P(cross_sectional_rank) to [floor, 1 - floor] so neither cohort is ever starved
+# to zero — the D067 exploration-floor principle on the cohort axis, keeping
+# evidence flowing to revise the estimate. Flag-off draws never reach the clamp
+# (they use the fixed `rank_combiner_share` unchanged, hard rule #6).
+_COHORT_EXPLORATION_FLOOR: float = 0.05
+
 # D151 (v21) — mean_reversion rank ENABLED. D150 held it rank-ineligible pending Q33;
 # Crucible answered YES (FORGE_q33_hurst_rank_coherence_response.md): `hurst` is
 # per-name-coherent on the rank path (`rank_per_name_coherent = True` — the runner
@@ -377,6 +385,44 @@ def _uses_single_name_only_indicator(
     return any(ind in rank_excluded_ids for sig in signals for ind in sig.indicators)
 
 
+def _cohort_xsect_probability(
+    hypothesis: str,
+    directional_id: str,
+    bucket: str,
+    *,
+    cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None,
+    rank_combiner_share: Mapping[str, float] | None,
+) -> float:
+    """P(emit a ``cross_sectional_rank`` combiner) for the already-chosen recipe.
+
+    Yield-driven (§3 of Crucible's 2026-06-17 yield-map refresh) when
+    ``cohort_yield_weights`` carries this recipe's
+    ``(hypothesis, directional, bucket)`` triple: ``p = w_xsect / (w_xsect +
+    w_single)``, clamped to ``[_COHORT_EXPLORATION_FLOOR, 1 - floor]`` so neither
+    cohort is starved (D067). Falls back to the FIXED ``rank_combiner_share`` for
+    the hypothesis when the cohort map is absent/empty or has no evidence for the
+    triple — so cold-start and flag-off are byte-identical to the H1 draw (hard
+    rule #6). Returns 0.0 for hypotheses outside ``RANK_COMBINER_HYPOTHESES``
+    (never rank-eligible) and when neither source applies (no cohort rng drawn).
+
+    Within-hypothesis by construction: it only re-weighs single<->xsect for a
+    FIXED (hypothesis, directional), never the cross-hypothesis mix — so it cannot
+    by itself deepen the trend monoculture (that axis lives in the hypothesis
+    weights).
+    """
+    if hypothesis not in RANK_COMBINER_HYPOTHESES:
+        return 0.0
+    if cohort_yield_weights:
+        w_xsect = cohort_yield_weights.get((hypothesis, directional_id, bucket, "xsect"))
+        w_single = cohort_yield_weights.get((hypothesis, directional_id, bucket, "single"))
+        if w_xsect is not None and w_single is not None and (w_xsect + w_single) > 0.0:
+            p = w_xsect / (w_xsect + w_single)
+            return min(max(p, _COHORT_EXPLORATION_FLOOR), 1.0 - _COHORT_EXPLORATION_FLOOR)
+    if rank_combiner_share:
+        return rank_combiner_share.get(hypothesis, 0.0)
+    return 0.0
+
+
 def sample_config(
     space: SearchSpace,
     registry: RegistrySnapshot,
@@ -390,6 +436,8 @@ def sample_config(
     underlying_name_weights: Mapping[str, float] | None = None,
     orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
     rank_combiner_share: Mapping[str, float] | None = None,
+    cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -444,6 +492,24 @@ def sample_config(
     the confluence path byte-identical (hard rule #6); the draw is the LAST
     decision so it never perturbs the signal/selector/sizer/exit/underlying
     sequence of a same-seed config.
+
+    ``cohort_yield_weights`` (§3, 2026-06-17 yield-map refresh) makes that final
+    cohort draw YIELD-DRIVEN instead of the fixed ``rank_combiner_share``: the
+    ``(hypothesis, directional, dte_bucket, cohort)`` component-rate decides
+    P(cross_sectional_rank) for the recipe already chosen (see
+    ``_cohort_xsect_probability``). The single largest within-stratum yield axis
+    Crucible found — cross-sectional momentum 40.4% vs single-name 0.96% on the
+    identical recipe. None/empty (or no evidence for the recipe's triple) →
+    fall back to ``rank_combiner_share``, byte-identical to the H1 draw (hard
+    rule #6). It re-weighs single↔xsect within a fixed hypothesis only.
+
+    ``regime_gate_yield_weights`` (§2, 2026-06-17 yield-map refresh) makes the
+    regime-gate draw yield-driven: the ``(hypothesis, directional, dte_bucket,
+    regime_gate)`` component-rate is sliced to the chosen triple and COMPOSED onto
+    the D150/uniform base in ``_pick_regime`` (down-weighting sink gates like the
+    gamma_flip trend regime, up-weighting minting ones). relative_value is never
+    composed (D119 — its pairs runner ignores the gate). None/empty preserves the
+    base regime draw byte-identically (hard rule #6).
 
     ``forced_hypothesis`` (D037) overrides the weighted pick when set —
     use it from the iterator to enforce a per-hypothesis stratified
@@ -505,6 +571,7 @@ def sample_config(
         regime_weights=regime_weights,
         bucket_weights=bucket_weights,
         directional_bucket_weights=directional_bucket_weights,
+        regime_gate_yield_weights=regime_gate_yield_weights,
     )
 
     # H4: slice the (hypothesis, directional, name) discount map down to this
@@ -611,20 +678,31 @@ def sample_config(
     # unaffected draw sequences are unchanged; the skipped config keeps its
     # signals and pinned underlying — full single-name sampling weight.
     combiner = CombinerSpec(type="confluence", direction_strategy="k_of_n", k=1)
-    if rank_combiner_share and hypothesis in RANK_COMBINER_HYPOTHESES:
-        share = rank_combiner_share.get(hypothesis, 0.0)
-        if (
-            share > 0.0
-            and not _uses_single_name_only_indicator(signals, space.rank_excluded_ids)
-            and rng.random() < share
-        ):
-            combiner = CombinerSpec(
-                type="cross_sectional_rank",
-                rank_k=rng.choice(_RANK_K_CHOICES),
-                rebalance_frequency=rng.choice(_RANK_REBALANCE_CHOICES),  # type: ignore[arg-type]
-                direction_mode=rng.choice(_RANK_DIRECTION_MODES),  # type: ignore[arg-type]
-            )
-            underlying = None
+    # D109 fixed `rank_combiner_share`; the 2026-06-17 yield-map refresh (§3)
+    # makes the cohort probability YIELD-DRIVEN via `cohort_yield_weights`,
+    # falling back to that share when absent (byte-identical, hard rule #6). The
+    # rng.random() is reached under the SAME guard as the D109 inline block
+    # (positive probability AND rank-eligible signals), so a None cohort map
+    # preserves the H1 draw sequence exactly.
+    p_xsect = _cohort_xsect_probability(
+        hypothesis,
+        directional_id,
+        bucket,
+        cohort_yield_weights=cohort_yield_weights,
+        rank_combiner_share=rank_combiner_share,
+    )
+    if (
+        p_xsect > 0.0
+        and not _uses_single_name_only_indicator(signals, space.rank_excluded_ids)
+        and rng.random() < p_xsect
+    ):
+        combiner = CombinerSpec(
+            type="cross_sectional_rank",
+            rank_k=rng.choice(_RANK_K_CHOICES),
+            rebalance_frequency=rng.choice(_RANK_REBALANCE_CHOICES),  # type: ignore[arg-type]
+            direction_mode=rng.choice(_RANK_DIRECTION_MODES),  # type: ignore[arg-type]
+        )
+        underlying = None
 
     return StrategyConfig(
         name=config_name,
@@ -763,6 +841,7 @@ def _select_bucket_directional_regime(
     regime_weights: Mapping[str, float] | None = None,
     bucket_weights: Mapping[tuple[str, str], float] | None = None,
     directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
+    regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
 ) -> tuple[str, str, str]:
     """v8 (D102) horizon-matched selection. Returns ``(bucket, directional_id,
     regime_id)``.
@@ -826,7 +905,18 @@ def _select_bucket_directional_regime(
         bucket = nearest_bucket(allowed, target) if target is not None else rng.choice(allowed)
 
     regimes = _compatible_regimes(space, by_id, hypothesis, directional_id, chain_family)
-    regime_id = _pick_regime(hypothesis, regimes, rng, regime_weights)
+    # §2 yield-map refresh: slice the (hyp, dir, bucket, regime) yield map down to
+    # this config's chosen (hyp, dir, bucket) — the regime cell is determined here
+    # (the regime is drawn next), exactly the H4 (hyp, dir)-slice discipline.
+    # None/empty → no slice → _pick_regime keeps its D150/uniform draw.
+    learned_regime: dict[str, float] | None = None
+    if regime_gate_yield_weights:
+        learned_regime = {
+            r: w
+            for (h, d, b, r), w in regime_gate_yield_weights.items()
+            if h == hypothesis and d == directional_id and b == bucket
+        }
+    regime_id = _pick_regime(hypothesis, regimes, rng, regime_weights, learned_regime)
     return bucket, directional_id, regime_id
 
 
@@ -835,6 +925,7 @@ def _pick_regime(
     regimes: tuple[str, ...],
     rng: random.Random,
     regime_weights: Mapping[str, float] | None,
+    learned_regime_weights: Mapping[str, float] | None = None,
 ) -> str:
     """Pick the §3.5 S3 regime gate from the compatible pool.
 
@@ -844,7 +935,18 @@ def _pick_regime(
     the Beta prior so unseen regimes stay explorable. Every other hypothesis —
     and the cold-start (no weights) case — draws uniform via ``rng.choice``,
     byte-identical to the pre-D103 sequence (hard rule #6: weights are an
-    additional input, like ``hypothesis_weights``)."""
+    additional input, like ``hypothesis_weights``).
+
+    ``learned_regime_weights`` (§2 of the 2026-06-17 yield-map refresh) is the
+    sliced ``{regime: component-rate}`` map for the already-chosen
+    (hypothesis, directional, bucket). When present (flag on, non-relative_value)
+    it COMPOSES with the base draw — ``base[r] * posterior[r]`` — modulating the
+    D150 ranging-bias / uniform draw by learned yield: a sink gate (gamma_flip,
+    ~0 components) is down-weighted, a minting gate (hurst) up-weighted, while a
+    DEAD triple (all regimes ~equal posterior) leaves the base distribution
+    intact (so D150 is refined by evidence, never silently discarded).
+    relative_value is never composed (D119 — its pairs runner ignores the gate).
+    None/empty preserves the base draw byte-identically (hard rule #6)."""
     if hypothesis == _REGIME_CURATED_HYPOTHESIS and regime_weights:
         weights = [
             max(regime_weights.get(r, _REGIME_WEIGHT_PRIOR_MEAN), _REGIME_EXPLORATION_FLOOR)
@@ -854,9 +956,33 @@ def _pick_regime(
     # D150 (v20): bias mean_reversion toward its ranging R1 gates vs the sparse
     # iv_rank (which stays explorable at weight 1.0). Only engages when >1 gate is
     # present, so a single-gate registry stays byte-identical to rng.choice.
+    base: list[float] | None
     if hypothesis == _MR_HYPOTHESIS and len(regimes) > 1:
-        weights = [_MR_RANGING_GATE_WEIGHT if r in _MR_RANGING_GATES else 1.0 for r in regimes]
+        base = [_MR_RANGING_GATE_WEIGHT if r in _MR_RANGING_GATES else 1.0 for r in regimes]
+    else:
+        base = None
+    # §2 yield-map refresh: compose the learned regime-yield onto the base, never
+    # for relative_value (D119). A dead triple's posteriors are ~equal, so
+    # base * posterior stays proportional to base (D150/uniform preserved); a
+    # minting triple modulates by component rate (down-weights the sink gates).
+    if learned_regime_weights and hypothesis != _REGIME_CURATED_HYPOTHESIS:
+        base_w = base if base is not None else [1.0] * len(regimes)
+        # Floor the POSTERIOR (component-rate scale, like D103), THEN multiply by
+        # the base — so the floor keeps a sink gate explorable without flattening
+        # the D150 base ratio (flooring the product would clobber base, since
+        # base*rate ~< the floor). A dead triple's equal posteriors then leave
+        # base intact; a minting triple modulates it.
+        weights = [
+            base_w[i]
+            * max(
+                learned_regime_weights.get(regimes[i], _REGIME_WEIGHT_PRIOR_MEAN),
+                _REGIME_EXPLORATION_FLOOR,
+            )
+            for i in range(len(regimes))
+        ]
         return rng.choices(regimes, weights=weights, k=1)[0]
+    if base is not None:
+        return rng.choices(regimes, weights=base, k=1)[0]
     return rng.choice(regimes)
 
 

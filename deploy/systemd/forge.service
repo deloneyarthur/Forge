@@ -10,7 +10,11 @@ WorkingDirectory=/home/aj/proj/Forge
 # --require-real-cache: skip the iteration if Crucible's writer/feature cache
 # is unavailable rather than silently degrading to the synthetic cache and
 # submitting a noise-filtered batch (2026-05-28 RCA / D080).
-ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache
+# --cohort-yield / --regime-gate-yield: §3/§2 of Crucible's 2026-06-17 yield-map
+# refresh (D182/D183) — yield-drive the cohort + regime-gate draws. Default-off
+# in code; ENABLED here. Remove either flag to revert that axis to a
+# byte-identical draw (the A/B kill switch; hard rule #6).
+ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield
 Restart=on-failure
 RestartSec=30
 TimeoutStopSec=120

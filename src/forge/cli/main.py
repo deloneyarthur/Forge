@@ -1134,6 +1134,114 @@ def _format_rank_combiner_share_line(share: Mapping[str, float]) -> str:
     return f"rank_combiner_share: {parts}"
 
 
+def _load_cohort_yield_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[tuple[str, str, str, str], float]:
+    """§3 of Crucible's 2026-06-17 yield-map refresh — the
+    (hypothesis, directional, dte_bucket, cohort) component-rate that makes the
+    sampler's final cohort draw yield-driven instead of the fixed
+    `rank_combiner_share` coin-flip.
+
+    Mirrors `_load_orthogonal_yield_discounts` (file-based export read, silent
+    degrade to {}; same version scoping). Only called when the operator enables
+    the --cohort-yield A/B flag — off, the loader is skipped entirely and the
+    cohort draw keeps the fixed share (byte-identical, hard rule #6).
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_cohort_yield_weights,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_cohort_yield_weights(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+
+
+def _format_cohort_yield_weights_line(
+    weights: Mapping[tuple[str, str, str, str], float],
+) -> str:
+    """One-line journal summary: count + the top (hyp, dir, bucket, cohort) cells
+    by component rate (the cohorts the sampler now favours)."""
+    top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:4]
+    parts = ", ".join(f"{h}x{d}x{b}x{c}={w:.3f}" for (h, d, b, c), w in top)
+    return f"cohort_yield_weights: {len(weights)} cells learned; top: {parts}"
+
+
+def _load_regime_gate_yield_weights(
+    forge_db_path: Path,
+    current_grammar_version: str | None = None,
+) -> dict[tuple[str, str, str, str], float]:
+    """§2 of Crucible's 2026-06-17 yield-map refresh — the
+    (hypothesis, directional, dte_bucket, regime_gate) component-rate that makes
+    the sampler's regime draw avoid sink gates (gamma_flip) and favour minting
+    ones, composed onto the D150/uniform base.
+
+    Mirrors `_load_cohort_yield_weights` (file-based export read, silent degrade
+    to {}; same version scoping; relative_value excluded weighter-side per D119).
+    Only called when the operator enables the --regime-gate-yield A/B flag — off,
+    the loader is skipped and the regime draw is byte-identical (hard rule #6).
+    """
+    from crucible_contracts import load_recent_gated_runs_from_export
+    from crucible_contracts.exceptions import QueryError
+
+    from forge.feedback.rejection_weights import (
+        FEEDBACK_GATED_RUNS_LIMIT,
+        compute_regime_gate_yield_weights,
+    )
+    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(
+            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
+        )
+    except (QueryError, OSError):
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_regime_gate_yield_weights(
+            conn,
+            gated_runs,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
+
+
+def _format_regime_gate_yield_weights_line(
+    weights: Mapping[tuple[str, str, str, str], float],
+) -> str:
+    """One-line journal summary: count + the top (hyp, dir, bucket, regime) cells
+    by component rate (the regime gates the sampler now favours)."""
+    top = sorted(weights.items(), key=lambda kv: kv[1], reverse=True)[:4]
+    parts = ", ".join(f"{h}x{d}x{b}x{r}={w:.3f}" for (h, d, b, r), w in top)
+    return f"regime_gate_yield_weights: {len(weights)} cells learned; top: {parts}"
+
+
 def _load_trade_rate_priors(
     forge_db_path: Path,
     registry: RegistrySnapshot,
@@ -1325,6 +1433,8 @@ def _run_battery_for_seed(
     underlying_name_weights: Mapping[str, float] | None = None,
     orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
     rank_combiner_share: Mapping[str, float] | None = None,
+    cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
@@ -1396,6 +1506,8 @@ def _run_battery_for_seed(
             underlying_name_weights=underlying_name_weights,
             orthogonal_yield_discounts=orthogonal_yield_discounts,
             rank_combiner_share=rank_combiner_share,
+            cohort_yield_weights=cohort_yield_weights,
+            regime_gate_yield_weights=regime_gate_yield_weights,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
@@ -1670,6 +1782,17 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # is an operational kill switch (configs revert to confluence) for the first-
     # time-new-runner path; not a gate.
     cross_sectional_rank: bool = True,
+    # §3 yield-map refresh (2026-06-17) cohort-yield A/B flag. Off (default) →
+    # byte-identical (the loader is skipped, the cohort draw keeps the fixed
+    # rank_combiner_share); on → the cohort draw is yield-driven by the learned
+    # (hyp, directional, bucket, cohort) component-rate. Operator flips it on the
+    # systemd unit, like --orthogonal-yield.
+    cohort_yield: bool = False,
+    # §2 yield-map refresh (2026-06-17) regime-gate-yield A/B flag. Off (default) →
+    # byte-identical (loader skipped, regime draw keeps its D150/uniform base); on →
+    # the regime draw composes the learned (hyp,dir,bucket,regime) yield onto the
+    # base (down-weighting sink gates). relative_value excluded (D119).
+    regime_gate_yield: bool = False,
     # H-4: §7.3 throttle; mirrors rate_limiter._DEFAULT_THRESHOLD (0.80).
     inflight_threshold: float = 0.80,
     # D137: §7.3 stall guard (seconds). 0 = off; production passes 10800 from
@@ -1841,6 +1964,29 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
 
         rank_combiner_share = {h: _DEFAULT_RANK_COMBINER_SHARE for h in RANK_COMBINER_HYPOTHESES}
         typer.echo(_format_rank_combiner_share_line(rank_combiner_share))
+    # §3 yield-map refresh (2026-06-17) — cohort-yield A/B flag. Off (default): the
+    # loader is skipped and the cohort draw keeps the fixed rank_combiner_share
+    # (byte-identical, hard rule #6). On: the (hyp, directional, bucket, cohort)
+    # component-rate drives P(cross_sectional_rank) per recipe — Crucible's largest
+    # within-stratum yield axis (xsect momentum 40.4% vs single-name 0.96%).
+    cohort_yield_weights: dict[tuple[str, str, str, str], float] = {}
+    if cohort_yield:
+        cohort_yield_weights = _load_cohort_yield_weights(
+            forge_db_path, current_grammar_version=grammar.grammar_version
+        )
+        if cohort_yield_weights:
+            typer.echo(_format_cohort_yield_weights_line(cohort_yield_weights))
+    # §2 yield-map refresh (2026-06-17) — regime-gate-yield A/B flag. Off (default):
+    # loader skipped, regime draw keeps its D150/uniform base (byte-identical, hard
+    # rule #6). On: the (hyp,dir,bucket,regime) component-rate composes onto the base
+    # so the regime draw avoids sink gates (gamma_flip) and favours minting ones.
+    regime_gate_yield_weights: dict[tuple[str, str, str, str], float] = {}
+    if regime_gate_yield:
+        regime_gate_yield_weights = _load_regime_gate_yield_weights(
+            forge_db_path, current_grammar_version=grammar.grammar_version
+        )
+        if regime_gate_yield_weights:
+            typer.echo(_format_regime_gate_yield_weights_line(regime_gate_yield_weights))
     # D076 / Q16 — empirical-prior bucket stats for `expected_trades`.
     # Cold start (no exports / no overlap with submissions) returns {};
     # filter falls back to the activations heuristic for every config.
@@ -1880,6 +2026,8 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             underlying_name_weights=underlying_name_weights,
             orthogonal_yield_discounts=orthogonal_yield_discounts,
             rank_combiner_share=rank_combiner_share,
+            cohort_yield_weights=cohort_yield_weights,
+            regime_gate_yield_weights=regime_gate_yield_weights,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
             timings=timings,
@@ -2273,6 +2421,27 @@ def cmd_run(
             "operational kill switch (configs revert to confluence)."
         ),
     ),
+    cohort_yield: bool = typer.Option(
+        False,
+        "--cohort-yield",
+        help=(
+            "§3 yield-map refresh (2026-06-17) A/B flag: make the cohort draw "
+            "(cross_sectional_rank vs confluence) yield-driven by the learned "
+            "(hypothesis, directional, dte_bucket, cohort) component-rate instead "
+            "of the fixed share. Off (default) is byte-identical to the H1 draw."
+        ),
+    ),
+    regime_gate_yield: bool = typer.Option(
+        False,
+        "--regime-gate-yield",
+        help=(
+            "§2 yield-map refresh (2026-06-17) A/B flag: make the regime-gate draw "
+            "yield-driven — compose the learned (hypothesis, directional, "
+            "dte_bucket, regime_gate) component-rate onto the D150/uniform base, "
+            "down-weighting sink gates (gamma_flip) and favouring minting ones. "
+            "relative_value excluded (D119). Off (default) is byte-identical."
+        ),
+    ),
     open_proposals: Path = typer.Option(
         Path("OPEN_PROPOSALS.md"),
         "--open-proposals",
@@ -2371,6 +2540,8 @@ def cmd_run(
             require_real_cache=require_real_cache,
             orthogonal_yield=orthogonal_yield,
             cross_sectional_rank=cross_sectional_rank,
+            cohort_yield=cohort_yield,
+            regime_gate_yield=regime_gate_yield,
             inflight_threshold=inflight_threshold,
             stall_after_seconds=stall_after_seconds,
         )
