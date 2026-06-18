@@ -566,6 +566,69 @@ def test_loop_continues_after_failing_iteration(
     assert len(calls) == 2
 
 
+def test_loop_forwards_yield_map_flags_to_iteration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression (D185 deploy catch): the --loop path MUST forward the
+    --cohort-yield / --regime-gate-yield A/B flags to ``_run_one_iteration``.
+    They were initially wired only into the single-iteration call site (which sits
+    at a shallower indent), so a replace_all missed the deeper loop-path call and
+    the daemon ran both axes INERT despite the flags being set on the unit. A
+    missing kwarg silently defaults to False, so only an explicit forward check
+    catches it."""
+    import time as _time
+
+    from forge.cli import main as m
+
+    captured: list[dict[str, object]] = []
+
+    def _capture(**kwargs: object) -> str:
+        captured.append(kwargs)
+        return "submitted"
+
+    monkeypatch.setattr(m, "_run_one_iteration", _capture)
+    monkeypatch.setattr(_time, "sleep", lambda *_a, **_k: None)
+
+    on = runner.invoke(
+        app,
+        [
+            "run",
+            "--no-config",
+            "--loop",
+            "--max-iterations",
+            "1",
+            "--dry-run",
+            "--cohort-yield",
+            "--regime-gate-yield",
+            "--inbox",
+            str(tmp_path / "ib"),
+        ],
+    )
+    assert on.exit_code == 0, on.stdout
+    assert captured, "iteration never ran"
+    assert captured[0]["cohort_yield"] is True
+    assert captured[0]["regime_gate_yield"] is True
+
+    # and OFF (default) must forward False — the byte-identical contract in --loop
+    captured.clear()
+    off = runner.invoke(
+        app,
+        [
+            "run",
+            "--no-config",
+            "--loop",
+            "--max-iterations",
+            "1",
+            "--dry-run",
+            "--inbox",
+            str(tmp_path / "ib2"),
+        ],
+    )
+    assert off.exit_code == 0, off.stdout
+    assert captured[0]["cohort_yield"] is False
+    assert captured[0]["regime_gate_yield"] is False
+
+
 def test_loop_does_not_swallow_schema_version_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

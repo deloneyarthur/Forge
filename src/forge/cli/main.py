@@ -2575,6 +2575,8 @@ def cmd_run(
                     require_real_cache=require_real_cache,
                     orthogonal_yield=orthogonal_yield,
                     cross_sectional_rank=cross_sectional_rank,
+                    cohort_yield=cohort_yield,
+                    regime_gate_yield=regime_gate_yield,
                     inflight_threshold=inflight_threshold,
                     stall_after_seconds=stall_after_seconds,
                 )
