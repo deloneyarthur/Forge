@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-19 — KING ARM RETIRED (D190): its quality-scoring role is now the standard-path quality lane (D189). Removed `king/*` + the `king` CLI + tests/MANPAGE; archived the king DB + oracle. Cleanup — no daemon impact.
+
+**Operator: "archive first, then proceed with the deletion." King-fold Part 3/3 done. Full record: [[D190]].**
+- **Archived** (recoverable): `king_submissions.db` + `meta_king_oracle_latest.json` → `~/forge_data/archive/king_retired_20260619/`.
+- **Removed:** `src/forge/king/` (6 modules), `cmd_king` + `@app.command("king")`, `tests/unit/test_king/`, `tests/fixtures/king/`, `tests/invariants/test_king_invariants.py`, the `### forge king` MANPAGE section. No `forge.king` ref remains (production quality model uses `ranking/features.py`; `featurize` vendored into the D188 probe).
+- **Pre-check clean:** king DB untouched since 06-17; daemon never imported king → zero daemon impact.
+- **Gates:** ruff clean, mypy --strict 90 files (was 97), full suite **1672 passed** (was 1703 — king tests gone).
+- **Target debate (Crucible pushback):** regime_stress likely a FLOOR not the target (consistent with [[D186]] tail-at-assembly). Reconciled: drafted `PROMPT_CRUCIBLE_WF_P25_GATE_EXPORT.md` — persist `wf_p25` per-verdict → `target_wf_p25` is the WF-native + predictable target; regime_stress stays the floor; option-C leverage arm sets residual weight. Lane is flag-OFF + target-agnostic → nothing built changes, only the flip target. D189's regime_stress lock was the predictability half.
+- **Next (Crucible-gated):** relay the `wf_p25` export ask + the leverage check; flip the lane after the export + arm. **King-fold arc COMPLETE; only the gated flip remains.**
+
+---
+
 ## 2026-06-19 — QUALITY LANE WIRED (D189, flag-OFF byte-identical): the regime_stress robustness model blends into the §6.2 prior via the F3 verdict_scorer slot. Reuses the T1 (D140/D141) machinery; `--quality-rank` default OFF. BUILD only — deploy/flip operator-gated.
 
 **Operator: build the King-fold quality lane (plan approved). Parts 1+2 done; Part 3 (King retirement) next. Full record: [[D189]].**

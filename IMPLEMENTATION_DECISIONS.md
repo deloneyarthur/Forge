@@ -4781,3 +4781,29 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** [[D188]] (target lock), [[D141]]/D140 (T1 machinery reused), [[D149]] (the F3 verdict_scorer slot blended over), [[D185]] (both-call-sites threading), [[D108]] (flag-OFF-byte-identical), `docs/proposals/tail-aware-ranker.md` §8.6.
 
 **STATUS: quality lane WIRED flag-OFF (byte-identical), 1703 passed. Flip gated on shadow re-confirm + Crucible leverage. Part 3 (King retirement) next.**
+
+---
+
+## D190 — 2026-06-19 — King arm RETIRED: its quality-scoring role is now the standard-path quality lane (D189). Removed `king/*` + the `king` CLI + tests/fixtures/MANPAGE; archived the king DB + oracle. Featurize vendored into the D188 probe. Cleanup; no daemon impact.
+
+**Spec section:** completes the King-fold plan (Part 3 of 3; Parts 1+2 = [[D189]]). Operator: *"archive first, then proceed with the deletion."*
+
+**Why now.** [[D189]] gave the standard path a learned quality score (robustness model blended into the §6.2 prior via the F3 verdict_scorer slot), so the separate meta-king arm — a parallel oracle-ridge quality scorer ([[meta-king-arm-status]]) — is redundant. Pre-check clean: `king_submissions.db` untouched since 06-17 (the 519-king override); the daemon never imported king (no `source` col — king is operator-CLI only) → zero daemon-loop impact.
+
+**Archived first** (operator-side, recoverable): `king_submissions.db` + `meta_king_oracle_latest.json` → `~/forge_data/archive/king_retired_20260619/`.
+
+**Removed.** `src/forge/king/` (oracle/score/search/submit/dedup/featurize/__init__); the `king` CLI (`cmd_king` + `@app.command("king")`, `cli/main.py`); `tests/unit/test_king/`; `tests/fixtures/king/`; `tests/invariants/test_king_invariants.py` (its "only king.submit may submit" invariant is moot once king is gone); the `### forge king` MANPAGE section. No `forge.king` reference remains in src/tests (only a historical comment in the vendored probe).
+
+**Kept / vendored.** `king/featurize.py` was used ONLY by the D188 research probe (`scripts/wf_quality_probe.py`) — the PRODUCTION quality model uses `ranking/features.py`. Vendored `featurize`/`_as_float` into the probe so it stays self-contained.
+
+**Determinism / hard rules.** Pure removal of an operator-CLI arm + its doc; no daemon-loop / grammar / gate change (#1/#3/#6 untouched).
+
+**Gates.** ruff (src tests scripts) clean; `mypy --strict` **90 files** (was 97); full suite **1672 passed** (king tests removed; was 1703).
+
+**Target-debate note (Crucible pushback, 2026-06-19 — folds into the FLIP, not the build).** Crucible argued regime_stress is a downside FLOOR, not the maximization target (WF-native primary / decorrelation co-primary), its weight set by the option-C leverage arm. Forge's honest read: the leverage objection is consistent with [[D186]] (tail is assembly-owned) → regime_stress likely a floor; BUT the only WF-native PRODUCTION target (`wf_median`) is weakly predictable (+0.27) while the WF FLOOR (`wf_p25`, +0.45 ≈ regime_stress) is WF-native AND predictable — it's just not in `gate_results`. So drafted `PROMPT_CRUCIBLE_WF_P25_GATE_EXPORT.md`: persist `wf_p25` per-verdict → `target_wf_p25` becomes the reconciled target (WF-native + predictable), regime_stress stays the floor. The lane (D189) is flag-OFF + target-agnostic, so this changes nothing built — only which `--target` we flip with. [[D188]]'s lock was the predictability half; the flip target is now likely `wf_p25` pending the export + the arm.
+
+**Files:** removed `src/forge/king/*`, `tests/unit/test_king/*`, `tests/fixtures/king/*`, `tests/invariants/test_king_invariants.py`; edited `cli/main.py` (cmd_king out), `docs/MANPAGE.md` (king section out), `scripts/wf_quality_probe.py` (vendored featurize); added `PROMPT_CRUCIBLE_WF_P25_GATE_EXPORT.md`; `STATUS.md`, this entry.
+
+**References:** [[D189]] (the quality lane that subsumes king), [[meta-king-arm-status]] (retired — memory updated), [[D186]] (tail-at-assembly, supports the leverage objection), [[D188]] (target lock, refining toward `wf_p25`), [[D179]]/[[D181]] (king volume/override history, archived).
+
+**STATUS: King arm RETIRED (archived + removed); role subsumed by the D189 quality lane. 1672 passed. Target likely refining regime_stress → wf_p25 (Crucible `wf_p25` export ask drafted); flip still gated on the leverage arm.**
