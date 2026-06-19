@@ -521,7 +521,7 @@ def train_robustness_model(
         raise ValueError(msg)
     y = [float(target_raw[i]) for i in keep]
 
-    raw_names = [c for c in frame.columns if c not in _REGRESSION_NON_FEATURES]
+    raw_names = [c for c in frame.columns if c not in _REGRESSION_NON_FEATURES and c != target]
     raw_columns = {name: frame[name].to_list() for name in raw_names}
     columns = {name: [float(raw_columns[name][i]) for i in keep] for name in raw_names}
     feature_names, means, stds, x_rows = _standardize_design(columns, raw_names, n_rows)

@@ -4807,3 +4807,31 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** [[D189]] (the quality lane that subsumes king), [[meta-king-arm-status]] (retired — memory updated), [[D186]] (tail-at-assembly, supports the leverage objection), [[D188]] (target lock, refining toward `wf_p25`), [[D179]]/[[D181]] (king volume/override history, archived).
 
 **STATUS: King arm RETIRED (archived + removed); role subsumed by the D189 quality lane. 1672 passed. Target likely refining regime_stress → wf_p25 (Crucible `wf_p25` export ask drafted); flip still gated on the leverage arm.**
+
+---
+
+## D191 — 2026-06-19 — Leverage arm REFUTED regime_stress as the steering target → quality lane RETARGETED to the WF floor (`target_wf_p25`); added a label-sourced training path (wf_p25 isn't in gate_results). regime_stress stays the threshold-0 tail FILTER. Flag-OFF; deploy/flip operator-gated.
+
+**Spec section:** resolves the target debate ([[D188]] predictability lock vs the Crucible 3-axes pushback); refines [[D189]] (the lane, retargeted). Operator chose (a): build the wf_p25 label-training path + retarget.
+
+**Leverage arm (Crucible `regime_stress_leverage_20260619T110328Z.json`) — decisive.** Selecting HIGH-regime_stress components yields a book with LOWER WF (hi_wf **1.74** vs lo_wf **2.05**); `regstress_selector_beats_cpcv_on_wf`=False, `hi_beats_lo_on_wf`=False. regime_stress tracks the TAIL (cpcv-p25, corr 0.49), barely the WF-center (0.20); the tail is CONSTRUCTION-owned (decorrelation + risk-scaling) and already cleared. Crucible's verdict: *"do NOT make it the generation steering target; steer by a WF-native target (wf_p25/wf_median)."* Confirms [[D186]] (tail-at-assembly); overrides D188's regime_stress lock (which was predictability-only).
+
+**Retarget → `target_wf_p25` (the WF floor).** Same-population check (refit label, 2,779 components, production featurizer) confirms the floor beats the median — train_r2 `wf_p10` 0.229 > `wf_p25` 0.194 > `wf_p50` 0.131 (D188's law on the production featurizer). The earlier "`wf_median` 0.235 looks higher" was a confound (49k recency gate-rows vs 2,779 honest label-rows). `wf_p25` = the arm-named standard floor; `wf_p10` a marginally-stronger tunable.
+
+**Label-sourced training path (wf_p25 isn't in `gate_results`).** Crucible's `wf_p25` lives in the per-component refit label, not per-verdict `gate_results` (the gate stores only `wf_median`). So: (1) `train_robustness_model` now excludes the target column from features generically (`c != target`) — a label-sourced target can't leak; (2) `build_label_frame` (dataset.py) builds a training frame from a label dict (config_hash → value) joined to submissions configs via `extract_features` (coverage_verified=1.0, decided_at=label stamp); (3) `train-robustness --label <json> --label-col wf_sharpe_p25`. Trained 2,779 components; artifact produced. The lane wiring's target-check flips `target_regime_stress → target_wf_p25`.
+
+**Continuous-path gap + Crucible follow-up.** The refit label is a snapshot; the daily retrain reads `gate_results`. `PROMPT_CRUCIBLE_WF_P25_GATE_PERSIST_FOLLOWUP.md` asks Crucible to persist `wf_p25` per-verdict in `gate_results` → then `target_wf_p25` is a normal `TARGET_COLUMN` trained continuously. Until then the `--label` path is the stopgap.
+
+**regime_stress** stays exactly the threshold-0 tail FILTER it already is (a gate), NOT a generation target. King's M was already abandoned ([[D190]]).
+
+**Determinism / hard rules.** Ranking-only (#1/#3 untouched); deterministic ridge + sigmoid blend, no RNG (#5/#6); flag-OFF byte-identical. Reads Crucible's computed values (§1.2).
+
+**Gates.** ruff (src tests scripts) clean; mypy --strict 90 files; full suite **1673 passed** (+1: the target-exclusion guard test). `build_label_frame` is e2e-validated (the 2,779-component train); a fixture unit test is a minor follow-up.
+
+**Alternatives considered.** `wf_median` (refuted — weakest on apples-to-apples, 0.131; and the arm shows the floor is the lever); keep regime_stress (refuted by the arm); add `wf_p25` to gate_results now (deferred to Crucible — the follow-up).
+
+**Files:** `ranking/model.py` (target-exclusion guard), `ranking/dataset.py` (+`build_label_frame`), `cli/ranker_model_cmd.py` (`--label`/`--label-col`), `cli/main.py` (lane retarget), `tests/unit/test_ranking/test_model.py`; added `PROMPT_CRUCIBLE_WF_P25_GATE_PERSIST_FOLLOWUP.md`; `STATUS.md`, this entry.
+
+**References:** [[D189]] (the lane), [[D188]] (predictability lock, now refined), [[D186]] (tail-at-assembly), [[D190]] (King retired), Crucible `regime_stress_leverage_*.json` + `refit_distributions_*.json`.
+
+**STATUS: regime_stress REFUTED as target (leverage arm) → lane RETARGETED to `target_wf_p25` (WF floor); label-training path built + trained (2,779). regime_stress = tail floor. Flag-OFF; flip gated on the gate_results persist (Crucible follow-up) + the shadow streak.**

@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-19 — TARGET RETARGETED regime_stress → `target_wf_p25` (D191): the leverage arm REFUTED regime_stress as the steering target; the WF floor is the binding axis. Built a label-sourced training path; lane flag-OFF. Deploy/flip operator-gated.
+
+**Operator chose (a): build the wf_p25 label-training path + retarget. Full record: [[D191]].**
+- **Leverage arm (Crucible `regime_stress_leverage`) — decisive:** HIGH-regime_stress books have LOWER WF (1.74 vs 2.05); regime_stress tracks the already-cleared tail (cpcv-p25 0.49), barely WF-center (0.20). Verdict: "do NOT make it the steering target; steer by WF-native (wf_p25/wf_median)." Confirms [[D186]]; overrides D188's predictability-only lock.
+- **Retarget → `target_wf_p25` (WF floor):** same-population check confirms floor > median (train_r2 wf_p10 0.229 > wf_p25 0.194 > wf_p50 0.131; the "wf_median 0.235" was a recency/honest confound). regime_stress stays the threshold-0 tail FILTER.
+- **Label path:** wf_p25 isn't in gate_results (only the refit label). Added `train_robustness_model` target-exclusion guard + `build_label_frame` + `train-robustness --label`; trained 2,779 components. Lane wiring flips `target_regime_stress → target_wf_p25`.
+- **Continuous-path follow-up:** `PROMPT_CRUCIBLE_WF_P25_GATE_PERSIST_FOLLOWUP.md` asks Crucible to persist wf_p25 per-verdict in gate_results (the daily retrain reads gate_results; the label is a snapshot stopgap).
+- **Gates:** ruff clean, mypy --strict 90, full suite **1673 passed** (+1 guard test). Flag-OFF/byte-identical.
+- **Flip gated on:** the gate_results wf_p25 persist (Crucible follow-up) + the §8.6 shadow streak on the production path.
+
+---
+
 ## 2026-06-19 — KING ARM RETIRED (D190): its quality-scoring role is now the standard-path quality lane (D189). Removed `king/*` + the `king` CLI + tests/MANPAGE; archived the king DB + oracle. Cleanup — no daemon impact.
 
 **Operator: "archive first, then proceed with the deletion." King-fold Part 3/3 done. Full record: [[D190]].**

@@ -150,3 +150,59 @@ def build_dataset(
     return pl.DataFrame(records, schema_overrides=target_floats).select(
         [*leading, *ordered_features]
     )
+
+
+def build_label_frame(
+    conn: duckdb.DuckDBPyConnection,
+    registry: RegistrySnapshot,
+    *,
+    label: Mapping[str, float],
+    target_name: str,
+    stamp: datetime,
+) -> pl.DataFrame:
+    """Training frame whose target is sourced from a per-component LABEL (e.g. Crucible's
+    refit-distribution ``wf_sharpe_p25``) rather than ``gate_results`` — for a target the gate
+    never persists per-verdict. Config features come from the submissions configs (same
+    ``extract_features`` path as :func:`build_dataset`); ``coverage_verified`` is 1.0 (the refit
+    is honest by construction); every row's ``decided_at`` is ``stamp`` (the label's generation
+    time → ``trained_through``). ``target_name`` is excluded from features by the trainer.
+    """
+    empty_schema: dict[str, pl.DataType | type[pl.DataType]] = {
+        "config_hash": pl.Utf8,
+        "decided_at": pl.Datetime,
+        COVERAGE_FEATURE: pl.Float64,
+        target_name: pl.Float64,
+    }
+    hashes = list(label)
+    if not hashes:
+        return pl.DataFrame(schema=empty_schema)
+    placeholders = ",".join("?" * len(hashes))
+    rows = conn.execute(
+        f"SELECT config_hash, config_json FROM submissions WHERE config_hash IN ({placeholders})",  # noqa: S608 -- placeholders only
+        hashes,
+    ).fetchall()
+    records: list[dict[str, object]] = []
+    feature_names: set[str] = set()
+    for config_hash, config_json in rows:
+        config = StrategyConfig.model_validate_json(config_json)
+        features = extract_features(config, registry).as_dict()
+        feature_names.update(features)
+        records.append(
+            {
+                "config_hash": config_hash,
+                "decided_at": stamp,
+                COVERAGE_FEATURE: 1.0,
+                target_name: float(label[config_hash]),
+                **features,
+            }
+        )
+    if not records:
+        return pl.DataFrame(schema=empty_schema)
+    ordered_features = sorted(feature_names)
+    for record in records:
+        for name in ordered_features:
+            record.setdefault(name, 0.0)
+    overrides = {target_name: pl.Float64, COVERAGE_FEATURE: pl.Float64}
+    return pl.DataFrame(records, schema_overrides=overrides).select(
+        ["config_hash", "decided_at", COVERAGE_FEATURE, target_name, *ordered_features]
+    )

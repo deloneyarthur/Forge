@@ -319,6 +319,12 @@ def cmd_train_robustness(
     target: str = typer.Option(
         "target_cpcv_p25", "--target", help="continuous gate value to predict (T1)"
     ),
+    label: Path | None = typer.Option(
+        None, "--label", help="per-component label JSON sourcing the target column"
+    ),
+    label_col: str = typer.Option(
+        "wf_sharpe_p25", "--label-col", help="label column to use as the target (requires --label)"
+    ),
     models_dir: Path | None = typer.Option(
         None, "--models-dir", help="artifact dir (default: <config db_path parent>/models)"
     ),
@@ -342,7 +348,35 @@ def cmd_train_robustness(
     registry = load_registry(exports_dir=exports_dir) if exports_dir else load_registry()
 
     with db_connection(forge_db) as conn:
-        frame = build_dataset(conn, registry, era_cut=cut)
+        if label is not None:
+            import json
+            from datetime import UTC, datetime
+
+            from forge.ranking.dataset import build_label_frame
+
+            raw = json.loads(label.read_text())
+            recs = (
+                raw["components"]
+                if isinstance(raw, dict) and "components" in raw
+                else raw
+                if isinstance(raw, list)
+                else next((v for v in raw.values() if isinstance(v, list)), [])
+            )
+            label_map = {
+                str(r["config_hash"]): float(r[label_col])
+                for r in recs
+                if isinstance(r, dict) and r.get(label_col) is not None
+            }
+            gen = raw.get("generated_at") if isinstance(raw, dict) else None
+            stamp = datetime.fromisoformat(gen) if gen else cut
+            if stamp.tzinfo is not None:
+                stamp = stamp.astimezone(UTC).replace(tzinfo=None)
+            frame = build_label_frame(
+                conn, registry, label=label_map, target_name=target, stamp=stamp
+            )
+            typer.echo(f"label-sourced frame: {len(label_map)} components [{label_col}]")
+        else:
+            frame = build_dataset(conn, registry, era_cut=cut)
 
     if target not in frame.columns:
         typer.echo(f"error: target column {target!r} not in dataset", err=True)

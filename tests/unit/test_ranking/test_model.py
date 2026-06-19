@@ -312,6 +312,19 @@ def test_robustness_is_deterministic_and_round_trips(tmp_path: Path) -> None:
     assert load_robustness_model(path) == a
 
 
+def test_robustness_excludes_the_target_column_from_features() -> None:
+    # A label-sourced target (e.g. target_wf_p25, not in TARGET_COLUMNS) must still be
+    # excluded from the feature set — else the target leaks in and predicts itself.
+    from forge.ranking.model import train_robustness_model
+
+    frame = _reg_frame(_reg_rows()).with_columns(
+        pl.col("target_cpcv_p25").alias("target_wf_p25")
+    )
+    model = train_robustness_model(frame, target="target_wf_p25", era_cut=_ERA_CUT)
+    assert model.target == "target_wf_p25"
+    assert "target_wf_p25" not in model.feature_names
+
+
 def test_robustness_tail_norm_bounded_and_monotone() -> None:
     # The §6.2 prior BLEND needs the unbounded robustness prediction mapped to (0, 1),
     # monotone in the prediction so the validated rank-IC is preserved.
