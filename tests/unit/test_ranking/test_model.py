@@ -310,3 +310,16 @@ def test_robustness_is_deterministic_and_round_trips(tmp_path: Path) -> None:
     assert a == b
     path = save_robustness_model(a, tmp_path)
     assert load_robustness_model(path) == a
+
+
+def test_robustness_tail_norm_bounded_and_monotone() -> None:
+    # The §6.2 prior BLEND needs the unbounded robustness prediction mapped to (0, 1),
+    # monotone in the prediction so the validated rank-IC is preserved.
+    from forge.ranking.model import robustness_tail_norm, train_robustness_model
+
+    model = train_robustness_model(_reg_frame(_reg_rows()), lambda_=0.01, era_cut=_ERA_CUT)
+    high = robustness_tail_norm(model, {"f_good": 1.0})
+    low = robustness_tail_norm(model, {"f_good": 0.0})
+    assert 0.0 < low < high < 1.0
+    # Deterministic: same inputs -> same output.
+    assert robustness_tail_norm(model, {"f_good": 1.0}) == high

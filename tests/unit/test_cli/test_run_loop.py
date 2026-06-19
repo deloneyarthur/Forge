@@ -600,6 +600,7 @@ def test_loop_forwards_yield_map_flags_to_iteration(
             "--dry-run",
             "--cohort-yield",
             "--regime-gate-yield",
+            "--quality-rank",
             "--inbox",
             str(tmp_path / "ib"),
         ],
@@ -608,6 +609,7 @@ def test_loop_forwards_yield_map_flags_to_iteration(
     assert captured, "iteration never ran"
     assert captured[0]["cohort_yield"] is True
     assert captured[0]["regime_gate_yield"] is True
+    assert captured[0]["quality_rank"] is True  # D185 lesson: forwarded through --loop
 
     # and OFF (default) must forward False — the byte-identical contract in --loop
     captured.clear()
@@ -627,6 +629,7 @@ def test_loop_forwards_yield_map_flags_to_iteration(
     assert off.exit_code == 0, off.stdout
     assert captured[0]["cohort_yield"] is False
     assert captured[0]["regime_gate_yield"] is False
+    assert captured[0]["quality_rank"] is False
 
 
 def test_loop_does_not_swallow_schema_version_mismatch(

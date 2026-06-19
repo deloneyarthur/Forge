@@ -602,6 +602,18 @@ def score_robustness(model: RobustnessModel, features: Mapping[str, float]) -> f
     return pred
 
 
+def robustness_tail_norm(model: RobustnessModel, features: Mapping[str, float]) -> float:
+    """Map a robustness prediction to (0, 1) for the §6.2 prior BLEND — deterministic and
+    monotone in the prediction, so the validated rank-IC is preserved. Sigmoid of the
+    prediction's deviation from the train-target mean, scaled by train RMSE; the scale is
+    provisional (tune from the shadow distribution before the wiring flag is flipped)."""
+    pred = score_robustness(model, features)
+    rmse = dict(model.train_metrics).get("rmse", 1.0)
+    scale = rmse if rmse > 1e-9 else 1.0
+    z = max(-30.0, min(30.0, (pred - model.target_mean) / scale))
+    return 1.0 / (1.0 + math.exp(-z))
+
+
 def save_robustness_model(model: RobustnessModel, models_dir: Path) -> Path:
     """Write the canonical artifact; content-hashed name → idempotent rewrite."""
     models_dir.mkdir(parents=True, exist_ok=True)

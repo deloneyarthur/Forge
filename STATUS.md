@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-19 — QUALITY LANE WIRED (D189, flag-OFF byte-identical): the regime_stress robustness model blends into the §6.2 prior via the F3 verdict_scorer slot. Reuses the T1 (D140/D141) machinery; `--quality-rank` default OFF. BUILD only — deploy/flip operator-gated.
+
+**Operator: build the King-fold quality lane (plan approved). Parts 1+2 done; Part 3 (King retirement) next. Full record: [[D189]].**
+- **Re-target confirmed (Part 1):** `train-robustness --target target_regime_stress` on the PRODUCTION featurizer → train_r2 0.286 (> wf 0.235 > cpcv 0.211), 47,442 rows (3.3× cpcv) — corroborates the [[D188]] lock.
+- **Wired (Part 2):** `robustness_tail_norm` ((0,1) sigmoid of the ridge prediction, deterministic/monotone) + `--quality-rank`/`FORGE_QUALITY_RANKER`. ON → `prior := P(component) × tail_norm` (BLEND) over F3; OFF (default) → F3 prior unchanged = byte-identical. Threaded to BOTH `_run_one_iteration` call sites ([[D185]] lesson; loop test asserts it).
+- **Reuse not rebuild:** the RobustnessModel + train/eval/shadow existed (D140/D141); this is `robustness_tail_norm` (~12 lines) + flag wiring. No new model.
+- **Gates:** mypy --strict (97) + full suite **1703 passed** + ruff clean. NOT flipped (flag absent from the live unit → OFF).
+- **Flip gate:** ON only after (a) regime_stress shadow IC re-confirm (§8.6 streak) AND (b) Crucible leverage check (`PROMPT_CRUCIBLE_QUALITY_TARGET_LEVERAGE.md`, relayed). D104 ritual + production training of the artifact.
+- **Next:** Part 3 — retire the King arm (own commit + D-entry; King's role is now the standard-path quality lane).
+
+---
+
 ## 2026-06-19 — QUALITY-TARGET SWEEP COMPLETE → TARGET LOCKED `regime_stress_p25_return` (D188): 47 metrics, both CV families + regime-stress distribution + mechanical ablation. One law: generation predicts DOWNSIDE robustness, not the peak. King-fold target set. RESEARCH — no production-loop change.
 
 **Operator: commit/log/lock regime_stress_p25; draft Crucible prompts + design forward. Full record: [[D188]].**

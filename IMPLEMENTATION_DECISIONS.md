@@ -4753,3 +4753,31 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** [[D186]]/[[D187]] (the arc), [[D155]] (cpcv tail model), [[D108]] (A/B-flag-off-byte-identical pattern for the lane), [[meta-king-arm-status]] (King retiring — memory update on fold), `king/featurize.py` (reused for the fold), [[promotion-gate-tiers-and-constraint]] (the worst-Q binding constraint this lands on).
 
 **STATUS: quality-target sweep COMPLETE; target LOCKED `regime_stress_p25_return` (downside robustness, +0.52, already-gated scalar). Next: leverage check (Crucible, drafted) + King-fold quality-lane design (A/B-flagged ranker term). Tooling committed.**
+
+---
+
+## D189 — 2026-06-19 — Quality lane WIRED (flag-OFF byte-identical): the regime_stress robustness model blends into the §6.2 prior via the F3 verdict_scorer slot. Reuses the existing T1 (D140/D141) machinery; `--quality-rank` default OFF. BUILD only — deploy/flag-flip operator-gated.
+
+**Spec section:** `docs/proposals/tail-aware-ranker.md` §5/§8.6 (T1 wiring, decision-3 BLEND); lands the [[D188]] target lock (`regime_stress_p25_return`) + the operator's King-fold directive (plug-in **b** = the F3 verdict_scorer slot). Plan: `~/.claude/plans/linked-marinating-whisper.md` (approved). Parts 1+2 of 3.
+
+**Part 1 — re-target (no code).** `train-robustness --target target_regime_stress` confirms the D188 pick on the PRODUCTION featurizer (`ranking/features.py`): train_r2 **0.286** (> wf 0.235 > cpcv 0.211) on **47,442** rows — 3.3× cpcv's 14k, since `regime_stress_p25_return` is populated on far more verdicts. The `--target` flag + `target_regime_stress` target already existed (D141).
+
+**Part 2 — wire (the gated T1 step).** `robustness_tail_norm(model, features)` (`ranking/model.py`) maps the ridge prediction to (0,1) — sigmoid of (pred − target_mean)/rmse, deterministic + monotone so the validated rank-IC is preserved. `cli/main.py` gains `--quality-rank` + `FORGE_QUALITY_RANKER`: ON → `verdict_scorer := P(component) × tail_norm` (decision-3 BLEND) wrapping the existing F3 scorer; OFF (default) → the F3 prior unchanged ⇒ **byte-identical**. Threaded to BOTH `_run_one_iteration` call sites ([[D185]] lesson; the loop-threading test asserts it).
+
+**Reuse, not rebuild.** The `RobustnessModel` ridge + train/save/load + shadow eval all existed (D140/D141). This increment is `robustness_tail_norm` (~12 lines) + the flag wiring. No new model.
+
+**Determinism / hard rules.** Ranking-only (#3 gate / #1 grammar untouched); deterministic ridge + sigmoid, no RNG (#5/#6); flag-OFF byte-identical (the worker gained a default-False param; enumeration untouched, #6). Reads Crucible's `regime_stress_p25_return` value, computes nothing (§1.2).
+
+**Gates.** `mypy --strict` (97 files) + full suite **1703 passed** + ruff clean. New tests: `robustness_tail_norm` bounds/monotonicity/determinism (`test_model.py`); `--quality-rank` forwards True through `--loop` + defaults False (`test_run_loop.py`, the D185 contract).
+
+**NOT flipped.** `--quality-rank` is absent from the live unit ExecStart → OFF → byte-identical, so landing the code is safe (a reboot runs prior behavior). The flip is gated.
+
+**Flip gate.** Turn `--quality-rank` on only after BOTH: (a) the regime_stress shadow re-confirms its IC edge on the production featurizer (the §8.6 streak; train_r2 corroborates, the out-of-fold streak is the formal gate), and (b) Crucible's leverage check (`PROMPT_CRUCIBLE_QUALITY_TARGET_LEVERAGE.md`, relayed) confirms high-regime_stress components lift assembled books. Flip + production training of the `target_regime_stress` artifact into the live models dir via the D104 ritual.
+
+**Alternatives considered.** New 6th composite term (rejected — the verdict_scorer slot is the precedented seam, plug-in b); replace F3 rather than blend (rejected — decision-3 keeps P(component) as the eligibility term); target_std for the sigmoid scale (deferred — used train RMSE to avoid a model-schema bump; tune from shadow before flip).
+
+**Files:** `ranking/model.py` (+`robustness_tail_norm`), `cli/main.py` (flag + blend + both call sites), `tests/unit/test_ranking/test_model.py`, `tests/unit/test_cli/test_run_loop.py`, `STATUS.md`, this entry. Operator's in-flight `PROMPT_CRUCIBLE_*` / `FORGE_THROTTLE_*` left uncommitted.
+
+**References:** [[D188]] (target lock), [[D141]]/D140 (T1 machinery reused), [[D149]] (the F3 verdict_scorer slot blended over), [[D185]] (both-call-sites threading), [[D108]] (flag-OFF-byte-identical), `docs/proposals/tail-aware-ranker.md` §8.6.
+
+**STATUS: quality lane WIRED flag-OFF (byte-identical), 1703 passed. Flip gated on shadow re-confirm + Crucible leverage. Part 3 (King retirement) next.**

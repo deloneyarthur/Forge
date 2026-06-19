@@ -1793,6 +1793,9 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # the regime draw composes the learned (hyp,dir,bucket,regime) yield onto the
     # base (down-weighting sink gates). relative_value excluded (D119).
     regime_gate_yield: bool = False,
+    # T1 quality lane: BLEND the regime_stress robustness prediction into the §6.2 prior.
+    # Off (default) → byte-identical (the F3 P(component) prior, or Jaccard, unchanged).
+    quality_rank: bool = False,
     # H-4: §7.3 throttle; mirrors rate_limiter._DEFAULT_THRESHOLD (0.80).
     inflight_threshold: float = 0.80,
     # D137: §7.3 stall guard (seconds). 0 = off; production passes 10800 from
@@ -2090,6 +2093,36 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             if _f3_off
             else "f3_ranker: Jaccard prior (no verdict model yet)"
         )
+
+    # T1 quality lane (tail-aware-ranker proposal §8.6): when --quality-rank is on, BLEND the
+    # regime_stress robustness prediction into the prior — prior := P(component) x tail_norm
+    # (decision 3). Off (default) leaves verdict_scorer exactly as the F3 block set it →
+    # byte-identical. Inert without an F3 P(component) base or a target_regime_stress model.
+    # Env kill-switch FORGE_QUALITY_RANKER=off. Deterministic (ridge eval over fixed features).
+    _quality_off = os.environ.get("FORGE_QUALITY_RANKER", "on").strip().lower() in {
+        "off",
+        "0",
+        "false",
+        "no",
+    }
+    if quality_rank and not _quality_off and verdict_scorer is not None:
+        from forge.ranking.model import load_latest_robustness_model, robustness_tail_norm
+
+        _qmodel = load_latest_robustness_model(forge_db_path.parent / "models")
+        if _qmodel is not None and _qmodel.target == "target_regime_stress":
+            _qm = _qmodel  # non-None binding for the closure
+            _base_scorer = verdict_scorer  # P(component) eligibility term
+
+            def _quality_score(config: StrategyConfig) -> float:
+                feats = extract_features(config, registry).as_dict()
+                return _base_scorer(config) * robustness_tail_norm(_qm, feats)
+
+            verdict_scorer = _quality_score
+            typer.echo(f"quality_rank: regime_stress BLEND ACTIVE (model={_qm.model_id})")
+        else:
+            typer.echo("quality_rank: no target_regime_stress model yet (prior unchanged)")
+    elif quality_rank and verdict_scorer is None:
+        typer.echo("quality_rank: inert — needs the F3 P(component) base (FORGE_F3_RANKER off)")
 
     ranked = rank_batch(
         ranker,
@@ -2442,6 +2475,17 @@ def cmd_run(
             "relative_value excluded (D119). Off (default) is byte-identical."
         ),
     ),
+    quality_rank: bool = typer.Option(
+        False,
+        "--quality-rank",
+        help=(
+            "T1 quality lane (tail-aware-ranker §8.6): BLEND the regime_stress "
+            "robustness prediction into the §6.2 prior — prior := P(component) x "
+            "tail_norm. Needs an F3 P(component) base + a target_regime_stress "
+            "robustness model. Env kill-switch FORGE_QUALITY_RANKER=off. Off "
+            "(default) is byte-identical (F3 prior unchanged)."
+        ),
+    ),
     open_proposals: Path = typer.Option(
         Path("OPEN_PROPOSALS.md"),
         "--open-proposals",
@@ -2542,6 +2586,7 @@ def cmd_run(
             cross_sectional_rank=cross_sectional_rank,
             cohort_yield=cohort_yield,
             regime_gate_yield=regime_gate_yield,
+            quality_rank=quality_rank,
             inflight_threshold=inflight_threshold,
             stall_after_seconds=stall_after_seconds,
         )
@@ -2577,6 +2622,7 @@ def cmd_run(
                     cross_sectional_rank=cross_sectional_rank,
                     cohort_yield=cohort_yield,
                     regime_gate_yield=regime_gate_yield,
+                    quality_rank=quality_rank,
                     inflight_threshold=inflight_threshold,
                     stall_after_seconds=stall_after_seconds,
                 )
