@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-18 — WF-QUALITY PROBE → generation-layer QUALITY model is VIABLE (D187): rich king features predict honest WF (IC +0.27); coarse cells don't (~0). Greenlights King-retirement (re-target M→WF) + a WF-p95 refit-label ask. RESEARCH — no production-loop change.
+
+**Operator: re-target the quality model to WF p95 on broad targets; retire the King lane into the standard submission path. Full record: [[D187]].**
+- **Probe (`scripts/wf_quality_probe.py`):** reuses `king/featurize.py` rich features + a pure-python ridge + 5-fold CV (no numpy in env). Same harness, two targets on 1700 honest broad components: **cpcv_p25 IC +0.44** (sanity, beats D155's +0.35) / **wf_median IC +0.27** (λ-robust). A coarse `(hyp,dir,dte)` cell baseline was ~0 (−0.03).
+- **Finding:** quality IS predictable at generation time — but only from RICH features (params/underlying/indicators), not the recipe cell. With [[D186]] this fully locates `quality × decorrelation`: **decorrelation → assembly, quality → generation.**
+- **King-retirement de-risked:** King's featurizer+ridge transfer to a WF target → fold King into the standard path = re-target its machinery **M→WF** (its own operator-gated, loop-touching increment).
+- **WF-median is the noisy statistic** (+0.27 vs cpcv's +0.44); operator picked **WF-p95** (the ceiling — fits assembly peak-tiling). p95 isn't in Forge's export → requested via the refit lane (`PROMPT_CRUCIBLE_WF_P95_REFIT_LABEL.md`, operator-relayed).
+- **Honest scope:** +0.27 is a steering lever (baseline ~+0.12), not a wall-breaker; no single broad component clears WF-median 2.0. **No `src/`/grammar/feedback change — not a deploy.**
+
+---
+
 ## 2026-06-18 — DECORRELATION-PROXY EXPERIMENT → VERDICT (D186): decorrelation belongs at ASSEMBLY (Crucible), not generation. The generation layer owns QUALITY + directional variety; the free structural proxy is too weak and a per-recipe map is NOT warranted. RESEARCH — no production-loop change.
 
 **Operator: *"how do we use an ML model for strategy generation"* → tested Crucible's `FORGE_generation_model_plan.md` §2 `quality × decorrelation` objective. Full record: [[D186]].**

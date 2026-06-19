@@ -4692,3 +4692,34 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** Crucible `FORGE_generation_model_plan.md` + `decorrelation_proxy_sample_20260618T235737Z.json`; [[D184]] (3b worst-Q decorrelation — this answers where it lives), [[D105]]/[[D106]]/[[D114]] (the quality machinery generation keeps), [[D182]]/[[D183]] (yield-map axes the rejected Option A would have mirrored; cohort-definition flag).
 
 **STATUS: VERDICT recorded — decorrelation → assembly (Crucible); generation = quality + directional variety; no Forge decorrelation axis; per-recipe map not warranted. Tooling committed; Crucible writeback pending operator go.**
+
+---
+
+## D187 — 2026-06-18 — WF-quality probe → the generation-layer QUALITY model is VIABLE: rich king features predict honest WF (IC +0.27), coarse cells don't (~0). Greenlights folding King into the standard path (re-target M → WF) + a WF-p95 refit-label ask. RESEARCH; no production-loop change.
+
+**Spec section:** Crucible `FORGE_generation_model_plan.md` — the *quality* half; companion to [[D186]] (which placed *decorrelation* at assembly). Operator: re-target the generation quality model to WF on broad targets; retire the King lane into the standard submission path.
+
+**The question.** [[D186]] left QUALITY as the generation layer's job. Is it learnable at generation time — and does King's machinery transfer to a WF target (the prerequisite for folding King in)? A coarse-cell check first showed `(hypothesis, directional, dte)` ~zero-predicts honest WF-median (LOO Spearman −0.03) — WF quality is idiosyncratic at the recipe level.
+
+**Probe (`scripts/wf_quality_probe.py`, offline/read-only).** Reuses `king/featurize.py` (rich features: param numerics, indicator/exit/signal-type one-hots, combiner categoricals), a pure-python ridge (no numpy in env) + 5-fold CV, out-of-fold Spearman = IC. Same harness, two targets on 1700 honest broad components / 36 features:
+- **`cpcv_p25` = +0.44** (SANITY — beats the D155 tail model's +0.35, validates the pipeline).
+- **`wf_median` = +0.27** (THE QUESTION — λ-robust across 1/10/100).
+
+**Findings.**
+- **Quality IS predictable at generation time — but only from RICH features.** Coarse recipe cells: −0.03 (dead). Rich king features: **+0.27** on honest WF-median. The signal lives in params/underlying/indicator structure, not the (hyp,dir,dte) cell.
+- **The two probes now fully locate Crucible's `quality × decorrelation`:** decorrelation → ASSEMBLY ([[D186]], per-pair, Forge-blind), quality → GENERATION (this, rich-feature-predictable). Clean partition.
+- **King-retirement de-risked.** King's featurizer+ridge transfer to a WF target → folding King into the standard path = re-targeting its machinery **M → WF on the broad cohort**, now evidence-backed.
+- **WF-median is the *noisy* statistic** (+0.27 vs cpcv-p25's +0.44 on identical features) → a sharper WF statistic likely predicts better. Operator chose **WF-p95** (the ceiling) as the real target — fits the assembly *peak-tiling* logic (mint high-ceiling broad components; assembly stitches complementary peaks). p95 isn't in Forge's export (only `walk_forward_sharpe_median`) → requested from Crucible's refit lane (`PROMPT_CRUCIBLE_WF_P95_REFIT_LABEL.md`).
+
+**Decision / next.**
+- **Quality model = viable**, buildable on WF-median today (+0.27, no Crucible dep); upgrade the target to WF-p95 if `IC(p95) > IC(median)` (Crucible label requested).
+- **Retire the King lane** into the standard submission path (operator directive) — its own operator-gated increment (separate oracle/search/DB/CLI, §20-blocked, paced fires; loop-touching → plan + deploy ritual + a [[meta-king-arm-status]] memory update). The folded-in lane = King's rich-feature ridge re-targeted to WF; do NOT fix the plug-in point (ranker prior à la [[D149]]/F3 vs replace-the-arm) until the target (median vs p95) is set.
+- **Honest scope:** +0.27 is a *steering* lever (baseline prior ~+0.12, cpcv tail model +0.35), not a wall-breaker. No single broad component clears WF-median 2.0; the promotion path stays assembled-peaks.
+
+**Alternatives considered.** (a) Coarse-cell / sampler-yield quality axis — rejected (−0.03; WF quality isn't a recipe property). (b) Conclude quality is unpredictable (as decorrelation was Forge-blind) — refuted (rich features +0.27). (c) Build on WF-median now vs wait for p95 — deferred to the King-fold increment once the target is set.
+
+**Files:** `scripts/wf_quality_probe.py` + `tests/unit/test_wf_quality_probe.py` (new; ruff clean, 6/6), `PROMPT_CRUCIBLE_WF_P95_REFIT_LABEL.md` (the label ask, operator-relayed), `STATUS.md`, this entry. NO `src/forge/` / grammar / feedback change → not a deploy. Operator's in-flight `PROMPT_CRUCIBLE_*` / `FORGE_THROTTLE_*` left uncommitted (theirs).
+
+**References:** [[D186]] (decorrelation → assembly; the companion half), [[D155]] (the cpcv-p25 tail model, +0.35, that the +0.44 sanity reproduces), `king/featurize.py` + `king/score.py` (the reused machinery), [[meta-king-arm-status]] (the arm being retired), `FORGE_generation_model_plan.md`, `PROMPT_CRUCIBLE_REFIT_PRIORITY_AND_WORSTQ_REGIME.md` (the refit lane the p95 label rides).
+
+**STATUS: quality model VIABLE (rich features → honest WF +0.27); King-retirement greenlit (re-target M→WF, own increment); WF-p95 refit label drafted for operator relay. Tooling committed.**
