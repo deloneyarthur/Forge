@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 from collections import Counter
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import duckdb
@@ -218,6 +219,98 @@ def standardize(genomes: Sequence[dict], columns: Sequence[str]) -> list[list[fl
 # --------------------------------------------------------------------------- main
 
 
+# Scalar quality metrics already present in gate_results (wave-1 sweep targets).
+TARGET_GATES = [
+    "cpcv_sharpe_p25",
+    "walk_forward_sharpe_median",
+    "sharpe_baseline",
+    "deflated_sharpe",
+    "profit_factor",
+    "regime_stress_p25_return",
+    "max_drawdown_ceiling",
+    "pbo",
+]
+# Computed composites: 2-gate proximities (D114) + the all-gate min_margin (King's M target).
+_COMPOSITE_TARGETS = ["joint_min", "joint_prod", "min_margin_z"]
+# WF refit percentile/derived targets (from Crucible's wf_percentile_refit label; --wf-label).
+_WF_REFIT_TARGETS = [
+    "wf_p95",
+    "wf_p90",
+    "wf_p75",
+    "wf_p50_refit",
+    "wf_p25",
+    "wf_p10",
+    "wf_min",
+    "wf_mean",
+    "wf_trimmed_mean",
+    "wf_top_quartile_mean",
+    "wf_frac_positive",
+    "wf_iqr",
+    "wf_cov",
+]
+# Targets computed from the per-fold series (set to None together when folds are absent).
+_WF_FOLD_DERIVED = (
+    "wf_mean",
+    "wf_trimmed_mean",
+    "wf_top_quartile_mean",
+    "wf_frac_positive",
+    "wf_p90",
+    "wf_p10",
+    "wf_min",
+    "wf_iqr",
+    "wf_cov",
+)
+# CPCV refit distribution targets (round-2 A: provided percentiles + cpcv_paths-derived extras).
+_CPCV_REFIT_TARGETS = [
+    "cpcv_p95",
+    "cpcv_p90",
+    "cpcv_p75",
+    "cpcv_p50_refit",
+    "cpcv_p25_refit",
+    "cpcv_p10",
+    "cpcv_min",
+    "cpcv_mean",
+    "cpcv_trimmed_mean",
+    "cpcv_top_quartile_mean",
+    "cpcv_frac_positive",
+    "cpcv_iqr",
+    "cpcv_cov",
+]
+# Regime-stress refit distribution targets (round-2 B rerun; regime-AGNOSTIC return bootstrap).
+_REGIME_STRESS_TARGETS = [
+    "rs_p5",
+    "rs_p10",
+    "rs_p25",
+    "rs_p50",
+    "rs_p75",
+    "rs_p90",
+    "rs_p95",
+    "rs_mean",
+    "rs_frac_positive",
+    "rs_cov",
+]
+_LOWER_IS_BETTER = {
+    "max_drawdown_ceiling",
+    "pbo",
+    "wf_iqr",
+    "wf_cov",
+    "cpcv_iqr",
+    "cpcv_cov",
+    "rs_cov",
+}
+# Sizing/selection knobs that mechanically drive risk metrics (dropped in the ablation).
+_MECHANICAL_COLUMNS = {
+    "num:risk_frac",
+    "num:rank_k",
+    "num:delta_target",
+    "num:dte_min",
+    "num:dte_max",
+    "num:min_oi",
+    "num:min_vol",
+    "num:k",
+}
+
+
 def _gate_value(gate_results: dict, key: str) -> float | None:
     """Pull a gate's numeric value from a verdict's gate_results dict."""
     x = gate_results.get(key)
@@ -245,14 +338,168 @@ def load_components(db_path: str, *, broad_only: bool) -> list[dict]:
         genome = json.loads(cj)
         if broad_only and (genome.get("combiner") or {}).get("type") != "cross_sectional_rank":
             continue
-        out.append(
-            {
-                "genome": genome,
-                "wf_median": _gate_value(g, "walk_forward_sharpe_median"),
-                "cpcv_p25": _gate_value(g, "cpcv_sharpe_p25"),
-            }
-        )
+        metrics: dict[str, float | None] = {k: _gate_value(g, k) for k in TARGET_GATES}
+        wf, cp = metrics["walk_forward_sharpe_median"], metrics["cpcv_sharpe_p25"]
+        both = wf is not None and cp is not None
+        metrics["joint_min"] = min(wf / 2.0, cp / 1.5) if both else None
+        metrics["joint_prod"] = (wf / 2.0) * (cp / 1.5) if both else None
+        out.append({"config_hash": h, "genome": genome, "metrics": metrics})
     return out
+
+
+def add_min_margin(comps: list[dict]) -> None:
+    """Add an all-gate `min_margin_z` (worst per-gate z-score, direction-aware) to each component.
+
+    Approximates King's `min_margin` (M): standardize each gate's value across the population,
+    flip lower-is-better gates, take the min -> 'how the component fares on its weakest gate'.
+    """
+    stats: dict[str, tuple[float, float] | None] = {}
+    for gate in TARGET_GATES:
+        present = [c["metrics"][gate] for c in comps if c["metrics"].get(gate) is not None]
+        if len(present) < 2:
+            stats[gate] = None
+            continue
+        mean = sum(present) / len(present)
+        std = (sum((x - mean) ** 2 for x in present) / len(present)) ** 0.5
+        stats[gate] = (mean, std if std > 1e-9 else 1.0)
+    for c in comps:
+        zs: list[float] = []
+        for gate in TARGET_GATES:
+            v = c["metrics"].get(gate)
+            st = stats[gate]
+            if v is None or st is None:
+                continue
+            z = (v - st[0]) / st[1]
+            zs.append(-z if gate in _LOWER_IS_BETTER else z)
+        c["metrics"]["min_margin_z"] = min(zs) if zs else None
+
+
+def _pctile(srt: list[float], q: float) -> float:
+    """Linear-interpolated percentile of an already-sorted list."""
+    if not srt:
+        return float("nan")
+    if len(srt) == 1:
+        return srt[0]
+    pos = q * (len(srt) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(srt) - 1)
+    frac = pos - lo
+    return srt[lo] * (1.0 - frac) + srt[hi] * frac
+
+
+def _series_extras(series: list, prefix: str, m: dict) -> None:
+    """Distribution extras (p90/min/mean/trimmed/top-q/frac-pos/IQR/CoV) from a value series."""
+    vals = [x for x in series if x is not None]
+    keys = (
+        f"{prefix}_p90",
+        f"{prefix}_min",
+        f"{prefix}_mean",
+        f"{prefix}_trimmed_mean",
+        f"{prefix}_top_quartile_mean",
+        f"{prefix}_frac_positive",
+        f"{prefix}_iqr",
+        f"{prefix}_cov",
+    )
+    if not vals:
+        for k in keys:
+            m[k] = None
+        return
+    srt = sorted(vals)
+    n = len(srt)
+    mean = sum(vals) / n
+    std = (sum((x - mean) ** 2 for x in vals) / n) ** 0.5
+    q = max(1, n // 4)
+    trim = max(1, n // 10)
+    m[f"{prefix}_p90"] = _pctile(srt, 0.90)
+    m[f"{prefix}_min"] = srt[0]
+    m[f"{prefix}_mean"] = mean
+    m[f"{prefix}_trimmed_mean"] = sum(srt[trim : n - trim]) / max(1, n - 2 * trim)
+    m[f"{prefix}_top_quartile_mean"] = sum(srt[-q:]) / q
+    m[f"{prefix}_frac_positive"] = sum(1 for x in vals if x > 0) / n
+    m[f"{prefix}_iqr"] = _pctile(srt, 0.75) - _pctile(srt, 0.25)
+    m[f"{prefix}_cov"] = std / abs(mean) if abs(mean) > 1e-9 else None
+
+
+def _load_label_components(label_path: str) -> list:
+    """Return the components array from a Crucible label file (list, or dict with 'components')."""
+    data = json.loads(Path(label_path).read_text())
+    if isinstance(data, list):
+        return data
+    if "components" in data:
+        return data["components"]
+    return next((v for v in data.values() if isinstance(v, list)), [])
+
+
+def add_wf_refit_targets(comps: list[dict], label_path: str) -> int:
+    """Join Crucible's WF refit label by config_hash; add WF targets. Returns # matched."""
+    by_hash = {r["config_hash"]: r for r in _load_label_components(label_path)}
+    matched = 0
+    for c in comps:
+        r = by_hash.get(c["config_hash"])
+        m = c["metrics"]
+        if r is None:
+            for t in (*_WF_REFIT_TARGETS, *_CPCV_REFIT_TARGETS):
+                m[t] = None
+            continue
+        matched += 1
+        m["wf_p95"] = r.get("wf_sharpe_p95")
+        m["wf_p75"] = r.get("wf_sharpe_p75")
+        m["wf_p50_refit"] = r.get("wf_sharpe_p50")
+        m["wf_p25"] = r.get("wf_sharpe_p25")
+        folds = [f[2] for f in (r.get("wf_folds") or []) if f and f[2] is not None]
+        if folds:
+            srt = sorted(folds)
+            n = len(srt)
+            mean = sum(folds) / n
+            std = (sum((x - mean) ** 2 for x in folds) / n) ** 0.5
+            q = max(1, n // 4)
+            trim = max(1, n // 10)
+            m["wf_mean"] = mean
+            m["wf_trimmed_mean"] = sum(srt[trim : n - trim]) / max(1, n - 2 * trim)
+            m["wf_top_quartile_mean"] = sum(srt[-q:]) / q
+            m["wf_frac_positive"] = sum(1 for x in folds if x > 0) / n
+            m["wf_p90"] = _pctile(srt, 0.90)
+            m["wf_p10"] = _pctile(srt, 0.10)
+            m["wf_min"] = srt[0]
+            m["wf_iqr"] = _pctile(srt, 0.75) - _pctile(srt, 0.25)
+            m["wf_cov"] = std / abs(mean) if abs(mean) > 1e-9 else None
+        else:
+            for key in _WF_FOLD_DERIVED:
+                m[key] = None
+        m["cpcv_p95"] = r.get("cpcv_sharpe_p95")
+        m["cpcv_p75"] = r.get("cpcv_sharpe_p75")
+        m["cpcv_p50_refit"] = r.get("cpcv_sharpe_p50")
+        m["cpcv_p25_refit"] = r.get("cpcv_sharpe_p25")
+        m["cpcv_p10"] = r.get("cpcv_sharpe_p10")
+        _series_extras(r.get("cpcv_paths") or [], "cpcv", m)
+    return matched
+
+
+def add_regime_stress_targets(comps: list[dict], label_path: str) -> int:
+    """Join the regime-stress label by config_hash; add rs_* targets. Returns # matched."""
+    by_hash = {r["config_hash"]: r for r in _load_label_components(label_path)}
+    matched = 0
+    for c in comps:
+        r = by_hash.get(c["config_hash"])
+        m = c["metrics"]
+        if r is None:
+            for t in _REGIME_STRESS_TARGETS:
+                m[t] = None
+            continue
+        matched += 1
+        m["rs_p5"] = r.get("regime_stress_p5")
+        m["rs_p10"] = r.get("regime_stress_p10")
+        m["rs_p25"] = r.get("regime_stress_p25")
+        m["rs_p50"] = r.get("regime_stress_p50")
+        m["rs_p75"] = r.get("regime_stress_p75")
+        m["rs_p90"] = r.get("regime_stress_p90")
+        m["rs_p95"] = r.get("regime_stress_p95")
+        m["rs_mean"] = r.get("regime_stress_mean")
+        m["rs_frac_positive"] = r.get("regime_stress_frac_positive")
+        mean = r.get("regime_stress_mean")
+        std = r.get("regime_stress_std")
+        m["rs_cov"] = std / abs(mean) if mean and abs(mean) > 1e-9 and std is not None else None
+    return matched
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -261,27 +508,52 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--min-support", type=int, default=20)
     ap.add_argument("--all-cohorts", action="store_true", help="include single-name cohort")
+    ap.add_argument("--drop-mechanical", action="store_true", help="ablation: drop sizing knobs")
+    ap.add_argument("--wf-label", help="Crucible refit_distributions label (.json): WF + CPCV")
+    ap.add_argument("--rs-label", help="Crucible regime_stress_distribution label (.json)")
     args = ap.parse_args(argv)
 
     comps = load_components(args.db, broad_only=not args.all_cohorts)
+    add_min_margin(comps)
+    sweep_targets = [*TARGET_GATES, *_COMPOSITE_TARGETS]
+    matched = 0
+    if args.wf_label:
+        matched = add_wf_refit_targets(comps, args.wf_label)
+        sweep_targets = [*sweep_targets, *_WF_REFIT_TARGETS, *_CPCV_REFIT_TARGETS]
+    if args.rs_label:
+        add_regime_stress_targets(comps, args.rs_label)
+        sweep_targets = [*sweep_targets, *_REGIME_STRESS_TARGETS]
     print("=" * 74)
-    print(f"WF-QUALITY PROBE  (honest {'all' if args.all_cohorts else 'BROAD'} components)")
+    mode = "  [ABLATION: mechanical knobs dropped]" if args.drop_mechanical else ""
+    print(f"WF-QUALITY PROBE  (honest {'all' if args.all_cohorts else 'BROAD'} components){mode}")
     print("=" * 74)
-    print(f"components: {len(comps)}")
+    suffix = f"   WF-label matched: {matched}" if args.wf_label else ""
+    print(f"components: {len(comps)}{suffix}")
     genomes = [c["genome"] for c in comps]
     columns = build_columns(genomes, args.min_support)
+    if args.drop_mechanical:
+        columns = [c for c in columns if c not in _MECHANICAL_COLUMNS]
     rows = standardize(genomes, columns)
     print(f"features (support>={args.min_support}, non-constant): {len(rows[0])}")
     print("(out-of-fold Spearman = IC; same features/model/population, only the target changes)\n")
-    for target in ("cpcv_p25", "wf_median"):
-        idx = [i for i in range(len(comps)) if comps[i][target] is not None]
+    results: list[tuple[str, int, float | None]] = []
+    for target in sweep_targets:
+        idx = [i for i in range(len(comps)) if comps[i]["metrics"].get(target) is not None]
+        if len(idx) < 100:
+            results.append((target, len(idx), None))
+            continue
         x = [rows[i] for i in idx]
-        y = [comps[i][target] for i in idx]
-        tag = "SANITY (D155 ~+0.35)" if target == "cpcv_p25" else "THE QUESTION"
-        line = f"  {target:<12} n={len(y):<5}"
-        for lam in (1.0, 10.0, 100.0):
-            line += f"  IC(λ={lam:g})={ridge_cv_ic(x, y, lam, args.folds):+.3f}"
-        print(line + f"   <- {tag}")
+        y = [comps[i]["metrics"][target] for i in idx]
+        results.append((target, len(idx), ridge_cv_ic(x, y, 10.0, args.folds)))
+    ranked = sorted(results, key=lambda r: (r[2] is None, -abs(r[2] or 0.0)))
+    print("  ranked by |IC| (out-of-fold Spearman, λ=10):")
+    for target, n, ic in ranked:
+        if ic is None:
+            print(f"    {target:<26} n={n:<5} (too few, skipped)")
+            continue
+        flag = " (lower=better)" if target in _LOWER_IS_BETTER else ""
+        anchor = "  <- D155 sanity" if target == "cpcv_sharpe_p25" else ""
+        print(f"    {target:<26} n={n:<5} IC={ic:+.3f}{flag}{anchor}")
     return 0
 
 

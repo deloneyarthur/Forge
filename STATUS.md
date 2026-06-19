@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-19 — QUALITY-TARGET SWEEP COMPLETE → TARGET LOCKED `regime_stress_p25_return` (D188): 47 metrics, both CV families + regime-stress distribution + mechanical ablation. One law: generation predicts DOWNSIDE robustness, not the peak. King-fold target set. RESEARCH — no production-loop change.
+
+**Operator: commit/log/lock regime_stress_p25; draft Crucible prompts + design forward. Full record: [[D188]].**
+- **Sweep (`scripts/wf_quality_probe.py`):** rich-feature ridge IC over 47 targets + `--drop-mechanical` ablation. Top edge cluster = **downside robustness**: `regime_stress_p25_return` / rs-level **+0.52** (flat across percentiles), WF floor `wf_p10/min/p25` **+0.50**, `wf_cov` +0.48. Ceilings (wf/cpcv p95/p90) ~+0.25 — REFUTED. CPCV = weaker WF. Mechanical (max_drawdown/deflated_sharpe), King's M, pbo all excluded.
+- **Regime-stress B-rerun answer:** percentiles are FLAT (rs is a tight ~98%-positive return bootstrap → collinear; only the LEVEL predicts, spread/cov does NOT). So the existing gate `regime_stress_p25_return` is tied-for-best — **no new percentile label is load-bearing.** Correction: regime_stress is regime-AGNOSTIC (not bear/ranging — that's portfolio-scope).
+- **LOCKED target = `regime_stress_p25_return`** — top-tied edge-IC, single scalar Forge already ingests, survives ablation. WF-native alternates `wf_p10/p25`. King's M abandoned (weak+mechanical).
+- **Next:** (1) leverage check — does selecting high-regime_stress lift assembled books? (`PROMPT_CRUCIBLE_QUALITY_TARGET_LEVERAGE.md`, assembly-side, drafted). (2) King-fold quality-lane design (A/B-flagged ranker term reusing `king/featurize`, gate flag-flip on the leverage read). Both operator-gated.
+- **No `src/`/grammar/feedback change — not a deploy.**
+
+---
+
 ## 2026-06-18 — WF-QUALITY PROBE → generation-layer QUALITY model is VIABLE (D187): rich king features predict honest WF (IC +0.27); coarse cells don't (~0). Greenlights King-retirement (re-target M→WF) + a WF-p95 refit-label ask. RESEARCH — no production-loop change.
 
 **Operator: re-target the quality model to WF p95 on broad targets; retire the King lane into the standard submission path. Full record: [[D187]].**

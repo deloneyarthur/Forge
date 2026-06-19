@@ -58,3 +58,9 @@ def test_ridge_cv_ic_is_near_zero_on_unrelated_target() -> None:
     rows = [[float(i)] for i in range(60)]
     y = [float(i % 2) for i in range(60)]  # alternating, no monotonic relation to the feature
     assert abs(mod.ridge_cv_ic(rows, y, lam=1.0, folds=5)) < 0.4
+
+
+def test_pctile_interpolates() -> None:
+    assert mod._pctile([1.0, 2.0, 3.0, 4.0], 0.5) == pytest.approx(2.5)
+    assert mod._pctile([10.0, 20.0, 30.0], 0.0) == pytest.approx(10.0)
+    assert mod._pctile([10.0, 20.0, 30.0], 1.0) == pytest.approx(30.0)

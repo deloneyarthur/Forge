@@ -4723,3 +4723,33 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** [[D186]] (decorrelation → assembly; the companion half), [[D155]] (the cpcv-p25 tail model, +0.35, that the +0.44 sanity reproduces), `king/featurize.py` + `king/score.py` (the reused machinery), [[meta-king-arm-status]] (the arm being retired), `FORGE_generation_model_plan.md`, `PROMPT_CRUCIBLE_REFIT_PRIORITY_AND_WORSTQ_REGIME.md` (the refit lane the p95 label rides).
 
 **STATUS: quality model VIABLE (rich features → honest WF +0.27); King-retirement greenlit (re-target M→WF, own increment); WF-p95 refit label drafted for operator relay. Tooling committed.**
+
+---
+
+## D188 — 2026-06-19 — Quality-target sweep COMPLETE (47 metrics, both CV families + regime-stress distribution + mechanical ablation) → TARGET LOCKED `regime_stress_p25_return`. One law: generation predicts DOWNSIDE robustness, not the peak. King-fold target set. RESEARCH; no production-loop change.
+
+**Spec section:** Crucible `FORGE_generation_model_plan.md` (quality half); completes [[D187]]. Operator: *"commit, log, and lock regime_stress_p25."* Round-2 labels (`refit_distributions`, `regime_stress_distribution`) relayed + folded.
+
+**The sweep.** `scripts/wf_quality_probe.py` ranks candidate quality targets by rich-feature ridge IC (out-of-fold Spearman; `king/featurize.py` features, pure-python ridge + 5-fold CV), with a `--drop-mechanical` ablation that strips sizing/selection knobs to separate edge from mechanical predictability. 47 targets: gate scalars + computed `min_margin`/joint composites; the full WF refit distribution (p10..p95 + mean/trimmed/top-q/frac-pos/IQR/CoV from `wf_folds`); the full CPCV distribution (same, from the 45 `cpcv_paths`); the regime-stress distribution (p5..p95 + mean/frac-pos/CoV).
+
+**Result (edge IC, post-ablation).**
+- **Top cluster = DOWNSIDE robustness:** `regime_stress_p25_return` / regime-stress level **+0.52** (flat across percentiles); WF floor `wf_p10`/`wf_min`/`wf_p25` **+0.50**; `wf_cov` (consistency) +0.48. Best CPCV (`cpcv_p25`) +0.40.
+- **Ceilings lose everywhere:** WF/CPCV p95/p90/p75 ~+0.24–0.32 (bottom). The p95 / peak-tiling bet is **refuted** — the ceiling is an extreme order stat (one lucky fold), structurally illegible.
+- **Floor-beats-ceiling law:** strong in WF (p10 +0.51 ≫ p95 +0.36), mild in CPCV; the whole story.
+- **Mechanical / excluded:** `max_drawdown` +0.59→+0.50 (sizing-driven), `deflated_sharpe` +0.32→+0.17, `min_margin_z` (King's M) +0.26→+0.20, `pbo` 0.00.
+
+**Regime-stress percentiles are FLAT (the B-rerun's answer).** rs_p5..p95 all ~+0.52 — the deep floor (p5/p10) slightly *worse*, not better — because regime_stress is a tight, ~98%-positive *return* bootstrap → percentiles collinear; only the LEVEL is predictable (`rs_cov`/`frac_positive` ~+0.21, NOT predictable). So the existing gate metric `regime_stress_p25_return` is statistically tied with any regime-stress percentile — **no new percentile label is load-bearing.** The rerun still earned its keep: it *ruled out* "a deeper percentile is better" (true for WF, false for regime-stress).
+
+**Correction folded.** `regime_stress_p25_return` is a regime-AGNOSTIC trade-block return bootstrap (`_regime_stress_p25_from_trades`), NOT the bear/ranging engine (portfolio-scope only). Earlier framing of it as "the BEAR/RANGING worst-Q payer" was over-reach; it is downside-tail robustness. The downside-wins conclusion is unaffected.
+
+**DECISION — target LOCKED: `regime_stress_p25_return`.** Top-tied edge-IC (+0.52), a single clean scalar Forge ALREADY ingests in `gate_results` (zero new-label dependency in production), survives the mechanical ablation. WF-native alternates: `wf_p10`/`wf_p25`. This is the re-target objective for the King-fold; King's M is abandoned (weak + mechanical).
+
+**Caveat / next.** PREDICTABILITY axis only. The LEVERAGE axis — does *selecting* high-`regime_stress` components actually lift assembled books toward the binding gates — is assembly-side and unvalidated; `PROMPT_CRUCIBLE_QUALITY_TARGET_LEVERAGE.md` requests the marginal-book-contribution read. Plan: build the King-fold quality lane **A/B-flagged (default OFF, byte-identical, [[D108]] pattern)** and gate the flag-flip on that leverage read.
+
+**Alternatives considered.** WF-p95 / ceiling (refuted, illegible); CPCV family (weaker WF); `min_margin`/M (King's objective — weak + mechanical, abandoned); max_drawdown / deflated_sharpe (mechanical); regime-stress deeper percentiles (collinear, no gain).
+
+**Files:** `scripts/wf_quality_probe.py` (WF+CPCV+regime-stress label joins, `min_margin`, ablation, 47-metric ranked sweep) + `tests/unit/test_wf_quality_probe.py` (ruff clean, 7/7), `PROMPT_CRUCIBLE_CPCV_REGIME_STRESS_CALMAR_LABELS.md` (round-2 ask, relayed), `PROMPT_CRUCIBLE_QUALITY_TARGET_LEVERAGE.md` (next ask), `STATUS.md`, this entry. NO `src/forge/` / grammar / feedback change → not a deploy. Crucible labels consumed: `refit_distributions_20260619T074555Z.json`, `regime_stress_distribution_20260619T080810Z.json`.
+
+**References:** [[D186]]/[[D187]] (the arc), [[D155]] (cpcv tail model), [[D108]] (A/B-flag-off-byte-identical pattern for the lane), [[meta-king-arm-status]] (King retiring — memory update on fold), `king/featurize.py` (reused for the fold), [[promotion-gate-tiers-and-constraint]] (the worst-Q binding constraint this lands on).
+
+**STATUS: quality-target sweep COMPLETE; target LOCKED `regime_stress_p25_return` (downside robustness, +0.52, already-gated scalar). Next: leverage check (Crucible, drafted) + King-fold quality-lane design (A/B-flagged ranker term). Tooling committed.**
