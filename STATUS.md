@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-19 — `target_wf_p25` WIRED as a gate-sourced target (D192): Crucible's `wf_sharpe_p25`/`p10` gate-emission → the continuous training path for the quality lane. No contracts gap; historical backfill moot (INSERT OR IGNORE). Flag-OFF.
+
+**Crucible delivered gate-time emission + backfill (operator relay). Full record: [[D192]].**
+- **Landed:** `target_wf_p25`/`target_wf_p10` → `TARGET_COLUMNS` + `_TARGET_GATE` (keys `wf_sharpe_p25`/`p10`). F3-safe (both models exclude via `set(TARGET_COLUMNS)`). `build_dataset` populates them forward → the daily timer can train `target_wf_p25` continuously.
+- **Contracts: NO gap** — the reader keeps `wf_sharpe_p25` (2,897/3,000 GatedRuns).
+- **Backfill moot for Forge:** `record_verdicts` is `INSERT OR IGNORE` → historical verdicts won't update (0/64,441); only NEW run_ids accrue wf_p25 forward. Fine — refit snapshot (2,779) = one-off train; forward accrual = continuous. Crucible needn't maintain the historical backfill.
+- **Gates:** ruff/mypy clean, full suite **1673 passed**.
+- **Flip prep (gated):** forward accrual (auto) → a `target_wf_p25` model in the live dir (daily timer `--target`, or `--label` interim) → §8.6 shadow streak → flip `--quality-rank` (D104).
+
+---
+
 ## 2026-06-19 — TARGET RETARGETED regime_stress → `target_wf_p25` (D191): the leverage arm REFUTED regime_stress as the steering target; the WF floor is the binding axis. Built a label-sourced training path; lane flag-OFF. Deploy/flip operator-gated.
 
 **Operator chose (a): build the wf_p25 label-training path + retarget. Full record: [[D191]].**

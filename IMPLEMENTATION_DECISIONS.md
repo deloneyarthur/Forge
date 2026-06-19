@@ -4835,3 +4835,23 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** [[D189]] (the lane), [[D188]] (predictability lock, now refined), [[D186]] (tail-at-assembly), [[D190]] (King retired), Crucible `regime_stress_leverage_*.json` + `refit_distributions_*.json`.
 
 **STATUS: regime_stress REFUTED as target (leverage arm) → lane RETARGETED to `target_wf_p25` (WF floor); label-training path built + trained (2,779). regime_stress = tail floor. Flag-OFF; flip gated on the gate_results persist (Crucible follow-up) + the shadow streak.**
+
+---
+
+## D192 — 2026-06-19 — Wired `target_wf_p25`/`target_wf_p10` as gate-sourced `TARGET_COLUMNS` (Crucible now emits `wf_sharpe_p25`/`p10` in gate_results) → the CONTINUOUS training path for the quality lane. No contracts gap; the historical backfill is moot for Forge. Flag-OFF.
+
+**Spec section:** completes [[D191]]'s continuous path. Crucible delivered the gate-time emission + a backfill (operator relay of `PROMPT_CRUCIBLE_WF_P25_GATE_PERSIST_FOLLOWUP.md`).
+
+**Landed.** `wf_sharpe_p25` + `wf_sharpe_p10` confirmed in the gated-runs export; the contracts reader KEEPS them (2,897/3,000 GatedRuns carry `wf_sharpe_p25` — **no contracts gap**, #2 clean). Added `target_wf_p25`→`wf_sharpe_p25` and `target_wf_p10`→`wf_sharpe_p10` to `TARGET_COLUMNS` + `_TARGET_GATE` (`dataset.py`). Both models auto-exclude them (F3 `_LOGISTIC_NON_FEATURES` + robustness `_REGRESSION_NON_FEATURES` are both `| set(TARGET_COLUMNS)`) → no leak. So `build_dataset` populates `target_wf_p25` from gate_results going forward, and `train-robustness --target target_wf_p25` (standard path) + the daily timer train it continuously as forward verdicts accrue.
+
+**Propagation diagnosis (validate-first).** Forge verdicts: 0/64,441 carry `wf_sharpe_p25` — because (1) the snapshot predates the daemon reconciling the wf_p25 export, and (2) `record_verdicts` is `INSERT OR IGNORE` (historical run_ids won't update; only NEW run_ids get it). So the **Crucible historical backfill is MOOT for Forge** (INSERT OR IGNORE + the rolling-10k export) — but unnecessary: the refit snapshot (2,779 honest components) is the one-off train source, forward accrual the continuous one. A verdicts-UPDATE path is NOT warranted (it'd cover only the rolling window; the honest trainable pool already = the snapshot). Heads-up to Crucible: needn't maintain the historical backfill — the forward emission is the win.
+
+**Gates.** ruff + `mypy --strict` clean; full suite **1673 passed** (additive; null on pre-emission rows).
+
+**Flip prep (gated, unchanged).** Forward verdicts accrue wf_p25 (automatic); put a `target_wf_p25` model in the live models dir (daily timer `--target target_wf_p25`, or the `--label` snapshot interim); §8.6 shadow streak; then flip `--quality-rank` (D104 ritual).
+
+**Files:** `ranking/dataset.py` (`TARGET_COLUMNS` + `_TARGET_GATE`), `STATUS.md`, this entry.
+
+**References:** [[D191]] (retarget to wf_p25), [[D189]] (the lane), Crucible wf_p25 gate-emission + backfill.
+
+**STATUS: `target_wf_p25` wired as a gate-sourced target (continuous path ready); contracts keeps the key (no gap); historical backfill moot (INSERT OR IGNORE). Flag-OFF; flip gated on forward accrual + a live wf_p25 model + the shadow streak.**

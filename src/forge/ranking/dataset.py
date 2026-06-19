@@ -47,11 +47,17 @@ TARGET_COLUMNS: tuple[str, ...] = (
     "target_cpcv_p25",
     "target_wf_median",
     "target_regime_stress",
+    # WF floor (D191): the quality-lane target. Gate-time-emitted as a METRIC (not a gate)
+    # in `gate_results` from 2026-06-19 (Crucible); null on pre-emission verdicts.
+    "target_wf_p25",
+    "target_wf_p10",
 )
 _TARGET_GATE: tuple[tuple[str, str], ...] = (
     ("target_cpcv_p25", "cpcv_sharpe_p25"),
     ("target_wf_median", "walk_forward_sharpe_median"),
     ("target_regime_stress", "regime_stress_p25_return"),
+    ("target_wf_p25", "wf_sharpe_p25"),
+    ("target_wf_p10", "wf_sharpe_p10"),
 )
 
 # A train-time conditioning feature (= the D128 honesty predicate, §8.2): lets
