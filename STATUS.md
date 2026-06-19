@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-18 — DECORRELATION-PROXY EXPERIMENT → VERDICT (D186): decorrelation belongs at ASSEMBLY (Crucible), not generation. The generation layer owns QUALITY + directional variety; the free structural proxy is too weak and a per-recipe map is NOT warranted. RESEARCH — no production-loop change.
+
+**Operator: *"how do we use an ML model for strategy generation"* → tested Crucible's `FORGE_generation_model_plan.md` §2 `quality × decorrelation` objective. Full record: [[D186]].**
+- **Experiment:** `scripts/decorrelation_proxy_alignment.py` (offline, deterministic) tests whether a FREE structural proxy (Jaccard over indicator-id sets) predicts Crucible's realized PnL correlation. Sample: `decorrelation_proxy_sample_20260618T235737Z.json` (1000 pairs / 70 configs / 810 broad×broad / 100% resolved). PREFLIGHT caught `content_key` is degenerate (saturates at distance 1.0) → switched to indicator-id distance.
+- **Findings (broad×broad n=810, calm→stress):** decorrelation is **ABUNDANT** (mean |corr| 0.098→0.124) — broad-xsect components already decorrelate regardless of structure; the proxy is **WEAK** and only in directional-indicator distance (Spearman −0.195 calm / **−0.228 stress**; regime-gate = noise −0.02); mild stress re-coupling (+0.026); residual variance is **per-pair, not per-recipe**.
+- **Verdict:** decorrelation → **ASSEMBLY** (Crucible has real pairwise corr; the §8.2 joint objective lives there). **No Forge decorrelation-yield axis** (weak proxy, wrong granularity). **Per-recipe map NOT warranted** — recommend a cheap directional-diversity guardrail at assembly; revisit only if the correlated tail (~12–16%, growing under stress) proves binding.
+- **Generation layer = QUALITY + varied menu:** mint strong component-grade legs toward the WF-median CENTER gate (generation-layer ML = a QUALITY model, NOT a decorrelation model); keep directional/hypothesis variety as a floor; push the quality frontier into under-served hypotheses (a GRAMMAR problem, operator-gated).
+- **Side-finding:** Forge cohort (`combiner.type`) vs Crucible cohort (execution breadth) diverge for 8/70 configs (confluence-on-universe tagged `xsect`) — flagged for [[D182]]; verdict robust to the definition (tool segments by the sample's tags).
+- **Caveat / scope:** n=70 good broad components — signs/stress-strengthening robust, magnitudes maybe attenuated. **No `src/`/grammar/feedback change — not a deploy.** Crucible writeback pending operator go.
+
+---
+
 ## 2026-06-17 — YIELD-MAP REFRESH DEPLOYED (D185): increments 1+2 (cohort + regime-gate yield) LIVE — `--cohort-yield --regime-gate-yield` added to the unit, D104 ritual. Increment 3 SKIPPED (Crucible concurs; 3a refuted on Forge data, 3b worst-Q deferred). PRODUCTION CHANGE.
 
 **Operator: "Crucible suggests we skip it. let's deploy 1+2." Increment-3 investigation ([[D184]]) refuted 3a on Forge data (`mr` 0/1901 honest; trend cohort×regime additive, already captured by 1+2); 3b (worst-Q decorrelation) deferred (no Crucible label). 1+2 = the final realization → deployed. Full record: [[D185]].**

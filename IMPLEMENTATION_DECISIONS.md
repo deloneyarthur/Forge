@@ -4660,3 +4660,35 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** [[D182]]/[[D183]] (the axes deployed), [[D184]] (increment 3 skipped), [[D104]] (the ritual + the dirty-tree-reboot lesson), [[D108]] (the A/B-flag-off-byte-identical guard that contained the bug), Crucible `FORGE_structural_yield_map_refresh.md`.
 
 **STATUS: increments 1+2 LIVE (cohort + regime-gate yield active in the journal); NRestarts=0, no errors. Increment 3 skipped. Yield-map-refresh arc COMPLETE + deployed.**
+
+---
+
+## D186 — 2026-06-18 — Decorrelation-proxy experiment → VERDICT: decorrelation belongs at ASSEMBLY (Crucible), not generation; the generation layer owns QUALITY + directional variety. Free structural proxy too weak; per-recipe map NOT warranted. RESEARCH + Crucible handoff — no production-loop change.
+
+**Spec section:** Crucible `FORGE_generation_model_plan.md` §2 (quality×decorrelation objective), §3 (proposed per-recipe decorrelation map), §8.2 (joint-oracle question). Answers where the [[D184]] "3b worst-Q decorrelation lever (deferred, no Crucible label)" actually lives. Operator frame: *"how do we use an ML model for strategy generation."*
+
+**The question.** The plan proposes a dual generation objective `quality × decorrelation`. Quality is already learned ([[D105]]/[[D106]]/[[D114]] component-rate posteriors); decorrelation is not — Forge has zero return/pairwise data (Crucible scores strategies independently, exports per-strategy scalars only). Two ways to feed a decorrelation signal into generation: (a) a FREE structural proxy Forge computes from the config alone, or (b) Crucible builds a per-recipe decorrelation map. Decide by testing whether the proxy predicts realized PnL correlation.
+
+**Experiment (`scripts/decorrelation_proxy_alignment.py`, offline/read-only/deterministic).** X = pairwise structural distance = Jaccard over signal INDICATOR-ID sets, per role (params dropped — PREFLIGHT caught that `content_key` saturates at distance 1.0, zero variance). Y = Crucible's realized daily-PnL correlation, a one-off SAMPLE asked for in `PROMPT_CRUCIBLE_DECORRELATION_PROXY_SAMPLE.md` → delivered `~/optbt_data/exports/decorrelation_proxy_sample_20260618T235737Z.json` (1000 pairs / 70 configs, 810 broad×broad, 100% hash-resolved; standalone-PnL union-calendar flat=0 = generation-time-faithful; parity soft_joint standalone −0.069 vs joint −0.038, same conclusion).
+
+**Findings (broad×broad n=810, by Crucible cohort tags; calm → stress[bear+high_vol]).**
+- **Decorrelation is ABUNDANT in broad×broad:** mean |corr| 0.098 → 0.124. Good broad components already decorrelate from each other almost regardless of structure (the cross-sectional construction buys it). Decorrelated SUPPLY is not scarce.
+- **The proxy is WEAK but correctly signed,** concentrated in ONE feature: directional-indicator distance Spearman −0.195 (calm) / **−0.228 (stress)**; all-indicator −0.114; **regime-gate distance is noise (−0.024)**. Strongest in the stress quarter the cpcv-p25 gate scores (good), but weak in magnitude.
+- **Mild stress re-coupling:** mean |corr| +0.026 in stress (~63% of pairs higher; frac |corr|>0.3 ~12%→~15% on the first-pass subset), concentrated on same-directional pairs.
+- **The residual decorrelation variance is PER-PAIR, not per-recipe** (realized name/beta overlap) — invisible to a generation-time proxy AND to a per-recipe map.
+- **Cohort-definition divergence (side-finding):** 62/70 configs agree, but 8 `confluence`-combiner configs that Forge labels `single` (by `combiner.type`) Crucible tags `xsect` — Crucible's cohort = execution breadth, not combiner type. Verdict robust to the definition (the tool now segments by the sample's tags; numbers barely move). FLAG for [[D182]] (cohort-yield keys on combiner.type).
+
+**Decision.** **Decorrelation is owned at ASSEMBLY (Crucible), not generation.** Crucible has the real pairwise correlations at assembly time — the per-pair signal that matters — so the §8.2 `quality × decorrelation` objective lives in assembly selection, NOT Forge's sampler.
+- **No Forge-side decorrelation-yield sampler axis** (the would-be "Option A"): the generation-time signal is too weak and the wrong granularity (per-recipe can't capture per-pair).
+- **Crucible's full per-recipe map is NOT warranted** — recommend a cheap directional-diversity guardrail at assembly (don't pair same-directional legs), measure assembled-book lift, revisit the map only if the ~12–16% correlated tail proves binding.
+- **The generation layer = QUALITY + a varied menu:** (1) mint strong component-grade legs sharpened toward the binding WF-median CENTER gate — *this is where generation-layer ML belongs: a QUALITY model (P(component-grade)), not a decorrelation model*; (2) hold directional-indicator / hypothesis variety as a light floor so assembly has decorrelated-strong pairs to pick (already partly via [[D103]]/[[D136]] + the diversifier); (3) push the quality frontier into under-served hypotheses (strong MR/relval/vol_event) — a GRAMMAR problem (operator-gated rule edits), not ML.
+
+**Alternatives considered.** (a) Build the decorrelation-yield axis now — rejected (weak proxy, wrong granularity, decorrelation already abundant). (b) Commission the full per-recipe map — deferred (per-recipe can't capture per-pair residual; near-saturated axis). (c) Heavy generative model conditioned on the pool — rejected (doesn't escape the grammar ceiling; determinism burden, hard rule #6/#8).
+
+**Caveat.** n=70 configs (good broad components, v9–v22) — the right population for assembly but small; SIGNS and stress-strengthening are robust, magnitudes may be attenuated by a homogeneous set. "Abundant decorrelation" is a direct measurement, holds regardless.
+
+**Files:** `scripts/decorrelation_proxy_alignment.py` + `tests/unit/test_decorrelation_proxy.py` (new; ruff clean, 10/10), `PROMPT_CRUCIBLE_DECORRELATION_PROXY_SAMPLE.md` (the ask), `STATUS.md`, this entry. NO `src/forge/` / grammar / feedback change → not a deploy, no production-loop impact. The operator's in-flight `PROMPT_CRUCIBLE_*` / `FORGE_THROTTLE_*` left uncommitted (theirs). Crucible writeback (verdict + §8.2 answer) pending operator go.
+
+**References:** Crucible `FORGE_generation_model_plan.md` + `decorrelation_proxy_sample_20260618T235737Z.json`; [[D184]] (3b worst-Q decorrelation — this answers where it lives), [[D105]]/[[D106]]/[[D114]] (the quality machinery generation keeps), [[D182]]/[[D183]] (yield-map axes the rejected Option A would have mirrored; cohort-definition flag).
+
+**STATUS: VERDICT recorded — decorrelation → assembly (Crucible); generation = quality + directional variety; no Forge decorrelation axis; per-recipe map not warranted. Tooling committed; Crucible writeback pending operator go.**
