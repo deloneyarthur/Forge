@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-20 — Crucible LM-G* generation-items handoff RE-DERIVED (D194): all four already-settled / dormant / Path-C-gated; NO Forge production code warranted. Authored the Crucible writeback (operator to relay).
+
+**Operator relayed `FORGE_HANDOFF_lm_generation_items.md` (learned-model review, generation-side LM-G1/G2/G5 + LM-S3 note) at max effort → chose "draft the Crucible writeback." Re-derived against the live tree + decision log (the handoff invited it; "validate, don't assume"). Full record: [[D194]].**
+- **LM-G1** (swap diversifier distance token-Jaccard → phenotypic return/regime) → **CLOSE, [[D186]]:** Forge has ZERO return/pairwise data at generation (return-corr distance *absent*, not weak); the regime-exposure proxy was tested directly = **noise (−0.024)**; residual is **per-pair, not per-recipe**. Decorrelation → ASSEMBLY. The diversifier (`select_top_n`, live via `rank_batch`) is a novelty/dedup filter; LM-G1's variety kernel is already served by the [[D103]]/[[D136]] floors inside it.
+- **LM-G2** (learned generative search) → **SUBSUMED → Path C:** the proposer is *already* a learned sampler ([[D094]]/[[D182]]/[[D183]]); the oracle-guided search (king/A3) was built + retired ([[D174]]→[[D190]], oracle max **~0.78 « 1.5**); the novel assembly-contribution reward is infeasible Forge-side (same zero-data fact; wf_p25 lane [[D193]] is the generation-side proxy). Ceiling resolves to LM-G2's OWN fallback (LM-Q4) = **new primitives = Path C** (parked, operator-gated). `generation-model-levers.md` §5.
+- **LM-G5** (charge DSR by N_eff not nominal N) → **DORMANT** (king retired). Nuance: [[D175]] deliberately chose conservative full-N; N_eff *reduces* deflation (opposite direction) — reconcile on revival.
+- **LM-S3** (Discounted-Thompson yield map) → **AWARENESS + watch-item:** the [[D182]]/[[D183]] `--cohort-yield`/`--regime-gate-yield` loaders must tolerate new decayed/posterior keys (else a pull could stall the daemon — loads-before-validation looks healthy); confirm leniency when Crucible advance-flags the schema.
+- **Register correction surfaced to Crucible:** king retirement is **D190** (2026-06-19), not the handoff's "D174/D175 archive 2026-06-19."
+- **No `src/`/grammar/feedback change — not a deploy.** Writeback `PROMPT_CRUCIBLE_LM_GENERATION_ITEMS_RESPONSE.md` pending operator relay. Tree dirty (docs only), reboot-safe.
+
+---
+
 ## 2026-06-20 — wf_p25 QUALITY LANE FLIPPED ON (D193): closed the inert-in-prod gap (shadow/streak/loader were cpcv-specific + target-blind), retargeted the robustness lane cpcv→wf_p25 end-to-end, then flipped `--quality-rank` via D104. Daemon journal: `quality_rank: wf_p25 BLEND ACTIVE`.
 
 **Operator: "continue on to r1-r3 and flip the bit." Full record: [[D193]].**
