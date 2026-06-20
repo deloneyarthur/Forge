@@ -208,12 +208,18 @@ def _top_k_mean(pairs: list[tuple[float, float]], k: int) -> float | None:
 _POOLED_TAIL_MODEL_ID = "pooled"
 
 
+# The realized worst-quartile gate the tail eval correlates predictions against. The
+# original cpcv lane (D147) used cpcv_sharpe_p25; the wf_p25 quality lane (D191/D192)
+# uses wf_sharpe_p25 — both are gate-emitted metrics in `gate_results`.
+_DEFAULT_TAIL_GATE = "cpcv_sharpe_p25"
+
+
 def _tail_triples_by_model(
-    conn: duckdb.DuckDBPyConnection, *, since: datetime
+    conn: duckdb.DuckDBPyConnection, *, since: datetime, gate: str = _DEFAULT_TAIL_GATE
 ) -> dict[str, list[tuple[float, float, float]]]:
-    """`(tail_score, composite_score, realized cpcv_p25)` per tail_model_id over the
-    window. Restricted to verified-coverage rows carrying a `cpcv_sharpe_p25` value —
-    apples-to-apples with what the tail model predicts (§8.2 assumes verified coverage)."""
+    """`(tail_score, composite_score, realized `gate` value)` per tail_model_id over the
+    window. Restricted to verified-coverage rows carrying a `gate` value — apples-to-apples
+    with what the tail model predicts (§8.2 assumes verified coverage)."""
     cut = since
     if cut.tzinfo is not None:
         cut = cut.astimezone(UTC).replace(tzinfo=None)
@@ -234,11 +240,11 @@ def _tail_triples_by_model(
         gate_results = parse_gate_results(gate_results_json)
         if not honest_regime_coverage_row(gate_results):
             continue
-        cpcv = gate_results.get("cpcv_sharpe_p25")
-        if cpcv is None or cpcv.value is None:
+        realized = gate_results.get(gate)
+        if realized is None or realized.value is None:
             continue
         by_model.setdefault(tail_model_id, []).append(
-            (float(tail_score), float(composite_score), float(cpcv.value))
+            (float(tail_score), float(composite_score), float(realized.value))
         )
     return by_model
 
@@ -263,20 +269,20 @@ def _build_tail_eval(
 
 
 def evaluate_tail_shadow(
-    conn: duckdb.DuckDBPyConnection, *, since: datetime
+    conn: duckdb.DuckDBPyConnection, *, since: datetime, gate: str = _DEFAULT_TAIL_GATE
 ) -> tuple[TailEvaluation, ...]:
     """One eval per tail_model_id over the window (journal/CLI breakdown)."""
-    by_model = _tail_triples_by_model(conn, since=since)
+    by_model = _tail_triples_by_model(conn, since=since, gate=gate)
     return tuple(_build_tail_eval(model_id, by_model[model_id]) for model_id in sorted(by_model))
 
 
 def evaluate_tail_shadow_pooled(
-    conn: duckdb.DuckDBPyConnection, *, since: datetime
+    conn: duckdb.DuckDBPyConnection, *, since: datetime, gate: str = _DEFAULT_TAIL_GATE
 ) -> TailEvaluation | None:
     """One eval POOLED across every tail_model_id in the window — the §8.6 streak
-    statistic. `None` when no verified-coverage cpcv-bearing tail-scored verdict
+    statistic. `None` when no verified-coverage `gate`-bearing tail-scored verdict
     decided in the window (a checkpoint with nothing to judge)."""
-    by_model = _tail_triples_by_model(conn, since=since)
+    by_model = _tail_triples_by_model(conn, since=since, gate=gate)
     pooled = [triple for model_id in sorted(by_model) for triple in by_model[model_id]]
     if not pooled:
         return None

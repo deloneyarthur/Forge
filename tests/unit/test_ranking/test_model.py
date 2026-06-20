@@ -336,3 +336,44 @@ def test_robustness_tail_norm_bounded_and_monotone() -> None:
     assert 0.0 < low < high < 1.0
     # Deterministic: same inputs -> same output.
     assert robustness_tail_norm(model, {"f_good": 1.0}) == high
+
+
+def test_load_latest_robustness_model_filters_by_target(tmp_path: Path) -> None:
+    # R1: the loader must select the newest model OF A REQUESTED TARGET, not the newest
+    # of any target — the quality lane (wf_p25) and the §8.6 shadow co-exist with the
+    # cpcv robustness model in one dir, and the cpcv one is retrained daily so it is
+    # almost always the newest. Target-blind load would never surface the wf_p25 model.
+    from forge.ranking.model import (
+        load_latest_robustness_model,
+        save_robustness_model,
+        train_robustness_model,
+    )
+
+    wf_frame = _reg_frame(_reg_rows()).with_columns(
+        pl.col("target_cpcv_p25").alias("target_wf_p25")
+    )
+    wf_model = train_robustness_model(wf_frame, target="target_wf_p25", era_cut=_ERA_CUT)
+    # A cpcv model trained "a day later" so it is unambiguously the newest artifact.
+    cpcv_frame = _reg_frame(_reg_rows()).with_columns(
+        (pl.col("decided_at") + pl.duration(days=1)).alias("decided_at")
+    )
+    cpcv_model = train_robustness_model(cpcv_frame, era_cut=_ERA_CUT)
+    assert cpcv_model.trained_through > wf_model.trained_through
+    save_robustness_model(wf_model, tmp_path)
+    save_robustness_model(cpcv_model, tmp_path)
+
+    # Target-blind (default) → newest of any target = the cpcv model.
+    blind = load_latest_robustness_model(tmp_path)
+    assert blind is not None
+    assert blind.target == "target_cpcv_p25"
+    # Target-aware → the wf_p25 model even though the cpcv one is newer.
+    wf = load_latest_robustness_model(tmp_path, target="target_wf_p25")
+    assert wf is not None
+    assert wf.model_id == wf_model.model_id
+    assert wf.target == "target_wf_p25"
+    # Target-aware → the cpcv model when asked.
+    cpcv = load_latest_robustness_model(tmp_path, target="target_cpcv_p25")
+    assert cpcv is not None
+    assert cpcv.model_id == cpcv_model.model_id
+    # A target with no artifact → None (not a fallback to a different target).
+    assert load_latest_robustness_model(tmp_path, target="target_regime_stress") is None

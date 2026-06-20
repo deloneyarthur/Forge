@@ -20,7 +20,14 @@ from forge.ranking.evaluation import evaluate_shadow
 _SINCE = datetime(2026, 6, 10, 17, 17, 13)  # noqa: DTZ001 — naive-UTC convention
 
 
-def _gated_run(*, config_hash: str, decision: str, honest: bool = True, cpcv: float | None = None):
+def _gated_run(
+    *,
+    config_hash: str,
+    decision: str,
+    honest: bool = True,
+    cpcv: float | None = None,
+    wf: float | None = None,
+):
     from datetime import date
 
     from crucible_contracts import GatedRun
@@ -39,6 +46,11 @@ def _gated_run(*, config_hash: str, decision: str, honest: bool = True, cpcv: fl
     if cpcv is not None:
         gate_results["cpcv_sharpe_p25"] = GateResult(
             gate_name="cpcv_sharpe_p25", passed=cpcv >= 1.5, value=cpcv, threshold=1.5
+        )
+    if wf is not None:
+        # wf_sharpe_p25 is gate-EMITTED as a metric (not a gate) per D192; passed=True.
+        gate_results["wf_sharpe_p25"] = GateResult(
+            gate_name="wf_sharpe_p25", passed=True, value=wf, threshold=None
         )
     return GatedRun(
         run=RunResult(
@@ -214,6 +226,63 @@ def test_tail_eval_spearman_and_top_k() -> None:
     assert ev.model_top_k_mean_cpcv == pytest.approx(0.95)
     assert ev.incumbent_top_k_mean_cpcv == pytest.approx(0.10)
     assert ev.overall_mean_cpcv == pytest.approx(0.53)
+
+
+def _seed_tail_gates(
+    conn: duckdb.DuckDBPyConnection,
+    rows: list[tuple[str, float, float, float, float]],
+    *,
+    tail_model_id: str = "tail111122223333",
+) -> None:
+    """rows: (config_hash, tail_score, composite_score, realized_cpcv, realized_wf). All honest."""
+    for config_hash, tail_score, composite_score, cpcv, wf in rows:
+        candidate_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
+            "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
+            [candidate_id, str(uuid.uuid4()), config_hash, _SINCE, "gated"],
+        )
+        conn.execute(
+            "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+            "composite_score, scored_at, tail_score, tail_model_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                candidate_id,
+                "logistic00000000",
+                0.5,
+                composite_score,
+                _SINCE,
+                tail_score,
+                tail_model_id,
+            ],
+        )
+        record_verdicts(
+            conn, [_gated_run(config_hash=config_hash, decision="reject", cpcv=cpcv, wf=wf)]
+        )
+
+
+def test_tail_eval_gate_param_selects_realized_column() -> None:
+    # R3: the §8.6 tail eval must be parametrizable on the realized gate column so the
+    # wf_p25 quality lane accrues its OWN justification streak (predicted vs realized
+    # wf_sharpe_p25), not the cpcv one. tail_score tracks realized wf but anti-tracks
+    # realized cpcv here — the gate choice must flip the Spearman sign.
+    from forge.ranking.evaluation import evaluate_tail_shadow
+
+    rows = [
+        # (config_hash, tail_score, composite, realized_cpcv, realized_wf)
+        ("aaaa000000000001", 0.9, 0.1, 0.10, 0.95),
+        ("aaaa000000000002", 0.7, 0.3, 0.30, 0.80),
+        ("aaaa000000000003", 0.5, 0.5, 0.50, 0.50),
+        ("aaaa000000000004", 0.3, 0.7, 0.80, 0.30),
+        ("aaaa000000000005", 0.1, 0.9, 0.95, 0.10),
+    ]
+    with db_connection() as conn:
+        _seed_tail_gates(conn, rows)
+        wf_eval = evaluate_tail_shadow(conn, since=_SINCE, gate="wf_sharpe_p25")
+        cpcv_eval = evaluate_tail_shadow(conn, since=_SINCE)  # default gate = cpcv_sharpe_p25
+
+    assert wf_eval[0].spearman == pytest.approx(1.0)  # tail_score tracks realized wf_p25
+    assert cpcv_eval[0].spearman == pytest.approx(-1.0)  # and anti-tracks realized cpcv
 
 
 def test_tail_eval_excludes_unverified_and_missing_cpcv() -> None:

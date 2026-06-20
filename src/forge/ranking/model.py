@@ -658,16 +658,28 @@ def load_robustness_model(path: Path) -> RobustnessModel:
     )
 
 
-def load_latest_robustness_model(models_dir: Path) -> RobustnessModel | None:
-    """Newest valid robustness artifact by (trained_through, model_id); corrupt skipped."""
+def load_latest_robustness_model(
+    models_dir: Path, *, target: str | None = None
+) -> RobustnessModel | None:
+    """Newest valid robustness artifact by (trained_through, model_id); corrupt skipped.
+
+    When ``target`` is given, only artifacts trained on that target are considered —
+    the quality lane (``target_wf_p25``) and the §8.6 tail shadow share one models dir
+    with the daily-retrained cpcv model, so a target-blind "newest" would shadow the
+    wrong model. ``None`` (default) preserves the original target-blind behavior.
+    """
     if not models_dir.is_dir():
         return None
     candidates: list[RobustnessModel] = []
     for path in sorted(models_dir.glob("robustness_model_*.json")):
         try:
-            candidates.append(load_robustness_model(path))
+            model = load_robustness_model(path)
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
             _LOG.warning("robustness_model_artifact_unreadable", path=str(path), error=str(exc))
+            continue
+        if target is not None and model.target != target:
+            continue
+        candidates.append(model)
     if not candidates:
         return None
     return max(candidates, key=lambda m: (m.trained_through, m.model_id))

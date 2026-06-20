@@ -14,7 +14,12 @@ WorkingDirectory=/home/aj/proj/Forge
 # refresh (D182/D183) — yield-drive the cohort + regime-gate draws. Default-off
 # in code; ENABLED here. Remove either flag to revert that axis to a
 # byte-identical draw (the A/B kill switch; hard rule #6).
-ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield
+# --quality-rank: the wf_p25 quality lane (D193) — BLEND the predicted WF-floor
+# robustness into the §6.2 prior (prior := P(component) x tail_norm). Default-off in
+# code; ENABLED here. Needs F3's P(component) base (the blend multiplies it) + a
+# target_wf_p25 model in ~/forge_data/models (the daily timer publishes it). Env
+# kill-switch FORGE_QUALITY_RANKER=off; remove the flag to revert byte-identical.
+ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
 TimeoutStopSec=120

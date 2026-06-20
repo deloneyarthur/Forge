@@ -256,11 +256,16 @@ def cmd_eval_robustness(
     since: str | None = typer.Option(
         None, "--since", help="ISO window start (default: the clean-era boundary)"
     ),
+    gate: str = typer.Option(
+        "cpcv_sharpe_p25",
+        "--gate",
+        help="realized worst-quartile gate to correlate against (e.g. wf_sharpe_p25)",
+    ),
 ) -> None:
-    """Tail-aware (T1) shadow readout (D141 data): does ranking by the predicted `cpcv_p25`
+    """Tail-aware (T1) shadow readout (D141 data): does ranking by the predicted tail value
     (tail_score) surface configs with higher REALIZED worst-quartile robustness? Prints
-    Spearman(tail_score, realized cpcv_p25) + top-K mean realized cpcv (tail model vs the
-    incumbent composite) per tail_model_id, over verified-coverage decided verdicts. The
+    Spearman(tail_score, realized `--gate` value) + top-K mean realized value (tail model vs
+    the incumbent composite) per tail_model_id, over verified-coverage decided verdicts. The
     §8.6 criterion margin is set once the shadow distribution is visible, so this prints the
     metrics with no PASS/FAIL yet. Design: docs/proposals/tail-aware-ranker.md."""
     from forge.core.contracts_check import check_contracts_version
@@ -274,7 +279,7 @@ def cmd_eval_robustness(
     cut = _resolve_era_cut(since)
 
     with db_connection(forge_db) as conn:
-        evaluations = evaluate_tail_shadow(conn, since=cut)
+        evaluations = evaluate_tail_shadow(conn, since=cut, gate=gate)
 
     if not evaluations:
         typer.echo(

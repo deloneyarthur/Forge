@@ -48,8 +48,15 @@ def run_shadow_scoring(
     registry: RegistrySnapshot,
     batch_id: str,
     scored_at: datetime,
+    robustness_target: str | None = None,
 ) -> int:
-    """Record shadow scores for the batch's submitted candidates; never raises."""
+    """Record shadow scores for the batch's submitted candidates; never raises.
+
+    ``robustness_target`` selects which robustness model to shadow (it shares the dir
+    with the daily-retrained cpcv model); ``None`` keeps the original target-blind
+    "newest" behavior. The production loop passes ``target_wf_p25`` so the §8.6 streak
+    measures the model the quality lane uses (D191/D192).
+    """
     try:
         model = load_latest_model(models_dir)
         if model is None:
@@ -57,7 +64,7 @@ def run_shadow_scoring(
         # D140: also score the tail-aware robustness model when one exists. NULL
         # otherwise (and for the whole pre-train history) — telemetry only; the
         # loop never reads tail_score, so this changes no submission behavior.
-        robustness = load_latest_robustness_model(models_dir)
+        robustness = load_latest_robustness_model(models_dir, target=robustness_target)
         tail_model_id = robustness.model_id if robustness is not None else None
         by_hash = {c.report.config.config_hash: c for c in candidates}
         rows = conn.execute(

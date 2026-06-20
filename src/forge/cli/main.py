@@ -1911,8 +1911,10 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     if quality_rank and not _quality_off and verdict_scorer is not None:
         from forge.ranking.model import load_latest_robustness_model, robustness_tail_norm
 
-        _qmodel = load_latest_robustness_model(forge_db_path.parent / "models")
-        if _qmodel is not None and _qmodel.target == "target_wf_p25":
+        _qmodel = load_latest_robustness_model(
+            forge_db_path.parent / "models", target="target_wf_p25"
+        )
+        if _qmodel is not None:
             _qm = _qmodel  # non-None binding for the closure
             _base_scorer = verdict_scorer  # P(component) eligibility term
 
@@ -2045,6 +2047,10 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             registry=registry,
             batch_id=str(result.batch_id),
             scored_at=batch.submitted_at,
+            # Shadow the wf_p25 robustness model (the quality lane's), not whichever
+            # robustness artifact was retrained last, so the §8.6 streak (D191/D192)
+            # measures the right model. Telemetry only — never changes submissions.
+            robustness_target="target_wf_p25",
         )
         if shadow_count:
             typer.echo(f"shadow_scores={shadow_count}")

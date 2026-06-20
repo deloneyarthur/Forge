@@ -4855,3 +4855,25 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **References:** [[D191]] (retarget to wf_p25), [[D189]] (the lane), Crucible wf_p25 gate-emission + backfill.
 
 **STATUS: `target_wf_p25` wired as a gate-sourced target (continuous path ready); contracts keeps the key (no gap); historical backfill moot (INSERT OR IGNORE). Flag-OFF; flip gated on forward accrual + a live wf_p25 model + the shadow streak.**
+
+## D193 — 2026-06-20 — FLIPPED the wf_p25 quality lane ON. Closed the inert-in-prod gap found post-D192: the shadow/streak/loader infra was cpcv-specific + target-blind, so `--quality-rank` would have been a no-op. Retargeted the robustness lane cpcv→wf_p25 end-to-end (R1 target-aware loader, R2 timer publishes wf_p25, R3 wf_p25 §8.6 streak), then flipped the flag via D104.
+
+**Spec section:** executes [[D192]]'s "flip prep". §6.2 prior BLEND (`prior := P(component) × tail_norm`); ranking-only (#1 grammar / #3 gate untouched), deterministic ridge+sigmoid (#5/#6), §1.2 (reads Crucible's `wf_sharpe_p25`, computes none).
+
+**The gap (verified, not assumed).** After D192 the lane was BUILT but **structurally inert in prod even if flagged on**: (a) `load_latest_robustness_model` was target-BLIND — it returned the newest robustness artifact of any target, and the daily timer only ever published a *cpcv* model (which therefore always won "latest"); (b) the timer trained no wf_p25 model; (c) `evaluate_tail_shadow*` hard-coded `gate_results["cpcv_sharpe_p25"]`, so no wf_p25 justification streak could accrue. "Turn it on" was a small infra increment, not a one-flag flip.
+
+**R1 — target-aware loader.** `load_latest_robustness_model(models_dir, *, target=None)` filters candidates to `m.target == target` (None = original target-blind behavior). The lane (`cli/main.py`) loads `target="target_wf_p25"`; the redundant `.target ==` guard dropped (the loader guarantees it). Test: a newer cpcv model in the dir no longer masks the wf_p25 one.
+
+**R2 — timer publishes wf_p25.** `scripts/daily_ranker_eval.sh` trains `train-robustness --target target_wf_p25` (was cpcv default) and atomic-publishes it; the §8.6 readout/streak run on `wf_sharpe_p25`. Retarget, not addition — cpcv had no consumer once the shadow + lane both use wf_p25 (the historical cpcv `robustness_streak.jsonl` stays on disk; the timer now writes `robustness_streak_wfp25.jsonl`).
+
+**R3 — wf_p25 §8.6 streak.** `evaluate_tail_shadow`/`evaluate_tail_shadow_pooled`/`_tail_triples_by_model` take `gate="cpcv_sharpe_p25"` (default preserves behavior); `eval-robustness` gains `--gate`. `run_shadow_scoring` takes `robustness_target` (None = blind); the loop passes `target_wf_p25` so the shadow scores the **lane's** model (not whichever was retrained last) — the streak now measures the right thing.
+
+**R4 — flip (D104).** Pre-flight: the live dataset carries 936 non-null `target_wf_p25` rows (> the 50-row floor); a fresh train gives n=936, train_r2=0.229, rmse=0.654 (matches D192 ~0.2). Published that model to `~/forge_data/models/`, added `--quality-rank` to `deploy/systemd/forge.service` ExecStart, stop → uncontended suite → commit → daemon-reload → start → **journal verified** `quality_rank: wf_p25 BLEND ACTIVE`. The §8.6 streak accrues forward as justification; the operator authorized the flip ahead of 3/3 ("flip the bit").
+
+**Gates.** ruff + `mypy --strict` (90 files) clean; full suite **1676 passed** (+3 over D192's 1673: loader-filter, gate-param, shadow-target). Flag-OFF remained byte-identical through the build (the lane block is gated; R3 is post-submission telemetry).
+
+**Files:** `ranking/model.py` (loader), `ranking/evaluation.py` (gate param), `ranking/shadow.py` (robustness_target), `cli/main.py` (lane loader + shadow call), `cli/ranker_model_cmd.py` (`--gate`), `scripts/daily_ranker_eval.sh` (R2), `deploy/systemd/forge.service` (flip), `docs/MANPAGE.md`, tests (model/evaluation/shadow), `STATUS.md`, this entry.
+
+**References:** [[D192]] (continuous path), [[D191]] (retarget to wf_p25), [[D189]] (the lane), [[D149]] (F3 base the blend multiplies), [[D104]] (deploy ritual / live-tree discipline).
+
+**STATUS: wf_p25 quality lane LIVE — `--quality-rank` on, daemon journal shows `quality_rank: wf_p25 BLEND ACTIVE`. Daily timer publishes the wf_p25 model + accrues the §8.6 streak. regime_stress stays the threshold-0 tail FILTER (not the target).**

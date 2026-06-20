@@ -78,6 +78,29 @@ def _toy_models_dir_with_tail(tmp_path: Path) -> Path:
     return models_dir
 
 
+def _add_robustness_model(models_dir: Path, *, target: str) -> str:
+    """Train + save a robustness model on `target` into an existing models dir; returns
+    its model_id (the toy rows carry the target column directly)."""
+    records = []
+    for i in range(30):
+        records.append(
+            {
+                "crucible_run_id": f"run-{i:04d}",
+                "config_hash": f"hash{i:012d}",
+                "decided_at": datetime(2026, 6, 11, 18, 0, i),  # noqa: DTZ001 — distinct day
+                "decision": "component" if i % 5 == 0 else "reject",
+                "label": int(i % 5 == 0),
+                target: 0.3 + 0.5 * (i % 5 == 0),
+                "coverage_verified": float(i % 4 != 0),
+                "hypothesis=mean_reversion": 1.0,
+                "f_noise": float(i % 3),
+            }
+        )
+    model = train_robustness_model(pl.DataFrame(records), target=target, era_cut=_ERA_CUT)
+    save_robustness_model(model, models_dir)
+    return model.model_id
+
+
 def _candidate(composite: float = 0.7) -> RankedCandidate:
     return RankedCandidate(
         report=PreFilterReport(
@@ -240,6 +263,33 @@ def test_tail_score_populated_when_robustness_model_present(tmp_path: Path) -> N
     assert tail_score is not None
     assert tail_model_id is not None
     assert len(tail_model_id) == 16
+
+
+def test_shadow_targets_requested_robustness_model(tmp_path: Path) -> None:
+    # R3: with both a cpcv (newest) and a wf_p25 robustness model in the dir, the shadow
+    # must score with the REQUESTED target so the §8.6 streak measures the model the
+    # quality lane actually uses — not whichever was retrained last.
+    models_dir = _toy_models_dir_with_tail(tmp_path)  # adds the default cpcv model
+    wf_id = _add_robustness_model(models_dir, target="target_wf_p25")
+    candidate = _candidate()
+    batch_id = str(uuid.uuid4())
+    with db_connection() as conn:
+        _insert_submission(conn, batch_id=batch_id, config_hash=candidate.report.config.config_hash)
+        run_shadow_scoring(
+            conn,
+            models_dir=models_dir,
+            candidates=[candidate],
+            registry=_REGISTRY,
+            batch_id=batch_id,
+            scored_at=_SCORED_AT,
+            robustness_target="target_wf_p25",
+        )
+        row = conn.execute("SELECT tail_score, tail_model_id FROM shadow_scores").fetchone()
+
+    assert row is not None
+    tail_score, tail_model_id = row
+    assert tail_score is not None
+    assert tail_model_id == wf_id
 
 
 def test_tail_score_null_without_robustness_model(tmp_path: Path) -> None:

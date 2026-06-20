@@ -195,9 +195,10 @@ Train the tail-aware T1 model (D140) — a deterministic ridge fit predicting a
 continuous worst-quartile gate value (default `cpcv_sharpe_p25`) instead of
 P(component). Same honest-era dataset, manual at the daily checkpoints; refuses
 when under 50 rows carry the target. Saves an append-only `robustness_model_*.json`
-artifact. Offline/analysis-side — does NOT shadow-score in the daemon yet (deferred,
-daemon-gated; see `docs/proposals/tail-aware-ranker.md`). Design: §8.3 / §1.2 (Forge
-consumes Crucible's `gate_results` values, computes none).
+artifact. The daily timer trains the **`target_wf_p25`** model (D191/D192) — the
+quality lane's; that artifact is shadow-scored in the daemon and (when `--quality-rank`
+is on) blended into the §6.2 prior. Design: §8.3 / §1.2 (Forge consumes Crucible's
+`gate_results` values, computes none).
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -206,7 +207,7 @@ consumes Crucible's `gate_results` values, computes none).
 | `--exports-dir` | path | exports default | Crucible exports dir (registry snapshot). |
 | `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override. |
 | `--lambda` | float | 1.0 | L2 regularization strength. |
-| `--target` | str | `target_cpcv_p25` | Continuous gate value to predict (`target_wf_median`, `target_regime_stress`). |
+| `--target` | str | `target_cpcv_p25` | Continuous gate value to predict (`target_wf_p25` — the lane's, `target_wf_p10`, `target_wf_median`, `target_regime_stress`). |
 | `--models-dir` | path | `<config db_path parent>/models` | Artifact dir (NOT derived from `--forge-db`). |
 
 ### forge ranker-model eval
@@ -230,31 +231,32 @@ forge ranker-model eval --forge-db /tmp/forge_snap.db --since 2026-06-11T00:00:0
 
 ### forge ranker-model eval-robustness
 
-Tail-aware (T1, D143) readout: does ranking by the predicted `cpcv_p25` (the D141 `tail_score`)
+Tail-aware (T1, D143) readout: does ranking by the predicted tail value (the D141 `tail_score`)
 surface configs with higher REALIZED worst-quartile robustness? Per `tail_model_id`, over
-verified-coverage decided verdicts, prints **Spearman(tail_score, realized `cpcv_p25`)** and
-**top-K mean realized `cpcv_p25`** (tail model vs the incumbent composite). No PASS/FAIL — the
-§8.6 criterion margin is set once the shadow distribution is visible. Reports "not yet accruing"
-until the D141 shadow code is live (post-restart) and a robustness model has scored batches.
+verified-coverage decided verdicts, prints **Spearman(tail_score, realized `--gate` value)** and
+**top-K mean realized value** (tail model vs the incumbent composite). No PASS/FAIL — the §8.6
+criterion margin is set once the shadow distribution is visible.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
 | `--config` | path | `config/forge.yaml` | YAML default for the DB path. |
 | `--since` | str | clean-era boundary | ISO window start (naive = UTC). |
+| `--gate` | str | `cpcv_sharpe_p25` | Realized worst-quartile gate to correlate against (timer uses `wf_sharpe_p25`). |
 
 **Automated daily** by the `forge-ranker-eval` systemd timer (05:00; `scripts/daily_ranker_eval.sh`)
-— it snapshots the DB, trains BOTH shadow models (`train` for P(component) + `train-robustness`
-for the tail-aware `cpcv_p25` model, D142; each atomic-published to `~/forge_data/models/`),
-evaluates (`eval` for the streak + `eval-robustness` for the tail readout, D143), and appends **TWO
-consecutive-PASS clocks**: the F3 verdict-model streak to `~/forge_data/ranker_eval/streak.jsonl`,
-and the **§8.6 tail-robustness streak to `~/forge_data/ranker_eval/robustness_streak.jsonl`** (D147 —
-pooled across the daily-rolling tail models, since `tail_score` is a `cpcv_p25` prediction in the
-same units; PROVISIONAL `_TAIL_SPEARMAN_CRITERION`=0.30 / `MIN_FRESH_TAIL`=50, raw spearman+n
-recorded each row for operator re-judging). Both judge a **fresh per-checkpoint window** (verdicts
-decided since the prior run), NOT the cumulative `--since` default — read the clocks there instead
-of re-deriving them. Reaching 3/3 on either wires NOTHING; both models stay shadow-only until their
-own operator gate (F3 for verdict, §8.6 for tail).
+— it snapshots the DB, trains BOTH shadow models (`train` for P(component) + `train-robustness
+--target target_wf_p25` for the quality lane's tail-aware model, D191/D192; each atomic-published to
+`~/forge_data/models/`), evaluates (`eval` for the streak + `eval-robustness --gate wf_sharpe_p25`
+for the tail readout), and appends **TWO consecutive-PASS clocks**: the F3 verdict-model streak to
+`~/forge_data/ranker_eval/streak.jsonl`, and the **§8.6 wf_p25 tail-robustness streak to
+`~/forge_data/ranker_eval/robustness_streak_wfp25.jsonl`** (pooled across the daily-rolling tail
+models, since `tail_score` is a `wf_p25` prediction in the same units; PROVISIONAL
+`_TAIL_SPEARMAN_CRITERION`=0.30 / `MIN_FRESH_TAIL`=50, raw spearman+n recorded each row for operator
+re-judging). Both judge a **fresh per-checkpoint window** (verdicts decided since the prior run), NOT
+the cumulative `--since` default — read the clocks there instead of re-deriving them. The F3 verdict
+model is live (D149); the wf_p25 quality lane flips via `--quality-rank` under its own operator gate
+(D104), and the operator may override the §8.6 streak.
 
 ### forge grammar list-proposals
 
@@ -405,11 +407,11 @@ confounded by infrastructure bugs. Filters by current `grammar_version`.
 
 **Bash, not Python** — the `ExecStart` of the `forge-ranker-eval` timer (05:00 daily), runnable by
 hand too. Snapshots the live DB to `/tmp`, trains the verdict model AND the tail-aware
-`cpcv_p25` robustness model (D142) into a staging dir and **atomically** publishes each to
-`~/forge_data/models/` (the daemon's `load_latest_model` never reads a half-written file),
-evaluates the live shadow models, and appends one JSON row to EACH of two clocks — the F3 verdict
-streak `~/forge_data/ranker_eval/streak.jsonl` and the §8.6 tail-robustness streak
-`~/forge_data/ranker_eval/robustness_streak.jsonl` (D147; pooled across tail models) — both judged
+`wf_p25` robustness model (D191/D192, the quality lane's) into a staging dir and **atomically**
+publishes each to `~/forge_data/models/` (the daemon's `load_latest_model` never reads a half-written
+file), evaluates the live shadow models, and appends one JSON row to EACH of two clocks — the F3
+verdict streak `~/forge_data/ranker_eval/streak.jsonl` and the §8.6 wf_p25 tail-robustness streak
+`~/forge_data/ranker_eval/robustness_streak_wfp25.jsonl` (pooled across tail models) — both judged
 on a fresh per-checkpoint window. Deterministic (no LLM, hard rule #5); telemetry-only — never
 touches grammar/weights/config/ranking. Trap-cleans the snapshot + staging on every exit. No args.
 
@@ -453,7 +455,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 | `grammar_versions` | Grammar change history (version, sha256, operator initials). |
 | `grammar_proposals` | Refinement proposals (pending/approved/rejected/applied). |
 | `promoted_patterns` | Discovered patterns across promoted strategies. |
-| `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. D140/D141 add `tail_score` + `tail_model_id` (the tail-aware model's predicted `cpcv_p25`, NULL until one is trained). Written post-submission; never read by the loop. |
+| `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. D140/D141 add `tail_score` + `tail_model_id` (the tail-aware model's predicted worst-quartile value — `wf_p25` per D191/D192, NULL until one is trained). Written post-submission; never read by the loop. |
 
 ---
 
@@ -472,7 +474,7 @@ systemd **user** services (`systemctl --user ...`). Start the writer first; stop
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback` | The Forge daemon: generate → submit → learn. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware robustness, D142 — + eval & eval-robustness, D143 → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak.jsonl` (§8.6 tail, D147), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

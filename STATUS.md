@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-20 — wf_p25 QUALITY LANE FLIPPED ON (D193): closed the inert-in-prod gap (shadow/streak/loader were cpcv-specific + target-blind), retargeted the robustness lane cpcv→wf_p25 end-to-end, then flipped `--quality-rank` via D104. Daemon journal: `quality_rank: wf_p25 BLEND ACTIVE`.
+
+**Operator: "continue on to r1-r3 and flip the bit." Full record: [[D193]].**
+- **The gap (verified):** `--quality-rank` alone was a no-op — `load_latest_robustness_model` was target-BLIND (the daily timer only published a cpcv model, always newest), the timer trained no wf_p25 model, and `evaluate_tail_shadow*` hard-coded cpcv. Not a one-flag flip.
+- **R1 target-aware loader:** `load_latest_robustness_model(..., target="target_wf_p25")`; a newer cpcv artifact no longer masks the wf_p25 one. **R2 timer:** `train-robustness --target target_wf_p25` + `eval-robustness --gate wf_sharpe_p25` → `robustness_streak_wfp25.jsonl`. **R3 streak:** `evaluate_tail_shadow*` gate-parametrized; `run_shadow_scoring(..., robustness_target="target_wf_p25")` so the shadow scores the lane's model.
+- **R4 flip (D104):** pre-flight 936 non-null wf_p25 rows / fresh train_r2 0.229 → published the model to `~/forge_data/models/`, added `--quality-rank` to `forge.service`, stop → uncontended suite → commit → restart → journal verified `quality_rank: wf_p25 BLEND ACTIVE`. §8.6 streak accrues forward; operator overrode the 3/3 gate.
+- **Gates:** ruff/mypy clean, full suite **1676 passed**. Flag-OFF stayed byte-identical through the build.
+- **Posture:** F3 P(component) prior stays ON (the blend multiplies it); regime_stress stays the threshold-0 tail FILTER.
+
+---
+
 ## 2026-06-19 — `target_wf_p25` WIRED as a gate-sourced target (D192): Crucible's `wf_sharpe_p25`/`p10` gate-emission → the continuous training path for the quality lane. No contracts gap; historical backfill moot (INSERT OR IGNORE). Flag-OFF.
 
 **Crucible delivered gate-time emission + backfill (operator relay). Full record: [[D192]].**
