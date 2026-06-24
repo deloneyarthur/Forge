@@ -37,7 +37,6 @@ forge:
   crucible:
     inbox_path: {inbox_path}
     db_path: {crucible_db_path}
-    contracts_version: "1.6"
   enumeration:
     max_candidates_per_batch: 1234
     seed: 99

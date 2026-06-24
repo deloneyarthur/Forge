@@ -5072,3 +5072,17 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Files:** `deploy/setup_new_box.sh`, `deploy/stage_transfer.sh`, `deploy/systemd/forge-eod-check.{service,timer}` (new), `scripts/forge_eod_check.sh` (new), `deploy/NEW_BOX_TRANSFER.md`, `STATUS.md`, this entry.
 
 **STATUS: new-box scripts now reproduce the full live unit set (daemon + four timers + eod helper). Remaining doc-refresh items: config hygiene — dead `contracts_version` field (bundle into next deploy) + `grammar.yaml` R2 (defer to next bump, or confirm a dedicated v23).**
+
+---
+
+## D204 — 2026-06-24 — Removed the dead `CrucibleConfig.contracts_version` field (config-schema cruft). Behavior-neutral; the real contracts pin is `FORGE_EXPECTED_CONTRACT_VERSION`. Reboot-safe; takes effect on next daemon restart.
+
+**Doc-refresh follow-through (operator "clean them all up"). `config/forge.yaml`'s `crucible.contracts_version: "1.6"` was a REQUIRED Pydantic field (`Field(min_length=1)`) whose VALUE nothing read — the actual contracts compatibility pin/check is `FORGE_EXPECTED_CONTRACT_VERSION` in `core/contracts_check.py`. Proof it was dead: the field sat at a wildly-stale `"1.6"` while the real pin moved to 1.20.0 and nothing ever errored. Removed as cruft.**
+
+- **Removed:** the `contracts_version: str = Field(min_length=1)` field from `CrucibleConfig` (`forge_config.py`); the `contracts_version: "1.6"` line from `config/forge.yaml`; the field from the two config-test fixtures (`extra="forbid"` would otherwise reject it) + the lone assertion in `test_forge_config.py`. The `main.py` `contracts_version` LOCAL (the `forge version`/`check` echo of `check_contracts_version()`'s return) is unrelated and untouched.
+- **Verified reboot-safe / behavior-neutral:** the real `config/forge.yaml` parses under the new model (smoke-checked); `mypy --strict` clean (92 files); ruff check+format clean; config + cli-threading + contracts-integration scope passes (27 tests). The RUNNING daemon already loaded its config and does not re-read `forge.yaml`, so it is unaffected; the change goes live on the next restart/reboot ([[D104]]) with zero behavior difference.
+- **Not a deploy:** behavior-neutral, so no dedicated stop→suite→restart was spun up — it rides the next natural restart, and a deliberate deploy's preflight (full suite) covers it then.
+
+**Files:** `src/forge/config/forge_config.py`, `config/forge.yaml`, `tests/unit/test_config/test_forge_config.py`, `tests/unit/test_cli/test_config_threading.py`, `STATUS.md`, this entry.
+
+**STATUS: config schema de-crufted (dead `contracts_version` gone, reboot-safe). The ONLY remaining doc-refresh item is `grammar.yaml` R2 `evidence_to_relax` — a fix forces a v22→v23 grammar bump + live deploy + Crucible cohort-compare; HELD for explicit operator confirmation (cheap default: piggyback the next real grammar bump).**

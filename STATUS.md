@@ -4,7 +4,7 @@
 
 - **Doc refresh — commit `76e7861` (28 docs):** architecture / MANPAGE / HOW-TO / NEW_BOX_TRANSFER / INDICATOR_THRESHOLDS / GRAMMAR / glossary / deploy + 20 proposal/review status banners. King-retirement ([[D190]]) sweep came back already-clean (all "king" hits were substring noise); quality-lane-flip ([[D193]]) + [[D200]] propagated. grammar doc-sync passes; `forge healthcheck` OVERALL=OK.
 - **DESIGN.md reconciled ([[D201]]):** §7.3 now documents the three block reasons (per-batch + D137 stall guard + D196/D200 `max_inflight`) — **closes the standing D196 spec-decision**; §6.2 documents the learned-ranking sourcing (D149 `P(component)` + D193 wf_p25 lane); §10.1's stale `contracts_version: "1.0"` literal → pointer to `core/contracts_check.py`.
-- **Doc-refresh follow-through:** root archive DONE ([[D202]]); new-box reproducibility DONE ([[D203]] — vendored the `forge-eod-check` unit+script into the repo; `setup_new_box.sh`/`stage_transfer.sh` de-staled + now install ALL units). Remaining: config hygiene — dead `forge.yaml` `crucible.contracts_version` field (bundle removal into next deploy) + `grammar.yaml` R2 `evidence_to_relax` (defer to next grammar bump, or confirm a dedicated v23).
+- **Doc-refresh follow-through:** root archive DONE ([[D202]]); new-box reproducibility DONE ([[D203]]); dead `contracts_version` config field REMOVED ([[D204]] — reboot-safe/behavior-neutral, takes effect next restart). **ONLY remaining:** `grammar.yaml` R2 `evidence_to_relax` staleness — a fix forces a v22→v23 bump + live deploy + Crucible cohort-compare; HELD for explicit operator go (cheap default: piggyback the next real grammar bump).
 
 ---
 

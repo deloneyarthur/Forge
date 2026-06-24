@@ -23,7 +23,6 @@ class CrucibleConfig(BaseModel):
 
     inbox_path: Path
     db_path: Path
-    contracts_version: str = Field(min_length=1)
 
     @field_validator("inbox_path", "db_path", mode="after")
     @classmethod

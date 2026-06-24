@@ -22,7 +22,6 @@ _DEFAULT_YAML: dict[str, object] = {
         "crucible": {
             "inbox_path": "~/optbt_data/inbox",
             "db_path": "~/optbt_data/results.duckdb",
-            "contracts_version": "1.6",
         },
         "enumeration": {"max_candidates_per_batch": 100000, "seed": 42},
         "submission": {
@@ -54,7 +53,6 @@ def test_load_returns_validated_config(tmp_path: Path) -> None:
     path = _write_yaml(tmp_path)
     cfg = load_forge_config(path)
     assert isinstance(cfg, ForgeConfig)
-    assert cfg.crucible.contracts_version == "1.6"
     assert cfg.submission.batch_size == 200
     assert cfg.feedback.full_analysis_after_every == 10
 

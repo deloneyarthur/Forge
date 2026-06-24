@@ -7,7 +7,6 @@ forge:
   crucible:
     inbox_path: ~/optbt_data/inbox        # where Forge writes
     db_path: ~/optbt_data/runs.duckdb     # where Forge reads (read-only)
-    contracts_version: "1.6"
 
   enumeration:
     max_candidates_per_batch: 5000   # v1 go-live; ramp once loop stability is proven
