@@ -107,9 +107,9 @@ a specific exchange or decision cites them.
 | `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger (D001–D200+); referenced everywhere as "D###" |
 | `OPEN_QUESTIONS.md` | Append-only logged uncertainties (Q##) with severity |
 | `OPEN_PROPOSALS.md` | Grammar loosening proposals awaiting operator sign-off (hard rule #4) |
-| `PHASE_N_HANDOFF.md` | Phase-boundary artifacts; phases 0–6 all complete — historical |
+| `PHASE_N_HANDOFF.md` | Phase-boundary artifacts; phases 0–6 all complete — historical (archived to `_archive/`, D202) |
 | `PROMPT_CRUCIBLE_*.md`, `*_AGENT_PROMPT.md`, `CRUCIBLE_*_HANDOFF.md`, `CONTRACTS_*` | **Outgoing** cross-repo messages the operator carries to the Crucible/contracts agent (`docs/tasks/crucible-handoff.md`) |
 | `../Crucible/docs/handoffs/FORGE_*.md` | **Incoming** responses/handoffs from Crucible |
 | `*_PLAN.md`, `*_SPEC.md`, `*_DRAFT.md`, `OPTION_*.md`, `PROMPT_5_*` | Scoping/planning artifacts for specific workstreams |
-| `_archive/` | Completed prompt/response pairs |
+| `_archive/` | Completed/landed records: prompt↔response pairs, answered `PROMPT_CRUCIBLE_*` relays, and the phase handoffs (periodically swept from root once their D-entry lands — D202) |
 | `AUDIT.md`, `docs/STRATEGY_GENERATION_STATE.md` | Point-in-time deep reviews — stale-bannered; historical context only |

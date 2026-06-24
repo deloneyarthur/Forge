@@ -5041,3 +5041,17 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Files:** `docs/DESIGN.md` (§6.2, §7.3, §10.1), `STATUS.md`, this entry. No `src/`/grammar/config change — not a deploy; reboot-safe (docs only).
 
 **STATUS: DESIGN.md reconciled to the D200 as-built; the §7.3 amendment closes the standing D196 spec-decision. Remaining operator-gated doc-refresh items (walking through together): root archive, out-of-VCS units/scripts, config hygiene.**
+
+---
+
+## D202 — 2026-06-24 — Root-file cleanup sweep: archived 28 landed records (19 answered `PROMPT_CRUCIBLE_*` relays + 9 phase artifacts) to `_archive/` via `git mv`. Docs-only housekeeping; root `*.md` 85 → 57.
+
+**Doc-refresh follow-through (operator-approved "all 28"). A read-only cleanup audit against the root-file taxonomy (`docs/architecture.md`) found ~46 archival candidates; moved the 28 HIGH-confidence ones — each self-declares done (ANSWERED/DEPLOYED/SUPERSEDED/CONFIRMED/complete) AND has a verified landing D-entry. `git mv` preserves history; the flat `_archive/` convention (was 15 files) followed; responses for the relays live in `../Crucible/docs/handoffs/FORGE_*` so the outgoing prompts archive prompt-only.**
+
+- **Group A — 19 landed relays:** YIELD_MAP_RESPONSE ([[D105]]), V18_CUT_COMPLETE ([[D135]]), V19_OPTION_MOMENTUM_LIVE ([[D138]]), V22_EXIT_TIMECUT_FAIRTEST ([[D169]]), CONTRACTS_1_18_ADOPTED ([[D123]]), DEALER_SINGLE_NAME_RESTRICTION (v13), DEALER_REFERENCE_GATE_READMISSION, GRAMMAR_VERSION_RESOLVE ([[D096]]/[[D097]]), H2_DAYS_SINCE_EARNINGS_FAMILY ([[D107]]), EXIT_TAIL_ATTRIBUTION, LONG_OPTIONS_EXHAUSTION ([[D154]]/[[D161]]), MAGNITUDE_COST_DECOMPOSITION (superseded), OVERLAYSPEC_BEAR_COMPLEMENT, META_KING_{CONTRACT_BUMP_CONFIRM, MIN_MARGIN_ADOPTED ([[D180]]/[[D181]]), PROVENANCE_DSR}, MOMENTUM_{CHEAP_IV_REGISTRY, RECOMMENDATION_AND_INPUTS}, MR_RV_RANK_HURST_OVERLAP ([[D167]]).
+- **Group B — 9 phase artifacts:** PHASE_0..6_HANDOFF, PHASE_1_RESUME_PROMPT, PHASE_4_MULTI_EXIT_DRAFT (phases 0–6 complete per CLAUDE.md). CLAUDE.md names `PHASE_N_HANDOFF.md` by pattern, not path → the reference still resolves from `_archive/`.
+- **Deliberately LEFT at root:** the operator's in-flight files (2 modified + 4 untracked, incl. the live wf_p25/quality thread); `AUDIT.md` (cited historical); Tier-2 medium-confidence relays (skim-first); `PROMPT_CRUCIBLE_WORST_QUARTILE_REGIME_LABEL.md` (a valid candidate but operator-modified — don't entangle its uncommitted banner).
+
+**Files:** 28× `git mv … _archive/`, `docs/architecture.md` (taxonomy rows), `STATUS.md`, this entry. No `src/`/grammar/config — reboot-safe.
+
+**STATUS: root `*.md` 85 → 57. Doc-refresh items remaining (together): out-of-VCS units/scripts, config hygiene.**
