@@ -5008,3 +5008,21 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Files:** `scripts/deploy_preflight.sh` (new), `tests/unit/test_cli/test_run_loop.py` (anti-inertness test), `docs/tasks/deploy.md` (gate as step 0), `docs/MANPAGE.md`, `STATUS.md`, this entry.
 
 **STATUS: OPS-HARDENING SPRINT COMPLETE (5/5).** backup/DR ([[D195]], live) · §7.3 backpressure ([[D196]]) · healthcheck ([[D197]], live) · `forge status` ([[D198]], live) · deploy preflight ([[D199]]). **Operator-gated remainder (not engineering):** deploy item 2 (restart → Tier-1; set `submission.max_inflight: 600` → Tier-2) · adopt contracts 1.20.0 (→ preflight GREEN) · the live ~33 h Crucible stall (upstream runner) · off-box DR target (`FORGE_BACKUP_DEST`).
+
+---
+
+## D200 — 2026-06-24 — Adopted contracts 1.20.0 (pin bump, validated no-op) + DEPLOYED §7.3 backpressure (D196): Tier-1 `STRANDED_AFTER` 5d active + Tier-2 `max_inflight`=600 enabled. D104 ritual via the (scope-fixed) deploy-preflight gate. PRODUCTION DEPLOY — journal-verified.
+
+**Operator: "adopt contracts 1.20.0 and bump the pin and deploy item 2."**
+
+**1.20.0 adoption — validated no-op for Forge.** Read Crucible f8ef52d: 1.20.0 = `PromotedPortfolio.vol_target_annual` + `PortfolioComponent.asof_universe_rule` (additive provenance) + drop BOOK-level `rebalance_freq` from the PORTFOLIO identity (`compute_config_hash`/`portfolio_config_hash`). Verified harmless: (a) additive minor, existing models unchanged; (b) the dropped field is the portfolio (assembly-side) hash — Forge neither computes nor reads `portfolio_config_hash`/`PromotedPortfolio`; (c) the per-component `CombinerSpec.rebalance_frequency` Forge generates (`sampler.py:702`) stays identity-bearing inside each `StrategyConfig.config_hash` → Forge config_hashes UNCHANGED (idempotency / hard rule #9 intact). `uv.lock` diff = only `crucible_contracts` 1.19.0→1.20.0. Action: bumped `FORGE_EXPECTED_CONTRACT_VERSION` 1.19.0→1.20.0 + adopted `uv.lock`; **no code change.** The §13.5 test (pin==installed) goes green.
+
+**§7.3 deploy (D196).** Tier-1 (`STRANDED_AFTER` 8d→5d) activates on restart (committed code, [[D196]]); Tier-2 enabled via `config/forge.yaml` `submission.max_inflight=600` (~3× batch_size; bounds the genuine in-flight queue).
+
+**Preflight scope fix (D199).** Dogfooding the gate on its first real use surfaced that it NO-GO'd on ANY dirty tracked file — including the operator's in-flight `PROMPT_*` docs (the normal live-tree state). Scoped the dirty-check NO-GO to the deploy surface (`src/config/pyproject/uv.lock/deploy`); other tracked changes (docs/tests/scripts) are informational, never blocking. The gate then correctly GO'd this deploy.
+
+**Deploy (D104 ritual).** `deploy_preflight.sh` → **GO** (suite **1698 passed / 0 failed** — pin test now green; deploy surface clean). `systemctl --user stop` (rc 0) → `reset-failed` → `start`. Restarted clean: MainPID 55616, NRestarts=0, active; journal shows `grammar_version=v22`, `registry_loaded_from_export`, all learned-weight lines (cohort/regime/rank), reconcile — **no traceback / SchemaVersionMismatch** (1.20.0 accepted). **Both §7.3 tiers journal-VERIFIED engaged ([[D185]] lesson):** the new daemon logged `blocked: in-flight depth 3536 exceeds cap 600 (§7.3 backpressure)` — Tier-2 firing; and the genuine depth **3536** (vs the ~54k raw in-flight) confirms Tier-1's 5d watermark excludes the dead tail. `forge healthcheck` → **OVERALL=OK (6/0/0)**: `contracts pin == installed (1.20.0)` (adoption confirmed), submission OK (the ~33 h Crucible stall has since cleared). Deployed 2026-06-24T~06:47Z.
+
+**Files:** `src/forge/core/contracts_check.py` (pin + 1.20.0 comment), `uv.lock` (adopt), `config/forge.yaml` (max_inflight=600), `scripts/deploy_preflight.sh` (scope fix), `STATUS.md`, this entry. Commits `6af7d84` (code/config) + this record.
+
+**STATUS: contracts 1.20.0 ADOPTED (pin green, daemon accepts it) + §7.3 BACKPRESSURE LIVE (Tier-1 5d + Tier-2 cap-600, both journal-verified). Daemon healthy / healthcheck OK. The one remaining operator item is off-box DR (`FORGE_BACKUP_DEST`).**

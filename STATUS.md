@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-06-24 — CONTRACTS 1.20.0 ADOPTED + §7.3 BACKPRESSURE DEPLOYED (D200). Pin 1.19.0→1.20.0 (validated no-op); item 2 (D196) LIVE — Tier-1 `STRANDED_AFTER` 5d + Tier-2 `max_inflight`=600. Journal-verified: `blocked: in-flight depth 3536 exceeds cap 600`. Daemon healthy; `forge healthcheck` OVERALL=OK.
+
+**Operator: "adopt contracts 1.20.0 and bump the pin and deploy item 2." Full record: [[D200]].**
+- **1.20.0 adopted (validated no-op):** the bump's "drop rebalance_freq from identity" is the BOOK/portfolio config_hash (assembly-side; Forge doesn't compute/use it); the per-component `CombinerSpec.rebalance_frequency` stays in `StrategyConfig.config_hash` → Forge hashes UNCHANGED. Pin bumped + `uv.lock` adopted, no code change. Suite GREEN (1698/0) — the standing red is cleared (and pre-commit hooks pass without `--no-verify` now that `uv.lock` is consistent).
+- **§7.3 DEPLOYED (D196):** Tier-1 (8d→5d) active on restart; Tier-2 enabled (`forge.yaml max_inflight=600`). **Journal-VERIFIED engaged:** `blocked: in-flight depth 3536 exceeds cap 600 (§7.3 backpressure)` — the depth block holding submission until the deep queue drains; genuine depth 3536 (Tier-1's 5d watermark excludes the dead tail from the old ~54k).
+- **Deploy:** preflight **GO** (scope-fixed to treat operator docs as informational) → stop → restart. MainPID 55616, NRestarts=0; `grammar_version=v22` + all learned-weight lines; no traceback/mismatch. `forge healthcheck` OVERALL=OK (contracts pin==installed 1.20.0; the Crucible stall has cleared — submission OK).
+- **Preflight scope fix (D199):** dirty-check NO-GO scoped to the deploy surface; docs informational.
+- **Remaining operator-gated:** off-box DR target (`FORGE_BACKUP_DEST` → a mounted remote). The ops sprint + this deploy land the productionization push.
+
+---
+
 ## 2026-06-23 — OPS-HARDENING SPRINT COMPLETE (5/5). Item 5 DONE: deploy-preflight gate + general anti-inertness regression guard (D199). The productionization push is landed; the remainder is operator-gated deploy/adopt + the upstream stall.
 
 **Full record: [[D199]]. Sprint arc: [[D195]] backup/DR (live) · [[D196]] §7.3 backpressure · [[D197]] healthcheck (live) · [[D198]] `forge status` (live) · [[D199]] deploy preflight.**
