@@ -5055,3 +5055,20 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Files:** 28× `git mv … _archive/`, `docs/architecture.md` (taxonomy rows), `STATUS.md`, this entry. No `src/`/grammar/config — reboot-safe.
 
 **STATUS: root `*.md` 85 → 57. Doc-refresh items remaining (together): out-of-VCS units/scripts, config hygiene.**
+
+---
+
+## D203 — 2026-06-24 — New-box reproducibility: vendored the `forge-eod-check` timer (unit + script) into the repo + de-staled `setup_new_box.sh`/`stage_transfer.sh`. Docs/ops glue; no daemon or src-behavior change.
+
+**Doc-refresh follow-through (operator "clean them all up"). The sweep found install-time artifacts that silently drift on a new-box rebuild — fixed so a clean bring-up reproduces the live system faithfully. These are install-time files (not read by the running daemon) → no restart/deploy.**
+
+- **Vendored `forge-eod-check`:** `cp` of `forge-eod-check.{service,timer}` → `deploy/systemd/` and `~/.local/bin/forge-eod-check.sh` → `scripts/forge_eod_check.sh` (verbatim; the unit's `%h` specifiers keep it portable). It is a **report-only, out-of-loop** headless-Claude EOD reporter (writes a markdown report; explicitly forbidden from modifying/submitting/relaying) → hard rule #5 (no LLM in the production *loop*) is unaffected ([[ml-allowed-in-loop-not-llms]] reasoning). The live box is undisturbed (its installed unit still execs the same `~/.local/bin` path). Note: the script carries a fixed 2026-06-10/v17 baseline anchor (its internal logic; not refit here).
+- **`setup_new_box.sh` de-staled:** removed the `EXPECTED_CONTRACTS="1.14.0"` literal — the contracts gate now derives the expected version from `FORGE_EXPECTED_CONTRACT_VERSION` in `contracts_check.py` (never re-stales on a bump); §8 now symlinks ALL `deploy/systemd/*.{service,timer}` (was `forge.service` only) + installs the eod helper + enables the four timers; dropped the uncommitted-v9 prose.
+- **`stage_transfer.sh` de-staled:** the "traps" comment dropped the uncommitted-v9 trap (grammar committed at v22), promoted the multi-GB gitignored-open `forge.db` + non-portable `.venv` as the durable traps; removed the `1.27 GB`/`v1.14.0` literals.
+- **`NEW_BOX_TRANSFER.md` reconciled:** removed the now-false "script is stale → install timers manually" + "eod-check not in repo, re-stand by hand" caveats; the unit table now lists all five units incl. `forge-eod-check`.
+
+**Verify:** `bash -n` clean on both scripts; no stale literals remain (grep clean for `1.14.0`/`uncommitted v9`/`1.27 GB`/`EXPECTED_CONTRACTS`).
+
+**Files:** `deploy/setup_new_box.sh`, `deploy/stage_transfer.sh`, `deploy/systemd/forge-eod-check.{service,timer}` (new), `scripts/forge_eod_check.sh` (new), `deploy/NEW_BOX_TRANSFER.md`, `STATUS.md`, this entry.
+
+**STATUS: new-box scripts now reproduce the full live unit set (daemon + four timers + eod helper). Remaining doc-refresh items: config hygiene — dead `contracts_version` field (bundle into next deploy) + `grammar.yaml` R2 (defer to next bump, or confirm a dedicated v23).**

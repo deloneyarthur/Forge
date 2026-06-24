@@ -4,7 +4,7 @@
 #
 # Assumes the chosen migration profile: same user + same paths
 # (user owns ~/proj/Forge and ~/proj/crucible_contracts), forge.db brought
-# over, working-tree copy carrying the uncommitted v9 grammar.
+# over; grammar.yaml is committed (v22), so a clone/copy carries it.
 #
 # What it does, in order:
 #   1. (optional) pull the bundle off the flash drive into ~/proj + ~/forge_data
@@ -15,7 +15,8 @@
 #   5. uv sync --extra dev  (rebuilds .venv; uv provisions Python 3.12 if needed)
 #   6. ensure ~/forge_data dirs; place forge.db if --copy-db given
 #   7. forge version + forge check  (contracts compat + DB schema-ensure)
-#   8. install + enable the systemd user unit (+ linger); start only if --start
+#   8. install + enable all systemd user units (daemon + timers) + the eod-check
+#      helper script (+ linger); start the daemon only if --start
 #   9. invariant smoke test (the must-be-green bar)
 #
 # Flags:
@@ -35,7 +36,6 @@ FORGE="$PROJ/Forge"
 CONTRACTS="$PROJ/crucible_contracts"
 FORGE_DATA="${FORGE_DATA:-$HOME/forge_data}"
 OPTBT_DATA="${OPTBT_DATA:-$HOME/optbt_data}"
-EXPECTED_CONTRACTS="1.14.0"
 
 FROM_BUNDLE=""
 COPY_DB=""
@@ -82,9 +82,11 @@ ctr_ver="$(grep -m1 -oP '^version\s*=\s*"\K[^"]+' "$CONTRACTS/pyproject.toml" ||
 forge_expects="$(grep -oP 'FORGE_EXPECTED_CONTRACT_VERSION:\s*str\s*=\s*"\K[^"]+' \
                  "$FORGE/src/forge/core/contracts_check.py" || true)"
 printf 'crucible_contracts on disk: %s\n' "${ctr_ver:-<unknown>}"
-printf 'Forge expects:              %s\n' "${forge_expects:-<unknown>}"
-[ "$ctr_ver" = "$EXPECTED_CONTRACTS" ]     || die "contracts version $ctr_ver != expected $EXPECTED_CONTRACTS"
-[ "$forge_expects" = "$EXPECTED_CONTRACTS" ] || die "Forge expects $forge_expects != $EXPECTED_CONTRACTS — repo/contracts out of sync"
+printf 'Forge pin (source of truth): %s\n' "${forge_expects:-<unknown>}"
+# The pin in contracts_check.py is the single source of truth; verify the on-disk
+# contracts match it. No hardcoded literal here, so this gate never re-stales on a bump.
+[ -n "$forge_expects" ] || die "could not read FORGE_EXPECTED_CONTRACT_VERSION from contracts_check.py"
+[ "$ctr_ver" = "$forge_expects" ] || die "contracts on disk ($ctr_ver) != Forge's pin ($forge_expects) — repo/contracts out of sync"
 
 # --- 3. uv ---------------------------------------------------------------------
 if ! command -v uv >/dev/null 2>&1; then
@@ -127,27 +129,39 @@ say "forge version + forge check"
 ( cd "$FORGE" && uv run forge version )
 ( cd "$FORGE" && uv run forge check )   # contracts compat (§13.5) + DB schema-ensure
 
-# --- 8. systemd user service ---------------------------------------------------
-say "Installing systemd user unit"
-UNIT_SRC="$FORGE/deploy/systemd/forge.service"
-UNIT_LINK="$HOME/.config/systemd/user/forge.service"
-[ -f "$UNIT_SRC" ] || die "missing unit file $UNIT_SRC"
-mkdir -p "$HOME/.config/systemd/user"
-ln -sfn "$UNIT_SRC" "$UNIT_LINK"
+# --- 8. systemd user units (daemon + timers) -----------------------------------
+say "Installing systemd user units (daemon + timers) + eod-check helper"
+UNIT_DIR="$HOME/.config/systemd/user"
+[ -f "$FORGE/deploy/systemd/forge.service" ] || die "missing unit file $FORGE/deploy/systemd/forge.service"
+mkdir -p "$UNIT_DIR"
+# Symlink every unit shipped in deploy/systemd/ (forge.service + all timers).
+for u in "$FORGE"/deploy/systemd/*.service "$FORGE"/deploy/systemd/*.timer; do
+  [ -e "$u" ] || continue
+  ln -sfn "$u" "$UNIT_DIR/$(basename "$u")"
+done
+# forge-eod-check.service execs ~/.local/bin/forge-eod-check.sh (the unit uses %h,
+# so this path is portable). Install it from the repo's canonical copy.
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "$FORGE/scripts/forge_eod_check.sh" "$HOME/.local/bin/forge-eod-check.sh"
 
-# enable-linger lets the user service run headless across logout/reboot.
+# enable-linger lets the user units run headless across logout/reboot.
 loginctl enable-linger "$USER" 2>/dev/null || warn "enable-linger failed (need: loginctl enable-linger $USER)"
 if systemctl --user daemon-reload 2>/dev/null; then
+  # Timers run independently of Crucible — enable + start them now.
+  for t in forge-ranker-eval forge-backup forge-healthcheck forge-eod-check; do
+    systemctl --user enable --now "$t.timer" 2>/dev/null || warn "could not enable $t.timer"
+  done
   systemctl --user enable forge.service 2>/dev/null || warn "could not enable forge.service"
   if [ "$START" -eq 1 ]; then
     systemctl --user start forge.service && say "forge.service started"
   else
-    say "forge.service ENABLED (not started). Start it AFTER Crucible is up:"
+    say "forge.service ENABLED (not started); timers active. Start the daemon AFTER Crucible is up:"
     printf '       systemctl --user start forge.service\n'
   fi
 else
   warn "systemctl --user unavailable in this shell (no user D-Bus session)."
-  warn "After a real login: systemctl --user daemon-reload && systemctl --user enable --now forge.service"
+  warn "After a real login: systemctl --user daemon-reload && systemctl --user enable --now \\"
+  warn "  forge.service forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer forge-eod-check.timer"
 fi
 
 # --- 9. smoke test -------------------------------------------------------------
@@ -167,6 +181,6 @@ Next steps
   2. Start Forge:        systemctl --user start forge.service
   3. Watch it:           journalctl --user -u forge.service -f
   4. Confirm health:     cd $FORGE && uv run forge check
-  5. The v9 grammar is still uncommitted (D103, DEPLOY PENDING). Commit it via
-     the deploy ritual in STATUS.md when you're ready (stop / full suite / commit).
+  5. Verify the timers:  systemctl --user list-timers 'forge-*'
+     (forge-healthcheck reports CRITICAL until the daemon is started — expected.)
 EOF

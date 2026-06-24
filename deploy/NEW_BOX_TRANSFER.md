@@ -10,13 +10,11 @@ Migrating Forge to a new machine. Profile chosen for this transfer:
 
 The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_new_box.sh` (new box).
 
-> **One stale spot in `setup_new_box.sh` to know about:** it was written for the original v8→v9
-> single-unit transfer. It auto-installs **only** `forge.service`, and its `EXPECTED_CONTRACTS`
-> pin (`1.14.0`) and its `--copy-db`/bundle prose predate the current state. The hard gate it
-> performs is still correct (it reads `FORGE_EXPECTED_CONTRACT_VERSION` off `contracts_check.py`
-> and the contracts `pyproject.toml`, and dies on a mismatch). Run it, then complete the two
-> manual steps this runbook adds below: **(a) install the four timer units** it doesn't, and
-> **(b) verify the contracts version against the live pin** (this doc, not the script's literal).
+> **`setup_new_box.sh` is current (refreshed D203):** it symlinks **all** units in
+> `deploy/systemd/` (`forge.service` + every timer) and installs the `forge-eod-check` helper
+> to `~/.local/bin/`, and its contracts gate derives the expected version from
+> `FORGE_EXPECTED_CONTRACT_VERSION` in `contracts_check.py` (no hardcoded literal to re-stale).
+> No manual unit-install follow-up is needed — the "verify the units" step below is just a check.
 
 ---
 
@@ -102,21 +100,15 @@ invariant smoke test.
 It deliberately does **not** start the service (pass `--start` to override) — Crucible should come
 up first.
 
-### Then: install the four timer units (the script does not)
+### Verify the units (the script installs them all)
 
-`setup_new_box.sh` installs only `forge.service`. The current system also runs four user timers,
-all defined in `deploy/systemd/`. Symlink + enable them so the new box reproduces the full
-operational set:
+`setup_new_box.sh` symlinks every unit in `deploy/systemd/` into `~/.config/systemd/user/`,
+installs the `forge-eod-check` helper to `~/.local/bin/`, and enables the timers (the daemon
+itself starts only with `--start`, after Crucible is up). Confirm the full set:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-for u in forge-ranker-eval forge-backup forge-healthcheck; do
-  ln -sfn ~/proj/Forge/deploy/systemd/$u.service ~/.config/systemd/user/$u.service
-  ln -sfn ~/proj/Forge/deploy/systemd/$u.timer   ~/.config/systemd/user/$u.timer
-done
-systemctl --user daemon-reload
-systemctl --user enable --now forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer
-systemctl --user list-timers 'forge-*'   # confirm all three are scheduled
+systemctl --user list-timers 'forge-*'    # all four timers scheduled
+systemctl --user is-enabled forge.service
 ```
 
 The full unit set after bring-up:
@@ -127,12 +119,7 @@ The full unit set after bring-up:
 | `forge-ranker-eval.timer` | 05:00 daily | train + eval the learned verdict / wf_p25 model; publish to `~/forge_data/models/` | F3 / D193 |
 | `forge-backup.timer` | 04:00 daily | DR backup of `forge.db` + `models/` | D195 |
 | `forge-healthcheck.timer` | hourly | `forge healthcheck` — detect an alive-but-unproductive daemon (CRITICAL surfaces in `--state=failed`) | D197 |
-
-> **Not in the repo, not reproduced here:** an operator-local `forge-eod-check.timer` (21:00) may
-> exist on the source box; it lives only in `~/.config/systemd/user/` and shells a headless
-> `~/.local/bin/forge-eod-check.sh` that is **not** part of the Forge repo or this bundle. It is an
-> operator reporting hook, not part of Forge's runtime — re-stand it up by hand on the new box if
-> wanted. The daemon and the four repo timers above are the complete Forge-owned set.
+| `forge-eod-check.timer` | 21:00 daily | headless-Claude EOD report (DB snapshot vs baseline) — **report-only, out-of-loop** (hard rule #5 unaffected); execs `~/.local/bin/forge-eod-check.sh`, vendored from `scripts/forge_eod_check.sh` | 06-10; vendored D203 |
 
 ### Data directories
 

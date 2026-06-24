@@ -2,24 +2,24 @@
 #
 # stage_transfer.sh — stage the Forge migration bundle onto a flash drive.
 #
-# WHY this exists: a new-box transfer of Forge has three non-obvious traps —
+# WHY this exists: a new-box transfer of Forge has non-obvious traps —
 #   (1) crucible_contracts has NO git remote, so it cannot be cloned and must
 #       physically travel as a sibling of Forge (Forge resolves it via the
 #       relative path ../crucible_contracts in pyproject [tool.uv.sources]).
-#   (2) the working tree carries uncommitted D103/v9 grammar work that a fresh
-#       `git clone` would silently drop (last commit is v8).
-#   (3) ~/forge_data/forge.db is ~1.27 GB of accumulated learning state, is
-#       gitignored, and is held OPEN by the running service.
-# This script bundles all three correctly and excludes the non-portable .venv
-# (uv bakes absolute interpreter paths into it; it is rebuilt on the new box).
+#   (2) ~/forge_data/forge.db is multi-GB of accumulated learning state, is
+#       gitignored, and is held OPEN by the running service — copy it out-of-band
+#       (this script) and quiesce first (--stop-service) for a consistent snapshot.
+#   (3) the non-portable .venv (uv bakes absolute interpreter paths) must NOT
+#       travel — setup_new_box.sh rebuilds it on the new box.
+# This script bundles (1)+(2) correctly and excludes the .venv per (3).
 #
 # Safe by default: PREVIEWS (rsync --dry-run) unless --go is passed, and never
 # stops the production service unless --stop-service is passed. Stopping the
 # service quiesces forge.db so the copy is consistent (DuckDB + WAL).
 #
 # Bundle layout produced at <dest>:
-#   <dest>/proj/Forge/               working tree incl. .git + uncommitted v9
-#   <dest>/proj/crucible_contracts/  shared editable dep (v1.14.0)
+#   <dest>/proj/Forge/               working tree incl. .git (committed through v22)
+#   <dest>/proj/crucible_contracts/  shared editable dep (the pinned version)
 #   <dest>/forge_data/forge.db       accumulated state
 #
 # Usage:
@@ -83,7 +83,7 @@ if [ "$GO" -eq 1 ]; then
   mkdir -p "$DEST/proj" "$DEST/forge_data"
 fi
 
-say "Forge working tree (incl. .git + uncommitted v9) -> $DEST/proj/Forge"
+say "Forge working tree (incl. .git, committed through v22) -> $DEST/proj/Forge"
 "${RSYNC[@]}" "${EXCLUDES[@]}" "$PROJ/Forge/" "$DEST/proj/Forge/"
 
 say "crucible_contracts (shared editable dep) -> $DEST/proj/crucible_contracts"

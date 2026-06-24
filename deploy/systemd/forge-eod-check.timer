@@ -1,0 +1,13 @@
+[Unit]
+Description=Trigger Forge EOD pipeline check
+Documentation=file://%h/.config/systemd/user/forge-eod-check.service
+
+[Timer]
+# 21:00 local (PDT) — end-of-day read of the clean-era cohort vs baseline.
+# Persistent=true catches missed runs after host reboot.
+OnCalendar=*-*-* 21:00:00
+Persistent=true
+Unit=forge-eod-check.service
+
+[Install]
+WantedBy=timers.target

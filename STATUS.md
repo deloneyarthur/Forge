@@ -4,7 +4,7 @@
 
 - **Doc refresh — commit `76e7861` (28 docs):** architecture / MANPAGE / HOW-TO / NEW_BOX_TRANSFER / INDICATOR_THRESHOLDS / GRAMMAR / glossary / deploy + 20 proposal/review status banners. King-retirement ([[D190]]) sweep came back already-clean (all "king" hits were substring noise); quality-lane-flip ([[D193]]) + [[D200]] propagated. grammar doc-sync passes; `forge healthcheck` OVERALL=OK.
 - **DESIGN.md reconciled ([[D201]]):** §7.3 now documents the three block reasons (per-batch + D137 stall guard + D196/D200 `max_inflight`) — **closes the standing D196 spec-decision**; §6.2 documents the learned-ranking sourcing (D149 `P(component)` + D193 wf_p25 lane); §10.1's stale `contracts_version: "1.0"` literal → pointer to `core/contracts_check.py`.
-- **Doc-refresh follow-through:** root archive DONE ([[D202]] — 28 landed records `git mv`→`_archive/`; root `*.md` 85→57). Remaining (together): out-of-VCS units/scripts (`forge-eod-check`; stale `setup_new_box.sh`/`stage_transfer.sh` literals); config hygiene (inert `forge.yaml` `crucible.contracts_version: "1.6"`; `grammar.yaml` R2 `evidence_to_relax`).
+- **Doc-refresh follow-through:** root archive DONE ([[D202]]); new-box reproducibility DONE ([[D203]] — vendored the `forge-eod-check` unit+script into the repo; `setup_new_box.sh`/`stage_transfer.sh` de-staled + now install ALL units). Remaining: config hygiene — dead `forge.yaml` `crucible.contracts_version` field (bundle removal into next deploy) + `grammar.yaml` R2 `evidence_to_relax` (defer to next grammar bump, or confirm a dedicated v23).
 
 ---
 
