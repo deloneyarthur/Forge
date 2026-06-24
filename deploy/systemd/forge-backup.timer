@@ -1,0 +1,14 @@
+[Unit]
+Description=Trigger Forge nightly DR backup
+Documentation=file://%h/proj/Forge/deploy/systemd/forge-backup.service
+
+[Timer]
+# 04:00 local: clear of the 03:00 prune and the 05:00 ranker-eval (both cp the
+# multi-GB DB) so two big reads never overlap; ahead of 06:00 digest / 19:00 ingest /
+# 21:00 eod-check. Persistent=true catches a run missed while the host was off.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+Unit=forge-backup.service
+
+[Install]
+WantedBy=timers.target

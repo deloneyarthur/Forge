@@ -71,6 +71,9 @@ ls -lt ~/optbt_data/exports/gated_runs_*.json | head -1
 # F3 learned-ranker criterion clock (auto-updated 05:00 daily by forge-ranker-eval)
 tail -1 ~/forge_data/ranker_eval/streak.jsonl        # latest verdict + N/3 streak
 journalctl --user -u forge-ranker-eval.service -n 20 --no-pager
+
+# Last nightly backup fresh? (forge-backup timer, 04:00)
+ls -lt ~/forge_data/backups/forge_db_*.duckdb | head -1
 ```
 
 The `forge-ranker-eval` timer trains + evaluates the shadow verdict model each morning and records
@@ -142,6 +145,24 @@ write. Inspect `~/optbt_data/inbox/<batch_id>/`: if the JSON file is present, up
 the row to `status='submitted'` manually; if absent, re-run the batch — the
 `config_hash` UNIQUE INDEX (§13.4) makes resubmission a safe no-op.
 
+### Restore forge.db (or models/) from a backup
+
+Nightly backups land in `~/forge_data/backups/` (the `forge-backup` timer, 04:00): validated
+`forge_db_<UTC>.duckdb` snapshots + `models_<UTC>.tar.gz`, newest 14 kept. To restore:
+
+```bash
+systemctl --user stop forge.service          # release the writer's lock on forge.db
+LATEST=$(ls -1 ~/forge_data/backups/forge_db_*.duckdb | sort | tail -1)
+# verify it opens before swapping:
+~/proj/Forge/.venv/bin/python -c "import duckdb,sys; print(duckdb.connect(sys.argv[1],read_only=True).execute('select count(*) from submissions').fetchone())" "$LATEST"
+cp -- "$LATEST" ~/forge_data/forge.db        # overwrite the corrupted/lost DB
+# models, if needed: tar -xzf "$(ls -1 ~/forge_data/backups/models_*.tar.gz | sort | tail -1)" -C ~/forge_data
+systemctl --user start forge.service
+```
+
+Caveat: same-disk backups don't survive a *physical disk* failure — for that, `FORGE_BACKUP_DEST`
+must point at a mounted off-box target (see `backup_forge_db.sh` in `MANPAGE.md`).
+
 ### Tune the generator from real results
 
 After a few hundred new gated runs accumulate, retrain the threshold ranges:
@@ -178,6 +199,7 @@ Full change procedure (worktree, tests, deploy ritual): `tasks/grammar-change.md
 | `~/optbt_data/refit_inbox/` | QuantIQ's quarterly re-validation requests |
 | `~/optbt_data/runs.duckdb` | Crucible's results DB (writer-locked; never read directly) |
 | `~/forge_data/forge.db` | Forge's own state (submissions, batches, proposals) |
+| `~/forge_data/backups/` | Nightly DR snapshots of `forge.db` + `models/` (keep 14; `forge-backup` timer, 04:00) |
 
 ## Manual runs (without the daemon)
 

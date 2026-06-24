@@ -419,6 +419,24 @@ touches grammar/weights/config/ranking. Trap-cleans the snapshot + staging on ev
 scripts/daily_ranker_eval.sh        # or: systemctl --user start forge-ranker-eval.service
 ```
 
+### backup_forge_db.sh
+
+**Bash, not Python** — the `ExecStart` of the `forge-backup` timer (04:00 daily), runnable by
+hand too. Nightly disaster-recovery backup of the non-git state. `cp`s the live `forge.db`
+between write bursts, **validates** the copy (opens it read-only and queries `submissions`; a torn
+mid-write copy fails and retries ≤3×), then publishes it via atomic same-fs rename as
+`forge_db_<UTC>.duckdb`; `~/forge_data/models/` is tar.gz'd alongside. Retention keeps the newest
+`FORGE_BACKUP_KEEP` (default 14) of each and prunes **only after** a validated new backup exists, so
+a failed run never deletes the last good one. Validation uses the venv python directly (no `forge`
+import) so a broken deploy can't break the backup. Env knobs: `FORGE_BACKUP_DEST` (default
+`~/forge_data/backups` — **same-disk**; point at a mounted external/remote target for true off-box
+DR), `FORGE_BACKUP_KEEP`, `FORGE_BACKUP_MIN_FREE_MB`. Deterministic-loop rules don't apply (ops glue,
+not `src/`); reverting = disable the timer. No args.
+
+```
+scripts/backup_forge_db.sh          # or: systemctl --user start forge-backup.service
+```
+
 ### check_grammar_version_bump.py / check_grammar_doc_sync.py
 
 Pre-commit hooks (no CLI args). The first enforces that a changed `grammar.yaml`
@@ -474,7 +492,7 @@ systemd **user** services (`systemctl --user ...`). Start the writer first; stop
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback` | The Forge daemon: generate → submit → learn. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`, keep 14; `scripts/backup_forge_db.sh`). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

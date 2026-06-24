@@ -1,0 +1,14 @@
+[Unit]
+Description=Forge nightly DR backup (forge.db + models/)
+Documentation=file://%h/proj/Forge/scripts/backup_forge_db.sh
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/proj/Forge
+ExecStart=%h/proj/Forge/scripts/backup_forge_db.sh
+# A 4.5 GB cp + read-only validation + a tiny models tar. Generous ceiling so a slow
+# snapshot (or a retry on a torn mid-write copy) never wedges the timer.
+TimeoutStartSec=30m
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forge-backup
