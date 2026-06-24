@@ -16,12 +16,17 @@ deployed ungated code (D104). Hence:
 ## Steps
 
 ```bash
+scripts/deploy_preflight.sh                  # GATE (D199): tree clean + FULL suite (covers contracts pin D176 + anti-inertness D185). NO-GO => fix first
 systemctl --user stop forge.service          # journal exit 143 = normal --loop SIGTERM
-uv run pytest                                 # FULL suite, uncontended — this is the deploy gate
 # commit / merge to main in the LIVE tree (service runs from here via editable install)
 systemctl --user reset-failed forge.service
 systemctl --user start forge.service
 ```
+
+The preflight runs the full suite (tests use isolated temp DBs, so it's effectively
+uncontended even with the daemon up). Re-run `uv run pytest` after stopping if you want a
+fully-quiesced gate. A contracts bump leaves the suite red until the pin is adopted — the
+preflight will NO-GO until you do, which is the point.
 
 ## Verify (within the first minutes)
 

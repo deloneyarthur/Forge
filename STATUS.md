@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-23 — OPS-HARDENING SPRINT COMPLETE (5/5). Item 5 DONE: deploy-preflight gate + general anti-inertness regression guard (D199). The productionization push is landed; the remainder is operator-gated deploy/adopt + the upstream stall.
+
+**Full record: [[D199]]. Sprint arc: [[D195]] backup/DR (live) · [[D196]] §7.3 backpressure · [[D197]] healthcheck (live) · [[D198]] `forge status` (live) · [[D199]] deploy preflight.**
+- **`scripts/deploy_preflight.sh`** — read-only GO/NO-GO gate: tree clean + full suite (which covers the contracts-pin test D176 + the loop-forward anti-inertness tests D185). Wired as step 0 in `docs/tasks/deploy.md`. Verified: correctly NO-GO on the current tree (un-adopted 1.20.0 + uncommitted operator files) — the gate refuses to green-light a deploy while 1.20.0 is un-adopted.
+- **General anti-inertness test** — asserts the `--loop` and single-iteration call sites forward IDENTICAL flag kwargs (catches the D185 trap generally, beyond per-flag spot checks). full suite 1697 passed / 1 (pre-existing pin).
+- **Finding A (contracts-pin reboot-safety) closed by composition:** healthcheck surfaces drift continuously + preflight blocks deploy while un-adopted.
+- **OPERATOR-GATED REMAINDER (not engineering):** deploy item 2 (§7.3: restart for Tier-1, set `submission.max_inflight: 600` for Tier-2) · adopt contracts 1.20.0 (→ preflight GREEN) · the live ~33 h Crucible stall (upstream runner; now ALERTED via healthcheck) · off-box DR target (`FORGE_BACKUP_DEST`).
+
+---
+
 ## 2026-06-23 — OPS-HARDENING SPRINT item 4/5 DONE: `forge status` LIVE (D198) — curated readout of the learning-signal clocks ("is the stream improving?") with no DB spelunking. F3 ranker PASS 12-streak (+0.497 AUC margin); §8.6 wf_p25 tail trending up (-0.11→+0.27).
 
 **Full record: [[D198]].**

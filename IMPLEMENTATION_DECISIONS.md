@@ -4988,3 +4988,23 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Files:** `src/forge/cli/status_cmd.py` (new), `src/forge/cli/main.py` (register), `tests/unit/test_cli/test_status.py` (new), `docs/MANPAGE.md`, `docs/HOW-TO.md`, `STATUS.md`, this entry.
 
 **STATUS: `forge status` LIVE — curated learning-clock readout (F3 AUC-margin + §8.6 wf_p25 Spearman streaks + trends), no DB. Ops-sprint item 4/5 done. Next: item 5 (deploy automation + anti-inertness guard + contracts-pin reboot-safety — closes Finding A).**
+
+---
+
+## D199 — 2026-06-23 — Deploy-preflight gate + general anti-inertness regression guard (ops-sprint item 5/5, FINAL). Codifies the D104 ritual's pre-checks; closes Finding A's reboot-safety class by composition.
+
+**Spec section:** none (operational / deploy discipline). Origin: the audit's deploy-safety gap — the D104 ritual is manual and its omissions have bitten thrice: a dirty tree a reboot silently deployed ([[D104]]), a stale contracts pin that hard-halts on restart ([[D176]]), partial feature wiring that ran inert ([[D185]]).
+
+**Decision (two parts).**
+- **`scripts/deploy_preflight.sh`** — a READ-ONLY go/no-go gate (never stops/starts the service or mutates the tree): (1) git tree clean (uncommitted TRACKED changes deploy on reboot → NO-GO), (2) the FULL suite (the deploy gate — and since it includes the contracts-pin equality test + the loop/single-iteration forward tests, a green suite proves pin-adoption [[D176]] AND anti-inertness [[D185]] in one shot). Exit 0 = GO (prints the stop→restart steps); non-zero = NO-GO (prints the reason). Wired as step 0 in `docs/tasks/deploy.md`.
+- **General anti-inertness test** (`test_loop_and_single_iteration_forward_identical_flags`) — captures `_run_one_iteration` kwargs from BOTH the `--loop` and single-iteration paths under identical CLI flags and asserts every flag/knob kwarg matches. The prior tests spot-checked individual flags; this catches ANY divergence (the [[D185]] trap generally), which mypy cannot (a missing call-site kwarg silently takes the default).
+
+**Contracts-pin reboot-safety (Finding A's class) — closed by composition:** the healthcheck ([[D197]]) surfaces drift continuously (WARN minor / CRITICAL major), and the preflight (this) blocks a deploy while the pin is un-adopted (the suite's pin test stays red). No separate mechanism needed.
+
+**Determinism / hard rules.** Ops glue + a test; no `src/`/grammar/gate change. The preflight is read-only.
+
+**Verification.** `bash -n` clean; ruff clean; full suite **1697 passed / 1 failed** (the pre-existing contracts-1.20.0 pin). Ran the preflight end-to-end → it correctly returned **NO-GO** on the current tree (uncommitted operator `uv.lock`/docs + the un-adopted-1.20.0 suite failure) — i.e. the gate works: it refuses to green-light a deploy while 1.20.0 is un-adopted. That same red is the cue to adopt the pin.
+
+**Files:** `scripts/deploy_preflight.sh` (new), `tests/unit/test_cli/test_run_loop.py` (anti-inertness test), `docs/tasks/deploy.md` (gate as step 0), `docs/MANPAGE.md`, `STATUS.md`, this entry.
+
+**STATUS: OPS-HARDENING SPRINT COMPLETE (5/5).** backup/DR ([[D195]], live) · §7.3 backpressure ([[D196]]) · healthcheck ([[D197]], live) · `forge status` ([[D198]], live) · deploy preflight ([[D199]]). **Operator-gated remainder (not engineering):** deploy item 2 (restart → Tier-1; set `submission.max_inflight: 600` → Tier-2) · adopt contracts 1.20.0 (→ preflight GREEN) · the live ~33 h Crucible stall (upstream runner) · off-box DR target (`FORGE_BACKUP_DEST`).

@@ -470,6 +470,20 @@ not `src/`); reverting = disable the timer. No args.
 scripts/backup_forge_db.sh          # or: systemctl --user start forge-backup.service
 ```
 
+### deploy_preflight.sh
+
+**Bash** — a read-only GO/NO-GO gate for the D104 deploy ritual (`docs/tasks/deploy.md`),
+run before committing + restarting. Checks (1) the git tree is clean (uncommitted tracked
+changes deploy on reboot) and (2) the FULL suite passes — which covers the contracts-pin
+equality test (D176) and the loop/single-iteration forward tests (D185), so a green suite
+proves pin-adoption + anti-inertness in one shot. Exit 0 = GO (prints the stop→restart
+steps); non-zero = NO-GO (prints the blocking reason). Never stops/starts the service or
+mutates the tree. No args.
+
+```
+scripts/deploy_preflight.sh
+```
+
 ### check_grammar_version_bump.py / check_grammar_doc_sync.py
 
 Pre-commit hooks (no CLI args). The first enforces that a changed `grammar.yaml`

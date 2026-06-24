@@ -637,6 +637,66 @@ def test_loop_forwards_yield_map_flags_to_iteration(
     assert captured[0]["quality_rank"] is False
 
 
+def test_loop_and_single_iteration_forward_identical_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D185 anti-inertness guard (general): the --loop and single-iteration call sites
+    must forward IDENTICAL flag/knob kwargs to ``_run_one_iteration``. A flag wired to
+    one site but not the other runs inert (the D182/D185 bug); a missing kwarg silently
+    takes the default and mypy can't catch it. This compares the two paths directly, so
+    it catches ANY such divergence — not just the per-flag spot checks above."""
+    import time as _time
+
+    from forge.cli import main as m
+
+    captured: list[dict[str, object]] = []
+
+    def _capture(**kwargs: object) -> str:
+        captured.append(kwargs)
+        return "submitted"
+
+    monkeypatch.setattr(m, "_run_one_iteration", _capture)
+    monkeypatch.setattr(_time, "sleep", lambda *_a, **_k: None)
+    crucible_db = tmp_path / "crucible.db"
+    build_synthetic_crucible_db(crucible_db).close()
+    base = [
+        "run",
+        "--no-config",
+        "--dry-run",
+        "--inbox",
+        str(tmp_path / "ib"),
+        "--crucible-db",
+        str(crucible_db),
+        "--cohort-yield",
+        "--regime-gate-yield",
+        "--quality-rank",
+    ]
+    assert runner.invoke(app, base).exit_code == 0
+    single = captured[-1]
+    captured.clear()
+    assert runner.invoke(app, [*base, "--loop", "--max-iterations", "1"]).exit_code == 0
+    looped = captured[-1]
+
+    # Every flag/knob wired at both call sites must agree (seed/batch differ per-iter by
+    # design, so they're excluded). A mismatch here is the inertness trap.
+    forwarded_keys = [
+        "consume_feedback",
+        "require_real_cache",
+        "orthogonal_yield",
+        "cross_sectional_rank",
+        "cohort_yield",
+        "regime_gate_yield",
+        "quality_rank",
+        "inflight_threshold",
+        "stall_after_seconds",
+        "max_inflight",
+    ]
+    for k in forwarded_keys:
+        assert single.get(k) == looped.get(k), (
+            f"{k} diverges: single={single.get(k)} loop={looped.get(k)} — the D185 inertness trap"
+        )
+
+
 def test_loop_does_not_swallow_schema_version_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
