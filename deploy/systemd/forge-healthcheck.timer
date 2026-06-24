@@ -1,0 +1,13 @@
+[Unit]
+Description=Trigger Forge daemon health check (hourly)
+Documentation=file://%h/proj/Forge/deploy/systemd/forge-healthcheck.service
+
+[Timer]
+# Hourly: frequent enough to catch a wedge/stall within an hour, cheap (journal +
+# filesystem reads, no DB snapshot). Persistent=true catches a run missed while off.
+OnCalendar=hourly
+Persistent=true
+Unit=forge-healthcheck.service
+
+[Install]
+WantedBy=timers.target

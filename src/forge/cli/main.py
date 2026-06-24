@@ -31,6 +31,7 @@ import typer
 
 from forge.cli.feedback_cmd import cmd_feedback
 from forge.cli.grammar_cmd import grammar_app
+from forge.cli.healthcheck_cmd import cmd_healthcheck
 from forge.cli.ranker_model_cmd import ranker_model_app
 from forge.core.logging import configure_logging
 from forge.version import __version__
@@ -2482,6 +2483,7 @@ def cmd_run(
 
 
 app.command("feedback")(cmd_feedback)
+app.command("healthcheck")(cmd_healthcheck)
 app.add_typer(grammar_app, name="grammar")
 app.add_typer(ranker_model_app, name="ranker-model")
 

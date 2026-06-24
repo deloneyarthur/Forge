@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-23 — OPS-HARDENING SPRINT item 3/5 DONE: `forge healthcheck` + hourly timer LIVE (D197) — detects "alive-but-unproductive" daemon states systemd can't (wedged loop, stalled pipeline, broken side-timers, contracts drift). Immediately surfaced the live ~32 h Crucible stall (CRITICAL) + contracts 1.20.0 (WARN) — both previously un-alerted.
+
+**Full record: [[D197]].**
+- **6 checks, exit 0/1/2:** service (`is-active`), loop (journal `--- loop iteration` recency → wedged-but-active), submission (journal `submitted=N` recency + the latest `blocked:` reason → catches the stall, points upstream), backup/model freshness (broken daily timer), contracts pin (installed vs `FORGE_EXPECTED`). Journal+fs+version driven (no 4.5 GB DB cp); pure check fns unit-tested.
+- **Alerting:** `.service` `SuccessExitStatus=1` → only CRITICAL marks the unit failed → shows in the operator's `systemctl --user --state=failed` routine. Timer hourly.
+- **Verified live (D185 lesson):** ran via systemd → correctly CRITICAL on the stall (with upstream reason) + WARN on contracts 1.20.0; the unit is presently failed = the alert correctly firing on the real ~32 h stall. ruff + mypy (91) + 7 tests clean.
+- **Next: item 4 (stream-health observability — "is the stream improving?").**
+
+---
+
 ## 2026-06-23 — OPS-HARDENING SPRINT item 2/5 DONE: §7.3 backpressure landed (D196) — `STRANDED_AFTER` 8d→5d + an aggregate in-flight-depth block (`max_inflight`, default-off byte-identical). Restores the §7.3 "shallow learnable queue" goal (73% of lifetime submissions never produced a signal). Code committed; deploy/enable operator-gated.
 
 **Full record: [[D196]]. Implements `FORGE_THROTTLE_BACKPRESSURE_PROPOSAL.md` (operator-relayed).**

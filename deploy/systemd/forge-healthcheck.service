@@ -1,0 +1,16 @@
+[Unit]
+Description=Forge daemon health check (alive AND productive)
+Documentation=file://%h/proj/Forge/src/forge/cli/healthcheck_cmd.py
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/proj/Forge
+ExecStart=%h/.local/bin/uv run forge healthcheck
+# Exit code = worst level (0 OK / 1 WARN / 2 CRITICAL). WARN is informational, so
+# SuccessExitStatus=1 keeps it from marking the unit failed; only CRITICAL (2) does,
+# surfacing in the operator's `systemctl --user --state=failed` daily routine.
+SuccessExitStatus=1
+TimeoutStartSec=2m
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forge-healthcheck

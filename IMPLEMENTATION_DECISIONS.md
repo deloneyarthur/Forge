@@ -4943,3 +4943,29 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **Deploy (operator-gated, separate).** Tier 1 activates on the next daemon restart (deploy ritual: stop → uncontended suite → restart → verify journal). Tier 2 enable = add `submission.max_inflight: 600` to forge.yaml (or leave it off to A/B later) + restart; the journal then shows `blocked: in-flight depth N exceeds cap 600` when the queue is deep. NOTE for operator: §7.3's literal spec text is per-batch; the depth gate is an ADDITION (precedent: the D137 stall guard added a block reason without a spec rewrite) — flag whether DESIGN.md §7.3 should be amended to state the depth bound explicitly.
 
 **STATUS: §7.3 backpressure landed (Tier 1 `STRANDED_AFTER` 5d + Tier 2 `max_inflight` depth block, default-off byte-identical). Ops-sprint item 2/5 done; deploy/enable operator-gated. Next: monitoring + silent-inertness (item 3).**
+
+---
+
+## D197 — 2026-06-23 — `forge healthcheck` + hourly `forge-healthcheck` timer (ops-sprint item 3/5): detects the "alive but unproductive" daemon states systemd can't see — wedged loop, chronically-stalled pipeline, broken side-timers, un-adopted contracts. LIVE.
+
+**Spec section:** none (operational hardening). Origin: the session audit's top reliability gap — the daemon's signature failure is "looks healthy, runs inert" (`registry_loaded_from_export` logs before validation; [[D176]] stale pin; [[D185]] partial wiring), and the live ~32 h Crucible stall had NOBODY alerted. systemd `Restart=on-failure` only knows the process is up, not whether it's progressing.
+
+**Decision.** A `forge healthcheck` command (registered on the main app like `cmd_feedback`; logic in `cli/healthcheck_cmd.py`) + an hourly `forge-healthcheck` oneshot timer. Six checks; exit code = worst level (0 OK / 1 WARN / 2 CRITICAL):
+- **service** — `systemctl is-active forge.service` (CRITICAL if not).
+- **loop** — newest `--- loop iteration` journal line; CRITICAL if older than critical_minutes (the up-but-wedged case).
+- **submission** — newest `submitted=N` (N>0) journal line; WARN/CRITICAL by hours-since, carrying the latest `blocked:` reason so the alert points upstream (this is what catches a stall).
+- **backup / model** — newest `~/forge_data/backups|models/` mtime (a silently-broken daily timer goes stale).
+- **contracts** — installed vs `FORGE_EXPECTED_CONTRACT_VERSION`: minor drift WARN, major CRITICAL (surfaces the contracts-pin reboot-safety class before a reboot hard-halts).
+- Reads the JOURNAL (cheap, no 4.5 GB DB snapshot, and it carries the block reason) + filesystem + version. Pure check functions take already-extracted values → fully unit-tested; only the journalctl/systemctl gather glue is runtime-only.
+
+**Alerting (proportionate for a single-user box).** The `.service` sets `SuccessExitStatus=1` so WARN stays informational (journal only) and only CRITICAL marks the unit *failed* — surfacing in the operator's existing `systemctl --user --state=failed` daily routine (HOW-TO §Daily health check). No new push infrastructure.
+
+**Determinism / hard rules.** Diagnostic-only — reads journal/fs/version, touches no grammar/weights/config/gate/DB/service; cannot change what Forge submits. Uses `utc_now()` (blessed clock). Bandit S603/S607 (trusted hardcoded journalctl/systemctl) handled via a scoped `pyproject` per-file-ignore (the same shell-out precedent as `tests/**` and `scripts/**`).
+
+**Verification (live — [[D185]] lesson).** ruff + mypy --strict (91) clean; 7 unit tests (journal parse + the 5 pure check fns). Ran live via systemd: correctly reported `CRITICAL submission: no submission in 29.4h; last block: crucible stalled …` + `WARN contracts: installed 1.20.0 != pin 1.19.0` — i.e. it immediately surfaced BOTH standing findings. Timer installed + scheduled (hourly); the unit is presently (correctly) failed because the ~32 h stall is a real CRITICAL — the alert now fires where nothing did before.
+
+**Files:** `src/forge/cli/healthcheck_cmd.py` (new), `src/forge/cli/main.py` (register), `pyproject.toml` (per-file-ignore), `tests/unit/test_cli/test_healthcheck.py` (new), `deploy/systemd/forge-healthcheck.{service,timer}` (new), `docs/MANPAGE.md`, `docs/HOW-TO.md`, `STATUS.md`, this entry. Installed: symlinks in `~/.config/systemd/user/` + timer enabled.
+
+**Follow-ups (noted, not built):** a feature-engaged check (compare the unit's ExecStart flags vs the journal's `cohort_yield_weights:` / `quality_rank:` lines — the [[D185]] inertness trap at the FEATURE level, beyond loop/submission liveness); a push channel beyond the failed-unit surface if the operator wants one.
+
+**STATUS: monitoring LIVE — `forge healthcheck` + hourly timer; CRITICAL → failed unit (operator's `--state=failed` routine). Immediately flagged the live ~32 h stall + contracts 1.20.0. Ops-sprint item 3/5 done. Next: stream-health observability (item 4).**

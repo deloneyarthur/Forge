@@ -56,7 +56,11 @@ systemctl --user stop crucible-db-writer.service
 ## Daily health check
 
 ```bash
-# Are all services alive?
+# One-shot daemon health — alive AND productive (exit 2 = CRITICAL). The
+# forge-healthcheck timer runs this hourly; a CRITICAL shows as a failed unit below.
+(cd ~/proj/Forge && uv run forge healthcheck)
+
+# Are all services alive? (forge-healthcheck shows here on CRITICAL)
 systemctl --user list-units 'crucible*' 'forge*' --state=failed
 
 # Is Forge submitting / rate-limited?
