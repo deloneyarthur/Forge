@@ -3,6 +3,12 @@
 Scope: any change to what Forge enumerates. Classification first — it determines the ritual
 (`docs/architecture.md` change taxonomy).
 
+> **Pending metadata fixes to piggyback on the next bump** — these don't change enumeration, so
+> do NOT bump *for* them; fold them into the next real change so the byte edit rides an
+> already-needed version increment:
+> - **R2 `evidence_to_relax`** reads `{adx, hurst, rv_rank}`, but R2's live accepted pool also
+>   includes `gamma_flip_distance_pct` (v11/D107) and `market_state` (v17/D131) — add both. (D204 defer.)
+
 ## Classify the change
 
 1. **`rules:` text change** — the 21 §3.5 rules are operator-owned (hard rule #1). Needs explicit
