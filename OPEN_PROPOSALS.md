@@ -25,7 +25,7 @@ decided_by: aj-bulk-2026-05-14
 decision_marker: null
 ---
 proposal_id: c6a8eba9-3578-4530-bf95-42f07f8e1f94
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -39,9 +39,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for ablation_arm
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: facc310b-5d82-45d0-a87b-4b574304a88d
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -55,9 +58,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for cpcv_sharpe_p25
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: bb8b3a0d-7315-4fe8-b5b6-ddf0abcdf4ba
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -71,9 +77,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for deflated_sharpe
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 00a2afd1-be78-45ee-9fbf-28dfd86485ba
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -87,9 +96,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for min_oos_trade_count
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 40e8eb39-2468-4b55-b896-f7b137b37c2b
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -103,9 +115,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for pbo
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: b0946a31-4a47-42a1-946e-b4d812c7cd3d
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -119,9 +134,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for profit_factor
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 4fac1dbe-1d3f-450f-86d7-5350bbfdfc09
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -135,9 +153,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for regime_stress_p25_return
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 3d7dd548-1931-4136-ab47-ef3e2aa2fa16
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -151,9 +172,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for sharpe_baseline
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: dba68e07-233b-4c4f-89da-3bc1cf22c639
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-14T16:38:04.630964+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -167,6 +191,9 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for walk_forward_sharpe_median
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 4b155abd-67f2-47a7-9d49-9996a70365cd
 status: PENDING
@@ -182,7 +209,7 @@ proposal_yaml: |
   # step_pct: 0.1000
 ---
 proposal_id: ecad3240-087a-4307-b7d7-e9dfe1a934b4
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -196,9 +223,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for ablation_arm
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: c4956d0c-e2a8-4abf-b57b-77e8d47f317f
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -212,9 +242,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for cpcv_sharpe_p25
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 65e1a949-f60e-4788-ad89-2ba441072657
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -228,9 +261,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for deflated_sharpe
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 7d798b4e-07ad-45d3-83b3-350bc07cf430
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -244,9 +280,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for min_oos_trade_count
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 60397deb-a009-4a51-9b20-00e756613808
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -260,9 +299,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for pbo
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 5b6070ad-4d8c-48cc-8d73-45c964ff8fe5
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -276,9 +318,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for profit_factor
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: f1dcc5c4-21cd-4316-abed-f521f4b1201b
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -292,9 +337,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for regime_stress_p25_return
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: ad0bda38-25e7-41ab-93b9-89599efaba04
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -308,9 +356,12 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for sharpe_baseline
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 476f7cb6-b34c-4e61-921c-5b41e23bdf0e
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:37:17.250900+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -324,6 +375,9 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for walk_forward_sharpe_median
   # Triggered by failure_rate=1.00
+decided_at: '2026-06-24T21:53:57+00:00'
+decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_failure_concentration noise (100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded off at source by the D034 promoted_count==0 check in proposer.py, so these cannot regenerate)
+decision_marker: null
 ---
 proposal_id: 343e71fd-0a65-4b29-958e-c2d8c151c40b
 status: APPROVED
@@ -476,3 +530,54 @@ proposal_yaml: |
 decided_at: '2026-06-13T01:00:00+00:00'
 decided_by: operator (effort-max session 2026-06-13 — "draft v19 activation now"; pin = trend_continuation via AskUserQuestion; recorded in D138). Ships at the next deploy ritual (docs/tasks/deploy.md).
 decision_marker: null
+
+---
+proposal_id: c4d68531-af31-4ba2-89d8-04bad80c48a5
+status: PENDING
+proposed_at: '2026-06-24T21:53:57+00:00'
+proposal_type: loosen
+target: retire_threshold_tightening
+rationale: >-
+  Retire the D073 indicator-threshold auto-tightening path
+  (config/auto_tightened_thresholds.yaml). This is loosening-class -- it widens
+  the enumerable threshold ranges back to the D031 audited baselines -- so it is
+  operator-gated per hard rule #4. It does NOT touch grammar.yaml and does NOT
+  lower Crucible's promotion gate (hard rule #3 safe). Evidence (2026-06-24
+  prefilter-tightening review): (1) FLAT AXIS -- Q43 to D171 (2026-06-15)
+  confirmed the per-config threshold response is flat on the binding constraint
+  (CPCV-p25); adx/momentum/hurst flat, rv_rank/iv_rank only faint CENTER
+  effects, nothing on the tail. The 16 active tightenings therefore cannot
+  improve promotability and are not Goodharting (no edge gradient to capture).
+  (2) WASTE ALREADY SOLVED -- the live gated export (2026-06-24, 10k window) is
+  8,914/10,000 high-trade (>=10 trades); the zero-trade waste this path was
+  meant to trim is gone, owed to the D076 empirical-prior expected_trades filter
+  plus grammar maturation, not threshold selection. (3) STALE + MONOCULTURE RISK
+  -- the active YAML was computed 2026-05-27 on a ~v3-v5 cohort; the current
+  export is a rolling window spanning only ~3 days, all v21/v22, ~76% trend.
+  Re-deriving per-(indicator,role) 5-95% bands off it would entrench the trend
+  monoculture the pool needs to diversify away from (worst-quartile OOS is
+  BEAR/RANGING-paid). (4) ALREADY INERT -- the proposer is a manual one-shot
+  (scripts/propose_threshold_tightenings.py), never re-run since 05-27; the
+  section 5.5 calibration auto-tune (prefilter.yaml) has never fired a tighten
+  (promotion ~0% keeps it in loosen-propose territory). Retiring removes a
+  moving part whose only live effect is monoculture-entrenchment risk, for zero
+  promotability upside.
+evidence:
+  trigger: operator_directed_analysis
+  analysis: 2026-06-24 prefilter-tightening review (helping-or-hurting)
+  flat_axis: 'Q43 -> D171 (2026-06-15): threshold response FLAT on CPCV-p25'
+  high_trade_share: 8914/10000 gated runs >=10 trades (export 2026-06-24T2127Z)
+  cohort: rolling 10k window ~3 days, grammar v21/v22, ~76 pct trend
+  last_proposer_run: 2026-05-27 (commit 85c1df5), 16 tightenings, never re-run
+proposal_yaml: |
+  # Retire D073 threshold auto-tightening on approval:
+  #   - Delete or empty config/auto_tightened_thresholds.yaml.
+  #   - indicator_thresholds._auto_tightenings() then returns {} (loader is
+  #     defensive: missing file -> {}), so _effective_range() falls back to the
+  #     D031 audited baselines for every (indicator, role).
+  #   - auto_tightenings_fingerprint() -> fixed empty-set hash, which changes
+  #     enumeration_inputs_hash / batch identity (D085): a deliberate one-time
+  #     enumeration change -> apply via the deploy ritual (stop -> uncontended
+  #     suite -> restart -> verify journal) with a Decision Log entry.
+  #   - Optional: also retire scripts/propose_threshold_tightenings.py and the
+  #     loader. Fully reversible via git (restore the YAML).
