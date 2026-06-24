@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-24 — §7.3 DEPTH-CAP WEDGE CLEARED (D205): submitter was blocked ~9h on phantom in-flight depth (3,300 vs cap 600); flushed 3,286 un-reconcilable Crucible-FAILED submissions (the 06-22 pool-crash cohort) → resumed. Durable fix relayed to Crucible.
+
+**Operator: "why is Forge stuck" → diagnosed → "drive it" → cleared. Full record: [[D205]].**
+- **Root cause:** Forge can't see Crucible FAILURES (the gated-runs export is gated-only) → failed submissions linger `submitted` for the 5d flush, pinning the [[D200]] `max_inflight`=600 depth metric. The 2026-06-22 runner-pool crash (~73,795 forge failures; *"process pool is not usable anymore"* ×77,686) left 3,200 phantom-in-flight; D200's cap (enabled 06-24T06:47Z) read them as "genuine drainable depth," but they don't drain — self-clear was ~06-27.
+- **Fix (stop → backup → targeted flush → restart; no code/grammar/config change):** UPDATE mirroring `_flush_aged_out_submissions` (`status='gated'` + nil sentinel) on the 3,286 rows that are Crucible-FAILED, no gated run, not in the live export. submitted **3,300 → 14**; iteration 1052 proceeded past `reconciled` with NO depth-block; daemon producing (prefetch, 34% CPU). Backup: `~/forge_data/forge.db.bak-pre-flush-20260624` (removable once stable). One-off script: `scratchpad/flush_failed_inflight.py`.
+- **Durable fix relayed (ready to pass):** `PROMPT_CRUCIBLE_FAILED_RUN_FEEDBACK.md` — Crucible to expose terminal FAILED runs via contracts so Forge excludes them from the §7.3 metric; + root-cause the pool crash. The §7.3 cap stays ON (still bounds genuine in-flight ≤600); one-time correction, not a cap change. **Watch:** first real submit lands after the ~33-min prefetch; confirm via the journal (no `blocked: in-flight depth`) / `forge status`.
+
+---
+
 ## 2026-06-24 — DOC REFRESH (28 files) + DESIGN.md SPEC RECONCILED (D201). Multi-agent doc-cleanup pass: every canonical doc validated against live code and refreshed (commit `76e7861`); then DESIGN.md §7.3/§6.2/§10.1 reconciled to as-built (operator-approved, [[D201]]). No src/grammar/config change.
 
 - **Doc refresh — commit `76e7861` (28 docs):** architecture / MANPAGE / HOW-TO / NEW_BOX_TRANSFER / INDICATOR_THRESHOLDS / GRAMMAR / glossary / deploy + 20 proposal/review status banners. King-retirement ([[D190]]) sweep came back already-clean (all "king" hits were substring noise); quality-lane-flip ([[D193]]) + [[D200]] propagated. grammar doc-sync passes; `forge healthcheck` OVERALL=OK.
