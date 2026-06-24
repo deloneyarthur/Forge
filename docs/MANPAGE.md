@@ -275,6 +275,22 @@ Run by hand or via the `forge-healthcheck` timer (hourly); the timer's unit sets
 forge healthcheck        # or: systemctl --user start forge-healthcheck.service
 ```
 
+### forge status
+
+Pretty-prints the two curated learning clocks the daily ranker-eval timer writes under
+`~/forge_data/ranker_eval/` — answering "is the stream improving?" at a glance, with no
+`tail|json` spelunking and **no DB access**: the **F3 verdict ranker** (`streak.jsonl`, AUC
+margin over the §6.2 incumbent) and the **§8.6 wf_p25 tail** (`robustness_streak_wfp25.jsonl`,
+Spearman vs the realized worst-quartile gate). Each line shows the latest verdict, the
+trailing consecutive-PASS streak (N/3), the latest metric, and an N-checkpoint trend.
+Distinct from `forge healthcheck` (is the daemon *alive/producing?*); this is *is the
+learning improving?*. For the authoritative recompute use `forge ranker-model eval` /
+`eval-robustness`.
+
+```
+forge status
+```
+
 ### forge grammar list-proposals
 
 List pending refinement proposals. Recurring themes (3+ pending) tagged `[PERSISTENT]`.

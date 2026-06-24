@@ -4969,3 +4969,22 @@ The arm attacks Forge's own established frontier: [[D165]]/[[D172]] both close w
 **Follow-ups (noted, not built):** a feature-engaged check (compare the unit's ExecStart flags vs the journal's `cohort_yield_weights:` / `quality_rank:` lines — the [[D185]] inertness trap at the FEATURE level, beyond loop/submission liveness); a push channel beyond the failed-unit surface if the operator wants one.
 
 **STATUS: monitoring LIVE — `forge healthcheck` + hourly timer; CRITICAL → failed unit (operator's `--state=failed` routine). Immediately flagged the live ~32 h stall + contracts 1.20.0. Ops-sprint item 3/5 done. Next: stream-health observability (item 4).**
+
+---
+
+## D198 — 2026-06-23 — `forge status`: a curated readout of the learning-signal clocks (ops-sprint item 4/5) — "is the stream improving?" without `tail|json` DB-spelunking. LIVE.
+
+**Spec section:** none (operational observability). Origin: the audit's observability gap — the pipeline's success metric (the stream becoming more likely to promote) was invisible without manually `tail -1 …jsonl | json`-parsing the two ranker-eval clocks (or recomputing from the locked DB).
+
+**Decision.** A `forge status` command (`cli/status_cmd.py`, registered on the main app like `cmd_feedback`/`cmd_healthcheck`) that pretty-prints the two curated clocks the daily ranker-eval timer already writes under `~/forge_data/ranker_eval/`:
+- **F3 verdict ranker** (`streak.jsonl`) — AUC margin of the learned P(component) model over the §6.2 incumbent + the trailing consecutive-PASS streak.
+- **§8.6 wf_p25 tail** (`robustness_streak_wfp25.jsonl`) — Spearman of the quality lane's predicted WF-floor vs the realized worst-quartile gate + its streak.
+Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend. **Zero DB access** (the JSONL files carry no lock, unlike forge.db); the pure `summarize_streak` reduction (consecutive-PASS counting mirrors `daily_ranker_eval.sh`; trend) is unit-tested. Deliberately distinct from `forge healthcheck` (is it *alive/producing?*) — this answers *is the learning improving?*. Points to `forge ranker-model eval` for the authoritative DB recompute.
+
+**Determinism / hard rules.** Read-only diagnostic over JSONL; touches no clock/RNG/DB/gate/grammar.
+
+**Verification.** ruff + mypy --strict (92) clean; 7 unit tests (the summary reduction + a CLI smoke test). Ran live: `F3 PASS streak 12/3 AUC +0.497`; `§8.6 wf_p25 FAIL 0/3 Spearman +0.266, trend -0.04 -0.05 -0.11 +0.27` (the wf_p25 head improving with data, per [[quality-lane-flip]]).
+
+**Files:** `src/forge/cli/status_cmd.py` (new), `src/forge/cli/main.py` (register), `tests/unit/test_cli/test_status.py` (new), `docs/MANPAGE.md`, `docs/HOW-TO.md`, `STATUS.md`, this entry.
+
+**STATUS: `forge status` LIVE — curated learning-clock readout (F3 AUC-margin + §8.6 wf_p25 Spearman streaks + trends), no DB. Ops-sprint item 4/5 done. Next: item 5 (deploy automation + anti-inertness guard + contracts-pin reboot-safety — closes Finding A).**

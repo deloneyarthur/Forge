@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-23 — OPS-HARDENING SPRINT item 4/5 DONE: `forge status` LIVE (D198) — curated readout of the learning-signal clocks ("is the stream improving?") with no DB spelunking. F3 ranker PASS 12-streak (+0.497 AUC margin); §8.6 wf_p25 tail trending up (-0.11→+0.27).
+
+**Full record: [[D198]].**
+- Pretty-prints the two ranker-eval clocks (`streak.jsonl` F3 AUC-margin, `robustness_streak_wfp25.jsonl` §8.6 Spearman) the daily timer already writes: latest verdict, consecutive-PASS streak N/3, latest metric, N-checkpoint trend. Zero DB (JSONL, no lock); pure `summarize_streak` unit-tested. Distinct from `forge healthcheck` (alive/producing) — this is learning-improving.
+- ruff + mypy (92) + 7 tests clean; live verified.
+- **Next: item 5 (deploy automation + D185 anti-inertness regression guard + contracts-pin reboot-safety → closes Finding A).**
+
+---
+
 ## 2026-06-23 — OPS-HARDENING SPRINT item 3/5 DONE: `forge healthcheck` + hourly timer LIVE (D197) — detects "alive-but-unproductive" daemon states systemd can't (wedged loop, stalled pipeline, broken side-timers, contracts drift). Immediately surfaced the live ~32 h Crucible stall (CRITICAL) + contracts 1.20.0 (WARN) — both previously un-alerted.
 
 **Full record: [[D197]].**

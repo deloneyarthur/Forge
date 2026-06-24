@@ -72,8 +72,8 @@ journalctl --user -u crucible-runner.service -n 10 --no-pager
 # Are exports fresh? (should be < 2 min old)
 ls -lt ~/optbt_data/exports/gated_runs_*.json | head -1
 
-# F3 learned-ranker criterion clock (auto-updated 05:00 daily by forge-ranker-eval)
-tail -1 ~/forge_data/ranker_eval/streak.jsonl        # latest verdict + N/3 streak
+# Is the stream improving? Curated learning clocks (no tail|json spelunking)
+(cd ~/proj/Forge && uv run forge status)
 journalctl --user -u forge-ranker-eval.service -n 20 --no-pager
 
 # Last nightly backup fresh? (forge-backup timer, 04:00)
@@ -82,7 +82,7 @@ ls -lt ~/forge_data/backups/forge_db_*.duckdb | head -1
 
 The `forge-ranker-eval` timer trains + evaluates the shadow verdict model each morning and records
 the consecutive-PASS streak; it's telemetry-only (no effect on what Forge submits until F3 ships).
-Don't hand-run train/eval at checkpoints anymore — read `streak.jsonl`. Deeper digging (forge.db
+Don't hand-run train/eval at checkpoints anymore — run `forge status`. Deeper digging (forge.db
 queries, cohort analysis, known traps): `tasks/investigate-live.md`.
 
 ## Common situations
