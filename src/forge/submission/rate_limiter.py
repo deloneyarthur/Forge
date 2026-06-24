@@ -42,6 +42,7 @@ from crucible_contracts import (
 from crucible_contracts.exceptions import QueryError
 
 from forge.core.clock import utc_now
+from forge.feedback.consumer import STRANDED_AFTER
 from forge.persistence.db import db_connection
 
 # D036 (2026-05-17) — tactical drop from 0.80 → 0.50 while we wait for the
@@ -89,6 +90,11 @@ class RateLimitStatus:
     independent block reason (Crucible has held new work >= T and decided
     nothing); `last_decided_at` is Crucible's decision clock for the journal
     line; `stall_pending_count` is the number of configs caught behind it.
+
+    D196 depth fields are inert (`False`/`0`) unless a positive `max_inflight`
+    is passed: `depth_blocked` is the third, independent block reason (the
+    aggregate genuine in-flight queue exceeds the cap); `inflight_depth` is that
+    measured depth for the journal line.
     """
 
     clear: bool
@@ -100,6 +106,8 @@ class RateLimitStatus:
     stall_blocked: bool = False
     last_decided_at: datetime | None = None
     stall_pending_count: int = 0
+    depth_blocked: bool = False
+    inflight_depth: int = 0
 
 
 def check_rate_limit(
@@ -109,6 +117,7 @@ def check_rate_limit(
     threshold: float = _DEFAULT_THRESHOLD,
     exports_dir: Path | None = None,
     stall_after_seconds: int = 0,
+    max_inflight: int = 0,
 ) -> RateLimitStatus:
     """Return whether a new batch may submit.
 
@@ -224,10 +233,15 @@ def check_rate_limit(
     stall_blocked, last_decided_at, stall_pending_count = _evaluate_stall_guard(
         forge_db_path, recent, stall_after_seconds=stall_after_seconds
     )
+    # D196 — third independent block reason: bound the aggregate genuine in-flight
+    # queue. The per-batch completion fraction and the stall guard both miss it.
+    depth_blocked, inflight_depth = _evaluate_inflight_depth(
+        forge_db_path, recent, max_inflight=max_inflight
+    )
 
     gated_count = local_gated_count + export_overlap
     pct = gated_count / submitted_count
-    clear = pct >= threshold and not stall_blocked
+    clear = pct >= threshold and not stall_blocked and not depth_blocked
     return RateLimitStatus(
         clear=clear,
         pct_gated=pct,
@@ -238,6 +252,8 @@ def check_rate_limit(
         stall_blocked=stall_blocked,
         last_decided_at=last_decided_at,
         stall_pending_count=stall_pending_count,
+        depth_blocked=depth_blocked,
+        inflight_depth=inflight_depth,
     )
 
 
@@ -288,6 +304,55 @@ def _evaluate_stall_guard(
         ).fetchone()
     pending = int(row[0]) if row is not None else 0
     return (pending > 0, last_decided_at, pending)
+
+
+def _evaluate_inflight_depth(
+    forge_db_path: Path,
+    recent: list[GatedRun],
+    *,
+    max_inflight: int,
+) -> tuple[bool, int]:
+    """Aggregate in-flight-depth block (D196, throttle-proposal Tier 2).
+
+    A third, independent block reason for what the per-batch completion fraction
+    and the stall guard both miss: the TOTAL learnable queue. Genuine in-flight
+    depth = `submitted` rows newer than the D052/D110 flush watermark
+    (`max(decided_at) - STRANDED_AFTER`); rows older than that are the dead tail
+    the flush retires, so they are excluded — else the orphan backlog would pin
+    the depth block exactly as it pinned D046's oldest-batch limiter (the very
+    failure this fixes). Blocks iff depth > `max_inflight`.
+
+    Inert (`(False, 0)`) when disabled (`max_inflight <= 0`) or when the decision
+    clock is unreadable (no export / empty): without a clock the watermark is
+    undefined, so genuine depth can't be separated from the dead tail and we fall
+    through to the completion-fraction path. `max_inflight=0` keeps the result
+    byte-identical to the pre-D196 contract.
+    """
+    if max_inflight <= 0 or not recent:
+        return (False, 0)
+    # Decision clock = newest decision in the fetched slice (D061: normalize naive
+    # export rows to aware UTC for the max, then strip to naive UTC to match the
+    # `submitted_at` column). Watermark mirrors consumer._flush_aged_out_submissions
+    # exactly, so depth counts precisely the rows the flush leaves behind.
+    decided_ats: list[datetime] = []
+    for gr in recent:
+        d = gr.decision.decided_at
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=UTC)
+        decided_ats.append(d)
+    watermark = (max(decided_ats) - STRANDED_AFTER).astimezone(UTC).replace(tzinfo=None)
+    with db_connection(forge_db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM submissions
+            WHERE status = 'submitted'
+              AND submitted_at >= ?
+            """,
+            [watermark],
+        ).fetchone()
+    depth = int(row[0]) if row is not None else 0
+    return (depth > max_inflight, depth)
 
 
 __all__ = ["RateLimitStatus", "check_rate_limit"]

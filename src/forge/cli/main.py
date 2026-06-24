@@ -1604,6 +1604,9 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # D137: §7.3 stall guard (seconds). 0 = off; production passes 10800 from
     # forge.yaml. Off by default keeps direct callers/tests on the old contract.
     stall_after_seconds: int = 0,
+    # D196: §7.3 aggregate in-flight-depth cap. 0 = off; production passes it from
+    # forge.yaml. Off by default keeps direct callers/tests byte-identical.
+    max_inflight: int = 0,
 ) -> str:
     """Run one cycle; return one of 'submitted', 'blocked', 'dry-run', 'skipped'.
 
@@ -1681,6 +1684,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             crucible_db,
             threshold=inflight_threshold,
             stall_after_seconds=stall_after_seconds,
+            max_inflight=max_inflight,
         )
         if not rate.clear:
             if rate.stall_blocked and rate.last_decided_at is not None:
@@ -1693,6 +1697,14 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                     f"{rate.last_decided_at:%Y-%m-%dT%H:%M:%SZ} ({stale_h:.1f}h); "
                     f"{rate.stall_pending_count} configs pending "
                     f">={stall_after_seconds // 3600}h"
+                )
+            elif rate.depth_blocked:
+                # D196: the third block reason — the aggregate learnable queue is
+                # too deep. The per-batch pct can read "clear" on a zombie batch
+                # while tens of thousands of configs pile up across other batches.
+                typer.echo(
+                    f"blocked: in-flight depth {rate.inflight_depth} exceeds cap "
+                    f"{max_inflight} (§7.3 backpressure)"
                 )
             else:
                 typer.echo(
@@ -2095,6 +2107,9 @@ _RUN_DEFAULT_INFLIGHT_THRESHOLD: float = 0.80
 # a stale-by-construction test/dev DB would false-trip it. Production turns it
 # on via config/forge.yaml (stall_after_seconds: 10800). 0 = disabled.
 _RUN_DEFAULT_STALL_AFTER_SECONDS: int = 0
+# D196: no-config fallback for the §7.3 in-flight-depth cap. OFF here; production
+# opts in via config/forge.yaml (submission.max_inflight). 0 = disabled.
+_RUN_DEFAULT_MAX_INFLIGHT: int = 0
 
 
 class _ResolvedRunDefaults(TypedDict):
@@ -2114,6 +2129,7 @@ class _ResolvedRunDefaults(TypedDict):
     poll_interval_seconds: int
     inflight_threshold: float
     stall_after_seconds: int
+    max_inflight: int
 
 
 def _resolve_run_defaults(
@@ -2143,6 +2159,7 @@ def _resolve_run_defaults(
     yaml_poll_interval: int | None = None
     yaml_inflight_threshold: float | None = None
     yaml_stall_after_seconds: int | None = None
+    yaml_max_inflight: int | None = None
     if not no_config and config.exists():
         from forge.config import load_forge_config
 
@@ -2156,6 +2173,7 @@ def _resolve_run_defaults(
         yaml_poll_interval = cfg.submission.poll_interval_seconds
         yaml_inflight_threshold = cfg.submission.inflight_threshold
         yaml_stall_after_seconds = cfg.submission.stall_after_seconds
+        yaml_max_inflight = cfg.submission.max_inflight
 
     return _ResolvedRunDefaults(
         seed=seed
@@ -2185,6 +2203,9 @@ def _resolve_run_defaults(
         stall_after_seconds=yaml_stall_after_seconds
         if yaml_stall_after_seconds is not None
         else _RUN_DEFAULT_STALL_AFTER_SECONDS,
+        max_inflight=yaml_max_inflight
+        if yaml_max_inflight is not None
+        else _RUN_DEFAULT_MAX_INFLIGHT,
     )
 
 
@@ -2354,6 +2375,7 @@ def cmd_run(
     poll_interval_seconds = resolved["poll_interval_seconds"]
     inflight_threshold = resolved["inflight_threshold"]
     stall_after_seconds = resolved["stall_after_seconds"]
+    max_inflight = resolved["max_inflight"]
 
     if not dry_run and inbox is None:
         typer.echo("error: --inbox is required unless --dry-run", err=True)
@@ -2398,6 +2420,7 @@ def cmd_run(
             quality_rank=quality_rank,
             inflight_threshold=inflight_threshold,
             stall_after_seconds=stall_after_seconds,
+            max_inflight=max_inflight,
         )
         return
 
@@ -2434,6 +2457,7 @@ def cmd_run(
                     quality_rank=quality_rank,
                     inflight_threshold=inflight_threshold,
                     stall_after_seconds=stall_after_seconds,
+                    max_inflight=max_inflight,
                 )
             except (KeyboardInterrupt, SchemaVersionMismatch):
                 # SIGINT stops cleanly via the outer handler; a contracts

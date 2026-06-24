@@ -50,6 +50,11 @@ class SubmissionConfig(BaseModel):
     # the default-off keeps the no-config/dev path on the completion-fraction
     # contract unchanged.
     stall_after_seconds: int = Field(default=0, ge=0)
+    # D196 §7.3 aggregate in-flight-depth cap: block submission when the genuine
+    # in-flight queue (submitted rows newer than the D110 flush watermark) exceeds
+    # this many configs. Optional; 0 (and absent) = disabled. Production opts in via
+    # config/forge.yaml; the default-off keeps the dev/no-config path byte-identical.
+    max_inflight: int = Field(default=0, ge=0)
 
 
 class FeedbackConfig(BaseModel):
@@ -83,8 +88,8 @@ class ForgeConfig(BaseModel):
 
         Accepts flat kwargs that map to nested fields:
           - `db_path`, `data_root`, `log_root`     (top-level)
-          - `batch_size`, `inflight_threshold`,
-            `poll_interval_seconds`, `stall_after_seconds`  (submission.*)
+          - `batch_size`, `inflight_threshold`, `poll_interval_seconds`,
+            `stall_after_seconds`, `max_inflight`  (submission.*)
           - `seed`, `max_candidates_per_batch`     (enumeration.*)
         Unknown keys raise `ValueError`.
         """
@@ -97,6 +102,7 @@ class ForgeConfig(BaseModel):
             "inflight_threshold",
             "poll_interval_seconds",
             "stall_after_seconds",
+            "max_inflight",
         }
         known_enumeration = {"max_candidates_per_batch", "seed"}
         for key, value in overrides.items():

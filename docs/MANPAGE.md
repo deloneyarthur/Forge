@@ -451,7 +451,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | File | Controls |
 |---|---|
-| `forge.yaml` | Data paths, Crucible wiring, enumeration cap, batch size, rate-limit threshold, stall-guard window (`submission.stall_after_seconds`, D137), feedback cadence. |
+| `forge.yaml` | Data paths, Crucible wiring, enumeration cap, batch size, rate-limit threshold, stall-guard window (`submission.stall_after_seconds`, D137), in-flight-depth cap (`submission.max_inflight`, D196; 0=off), feedback cadence. |
 | `grammar.yaml` | The 21 grammar rules (S/C/R/X families). Operator-owned; version-bumped + archived on change. |
 | `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation, auto-tune bounds). |
 | `ranker.yaml` | Composite-score weights + diversification method. |

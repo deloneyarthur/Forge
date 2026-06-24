@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-06-23 — OPS-HARDENING SPRINT item 2/5 DONE: §7.3 backpressure landed (D196) — `STRANDED_AFTER` 8d→5d + an aggregate in-flight-depth block (`max_inflight`, default-off byte-identical). Restores the §7.3 "shallow learnable queue" goal (73% of lifetime submissions never produced a signal). Code committed; deploy/enable operator-gated.
+
+**Full record: [[D196]]. Implements `FORGE_THROTTLE_BACKPRESSURE_PROPOSAL.md` (operator-relayed).**
+- **Diagnosis (proposal):** §7.3's limiter is mechanically healthy but misses its goal — of 184,589 lifetime submissions only 27% ever got a real decision; 43% were sentinel-flushed orphans, 29% stuck `submitted`; ~1.7× sustained over-submission. Causes: per-batch gate can't see aggregate depth; a permanent zombie batch pins D046's oldest-batch selector; the 8d flush margin sat ~5d above the real p99 (~3.1d, n=9,405).
+- **Tier 1 — `STRANDED_AFTER` 8d→5d** (`consumer.py`): retires never-decided orphans 3d sooner, un-pinning the zombie. Auto-tightening (Rule #4); activates on next restart.
+- **Tier 2 — `max_inflight` depth block** (`rate_limiter._evaluate_inflight_depth`): a third independent block reason mirroring the D137 stall guard. Genuine depth = `submitted` rows newer than the flush watermark (excludes the dead tail). `submission.max_inflight` knob, **default 0 = off → byte-identical**; enable at 600 (3× batch_size).
+- **TDD + D185 guard:** invariants-first (guard-off equivalence, block-iff-over-cap, tail-exclusion, zombie scenario); `max_inflight` wired to BOTH `_run_one_iteration` call sites with `test_run_loop`/`test_config_threading` asserting the forward (a missing kwarg silently defaults — the D185 trap). ruff + mypy --strict (90) clean; full suite 1682p / 1f (the pre-existing contracts-1.20.0 pin, unrelated).
+- **Deploy/enable (operator-gated):** Tier 1 on next restart; Tier 2 = add `submission.max_inflight: 600` to forge.yaml + restart → journal shows `blocked: in-flight depth N exceeds cap 600`. Spec note: §7.3 literal text is per-batch; the depth gate is an addition (D137-stall-guard precedent) — operator to decide whether to amend §7.3.
+- **Next: item 3 (monitoring + silent-inertness detection).**
+
+---
+
 ## 2026-06-23 — OPS-HARDENING SPRINT started (productionization push). Item 1/5 DONE: backup/DR LIVE + VERIFIED (D195) — `forge-backup` timer nightly 04:00, validated DuckDB snapshots + models/, keep-14, same-disk default. Surfaced two findings: contracts 1.20.0 un-adopted (suite red, operator's uv.lock); Crucible stalled ~32 h (D137 guard holding).
 
 **Operator: "push to a fully productionized system" → chose the Ops-hardening sprint (cheapest, ungated, in-scope). A productionization audit (4 parallel reviews — ops / backlog / learned-systems / grammar+mission) framed it: the MACHINERY is feature-complete; the real gaps are operational hardening + the strategic Path-C ceiling (separate, operator/Crucible-gated). Sprint plan: (1) backup/DR ✓ (2) §7.3 backpressure (3) monitoring/silent-inertness (4) stream-health observability (5) deploy automation + anti-inertness guard. Full record: [[D195]].**

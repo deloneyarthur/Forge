@@ -610,6 +610,11 @@ def test_loop_forwards_yield_map_flags_to_iteration(
     assert captured[0]["cohort_yield"] is True
     assert captured[0]["regime_gate_yield"] is True
     assert captured[0]["quality_rank"] is True  # D185 lesson: forwarded through --loop
+    # D196: the §7.3 throttle params must reach the loop call site too — a missing
+    # kwarg silently takes _run_one_iteration's default (the exact D185 trap), so
+    # the key's presence is what proves the deeper loop call wires it.
+    assert "max_inflight" in captured[0]
+    assert "stall_after_seconds" in captured[0]
 
     # and OFF (default) must forward False — the byte-identical contract in --loop
     captured.clear()

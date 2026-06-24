@@ -82,11 +82,16 @@ _AGED_OUT_SENTINEL_RUN_ID = "00000000-0000-0000-0000-000000000000"
 # compression: it tracks Crucible's decision clock directly.
 #
 # Sizing: must exceed real submit→decide latency so it never flushes a
-# still-pending batch (that would void §7.3 backpressure). 8d sits above the
-# observed p99 (~7.2d, itself biased high by window survivorship). Tunable DOWN
-# once the true latency distribution is known — smaller margin = faster recovery
-# of a stranded backlog.
-STRANDED_AFTER = timedelta(days=8)
+# still-pending batch (that would void §7.3 backpressure). D196 (2026-06-23)
+# lowered this 8d → 5d: direct measurement of matched submit→decide latency
+# (export decided_at - forge submitted_at, n=9,405) put the real p99 at ~3.1d.
+# The old 8d margin was sized off a survivorship-biased ~7.2d estimate and sat
+# ~5d above the truth, holding never-decided orphans in the queue ~3 days longer
+# than needed — which kept D046's oldest-batch throttle pinned on a permanent
+# zombie batch (the D196 backpressure finding). 5d keeps ~2d headroom over the
+# real p99. Tunable; smaller = faster backlog recovery, but never below the true
+# submit→decide p99 or it voids §7.3.
+STRANDED_AFTER = timedelta(days=5)
 
 
 def _resolve_batch_id(

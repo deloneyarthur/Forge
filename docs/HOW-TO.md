@@ -125,6 +125,20 @@ What to do: this points upstream, not at Forge. Diagnose the runner (is it wedge
 needed, and relay a wedge prompt (`PROMPT_CRUCIBLE_RUNNER_WEDGE.md` is the template). Do
 **not** lower `stall_after_seconds` to "unblock" — that just resumes feeding the dead gate.
 
+### Forge says "blocked: in-flight depth N exceeds cap M"
+
+The D196 §7.3 backpressure block (`submission.max_inflight`, off unless set): the
+*aggregate* learnable queue — genuine in-flight `submitted` rows newer than the D110 flush
+watermark, summed across all batches — exceeds the cap. Unlike the per-batch "N% gated"
+line, it fires even when the oldest batch reads ≥80% (a permanent zombie batch can't mask
+it). It means Crucible is draining slower than Forge submits; Forge is correctly waiting so
+the queue stays shallow enough to learn from. It self-clears as Crucible drains below the cap.
+
+What to do: usually nothing — it's the throttle working. If it blocks persistently, Crucible
+is the bottleneck (see the stall guidance above / diagnose the runner), not Forge. To retune,
+raise/lower `submission.max_inflight` in forge.yaml (0 = disable); 600 (≈3× batch_size) is the
+recommended on value. Don't disable it to "unblock" — that just re-deepens the un-learnable queue.
+
 ### Exports are stale / Forge can't see results
 
 The DB is single-writer. Forge never reads `runs.duckdb` directly — it reads the
