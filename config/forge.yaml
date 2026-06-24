@@ -19,6 +19,9 @@ forge:
     poll_interval_seconds: 60  # v1 go-live; Crucible runner polls every 30s
     stall_after_seconds: 10800 # Q38/D137 §7.3 stall guard: block if Crucible has
                                # held new work >=3h with zero decisions (0=off)
+    max_inflight: 600          # D196/D200 §7.3 depth cap: block when the genuine in-flight
+                               # queue (submitted rows newer than the D110 flush watermark)
+                               # exceeds ~3x batch_size; bounds the learnable queue (0=off)
 
   feedback:
     light_consumption_after_every: 1   # every batch

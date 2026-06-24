@@ -43,7 +43,14 @@ from crucible_contracts import (
 # meta-king A3 submission arm (Crucible 30b8fa9; D096 provenance pattern, no
 # config_hash churn). Required adoption — installed contracts is 1.19.0, so the
 # pin must match or check_contracts_version fails every CLI startup.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.19.0"
+# 1.20.0 (D200): portfolio resolved-provenance fields (PromotedPortfolio.vol_target_annual,
+# PortfolioComponent.asof_universe_rule) + drop BOOK-level rebalance_freq from the
+# portfolio identity (Crucible f8ef52d, Path A engine-core). NO-OP for Forge — verified:
+# additive minor (existing models unchanged); the dropped field is the PORTFOLIO
+# config_hash (assembly-side, Forge neither computes nor reads it); and the per-component
+# CombinerSpec.rebalance_frequency Forge generates (sampler.py) stays identity-bearing
+# inside each StrategyConfig.config_hash, so Forge config_hashes are UNCHANGED. Pin-only.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.20.0"
 
 
 def check_contracts_version() -> str:

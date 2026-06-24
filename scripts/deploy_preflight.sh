@@ -27,15 +27,22 @@ echo "=== deploy preflight (D104) — read-only readiness gate ==="
 # 1. Tree cleanliness. A reboot/restart deploys the WORKING TREE (committed or not),
 #    so any uncommitted TRACKED change is a hazard. Untracked files don't deploy, so
 #    they're excluded (operator scratch docs are fine).
-echo "--- 1. git tree (uncommitted tracked changes deploy on reboot) ---"
-dirty="$(git status --porcelain --untracked-files=no)"
-if [ -n "$dirty" ]; then
-    note "WARN uncommitted tracked changes present (a reboot would deploy these):"
-    echo "$dirty" | sed 's/^/      /'
-    note "      -> commit (or stash) intended changes; land nothing half-applied in the live tree."
+echo "--- 1. git deploy-surface (src/config/pyproject/uv.lock/deploy deploy on restart) ---"
+surface="$(git status --porcelain --untracked-files=no -- src config pyproject.toml uv.lock deploy 2>/dev/null)"
+if [ -n "$surface" ]; then
+    note "FAIL uncommitted deploy-surface changes (a restart/reboot deploys these):"
+    echo "$surface" | sed 's/^/      /'
+    note "      -> commit them; land nothing half-applied in the live tree."
     fail=1
 else
-    note "OK tree clean (no uncommitted tracked changes)"
+    note "OK deploy surface clean (src/config/pyproject/uv.lock/deploy committed)"
+fi
+# Other uncommitted tracked files (docs/tests/scripts) do not change the running
+# daemon, so they're informational — they never block a deploy.
+others="$(git status --porcelain --untracked-files=no -- ':!src' ':!config' ':!pyproject.toml' ':!uv.lock' ':!deploy' 2>/dev/null)"
+if [ -n "$others" ]; then
+    note "note: other uncommitted tracked files (don't affect the daemon; not blocking):"
+    echo "$others" | sed 's/^/      /'
 fi
 
 # 2. The full suite IS the deploy gate (docs/tasks/deploy.md). Covers the contracts-pin
