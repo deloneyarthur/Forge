@@ -5026,3 +5026,18 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Files:** `src/forge/core/contracts_check.py` (pin + 1.20.0 comment), `uv.lock` (adopt), `config/forge.yaml` (max_inflight=600), `scripts/deploy_preflight.sh` (scope fix), `STATUS.md`, this entry. Commits `6af7d84` (code/config) + this record.
 
 **STATUS: contracts 1.20.0 ADOPTED (pin green, daemon accepts it) + §7.3 BACKPRESSURE LIVE (Tier-1 5d + Tier-2 cap-600, both journal-verified). Daemon healthy / healthcheck OK. The one remaining operator item is off-box DR (`FORGE_BACKUP_DEST`).**
+
+---
+
+## D201 — 2026-06-24 — DESIGN.md spec reconciled to as-built (doc-only): §7.3 three block reasons (D137 stall guard + D196/D200 `max_inflight`), §6.2 learned-ranking sourcing (D149 `P(component)` + D193 wf_p25 lane), §10.1 stale `contracts_version` literal redirected. No behavior change; not a deploy.
+
+**The doc-refresh sweep surfaced that DESIGN.md (the source of truth) lagged three already-shipped behaviors. Proposed exact amendments to the operator → "approve". Spec-sync only — every behavior already has its own D-entry; this records the spec catching up, per the "spec deviations are proposed as Decision Log entries, never silent edits" rule.**
+
+- **§7.3 Rate limiting** — was per-batch ≥80%-gated only; now documents the three independent block reasons the submitter actually applies: (1) per-batch completion, (2) the [[D137]] stall guard (Crucible idle while work pending → never feed a dead gate), (3) the [[D196]]/[[D200]] aggregate `max_inflight` in-flight-depth cap. **Closes the explicit D196 "operator to decide whether to amend §7.3" item.** Volatile thresholds (80%, stall interval, depth cap) stay in `config/forge.yaml`, not the spec.
+- **§6.2 `prior_promotion_proximity_score`** — the spec described only the structural-Jaccard score and never mentioned the learned ranker (it predates the D132 shadow track). Appended a paragraph: the slot may be filled by a deterministic non-LLM model — the F3 verdict model's `P(component)` ([[D149]]) optionally × a monotone transform of a `target_wf_p25` robustness prediction (the [[D193]] quality lane) — both filling ONLY this term (§6.2 weights unchanged), each env-kill-switched (disabling restores the structural score byte-for-byte). Consistent with hard rules #5 (no LLM, ML OK) / #6 (determinism).
+- **§10.1 `forge.yaml` example** — the illustrative block hard-coded `contracts_version: "1.0"` (stale value AND wrong location — the pin lives in `core/contracts_check.py`, not yaml). Replaced with a comment pointing at `FORGE_EXPECTED_CONTRACT_VERSION` / §13.5.
+- **No-ops (verified by the read-only DESIGN.md validation):** meta-king never entered the spec; the "NaN stub" framing isn't in DESIGN.md; §13.5 is correctly version-agnostic; the §3.6 "25 vs 21 rules" gap is pre-existing and already tracked under [[D001]].
+
+**Files:** `docs/DESIGN.md` (§6.2, §7.3, §10.1), `STATUS.md`, this entry. No `src/`/grammar/config change — not a deploy; reboot-safe (docs only).
+
+**STATUS: DESIGN.md reconciled to the D200 as-built; the §7.3 amendment closes the standing D196 spec-decision. Remaining operator-gated doc-refresh items (walking through together): root archive, out-of-VCS units/scripts, config hygiene.**

@@ -1,5 +1,13 @@
 # Forge — Status
 
+## 2026-06-24 — DOC REFRESH (28 files) + DESIGN.md SPEC RECONCILED (D201). Multi-agent doc-cleanup pass: every canonical doc validated against live code and refreshed (commit `76e7861`); then DESIGN.md §7.3/§6.2/§10.1 reconciled to as-built (operator-approved, [[D201]]). No src/grammar/config change.
+
+- **Doc refresh — commit `76e7861` (28 docs):** architecture / MANPAGE / HOW-TO / NEW_BOX_TRANSFER / INDICATOR_THRESHOLDS / GRAMMAR / glossary / deploy + 20 proposal/review status banners. King-retirement ([[D190]]) sweep came back already-clean (all "king" hits were substring noise); quality-lane-flip ([[D193]]) + [[D200]] propagated. grammar doc-sync passes; `forge healthcheck` OVERALL=OK.
+- **DESIGN.md reconciled ([[D201]]):** §7.3 now documents the three block reasons (per-batch + D137 stall guard + D196/D200 `max_inflight`) — **closes the standing D196 spec-decision**; §6.2 documents the learned-ranking sourcing (D149 `P(component)` + D193 wf_p25 lane); §10.1's stale `contracts_version: "1.0"` literal → pointer to `core/contracts_check.py`.
+- **Remaining operator-gated doc-refresh items (in progress, together):** root archive (~31 landed `PROMPT_CRUCIBLE_*` + phase handoffs → `_archive/`); out-of-VCS units/scripts (`forge-eod-check`; stale `setup_new_box.sh`/`stage_transfer.sh` literals); config hygiene (inert `forge.yaml` `crucible.contracts_version: "1.6"`; `grammar.yaml` R2 `evidence_to_relax` stale).
+
+---
+
 ## 2026-06-24 — CONTRACTS 1.20.0 ADOPTED + §7.3 BACKPRESSURE DEPLOYED (D200). Pin 1.19.0→1.20.0 (validated no-op); item 2 (D196) LIVE — Tier-1 `STRANDED_AFTER` 5d + Tier-2 `max_inflight`=600. Journal-verified: `blocked: in-flight depth 3536 exceeds cap 600`. Daemon healthy; `forge healthcheck` OVERALL=OK.
 
 **Operator: "adopt contracts 1.20.0 and bump the pin and deploy item 2." Full record: [[D200]].**

@@ -521,6 +521,8 @@ score = (
 
 `prior_promotion_proximity_score`: high if the candidate is structurally similar to a previously-promoted strategy (in terms of signals used, hypothesis, etc.). This is a learning signal — once we know a region is promising, sample more from it.
 
+This slot may instead be sourced from a learned, deterministic, non-LLM model (the loop bars LLMs, not ML — hard rules #5/#6): the F3 verdict model fills it with `P(component)` — a logistic estimate of a candidate's component-gate probability — in place of the structural-Jaccard score (D149); when the quality lane is enabled, that value is multiplied by a monotone transform of a `target_wf_p25` robustness prediction to bias toward walk-forward-robust regions (D193). Both fill only this term — the §6.2 weights are unchanged — and each is A/B-gated by an env kill-switch, so disabling restores the structural score byte-for-byte. Model IDs, training rows, and fit statistics are operational state (STATUS.md / D-entries), not the spec.
+
 ### 6.3 Diversification penalty
 
 Top-N selection is not "highest score wins." It uses a determinantal point process (DPP) or simple greedy diversification:
@@ -576,9 +578,13 @@ Submission is atomic per-file (write to temp + rename). Crucible's inbox watcher
 
 ### 7.3 Rate limiting
 
-Forge does not submit a new batch until the previous batch is at least 80% complete in Crucible. This prevents the inbox from becoming a deep queue Forge can't learn from.
+Forge does not submit a new batch while the in-flight queue is too deep for Forge to learn from it. The submitter applies three independent block reasons; submission is held if ANY of them trips:
 
-Check rate: every 10 minutes, Forge queries Crucible's runs DB for the status of the previous batch's candidates. When 80%+ are `gated`, Forge submits the next batch.
+1. **Per-batch completion** — the previous batch must be at least 80% `gated` in Crucible before the next is submitted (the original §7.3 rule). This prevents the inbox from becoming a deep queue Forge can't learn from.
+2. **Stall guard** — submission halts if Crucible has produced no decisions for a threshold interval while Forge work is pending, so Forge never feeds a dead gate (added D137).
+3. **Aggregate in-flight depth** — submission halts if the count of undecided in-flight submissions (newer than the stranded-flush watermark) exceeds a configured cap, independent of per-batch progress (added D196; deployed D200). Default-off → byte-identical; the cap is the `submission.max_inflight` knob.
+
+Check rate: every 10 minutes, Forge queries Crucible's runs DB for the status of in-flight candidates and re-evaluates the three block reasons. Thresholds (completion fraction, stall interval, depth cap) are operational values held in `config/forge.yaml`, not the spec.
 
 ### 7.4 Failure handling
 
@@ -772,7 +778,8 @@ forge:
   crucible:
     inbox_path: ~/optbt_data/inbox     # where Forge writes
     db_path: ~/optbt_data/results.duckdb  # where Forge reads (read-only)
-    contracts_version: "1.0"
+    # contracts pin lives in core/contracts_check.py
+    # (FORGE_EXPECTED_CONTRACT_VERSION), not here — see §13.5
 
   enumeration:
     max_candidates_per_batch: 100000
