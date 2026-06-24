@@ -1,5 +1,7 @@
 # Learned Verdict Model for Ranking — Design Proposal (F-track)
 
+> **STATUS (2026-06-24):** LANDED — live in production. F1/F2 built; F3 (`prior_promotion_proximity := P(component)`) wired live [[D149]]. The successor quality lane (`wf_p25`) was subsequently flipped on in prod [[D193]] (arc [[D189]]–[[D192]]). Historical design record below.
+
 **Status: APPROVED 2026-06-10 — all six §8 decisions resolved (in-session AskUserQuestion,
 every recommended option chosen). F1 and F2 are greenlit; F3 remains gated on the §4
 promotion criterion plus its own operator go. No code exists yet as of approval.**

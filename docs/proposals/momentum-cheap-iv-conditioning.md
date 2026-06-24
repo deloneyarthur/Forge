@@ -1,5 +1,7 @@
 # Condition the long trend/momentum book on CHEAP IV (Crucible ask) — scoped, operator-gated
 
+> **STATUS (2026-06-24):** REFUTED / SHELVED — never built. Crucible's empirical read found trend cheap-IV gives no lift (mild inversion) → this D158 T1/T2 lever SHELVED [[D161]] (confirmed by the trend-enumeration-frontier-closed read [[D166]]). Historical record below.
+
 Status: **SCOPING / HELD 2026-06-15 ([[D158]]) — change surface mapped, no build.** Operator chose
 "scope the trend-side build" after the bottom-line assessment of Crucible's handoff
 `../Crucible/docs/handoffs/FORGE_momentum_cheap_iv_conditioning.md`. Sits under [[D157]] (operator's D156-hold reversal — enum/grammar now un-held; this is the **trend-book**

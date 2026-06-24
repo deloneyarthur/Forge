@@ -1,5 +1,7 @@
 # Generation-Side Learned Levers — Scoping (selection → generation)
 
+> **STATUS (2026-06-24):** SCOPING — superseded by the D186–D194 generation arc. Nothing shipped directly off this doc, but the generation-quality lever it maps was realized: the quality (`wf_p25`) lane flipped on in prod [[D193]] (D186 decorrelation-at-assembly, D187/D188 quality-at-generation, King retired [[D190]]). Historical record below.
+
 **Status: SCOPING (2026-06-15, [[D155]] follow-up). Nothing ships off this doc.** It maps the levers for a
 *generation* (config-shaping) learned model — distinct from the *selection* models (verdict / tail) audited in
 [[D155]] — the constraints they must live under, and the honest EV ceiling. Each lever, if elected, is its own

@@ -1,5 +1,7 @@
 # Forge — Strategy Generation: State of the System
 
+> **STATUS (2026-06-24):** HISTORICAL deep-review snapshot — context only. The system is now at grammar **v22** / contracts **1.20.0** (well past the "v12 / 1.16.0" cited in the older banner below); the mechanics narrative remains broadly accurate but ALL numbers/weights/counts/gaps are superseded. Live state: `STATUS.md` top block + `IMPLEMENTATION_DECISIONS.md` (latest D200).
+
 > **STALE — historical snapshot (banner added 2026-06-09).** Written at grammar **v4** /
 > contracts 1.13.0; the system is now at v12 / 1.16.0 with a substantially re-aimed feedback
 > loop (D098–D110). The mechanics narrative (how enumeration/pre-filtering/ranking work) remains

@@ -1,5 +1,7 @@
 # Forge: next actions after D077-D079 landing
 
+> **STATUS (2026-06-24):** HISTORICAL — point-in-time handoff authored 2026-05-27 at grammar v4 / D079. All counts, the grammar version, and the "next actions" are long superseded (the system is now at v22 with the D080–D200 arc landed). Kept for historical context only; for live state see `STATUS.md` + `IMPLEMENTATION_DECISIONS.md`. Snapshot below.
+
 **Authored:** 2026-05-27
 **Audience:** Forge maintainer / agent working in `/home/aj/proj/Forge/`
 **Context:** D077 (rv_rank regime gate), D078 (dynamic universe + threshold feedback), D079 (relative_value underlying fix) have all shipped. Service restarted on grammar v4. Rate-limited waiting for Crucible to process batch `1a41005f...`.

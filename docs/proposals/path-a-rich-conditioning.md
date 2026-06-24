@@ -1,5 +1,7 @@
 # Path A — rich-conditioning sweep of long options (in-scope): light up the vega axis, joint-gate the entry, learn the conditioner
 
+> **STATUS (2026-06-24):** SUPERSEDED — partly REFUTED, partly LANDED. The actionable build surface moved to `conditioning-levers.md`; thread-1 cheap-IV was falsified [[D154]]/[[D161]], the AND-gate de-prioritized [[D161]], and the surviving `rv_rank` mr conditioner shipped in v22 [[D167]]/[[D170]]. Read the threads as historical context. Historical record below.
+
 Status: **UN-HELD 2026-06-15 ([[D157]]) — D156's hold reversed; operator chose to RUN/measure the untried
 levers. Thread 2 (joint/AND-gate) is now SCOPED for build in `conditioning-levers.md` ([[D159]]).** Arc:
 launched ([[D153]]) → thread-1 premise falsified, walked back ([[D154]]) → "pursue the builds" → held

@@ -1,5 +1,7 @@
 # Long-options exhaustion assessment (consolidated) — can a long-premium book reach promotion-grade Sharpe/CPCV?
 
+> **STATUS (2026-06-24):** FINDING STANDS — Crucible-confirmed exhaustion of long-premium for promotion-grade adverse-regime magnitude [[D152]]. The operator's Path-C provability gate is satisfied, but Path C remains HELD/operator-gated per the "exhaust long options before v2 spreads" directive ([[D154]]/[[D161]] reinforced exhaustion; see `path-c-scope-expansion.md`). Historical record below.
+
 Status: **CONSOLIDATED FINDING, 2026-06-14 → CRUCIBLE-CONFIRMED 2026-06-15 → QUALIFIED 2026-06-15
 (`../Crucible/docs/handoffs/FORGE_long_options_exhaustion_consolidated.md`).** Combines our Crucible data +
 the long-options inventory + two adversarially-verified deep-research scans, now confirmed by Crucible's

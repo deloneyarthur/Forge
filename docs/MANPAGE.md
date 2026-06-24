@@ -99,9 +99,15 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 | `--forge-db` | path | in-memory | Forge state DB. Pass a file path for persistence. |
 | `--dry-run` | flag | off | Run pipeline but skip inbox writes + DB persistence. |
 | `--loop` | flag | off | Daemon mode: repeat, sleeping `--poll-interval-seconds` between cycles. |
+| `--require-real-cache` | flag | off | Skip the iteration (no submit) when Crucible's real feature cache is unavailable, instead of silently degrading to the synthetic cache. Production safety; on the service. |
 | `--max-iterations` | int | unbounded | Cap loop iterations (testing). |
 | `--poll-interval-seconds` | int | `60` (`600`) | Sleep between loop iterations. |
 | `--consume-feedback` | flag | off | Run feedback chain (consumer/analyzer/proposer/auto-tune) after submit. |
+| `--orthogonal-yield` | flag | off | H4 A/B: discount over-mined (hypothesis, directional, underlying-class) factor cells in the underlying draw, rewarding orthogonal components. Off is byte-identical to D105/D106. |
+| `--cross-sectional / --no-cross-sectional` | flag | on | H1 (v12) breadth lever: emit `cross_sectional` combiners for the breadth-starved directional archetypes (trend/mean_reversion) at a ~1/3 exploration share, defeating the 100-trade floor. ON by default (the point of v12); `--no-cross-sectional` is the kill switch (revert to confluence). |
+| `--cohort-yield` | flag | off | §3 yield-map refresh (D182): make the cohort draw (cross_sectional vs confluence) yield-driven by the learned (hypothesis, directional, dte_bucket, cohort) component-rate instead of the fixed share. On the service. Off is byte-identical to the H1 draw. |
+| `--regime-gate-yield` | flag | off | §2 yield-map refresh (D183): make the regime-gate draw yield-driven — compose the learned (hypothesis, directional, dte_bucket, regime_gate) rate onto the D150/uniform base, down-weighting sink gates (gamma_flip) and favouring minting ones. `relative_value` excluded (D119). On the service. Off is byte-identical. |
+| `--quality-rank` | flag | off | T1 quality lane (tail-aware ranking, §8.6, D193): BLEND the wf_p25 robustness prediction into the §6.2 prior — `prior := P(component) × tail_norm`. Needs an F3 P(component) base + a `target_wf_p25` robustness model. Env kill-switch `FORGE_QUALITY_RANKER`. On the service. Off is byte-identical (F3 prior unchanged). |
 | `--open-proposals` | path | `OPEN_PROPOSALS.md` | Where loosening proposals are written. |
 | `--prefilter-yaml` | path | `config/prefilter.yaml` | Prefilter calibration (auto-tune target). |
 | `--config` | path | `config/forge.yaml` | YAML defaults file. |
@@ -111,8 +117,9 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 # One real batch, persisted:
 forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db --batch-size 200
 
-# Daemon (what the service runs):
-forge run --loop --consume-feedback
+# Daemon (what the service runs — see deploy/systemd/forge.service):
+forge run --loop --consume-feedback --require-real-cache \
+  --cohort-yield --regime-gate-yield --quality-rank
 
 # Dry run, no side effects:
 forge run --dry-run --max 100
@@ -513,7 +520,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | Table | Holds |
 |---|---|
-| `submissions` | One row per submitted config. `config_hash` is unique-indexed (idempotency). `status` ∈ submitted/gated/skipped. |
+| `submissions` | One row per submitted config. `config_hash` is unique-indexed (idempotency, hard rule #9). `status` lifecycle: `pending` (insert) → `submitted` \| `skipped_duplicate` \| `submission_failed`, then `gated` once Crucible decides (set on reconcile/age-out). |
 | `batch_summaries` | Per-batch stats: size, grammar/registry version, promotion rate, prefilter rejections. |
 | `pre_filter_logs` | Per-(candidate, filter) pass/score/details. |
 | `verdicts` | Durable per-candidate Crucible decisions (D111): decision, decided_at, trade_count, grammar_version, full gate_results JSON. PK `crucible_run_id`, so re-gates append. Populated on every reconcile pass; survives the rolling export window. |
@@ -535,9 +542,9 @@ systemd **user** services (`systemctl --user ...`). Start the writer first; stop
 | `crucible-runner` | `start_runner.py` | Backtests queued runs through the full gate; writes promotion decisions. |
 | `crucible-gated-runs-publisher` | `export_gated_runs.py --poll-interval 60` | Exports gated-run snapshots every 60s (Forge's read path). |
 | `crucible-promoted-strategies-publisher` | `export_promoted_strategies.py --poll-interval 60` | Exports promoted strategies every 60s (QuantIQ's read path). |
-| `crucible-registry-publisher` | `export_registry.py` | Oneshot at startup: publishes indicator registry snapshot. |
+| `crucible-registry-publisher` | `export_registry.py` | Publishes the indicator registry snapshot every ~6h (D166; was oneshot-at-startup pre-2026-06-15). Forge re-reads the newest snapshot by mtime. |
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
-| `forge` | `forge run --loop --consume-feedback` | The Forge daemon: generate → submit → learn. |
+| `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
 Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`, keep 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 

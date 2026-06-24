@@ -24,8 +24,10 @@ flowchart LR
 Per-batch order (§2.1, fixed): load grammar (verify version + archive) → snapshot registry →
 enumerate (lazy, seeded) → pre-filter battery (cost-ascending, short-circuit on first failure) →
 rank (§6.2 composite) → diversify (greedy, min-per-hypothesis floor) → submit (atomic, idempotent)
-→ rate-limit (§7.3: block until ≥80% of the oldest in-flight batch is gated, OR the D137 stall
-guard trips — Crucible idle ≥3h with our work pending) → consume feedback →
+→ rate-limit (§7.3, three independent block reasons: ≥80% of the oldest in-flight batch must be
+gated; OR the D137 stall guard trips — Crucible idle ≥3h with our work pending; OR the aggregate
+in-flight depth exceeds `submission.max_inflight` — the D196 backpressure block bounding the total
+genuine in-flight queue, default-off, operator-enabled, D200) → consume feedback →
 analyze → propose (auto-apply tightenings; loosenings → `OPEN_PROPOSALS.md`). Cross-batch state
 lives in `~/forge_data/forge.db` only — never in process memory across runs.
 
@@ -36,14 +38,14 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
 | `grammar/` | Load/validate `config/grammar.yaml`; predicate engine; S4 horizon table (`signal_horizon.py` — Forge-owned, registry `lookback` is a warmup not a horizon, D102); archive consistency (`archive.py`) | §3 | `test_grammar/` |
 | `enumeration/` | Search space + seeded sampler; per-indicator threshold table (`indicator_thresholds.py`); underlying classes (`underlying_class.py`); registry fingerprint | §4 | `test_enumeration/` |
 | `prefilters/` | `battery.py` runs filters cost-ascending — the live order is in code, not the §5.2 list (it grew past the original 7); `crucible_feature_cache.py` = real cache (via db_writer socket), `feature_cache.py` = synthetic fallback | §5 | `test_prefilters/` |
-| `ranking/` | Composite scorer (weights in `config/ranker.yaml`); greedy diversifier (`min_per_hypothesis` floor, D103; per-arm exploration floor, D136 — `arm_floor.py` owns arm extraction + the honest-era mature-arm count, young arms get ≤2 reserved slots / ≤10% batch); learned verdict model (D132 shadow-track: `features.py` extraction, `dataset.py` honest-era frame, `model.py` pure-Python IRLS + artifacts, `shadow.py` post-submit telemetry recorder, `evaluation.py` shadow-vs-incumbent readout — nothing wired into scoring until F3); `regime_supply.py` per-batch regime-complement supply telemetry (T2 shadow, D144 — the `regime_supply:` journal line; classifies ranked survivors' regime-bets into trending-dominant / ranging / bear / other, never reshapes a batch) | §6 | `test_ranking/` |
+| `ranking/` | Composite scorer (weights in `config/ranker.yaml`); greedy diversifier (`min_per_hypothesis` floor, D103; per-arm exploration floor, D136 — `arm_floor.py` owns arm extraction + the honest-era mature-arm count, young arms get ≤2 reserved slots / ≤10% batch); learned verdict model (`features.py` extraction, `dataset.py` honest-era frame, `model.py` pure-Python IRLS + artifacts, `shadow.py` post-submit telemetry recorder, `evaluation.py` shadow-vs-incumbent readout; born as the D132 shadow-track, now WIRED into the §6.2 prior slot — F3 sets `prior_promotion_proximity := P(component)` instead of Jaccard (D149, live; env kill-switch `FORGE_F3_RANKER=off`), and the wf_p25 quality lane multiplies that by a monotone `tail_norm` of a `target_wf_p25` robustness prediction — `prior := P(component) × tail_norm` (`--quality-rank`, D193 live; kill-switch `FORGE_QUALITY_RANKER=off`); both fill only the prior term, §6.2 weights untouched); `regime_supply.py` per-batch regime-complement supply telemetry (T2 shadow, D144 — the `regime_supply:` journal line; classifies ranked survivors' regime-bets into trending-dominant / ranging / bear / other, never reshapes a batch) | §6 | `test_ranking/` |
 | `submission/` | Batch orchestration; atomic submit via contracts; §7.3 rate limiter; per-filter logging | §7 | `test_submission/` |
 | `feedback/` | `consumer.py` (reconcile + aged-out flush, D052/D110); `analyzer.py`; `proposer.py`; `rejection_weights.py` (learned sampler weights — the D094→D108 lineage); `trade_rate_priors.py` (expected-trades prior + cold-start); `auto_tune.py` (prefilter calibration, tighten-only) | §8 | `test_feedback/` |
 | `funnel/` | Per-batch funnel + join-map exports consumed by Crucible's instrumentation (D096) | D096 | `test_funnel/` |
 | `persistence/` | `db.py` (the blessed DB open), `schemas.py` (forge.db DDL — table summaries in `docs/MANPAGE.md`), `registry_loader.py` | §9 | `test_persistence.py` |
 | `core/` | `clock.py` + `seed.py` (the ONLY time/RNG sources, hard rule #8); `contracts_check.py` (holds the `FORGE_EXPECTED_CONTRACT_VERSION` pin, §13.5); `logging.py` | §13 | `test_phase0_smoke.py` |
 | `config/` | `forge_config.py` — precedence: CLI flag > `config/forge.yaml` > hardcoded (`--no-config`) | §10 | `test_config/` |
-| `cli/` | `main.py` (`forge` entry point + run loop), `grammar_cmd.py`, `feedback_cmd.py` | — | `test_cli/` |
+| `cli/` | `main.py` (`forge` entry point + run loop), `grammar_cmd.py` (`grammar` sub-app), `feedback_cmd.py`, `ranker_model_cmd.py` (`ranker-model` sub-app: dataset/train/eval + the wf_p25 robustness variants, D132/D191), `healthcheck_cmd.py` (`forge healthcheck` — alive-AND-productive read, D197), `status_cmd.py` (`forge status` — learning-signal clocks, D198) | — | `test_cli/` |
 
 ## Change taxonomy — how a change is classified and attributed
 
@@ -63,15 +65,24 @@ Determinism identity: `(grammar_version, registry_hash, seed)` → same enumerat
 - Box `aj-workstation`, timezone **UTC since 2026-06-07** (older records are PDT — convert before joining).
 - `forge.service` (systemd **user** unit, `deploy/systemd/forge.service`) runs
   `uv run forge run --loop --consume-feedback --require-real-cache` from **this working tree**
-  via editable install. A reboot auto-starts it onto whatever the tree contains (D104) — hence the
+  via editable install — plus the live yield-map axes (`--cohort-yield`/`--regime-gate-yield`,
+  D182/D183) and the wf_p25 quality lane (`--quality-rank`, D193); the authoritative flag set is
+  the unit's `ExecStart`. A reboot auto-starts it onto whatever the tree contains (D104) — hence the
   worktree + deploy ritual in `docs/tasks/deploy.md`.
 - Crucible services/timers and start/stop order: `docs/MANPAGE.md` (PIPELINE SERVICES) and `docs/HOW-TO.md`.
 - Forge timers (units in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`):
-  `forge-ranker-eval` (05:00, `scripts/daily_ranker_eval.sh` — daily shadow-model train+eval, F3
-  streak → `~/forge_data/ranker_eval/streak.jsonl`; deterministic, telemetry-only) and
-  `forge-eod-check` (21:00, headless EOD read).
+  `forge-ranker-eval` (05:00, `scripts/daily_ranker_eval.sh` — daily learned-model train+eval; the
+  F3 streak → `~/forge_data/ranker_eval/streak.jsonl` and the wf_p25 robustness streak; deterministic,
+  telemetry-only); `forge-backup` (04:00, `scripts/backup_forge_db.sh` — nightly DR copy of `forge.db`
+  + `models/`, D195); `forge-healthcheck` (hourly, `forge healthcheck` — alerts on the alive-but-stuck
+  daemon states systemd can't see, D197); and `forge-eod-check` (21:00, headless EOD read).
 - Forge state: `~/forge_data/forge.db` (DuckDB; live RW lock — snapshot before reading, see
   `docs/tasks/investigate-live.md`). Inter-system paths: table in `docs/HOW-TO.md`.
+- `scripts/` is operational glue around the daemon, not part of the import graph: pre-commit
+  enforcers (`check_grammar_version_bump.py`, `check_grammar_doc_sync.py` — see §13.2 below),
+  the timer entrypoints (`daily_ranker_eval.sh`, `backup_forge_db.sh`), the read-only pre-deploy
+  GO/NO-GO gate (`deploy_preflight.sh` — codifies the D104 ritual's pre-checks: dirty tree, stale
+  contracts pin, inert feature wiring; D199), plus one-off analysis/probe + migration scripts.
 
 ## Invariant bookmarks (§13)
 
@@ -93,7 +104,7 @@ a specific exchange or decision cites them.
 | Pattern | What it is |
 |---|---|
 | `STATUS.md` | Live state; newest block on top, marked SUPERSEDES. Read first, every session |
-| `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger (D001–D110+); referenced everywhere as "D###" |
+| `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger (D001–D200+); referenced everywhere as "D###" |
 | `OPEN_QUESTIONS.md` | Append-only logged uncertainties (Q##) with severity |
 | `OPEN_PROPOSALS.md` | Grammar loosening proposals awaiting operator sign-off (hard rule #4) |
 | `PHASE_N_HANDOFF.md` | Phase-boundary artifacts; phases 0–6 all complete — historical |

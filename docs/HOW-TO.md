@@ -56,8 +56,9 @@ systemctl --user stop crucible-db-writer.service
 ## Daily health check
 
 ```bash
-# One-shot daemon health — alive AND productive (exit 2 = CRITICAL). The
-# forge-healthcheck timer runs this hourly; a CRITICAL shows as a failed unit below.
+# One-shot daemon health — alive AND productive (exit 0/1/2 = OK/WARN/CRITICAL). The
+# forge-healthcheck timer runs this hourly; only a CRITICAL fails the unit (WARN is
+# informational), so a WARN won't show in --state=failed — read the journal for it.
 (cd ~/proj/Forge && uv run forge healthcheck)
 
 # Are all services alive? (forge-healthcheck shows here on CRITICAL)
@@ -81,9 +82,10 @@ ls -lt ~/forge_data/backups/forge_db_*.duckdb | head -1
 ```
 
 The `forge-ranker-eval` timer trains + evaluates the shadow verdict model each morning and records
-the consecutive-PASS streak; it's telemetry-only (no effect on what Forge submits until F3 ships).
-Don't hand-run train/eval at checkpoints anymore — run `forge status`. Deeper digging (forge.db
-queries, cohort analysis, known traps): `tasks/investigate-live.md`.
+the consecutive-PASS streak; the streak files are telemetry-only — they track *whether the learning
+is improving*, not what the daemon submits (the live ranker/quality-lane models are loaded on their
+own paths). `forge status` pretty-prints both clocks; don't hand-run train/eval at checkpoints
+anymore. Deeper digging (forge.db queries, cohort analysis, known traps): `tasks/investigate-live.md`.
 
 ## Common situations
 
@@ -131,7 +133,7 @@ needed, and relay a wedge prompt (`PROMPT_CRUCIBLE_RUNNER_WEDGE.md` is the templ
 
 ### Forge says "blocked: in-flight depth N exceeds cap M"
 
-The D196 §7.3 backpressure block (`submission.max_inflight`, off unless set): the
+The §7.3 backpressure block (`submission.max_inflight`, deployed ON per D196/D200): the
 *aggregate* learnable queue — genuine in-flight `submitted` rows newer than the D110 flush
 watermark, summed across all batches — exceeds the cap. Unlike the per-batch "N% gated"
 line, it fires even when the oldest batch reads ≥80% (a permanent zombie batch can't mask
@@ -140,8 +142,9 @@ the queue stays shallow enough to learn from. It self-clears as Crucible drains 
 
 What to do: usually nothing — it's the throttle working. If it blocks persistently, Crucible
 is the bottleneck (see the stall guidance above / diagnose the runner), not Forge. To retune,
-raise/lower `submission.max_inflight` in forge.yaml (0 = disable); 600 (≈3× batch_size) is the
-recommended on value. Don't disable it to "unblock" — that just re-deepens the un-learnable queue.
+raise/lower `submission.max_inflight` in `config/forge.yaml` (0 = disable; the live value is set
+at ≈3× batch_size per D200). Don't disable it to "unblock" — that just re-deepens the un-learnable
+queue. Changing it is a config edit that deploys on restart — run the deploy ritual (below).
 
 ### Exports are stale / Forge can't see results
 
@@ -188,11 +191,13 @@ After a few hundred new gated runs accumulate, retrain the threshold ranges:
 ```bash
 cd ~/proj/Forge
 .venv/bin/python scripts/propose_threshold_tightenings.py   # writes config/auto_tightened_thresholds.yaml
-systemctl --user restart forge.service                       # pick up new ranges
+scripts/deploy_preflight.sh                                  # D199 GO/NO-GO gate (tree clean + full suite)
+systemctl --user restart forge.service                       # pick up new ranges (only on GO)
 ```
 
-Review any **loosening** proposals (these need operator sign-off) in
-`OPEN_PROPOSALS.md`.
+Any change that deploys on restart (config edits, new ranges, code) should clear
+`scripts/deploy_preflight.sh` first — it's step 0 of the deploy ritual (`tasks/deploy.md`).
+Review any **loosening** proposals (these need operator sign-off) in `OPEN_PROPOSALS.md`.
 
 ### Changing the grammar
 

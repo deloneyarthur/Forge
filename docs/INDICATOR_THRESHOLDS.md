@@ -2,25 +2,40 @@
 
 **Audit date:** 2026-05-14
 **Source data:** `~/optbt_data/bars_underlying/symbol=SPY/` — 1508 trading days, 2020-01-02 → 2025-12-31.
-**Compute path:** `optbt.features.base.build(id).compute(bars.lazy())` for each of the 33 indicators advertised in Crucible's `RegistrySnapshot` (commit `b447597` writer-side feature_cache).
+**Compute path:** `optbt.features.base.build(id).compute(bars.lazy())` for each of the 33 indicators advertised in Crucible's `RegistrySnapshot` *at the time of the audit* (commit `b447597` writer-side feature_cache). **NB:** the registry has grown since — the current snapshot (`2026-06-24T070003Z.json`) advertises **58** indicators. The audit covered only the 33 then-present; the addenda at the bottom (v6/v18) and `_INDICATOR_THRESHOLD_TABLE` track the later ones. For the authoritative live count, read the registry, not this line.
 
 **Why this exists:** Forge's enumerator (`sampler.py:132`) sets `params={"threshold": 30.0}` as a generic default for every threshold-style `SignalSpec`. Real-data audit shows this default is **meaningful for only ~1 in 4 indicators**. The rest produce 0 activations (signal never fires), making `signal_density` filter reject 100% of candidates under the real Crucible cache.
 
 This document is the **threshold map** that informs Forge's per-indicator threshold sampling.
 
-> **⚠ STALE in part — this is a 2026-05-14 pre-D031 audit. For indicator *liveness*, trust the CODE
-> (`src/forge/enumeration/indicator_thresholds.py`) + Crucible's `RegistrySnapshot`, NOT this narrative.**
-> D030's "stub" framing below (§9 — `iv_rank`, `vix_level`, `pairs_zscore`, `put_call_flow`,
-> `expected_value_estimator`) was **obsoleted by D031 (2026-05-15)**: Crucible shipped real `version=2`
-> implementations of all five; `indicator_thresholds.py:18-22` treats them identically to other bounded
-> indicators, and each has a live threshold spec (e.g. `iv_rank` `regime_range=(10,50)`, honoring §3.5 R1).
-> Crucible re-confirmed coverage 2026-06-15 (`../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`):
-> `iv_rank` non-NaN ~100% single-name (used in 3,998 runs / 77 components — impossible for a NaN stub),
-> `iv_term_slope` 94–100%, `iv_minus_rv` 98–99%. **The §9 "skip-list" and the "§3.5 R1 structurally
-> unsatisfiable" caveat are WRONG as of D031** — corrected inline below. (One genuine IV-surface gap remains:
-> **skew / risk-reversal is absent** — no indicator built — but it is a *seller* signal, wrong-signed for
-> long premium.) Root cause of a 2026-06-15 mis-derivation ([[D154]]): an audit read this stale doc instead
-> of the code. See [[indicator-thresholds-doc-stale-pre-d031]].
+> **⚠ HISTORICAL SNAPSHOT (2026-05-14, pre-D031). For indicator *liveness* and *current* threshold
+> specs, the CODE is authoritative — read `src/forge/enumeration/indicator_thresholds.py` (the live
+> `_INDICATOR_THRESHOLD_TABLE`) + the newest Crucible `RegistrySnapshot`
+> (`~/optbt_data/exports/registry_snapshot_*.json`, newest by mtime), NOT this narrative.** The
+> distribution tables below were computed once on SPY in 2026-05 and are kept as a calibration record;
+> the indicator *set* and the *ranges* have moved on since (see the v6/v18 addenda at the bottom).
+>
+> What is verified WRONG in the original 2026-05-14 text, and corrected inline below:
+> - **The §9 "Stubs (NaN-only)" list is FALSE.** D030's "stub" framing for the five indicators
+>   `iv_rank`, `vix_level`, `pairs_zscore`, `put_call_flow`, `expected_value_estimator` was **obsoleted
+>   by D031 (2026-05-15)**: Crucible shipped real `version=2` implementations of all five. They are LIVE
+>   today — confirmed present in the latest registry snapshot (`2026-06-24T070003Z.json`, 58 indicators)
+>   and each carries a live threshold spec in `_INDICATOR_THRESHOLD_TABLE` (e.g. `iv_rank`
+>   `regime_range=(10,50)`, honoring §3.5 R1). Crucible re-confirmed coverage 2026-06-15
+>   (`../Crucible/docs/handoffs/FORGE_iv_rank_already_live_coverage.md`): `iv_rank` non-NaN ~100%
+>   single-name (used in 3,998 runs / 77 components — impossible for a NaN stub), `iv_term_slope`
+>   94–100%, `iv_minus_rv` 98–99%.
+> - **The "§9 skip-list" and the "§3.5 R1 structurally unsatisfiable" caveat are WRONG as of D031.**
+>   `iv_rank` is live ⇒ R1 is satisfiable; it is a valid `mean_reversion` regime gate.
+> - **"skew / risk-reversal is absent — no indicator built" is now STALE.** As of the current registry,
+>   skew-surface indicators DO exist (`skew_25d`, `butterfly_25d`, `realized_skew`, family
+>   `iv_structure`/`volatility`). They are registry-published but NOT yet in Forge's threshold table, so
+>   Forge does not enumerate them as threshold signals today (see "Registry vs. Forge table gap" below).
+>   Caveat unchanged: classic skew/risk-reversal reads a *seller* signal, wrong-signed for long premium —
+>   admitting any of these is a grammar/operator decision, not an audit conclusion.
+>
+> Root cause of a 2026-06-15 mis-derivation ([[D154]]): an audit read this stale doc instead of the
+> code. See [[indicator-thresholds-doc-stale-pre-d031]].
 
 ---
 
@@ -147,6 +162,17 @@ indicators (`ema`, `ema_50`, `sma`) and raw $-scale (`gex`/`vex`/`cex`/`atr`), p
 - `ema`, `ema_50`, `sma`
 
 **Conditional skip** — `days_to_earnings` only enumerable for non-SPY (single-name) underlyings; v1 SPY-only so skip.
+
+**Registry vs. Forge table gap (current, derive-from-source).** The live registry advertises more
+indicators than `_INDICATOR_THRESHOLD_TABLE` carries. Any registry id absent from the table returns
+`is_threshold_skippable() == True` (defensive invariant: no empty-params threshold leak) — so Forge does
+**not** enumerate it as a directional/regime threshold signal; it is at most a `passthrough`/`confluence`
+indicator. As of the `2026-06-24T070003Z.json` snapshot, the published-but-not-in-table set was:
+`butterfly_25d`, `cs_dispersion`, `iv_vs_index`, `ivol`, `realized_skew`, `skew_25d`, `vix_term_slope`,
+`vol_of_vol` (families `iv_structure` / `macro` / `volatility`). This list is a moving target — re-derive
+it from the diff of the newest registry snapshot against the table, not from this line. Adding any of these
+to the threshold table is a grammar/operator decision (and for the skew-surface ids, a *direction* decision
+— classic skew is seller-signed; see the banner).
 
 **~~Grammar impact (§3.5 R1 / X2 caveats)~~ — OBSOLETE (D031): both constraints are satisfied.**
 - §3.5 R1: `iv_rank` is **live**, so R1 is **satisfiable** and `iv_rank` is a valid mean_reversion regime gate

@@ -1,5 +1,7 @@
 # Proposal / scoping: edge-magnitude (expressivity) levers
 
+> **STATUS (2026-06-24):** SCOPING — historical inventory. No grammar/enumeration change shipped off this doc; the magnitude reservoir was found Crucible-gated/data-blocked and the binding wall is edge magnitude, not these levers (see the D186–D194 generation arc and `regime-orthogonal-arms.md`). Path C HELD. Historical record below.
+
 Status: **SCOPING (analysis only) — ranked inventory, no code/grammar change proposed for direct ship.**
 Date: 2026-06-14 (Sunday review follow-up). Relates to: [[D146]] (the magnitude reframe),
 `worst-quartile-complement-supply.md`, `tail-aware-ranker.md`, [[pipeline-vision-roadmap]] Phase 3.

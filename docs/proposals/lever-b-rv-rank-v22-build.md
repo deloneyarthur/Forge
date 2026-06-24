@@ -1,5 +1,7 @@
 # Lever B build scope — v22: add `rv_rank` (cheap realized vol) as a `mean_reversion` R1 gate
 
+> **STATUS (2026-06-24):** LANDED — built + deployed in grammar v22 [[D170]]; still live (v22 is current). Historical build record below.
+
 Status: **✅ BUILT + DEPLOYED 2026-06-15 ([[D170]]) — operator approved (A) + relayed/answered (B); built in worktree
 `../Forge-v22` (commit `4c4ce84`), full suite 1623 passed, deployed v21→v22.** This scope is now history; the build
 record is [[D170]]. (A) `rv_rank` mr R1 gate ([[D167]]) + (B) `event_passed_exit` ladder {3,5,8,13,21} ([[D169]], range

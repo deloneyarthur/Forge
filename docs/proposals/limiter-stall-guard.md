@@ -1,5 +1,7 @@
 # §7.3 Stall Guard — Design Proposal (Q38)
 
+> **STATUS (2026-06-24):** LANDED + extended + live. Stall guard BUILT [[D137]] (the design below, all four §8 decisions); the §7.3 backpressure family was later completed by [[D196]] (added an aggregate in-flight `max_inflight` depth block beside this guard) and DEPLOYED [[D200]]. Service runs with the guard active. Historical record below.
+
 **Status: BUILT 2026-06-13 (D137) — all four §8 decisions implemented as approved
 (decision-clock predicate, T = 3 h `stall_after_seconds: 10800`, direct enforce, extend
 `check_rate_limit`). TDD: 12 unit + 3 invariants + wiring/model tests; full suite 1,563/0,

@@ -12,21 +12,29 @@ deployed ungated code (D104). Hence:
   hot and stamps submissions with the new version before the code exists
   (`grammar_versions.changed_at` = stamp-flip time, never deploy time).
 - Versionless changes follow the same ritual — the uncontended-suite gate is the point.
+- §7.3 backpressure knobs (`submission.stall_after_seconds`, `submission.max_inflight`) live in
+  `config/forge.yaml`, NOT `grammar.yaml`; they're hot-read, default-off, and operator-gated
+  (enabling a depth cap is a loosening-adjacent live-behavior change — D196/D200). Changing a
+  value here needs no version bump but still goes through this ritual.
 
 ## Steps
 
 ```bash
-scripts/deploy_preflight.sh                  # GATE (D199): tree clean + FULL suite (covers contracts pin D176 + anti-inertness D185). NO-GO => fix first
+scripts/deploy_preflight.sh                  # GATE (D199): deploy-surface clean + FULL suite (covers contracts pin D176 + anti-inertness D185). NO-GO => fix first
 systemctl --user stop forge.service          # journal exit 143 = normal --loop SIGTERM
 # commit / merge to main in the LIVE tree (service runs from here via editable install)
 systemctl --user reset-failed forge.service
 systemctl --user start forge.service
 ```
 
-The preflight runs the full suite (tests use isolated temp DBs, so it's effectively
-uncontended even with the daemon up). Re-run `uv run pytest` after stopping if you want a
-fully-quiesced gate. A contracts bump leaves the suite red until the pin is adopted — the
-preflight will NO-GO until you do, which is the point.
+The preflight is read-only (it never stops/starts the service or touches the tree) and runs the
+full suite (tests use isolated temp DBs, so it's effectively uncontended even with the daemon up).
+Its dirty-tree NO-GO is scoped to the **deploy surface** (`src config pyproject.toml uv.lock deploy`)
+— a reboot deploys those; other uncommitted tracked files (docs/tests/scripts) and untracked scratch
+docs are reported but never block, so the operator's in-flight `PROMPT_*` docs don't fail the gate
+(D199 scope fix). Re-run `uv run pytest` after stopping if you want a fully-quiesced gate. A contracts
+bump leaves the suite red until the pin is adopted — the preflight will NO-GO until you do, which is
+the point.
 
 ## Verify (within the first minutes)
 

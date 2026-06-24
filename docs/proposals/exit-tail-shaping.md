@@ -1,5 +1,7 @@
 # Exit-parameter sweeping as a CPCV-p25 TAIL lever (in-scope) — scoped, probe-gated
 
+> **STATUS (2026-06-24):** LANDED as a HYGIENE knob (not a wall-mover). The `event_passed_exit` time-cut ladder shipped in v22 [[D170]]; Crucible's attribution found the worst-quartile tail ~60% structurally irreducible → confirmed non-tail [[D165]], with a partial reopen [[D168]] (loosening early time-exits, not truncating). Live in v22; not a promotion unlock. Historical record below.
+
 Status: **✅ FAIR TEST BUILT INTO v22 + DEPLOYED 2026-06-15 ([[D170]]) — the [[D168]] time-cut suspect is now under live OOS
 test.** Crucible answered the range (`FORGE_v22_exit_timecut_fairtest_response.md`): `event_passed_exit.n_bars_after_entry`
 samples the loosening ladder **{3,5,8,13,21}** (was inert → default 3) on a fresh vol_event cohort. **Decisive masking

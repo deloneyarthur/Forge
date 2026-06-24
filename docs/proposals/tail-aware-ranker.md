@@ -1,5 +1,7 @@
 # Tail-Aware Ranking — Design Proposal (F-track successor)
 
+> **STATUS (2026-06-24):** LANDED (retargeted). T1 offline head built [[D140]]/[[D141]]; T2 supply-metric built (shadow) [[D144]]. The live lane shipped as the quality ranker: target moved cpcv_p25 → `wf_p25` and FLIPPED ON in prod [[D193]] (arc [[D189]]–[[D192]]; King retired [[D190]]). The T2 enforcement FLOOR remains un-shipped (gated). Historical design record below.
+
 **Status: §8 DECIDED 2026-06-13 (in-session AskUserQuestion — all six decisions, all
 recommended options). T1 offline head BUILT (D140, 3 commits); the tail-score shadow-wiring
 increment shipped INERT as D141 (`fc1e985`). T1 wiring +

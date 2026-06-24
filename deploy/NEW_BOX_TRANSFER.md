@@ -3,19 +3,41 @@
 Migrating Forge to a new machine. Profile chosen for this transfer:
 
 - **Same user + same paths** (`aj`, `/home/aj/proj/Forge`) → no unit edits.
-- **Bring `forge.db`** → preserve the feedback/learning state.
-- **Flash-drive copy of the working tree** → preserve the uncommitted D103/v9 grammar (last commit is v8).
-- **Forge bundle carries `crucible_contracts`** → it has no git remote and cannot be cloned.
+- **Bring `forge.db`** → preserve the feedback/learning state (months the loop can't reconstruct).
+- **Carry the working tree, not a fresh clone** → it preserves `.git` plus any in-flight,
+  not-yet-committed operator work, and it carries `crucible_contracts`, which has no git remote
+  and cannot be cloned.
 
 The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_new_box.sh` (new box).
 
+> **One stale spot in `setup_new_box.sh` to know about:** it was written for the original v8→v9
+> single-unit transfer. It auto-installs **only** `forge.service`, and its `EXPECTED_CONTRACTS`
+> pin (`1.14.0`) and its `--copy-db`/bundle prose predate the current state. The hard gate it
+> performs is still correct (it reads `FORGE_EXPECTED_CONTRACT_VERSION` off `contracts_check.py`
+> and the contracts `pyproject.toml`, and dies on a mismatch). Run it, then complete the two
+> manual steps this runbook adds below: **(a) install the four timer units** it doesn't, and
+> **(b) verify the contracts version against the live pin** (this doc, not the script's literal).
+
 ---
 
-## The three traps this transfer avoids
+## The traps this transfer avoids
 
-1. **`crucible_contracts` has no git remote.** Forge installs it as an editable dep via the relative path `../crucible_contracts` (`pyproject.toml [tool.uv.sources]`). It must physically travel as a sibling of Forge. Forge gates on **v1.14.0** (`forge.core.contracts_check.FORGE_EXPECTED_CONTRACT_VERSION`); a mismatch halts at startup.
-2. **Uncommitted v9 work.** The working tree has the D103/v9 grammar (`config/grammar.yaml` + 8 src/test files + untracked `config/grammar_archive/v9.yaml`), marked "DEPLOY PENDING" in `STATUS.md`. A fresh `git clone` would land on **v8** and silently drop it. The working-tree copy preserves it (and `.git`, so you can still commit it later).
-3. **`.venv` is not portable.** uv bakes absolute interpreter paths into it. It is excluded from the bundle and rebuilt on the new box with `uv sync`. Same for `.mypy_cache/.ruff_cache/.pytest_cache/.hypothesis`.
+1. **`crucible_contracts` has no git remote.** Forge installs it as an editable dep via the
+   relative path `../crucible_contracts` (`pyproject.toml [tool.uv.sources]`). It must physically
+   travel as a sibling of Forge. Forge gates on the version pinned in
+   `forge.core.contracts_check.FORGE_EXPECTED_CONTRACT_VERSION` (currently **1.20.0**); a
+   mismatch hard-halts at startup (§13.5).
+2. **`.venv` is not portable.** uv bakes absolute interpreter paths into it. It is excluded from
+   the bundle and rebuilt on the new box with `uv sync`. Same for
+   `.mypy_cache/.ruff_cache/.pytest_cache/.hypothesis`.
+3. **`forge.db` is held open + gitignored.** `~/forge_data/forge.db` is a multi-GB DuckDB file
+   (single copy of every submission, verdict, grammar version/proposal, promoted pattern, shadow
+   score). It is under no git, and the running service holds an intermittent RW lock — stop the
+   service before copying so the snapshot is consistent (DuckDB + WAL).
+
+> The grammar on the tree is committed (currently `grammar_version: v22`, archived under
+> `config/grammar_archive/`). Carrying `.git` is for any *in-flight* operator work, not because a
+> clone would drop the grammar — a clean tree is the production tree (D104).
 
 ---
 
@@ -34,11 +56,21 @@ Produces on the drive:
 ```
 /media/aj/FLASHDRIVE/
 ├── proj/
-│   ├── Forge/                 # working tree incl. .git + uncommitted v9
-│   └── crucible_contracts/    # v1.14.0, editable dep
+│   ├── Forge/                 # working tree incl. .git (+ any in-flight work)
+│   └── crucible_contracts/    # editable dep, version must match Forge's pin
 └── forge_data/
-    └── forge.db               # ~1.27 GB accumulated state
+    └── forge.db               # accumulated state
 ```
+
+The bundle carries **only `forge.db`** out of `~/forge_data/`. Everything else there is either
+rebuilt or regenerated on the new box:
+
+- `models/`, `ranker_eval/`, `backups/`, `logs/`, `exports/` — recreated by the daemon and its
+  timers (see below). The daily ranker-eval timer republishes a fresh learned-verdict + wf_p25
+  model within a day, so `models/` need not travel.
+- `king_submissions.db` — **do NOT carry it.** The king/oracle arm was retired (D190); a new box
+  must not stand up any king DB, oracle, or king timer. If a naive copy drags this file along,
+  delete it.
 
 `--stop-service` leaves Forge **stopped** on the old box. To resume producing there
 (e.g. you're not cutting over yet): `systemctl --user start forge.service`.
@@ -51,24 +83,76 @@ Produces on the drive:
 
 ## New box — bootstrap
 
-Mount the drive and run the script straight off it — one command does everything
-(pull bundle into `~/proj` + `~/forge_data` → verify → build → service → smoke test):
+Mount the drive and run the script straight off it — it lays the repos and `forge.db` down,
+verifies the contracts gate, rebuilds the venv, and installs `forge.service`:
 
 ```bash
 /media/aj/FLASHDRIVE/proj/Forge/deploy/setup_new_box.sh --from-bundle /media/aj/FLASHDRIVE
 ```
 
-(The script operates on `~/proj`, not on its own location, so running it from the
-drive is fine — `--from-bundle` lays the repos and `forge.db` down first.)
+(The script operates on `~/proj`, not on its own location, so running it from the drive is fine —
+`--from-bundle` lays the repos and `forge.db` down first.)
 
-`--from-bundle` rsyncs `proj/*` → `~/proj` and `forge_data/forge.db` → `~/forge_data`,
-verifies the contracts version gate, installs uv if absent, rebuilds `.venv`
-(`uv sync --extra dev` — uv provisions Python 3.12 if the box lacks it), ensures the
-data dirs, runs `forge version` + `forge check`, installs and **enables** the systemd
-user unit with linger, and runs the invariant smoke test.
+`--from-bundle` rsyncs `proj/*` → `~/proj` and `forge_data/forge.db` → `~/forge_data`, verifies
+the contracts version gate, installs uv if absent, rebuilds `.venv` (`uv sync --extra dev` — uv
+provisions Python 3.12 if the box lacks it), ensures the data dirs, runs `forge version` +
+`forge check`, installs and **enables** the `forge.service` user unit with linger, and runs the
+invariant smoke test.
 
-It deliberately does **not** start the service (pass `--start` to override) — Crucible
-should come up first.
+It deliberately does **not** start the service (pass `--start` to override) — Crucible should come
+up first.
+
+### Then: install the four timer units (the script does not)
+
+`setup_new_box.sh` installs only `forge.service`. The current system also runs four user timers,
+all defined in `deploy/systemd/`. Symlink + enable them so the new box reproduces the full
+operational set:
+
+```bash
+mkdir -p ~/.config/systemd/user
+for u in forge-ranker-eval forge-backup forge-healthcheck; do
+  ln -sfn ~/proj/Forge/deploy/systemd/$u.service ~/.config/systemd/user/$u.service
+  ln -sfn ~/proj/Forge/deploy/systemd/$u.timer   ~/.config/systemd/user/$u.timer
+done
+systemctl --user daemon-reload
+systemctl --user enable --now forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer
+systemctl --user list-timers 'forge-*'   # confirm all three are scheduled
+```
+
+The full unit set after bring-up:
+
+| Unit | Cadence | Purpose | Provenance |
+|---|---|---|---|
+| `forge.service` | 24/7 daemon | the producer loop (`forge run --loop …`) | — |
+| `forge-ranker-eval.timer` | 05:00 daily | train + eval the learned verdict / wf_p25 model; publish to `~/forge_data/models/` | F3 / D193 |
+| `forge-backup.timer` | 04:00 daily | DR backup of `forge.db` + `models/` | D195 |
+| `forge-healthcheck.timer` | hourly | `forge healthcheck` — detect an alive-but-unproductive daemon (CRITICAL surfaces in `--state=failed`) | D197 |
+
+> **Not in the repo, not reproduced here:** an operator-local `forge-eod-check.timer` (21:00) may
+> exist on the source box; it lives only in `~/.config/systemd/user/` and shells a headless
+> `~/.local/bin/forge-eod-check.sh` that is **not** part of the Forge repo or this bundle. It is an
+> operator reporting hook, not part of Forge's runtime — re-stand it up by hand on the new box if
+> wanted. The daemon and the four repo timers above are the complete Forge-owned set.
+
+### Data directories
+
+`setup_new_box.sh` ensures `~/forge_data/{logs,exports,approvals}` and the Crucible-owned
+`~/optbt_data/{inbox,exports}`. The timer scripts create the rest of `~/forge_data/` on their
+first run — no manual step needed:
+
+- `scripts/daily_ranker_eval.sh` creates `~/forge_data/{models,ranker_eval}` (`mkdir -p`).
+- `scripts/backup_forge_db.sh` creates its destination `~/forge_data/backups`
+  (override via `FORGE_BACKUP_DEST` for a true off-box target — see DR note below).
+
+All scripts the timers invoke ride the tree and are committed executable; verify before enabling:
+
+```bash
+ls -l ~/proj/Forge/scripts/{daily_ranker_eval.sh,backup_forge_db.sh,deploy_preflight.sh}
+# all three should be -rwxr-xr-x; chmod +x any that lost the bit in transit
+```
+
+(`deploy_preflight.sh` (D199) is the read-only pre-deploy GO/NO-GO gate used by the deploy
+ritual, not a timer — but it travels with the tree and should be executable.)
 
 ---
 
@@ -81,11 +165,14 @@ Forge is a consumer of Crucible's runtime. Bring things up in this order:
    `~/optbt_data/exports/` is populated.
 2. **Forge**: `systemctl --user start forge.service`.
 
-The unit runs with `--require-real-cache`, so if Crucible's writer/feature cache is
-not yet up, Forge **skips iterations cleanly** rather than submitting a noise-filtered
-batch — it will not crash, it just waits.
+The unit runs with `--require-real-cache`, so if Crucible's writer/feature cache is not yet up,
+Forge **skips iterations cleanly** rather than submitting a noise-filtered batch — it will not
+crash, it just waits.
 
-Watch: `journalctl --user -u forge.service -f`.
+Watch: `journalctl --user -u forge.service -f`. On a healthy start the journal prints the contracts
+line, `grammar_version: v22`, and the enabled rank/yield axes the unit carries
+(`--cohort-yield` / `--regime-gate-yield` D182/D183; `--quality-rank` D193) before the per-iteration
+prefetch.
 
 ---
 
@@ -93,7 +180,7 @@ Watch: `journalctl --user -u forge.service -f`.
 
 | Path / resource | Owner | Forge's relationship |
 |---|---|---|
-| `~/proj/crucible_contracts` (v1.14.0) | shared | editable dep of **both**; one copy, same dir |
+| `~/proj/crucible_contracts` (version == Forge's pin) | shared | editable dep of **both**; one copy, same dir |
 | `~/optbt_data/inbox/` | Crucible | Forge **writes** candidates here |
 | `~/optbt_data/exports/` | Crucible | Forge **reads** registry / gated / promoted / universe |
 | `~/optbt_data/db_writer.sock` + feature cache | Crucible | needed live for Forge's `--require-real-cache` iterations |
@@ -101,13 +188,27 @@ Watch: `journalctl --user -u forge.service -f`.
 
 ---
 
+## Disaster-recovery note
+
+The `forge-backup` timer (D195) writes verified, retained copies of `forge.db` + `models/` to
+`FORGE_BACKUP_DEST` (default `~/forge_data/backups`). On a single-NVMe box that default is
+**same-disk** — it protects against deletion / bad migration / fs corruption but **not** a physical
+disk failure. For true off-box DR, point `FORGE_BACKUP_DEST` at a mounted external/remote target;
+nothing else changes. **Operator decision pending:** an off-box destination is not yet configured —
+set one on the new box if the host has only one disk.
+
+---
+
 ## Post-migration checklist
 
-- [ ] `cd ~/proj/Forge && uv run forge check` → contracts compat + schema OK
-- [ ] `uv run forge version` shows Forge + contracts 1.14.0
-- [ ] `git -C ~/proj/Forge status` shows the v9 working-tree changes intact
+- [ ] `cd ~/proj/Forge && uv run forge check` → contracts compat (§13.5) + schema OK
+- [ ] `uv run forge version` shows Forge + the contracts version matching the pin (1.20.0)
 - [ ] `du -h ~/forge_data/forge.db` ≈ matches the old box (state came across)
 - [ ] `systemctl --user is-enabled forge.service` → enabled; linger on
+- [ ] `systemctl --user list-timers 'forge-*'` → `forge-ranker-eval`, `forge-backup`,
+      `forge-healthcheck` all scheduled (king arm absent — D190)
+- [ ] `ls ~/proj/Forge/scripts/*.sh` → backup/ranker-eval/preflight scripts present + executable
 - [ ] Crucible up + `~/optbt_data/exports/` populated → start Forge
-- [ ] First batch in `journalctl` loads the registry + grammar without `SchemaVersionMismatch`
-- [ ] When ready: run the D103/v9 deploy ritual from `STATUS.md` to commit v9
+- [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version: v22`) without
+      `SchemaVersionMismatch`
+- [ ] `uv run forge healthcheck` → green (alive AND productive) once a batch or two have run

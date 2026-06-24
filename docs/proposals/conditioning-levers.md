@@ -1,5 +1,7 @@
 # Scoped conditioning levers (D157 reversal): joint/AND-gate + the Q41 realized-vol cheapness gate
 
+> **STATUS (2026-06-24):** PARTIALLY LANDED. The realized-vol cheapness gate (Lever B) was refined to `rv_rank` [[D161]], cleared the hurst-overlap gate [[D164]], and SHIPPED in grammar v22 [[D167]]/[[D170]] (a quality knob, not a promotion unlock). The AND-gate (Lever A) was DE-PRIORITIZED [[D161]] and not built. Historical record below.
+
 Status: **SCOPING 2026-06-15 ([[D159]]) — both change surfaces mapped, no build.** The two cheapest of the
 untried in-scope levers the operator un-held at [[D157]] (this session keeps the enum/grammar lane). Sibling
 to the trend-book cheap-IV lever ([[D158]], `momentum-cheap-iv-conditioning.md`); supersedes Thread 2 of

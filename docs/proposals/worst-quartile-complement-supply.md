@@ -1,5 +1,7 @@
 # Proposal / work-up: worst-quartile complement supply (bear + ranging)
 
+> **STATUS (2026-06-24):** RESOLVED — bear CLOSED for Forge (constant bear hedge is negative-carry; `tail_hedge`-only, keep D066, no §3.5 bearish rule — see the inline DECIDED 2026-06-14 block below). The Forge half of the complement is RANGING only, grown via the v20–v22 mr supply increments ([[D150]]/[[D151]]/[[D167]]). Historical record below.
+
 Status: **WORK-UP (analysis only) — no grammar/code change proposed for direct ship.**
 Date: 2026-06-14 (Sunday review). Author: ranking/grammar investigation.
 Relates to: `tail-aware-ranker.md` (T2/T3a), D144 (`regime_supply`), [[promotion-gate-tiers-and-constraint]].

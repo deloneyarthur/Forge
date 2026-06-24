@@ -1,5 +1,7 @@
 # Proposal / scoping: edge-magnitude — regime-orthogonal arms (the promotion unlock)
 
+> **STATUS (2026-06-24):** SCOPING — research framing, no code shipped off this doc. The ranging-supply increments shipped separately ([[D150]]/[[D151]] grew mr supply; v22 added the `rv_rank` mr gate); bear was CLOSED for Forge (`worst-quartile-complement-supply.md`). The deeper "regime-orthogonal unlock" lands in Path C, which remains HELD. Historical record below.
+
 Status: **SCOPING (research framing) — no code; defines the problem, the paths, and the first
 experiments.** Date: 2026-06-14. Relates to: [[D146]] (the magnitude reframe), [[D148]] (Crucible
 greenlight + the "regime-orthogonal arms" pointer), `edge-magnitude-levers.md` (the expressivity

@@ -1,5 +1,7 @@
 # Path C — defined-risk scope expansion (grammar v2): PARKED resume dossier
 
+> **STATUS (2026-06-24):** OPEN / PARKED — still the active resume entry point. Path C (spreads, grammar v2) remains HELD as the last resort per the "exhaust long options before v2 spreads" operator directive; the provability gate is satisfied but the operator chose to hold. No change as of D200. Resume dossier below.
+
 Status: **PARKED 2026-06-15 (operator) — explore later "when the time arises."** This is the single
 entry point for resuming the Path-C question. It consolidates the decision, the resume signals, and the
 first step; it does **not** re-derive the analysis — the detail lives in the docs cross-referenced below.

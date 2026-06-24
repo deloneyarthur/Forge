@@ -1,5 +1,7 @@
 # Proposal: throughput cut — bound the submission queue + match Crucible's drain rate
 
+> **STATUS (2026-06-24):** LANDED (different mechanism). Options A/B as scoped here were DECLINED 2026-06-14, but the §7.3 straggler diagnosis below drove the real fix: backpressure implemented [[D196]] (`STRANDED_AFTER` 8d→5d + an aggregate `max_inflight` depth block) and DEPLOYED [[D200]] (Tier-1 5d + Tier-2 cap 600, both journal-verified). The diagnosis-of-record below is accurate; the "not building" line refers only to the queue-depth/top-N brakes, since superseded. Historical record.
+
 Status: **PROPOSAL — option A (queue-depth brake) build DECLINED by operator 2026-06-14; not building.**
 The queue runaway (41,842, +10k/day) is accepted for now — per [[D146]] the un-drained capacity has
 **no promotion cost** (the wall is edge magnitude, not volume); the residual cost is Crucible

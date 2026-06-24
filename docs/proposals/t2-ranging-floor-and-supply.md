@@ -1,5 +1,7 @@
 # Proposal: T2 ranging-complement floor + mean_reversion (ranging) supply growth
 
+> **STATUS (2026-06-24):** PARTIALLY LANDED. The ranging SUPPLY-growth half shipped: grammar v20 added the `hurst` mr R1 gate + biased the regime draw toward ranging [[D150]], and v21 enabled mr RANK [[D151]]; v22 added `rv_rank` [[D167]]. The T2 enforcement FLOOR itself remains un-shipped (gated on complement supply + the §8.6 criterion + F3). Historical record below.
+
 Status: **SCOPING — awaiting operator sign-off on the supply lever (the grammar/enumeration change).**
 Date: 2026-06-14. Greenlit by [[D148]] (`FORGE_greenlight_ranker_wiring_and_ranging.md`, operator-approved).
 Ships *together* (Crucible: the floor alone only caps trend). Relates to [[D103]] (the existing
