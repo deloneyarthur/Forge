@@ -1706,12 +1706,14 @@ _COHORT_TREND = "trend_continuation"
 # {trend/mr/em: 0.5}. The refactor to `_cohort_xsect_probability` MUST reproduce
 # this exact rng sequence when cohort_yield_weights is None (hard rule #6).
 _COHORT_GOLDEN_PRE_REFACTOR = [
+    # Rebaselined 2026-06-24 (D206): threshold auto-tightening retired -> D031
+    # baseline ranges. Prior values in git history (pre-D206).
     "dc125d8f4e014630",
     "4710371b04fac3d0",
     "ab843a6efc8108ca",
     "174df1ffb521246b",
     "d6441978c5b40ea4",
-    "6de7ce1f9fbd6159",
+    "90173a14a932fa53",
     "c784f43ffe11d57a",
     "c7aada72922e629c",
     "9c25b03b9c6e087a",
@@ -1896,18 +1898,20 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # regime draw fires for every config, so this pins that adding the learned param
 # preserves the D150/uniform rng sequence when the map is absent (hard rule #6).
 _REGIME_GOLDEN_PRE = [
-    "93caf046c1d3ea80",
-    "5ca73cb9010aa051",
+    # Rebaselined 2026-06-24 (D206): threshold auto-tightening retired -> D031
+    # baseline ranges. Prior values in git history (pre-D206).
+    "1f4d7e099c2af3f4",
+    "abf5a8f192fa7e56",
     "5d9a069f03702cf5",
     "8a544b31ee7454e8",
-    "23a84bcddef209ac",
+    "503c26e1a149ab57",
     "0e6f61d70f81162c",
-    "ae0700d3adbce2e9",
+    "5ea3d71824f67c84",
     "09e33bc848443ddc",
     "6132886f1be9c461",
     "71fef98d23a281d6",
     "c82d5490f221b353",
-    "a5a4d48c3720f95e",
+    "851a1342351e096e",
     "9b510202bffbd679",
     "2e4054a200aca442",
     "5b0c7bd6a1772e0d",

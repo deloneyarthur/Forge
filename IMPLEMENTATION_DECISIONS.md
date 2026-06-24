@@ -5102,3 +5102,19 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Files:** `STATUS.md`, `PROMPT_CRUCIBLE_FAILED_RUN_FEEDBACK.md`, this entry. One-off script: `scratchpad/flush_failed_inflight.py` (not vendored). Live data: `forge.db.submissions` (3,286 rows `submitted`→`gated`/sentinel); backup at `~/forge_data/forge.db.bak-pre-flush-20260624` (removable once stable).
 
 **STATUS: submitter UNBLOCKED + producing; §7.3 cap healthy (bounds genuine in-flight only). Durable fix PENDING Crucible (relay ready to pass).**
+
+---
+
+## D206 — 2026-06-24 — Retire the D073 threshold auto-tightening path
+
+**Spec section:** §5, §8.4, hard rule #4; lineage D073 / D031 / D085 / D171 / D034
+
+**Decision:** Retire indicator-threshold auto-tightening. `config/auto_tightened_thresholds.yaml` is emptied to `tightenings: []` (with a retirement note), so `indicator_thresholds._auto_tightenings()` returns `{}` and the sampler falls back to the D031 audited baselines for every (indicator, role). Operator-approved loosening (hard rule #4) via OPEN_PROPOSALS proposal `c4d68531-af31-4ba2-89d8-04bad80c48a5` ("retire now (one deploy)", 2026-06-24).
+
+**Rationale:** From the 2026-06-24 prefilter-tightening review ("helping or hurting?"). (1) FLAT AXIS — Q43→D171 confirmed the per-config threshold response is flat on the binding constraint (CPCV-p25): adx/momentum/hurst flat, rv_rank/iv_rank only faint CENTER effects, nothing on the tail. Tightenings cannot lift promotability and were not Goodharting (no edge gradient). (2) WASTE SOLVED — the live gated export (2026-06-24, 10k window) is 8,914/10,000 high-trade (≥10 trades); the zero-trade waste this path targeted is gone, owed to the D076 empirical-prior expected_trades filter + grammar maturation, not threshold selection. (3) MONOCULTURE RISK — the active set was a one-shot from 2026-05-27 (~v3-v5 cohort, never re-run); re-deriving per-(indicator,role) 5–95% bands off the current rolling 10k export (~3 days, all v21/v22, ~76% trend) would entrench the trend monoculture the pool must diversify away from (worst-quartile OOS is BEAR/RANGING-paid). The path was already inert (manual one-shot; the §5.5 calibration auto-tune never fired a tighten in the ~0% promotion regime — `prefilter.yaml` byte-frozen since D076).
+
+**Alternatives considered:** (a) Refresh the proposer on the current cohort — rejected: flat axis → no lift, plus monoculture-entrenchment risk. (b) Leave frozen — viable (the 16 entries are near-inert) but keeps a dead moving part calibrated to an obsolete grammar. (c) Delete the file outright — equivalent (loader is defensive: missing file → {}), but a documented empty file is more discoverable.
+
+**Action:** `tightenings: []` + retirement note in the YAML. `auto_tightenings_fingerprint()` → fixed empty-set hash `4f53cda18c2baa0c`; `enumeration_inputs_hash` shifts accordingly — a deliberate one-time enumeration-identity change, expected and tracked per D085 (no batch-id collision). Rebaselined two determinism goldens in `tests/unit/test_enumeration/test_sampler.py` (`_COHORT_GOLDEN_PRE_REFACTOR`, `_REGIME_GOLDEN_PRE`) to the post-retirement baseline-range sequence (captured under the tests' exact fixtures; now coupled to fixed D031 constants rather than the mutable YAML). Full suite 1698 passed. Deployed via the D104 ritual (preflight GO → stop → commit → restart → verify). Also in the same window: declined the 18 pre-D034 `gate_failure_concentration` proposal fossils — OPEN_PROPOSALS.md REJECTED in-file (commit b5038c5) + DB `grammar_proposals` rejected via `forge grammar reject-proposal` (the trigger is guarded off at source by the D034 `promoted_count==0` check, so they cannot regenerate). Reversible: restore the YAML from git (commit 85c1df5) + redeploy.
+
+**STATUS: threshold auto-tightening RETIRED + live. Promotability frontier remains magnitude + diversity (ranker/quality lane D193, grammar Path C), not threshold selection.**

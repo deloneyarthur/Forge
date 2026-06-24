@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-24 — THRESHOLD AUTO-TIGHTENING RETIRED (D206) + 18 pre-D034 proposal fossils declined. Emptied `config/auto_tightened_thresholds.yaml` → enumeration falls back to the D031 baselines. Operator-approved loosening (OPEN_PROPOSALS c4d68531, hard rule #4); deployed via the D104 ritual.
+
+**Operator: "is prefilter tightening helping or hurting?" → analyzed → "retire now (one deploy)." Full record: [[D206]].**
+- **Why retire:** FLAT AXIS (Q43→[[D171]]: threshold response flat on CPCV-p25 → no promotability lift, not Goodharting); zero-trade waste already SOLVED (8,914/10,000 gated runs high-trade, owed to D076 + grammar maturation); MONOCULTURE-entrenchment risk (re-deriving 5–95% bands off the 3-day, all-v21/v22, ~76%-trend cohort). Path was already inert — manual one-shot last run 2026-05-27; §5.5 calibration auto-tune never fired a tighten (`prefilter.yaml` frozen since D076).
+- **Change:** `tightenings: []` → `_auto_tightenings()` returns {} → D031 baselines for every (indicator, role). `auto_tightenings_fingerprint()` → empty-set `4f53cda1…`; `enumeration_inputs_hash` shifts (deliberate, tracked per [[D085]] — no batch-id collision). Rebaselined 2 determinism goldens in `test_sampler.py` (now coupled to fixed D031 constants, not the mutable YAML). Full suite 1698 passed. Reversible via git (commit 85c1df5).
+- **Also:** declined 18 degenerate pre-D034 `gate_failure_concentration` proposals — OPEN_PROPOSALS REJECTED in-file (commit b5038c5) + DB rejected this window. Trigger guarded off at source ([[D034]] `promoted_count==0`) → cannot regenerate.
+- **Deploy:** preflight GO (1698 passed) → stop → DB reject 18 → commit → restart. **[verification: MainPID/NRestarts/journal appended post-restart]**
+
+---
+
 ## 2026-06-24 — §7.3 DEPTH-CAP WEDGE CLEARED (D205): submitter was blocked ~9h on phantom in-flight depth (3,300 vs cap 600); flushed 3,286 un-reconcilable Crucible-FAILED submissions (the 06-22 pool-crash cohort) → resumed. Durable fix relayed to Crucible.
 
 **Operator: "why is Forge stuck" → diagnosed → "drive it" → cleared. Full record: [[D205]].**

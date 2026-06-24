@@ -533,7 +533,7 @@ decision_marker: null
 
 ---
 proposal_id: c4d68531-af31-4ba2-89d8-04bad80c48a5
-status: PENDING
+status: APPROVED
 proposed_at: '2026-06-24T21:53:57+00:00'
 proposal_type: loosen
 target: retire_threshold_tightening
@@ -581,3 +581,6 @@ proposal_yaml: |
   #     suite -> restart -> verify journal) with a Decision Log entry.
   #   - Optional: also retire scripts/propose_threshold_tightenings.py and the
   #     loader. Fully reversible via git (restore the YAML).
+decided_at: '2026-06-24T22:30:30+00:00'
+decided_by: operator-directed retirement (effort-max session 2026-06-24, "retire now (one deploy)"); applied via the D104 deploy ritual — auto_tightened_thresholds.yaml emptied to an empty tightenings list; recorded in D206
+decision_marker: null
