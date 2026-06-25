@@ -5136,3 +5136,20 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Scope/safety:** Additive, NOT wired into the production loop (the daemon never reads it) → reboot-safe; committed but not deployed (a read-only command needs no restart). DB access mirrors `ranker-model --forge-db` (caller snapshots the live DB under its RW lock; friendly lock-error hint on failure). New files: `src/forge/feedback/alpha_budget.py` (pure math + aggregation), `src/forge/cli/alpha_budget_cmd.py` (DB read + format + glue), registered with one line in `cli/main.py`. Tests: `tests/unit/test_feedback/test_alpha_budget.py` (benchmark values vs LdP, aggregation, natural version sort) + `tests/unit/test_cli/test_alpha_budget.py` (DB round-trip, format, CLI smoke). 11 new tests; ruff + mypy --strict clean; CLI+feedback scope 372/0. MANPAGE updated.
 
 **STATUS: shipped (committed, not deployed). First of the Tier-1 honesty/loop-integrity items; next — pre-registration registry (1a-ii), champion/challenger model-adoption gate (1c).**
+
+---
+
+## D208 — 2026-06-25 — Pre-registration registry + post-cut confirmation (`forge prereg`)
+
+**Spec section:** §8.4 (auto-tightening triggers fire on the motivating cohort); hard rules #6/#8 satisfied (deterministic id from sha256; clock via `forge.core.clock`). Implements the GRAMMAR_REVIEW §5 "pre-register every prune/retarget and confirm payoff on a *later* time-cut cohort (never the cohort that motivated it)" prerequisite, owned by no prior work.
+
+**Decision:** Add `forge prereg` (register/list/resolve) backed by `forge.feedback.preregistration` — Tier-1a, the post-selection-bias rung below the alpha budget (D207). §8.4 acts on the same cohort that revealed a pattern ("0 promotions in 200+ submissions with param Z above T → tighten Z", confirmed on that very batch) — guaranteed to look good. More importantly, Forge's *consequential* prunes/retargets (D158/159/160 lever scoping, the D191 wf_p25 retarget, the upcoming Q17 stub suppression) are manual operator decisions that never pass through `proposer.py`. Pre-registration records the claim with a cohort cut BEFORE the confirming data exists; confirmation reads only post-cut rows.
+
+**Design (deliberate):**
+- **Decision-agnostic registry, not an actuator.** The module stores claims and supplies `confirm_promotion_claim(rows, *, cohort_cut, predicted_max_rate, min_samples)`, whose single job is to structurally drop every row at-or-before the cut — the anti-cheat guard is the tested core. Predicate-matching (which configs a claim is *about*) is the caller's: claims are too varied to generalise, and the operator runs the post-cut query for `resolve`.
+- **Git-tracked JSONL** (`config/preregistrations.jsonl`): the prediction is committed before its test, so version control supplies the tamper-evidence. `resolve` rewrites the entry's status (git diff preserves the original).
+- **Proposer rewire deliberately deferred.** Changing `propose()` from act-now to register-then-confirm is a behaviour change to the feedback loop and a separate gated step; the standalone registry serves the manual decisions (the majority) now. D206 already retired the main threshold auto-path, lowering the urgency.
+
+**Scope/safety:** Additive, not wired into the production loop → reboot-safe; not deployed (CLI + read/write of a tracked file). New files: `src/forge/feedback/preregistration.py`, `src/forge/cli/prereg_cmd.py`, registered with one `add_typer` line. Tests: `tests/unit/test_feedback/test_preregistration.py` (anti-post-selection guard incl. exactly-at-cut exclusion, registry round-trip) + `tests/unit/test_cli/test_prereg.py` (register/list/resolve, validation). 13 new tests; ruff + mypy --strict clean; CLI+feedback scope 385/0. MANPAGE updated.
+
+**STATUS: shipped (committed, not deployed). Tier-1a (1a-i + 1a-ii) complete; next — champion/challenger model-adoption gate (1c), Q17 stub suppression.**

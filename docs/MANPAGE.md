@@ -317,6 +317,24 @@ coordination item, not pre-judged. Snapshot the live DB first (the daemon holds 
 cp ~/forge_data/forge.db /tmp/snap.db && forge alpha-budget --forge-db /tmp/snap.db
 ```
 
+### forge prereg
+
+Pre-register a prune/retarget, then confirm it on a *later* cohort (Tier-1a honesty discipline,
+D208). The §8.4 auto-tightening triggers — and most manual prunes — observe a pattern in a cohort
+and act on the same cohort that revealed it (post-selection bias). `forge prereg register` records
+the claim with a `--cohort-cut`; only data after the cut may confirm it, and `forge prereg resolve`
+takes operator-supplied post-cut evidence. The registry is a git-tracked JSONL
+(`config/preregistrations.jsonl`) so the prediction is committed before its test; the
+`confirm_promotion_claim` guard (in `forge.feedback.preregistration`) structurally drops pre-cut
+rows for programmatic callers. Read/write only — no production-loop or grammar change.
+
+```
+forge prereg register --claim "adx<10 never promotes" --predicted "<= 0.005" \
+    --action "tighten adx lower bound" --cohort-cut 2026-06-25T00:00:00
+forge prereg list --open-only
+forge prereg resolve <id> --outcome confirmed --evidence "post-cut rate 0.002 (n=120)"
+```
+
 ### forge grammar list-proposals
 
 List pending refinement proposals. Recurring themes (3+ pending) tagged `[PERSISTENT]`.

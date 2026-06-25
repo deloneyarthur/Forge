@@ -33,6 +33,7 @@ from forge.cli.alpha_budget_cmd import cmd_alpha_budget
 from forge.cli.feedback_cmd import cmd_feedback
 from forge.cli.grammar_cmd import grammar_app
 from forge.cli.healthcheck_cmd import cmd_healthcheck
+from forge.cli.prereg_cmd import prereg_app
 from forge.cli.ranker_model_cmd import ranker_model_app
 from forge.cli.status_cmd import cmd_status
 from forge.core.logging import configure_logging
@@ -2489,6 +2490,7 @@ app.command("healthcheck")(cmd_healthcheck)
 app.command("status")(cmd_status)
 app.command("alpha-budget")(cmd_alpha_budget)
 app.add_typer(grammar_app, name="grammar")
+app.add_typer(prereg_app, name="prereg")
 app.add_typer(ranker_model_app, name="ranker-model")
 
 
