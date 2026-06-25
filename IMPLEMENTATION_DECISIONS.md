@@ -5187,3 +5187,25 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Action:** `OPEN_QUESTIONS.md` Q17 banner-resolved (RESOLVED/STALE). No code, grammar, filter, or enumeration change → determinism untouched, stream unchanged. Method note: this is the measure-before-acting / pre-registration discipline (D208) in practice — the premise was tested against current data, refuted, and the action declined.
 
 **STATUS: Q17 CLOSED-as-stale. No suppression. `relative_value` confirmed healthy + diversity-valuable on the current pool.**
+
+---
+
+## D211 — 2026-06-25 — Adopt `crucible_contracts` 1.21.0 (premium-R exit family) — validated NO-OP, pin-only
+
+**Spec section:** §13.5 (contracts SemVer pin), hard rule #2; lineage D176 / D200.
+
+**Decision:** Bump `FORGE_EXPECTED_CONTRACT_VERSION` 1.20.0 → 1.21.0 + adopt `uv.lock` (operator already staged the `uv.lock` bump). Operator-directed ("adopt contracts 1.21.0").
+
+**What 1.21.0 adds (contracts `a13b354`, the D333 premium-R exit family):** `KNOWN_EXIT_IDS += delta_floor_stop / premium_r_target / premium_r_time_stop` (18→21); `STOP_LOSS_EXIT_IDS += delta_floor_stop`; `SelectorSpec.stop_atr_mult` (the underlying-R basis).
+
+**Validated NO-OP for Forge (the critical pre-deploy check):**
+- **config_hash byte-identical.** `stop_atr_mult` is a None-sentinel DROPPED from `StrategyConfig.config_hash` when unset (mirrors the 1.19.0 rank fields). Forge's sampler never sets it → it drops → no config re-keys. Contracts' golden-hash suite confirms byte-identity; Forge's own full determinism-golden suite confirms it independently.
+- **MANDATORY_EXIT_IDS unchanged** → every `tuple(sorted(MANDATORY_EXIT_IDS))` usage + the `e1_mandatory` goldens are unaffected.
+- **STOP_LOSS_EXIT_IDS grew by `delta_floor_stop`,** but no Forge config composes it (not enumerated), so the E2 `at_most_two_stop_loss_exits` count is unchanged for every Forge config.
+- **KNOWN_EXIT_IDS is not imported by Forge;** the 3 new exit ids are grammar-gated (Forge S3.5 E2, unbuilt) → NOT auto-enumerated. They become a real lever only via a future, separate, operator-gated grammar bump that enumerates them.
+
+**Gate:** FULL suite GREEN — **1723 passed** — with the pin bumped + `uv.lock` at 1.21.0. This empirically confirms the no-op: the pin-match test (`test_contracts_integration.py:56`) flips green and all determinism goldens pass.
+
+**Deploy:** pin + comment + `uv.lock` committed. The running daemon (D206-era process, in-memory 1.20.0) is behaviorally identical under 1.21.0 (no-op); a reboot now starts cleanly (pin 1.21.0 == installed 1.21.0), and the §13.5 startup check + the healthcheck contracts WARN clear on commit. A proactive `forge.service` restart to load 1.21.0 in-memory is the only remaining step and is operator-gated — NOT auto-restarted (operator said "adopt", not "deploy/restart"); behaviorally moot since it is a pure no-op.
+
+**STATUS: contracts 1.21.0 ADOPTED (pin + uv.lock committed, full suite 1723 green, validated no-op). Daemon in-memory restart left as the operator-gated final step (moot — pure no-op).**

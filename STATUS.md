@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-06-25 — CONTRACTS 1.21.0 ADOPTED (D211) — premium-R exit family; validated NO-OP, pin-only. Pin 1.20.0→1.21.0 + `uv.lock`; FULL suite GREEN (1723). Daemon in-memory restart left operator-gated (moot — pure no-op).
+
+**Operator: "adopt contracts 1.21.0."**
+- **1.21.0 = the D333 premium-R exit family:** `KNOWN_EXIT_IDS` 18→21 (`delta_floor_stop`/`premium_r_target`/`premium_r_time_stop`), `STOP_LOSS_EXIT_IDS += delta_floor_stop`, `SelectorSpec.stop_atr_mult`.
+- **NO-OP for Forge (verified):** `config_hash` byte-identical (`stop_atr_mult` None-dropped, Forge never sets it — contracts golden-hash + Forge determinism goldens both confirm); `MANDATORY_EXIT_IDS` unchanged; no Forge config composes `delta_floor_stop` (E2 count unchanged); `KNOWN_EXIT_IDS` not imported; the 3 new exits are grammar-gated (Forge S3.5 E2, unbuilt) → not auto-enumerated.
+- **Gate + commit:** FULL suite **1723 passed** with pin=1.21.0 + uv.lock=1.21.0 (pin-match test flips green). Committed (pin comment + `uv.lock`).
+- **Deploy state:** reboot-safe now (pin==installed); healthcheck contracts WARN clears on commit. The running daemon is a no-op-equivalent on 1.20.0-in-memory; a proactive `forge.service` restart to load 1.21.0 is the operator-gated final step (behaviorally moot). The 3 new exit ids become a real lever only via a future grammar bump that enumerates them (operator-gated).
+
+---
+
 ## 2026-06-25 — HONESTY/LOOP-INTEGRITY PROGRAM kicked off (Tier-1 of the "unturned stones" audit). Tier-1a SHIPPED: D207 `forge alpha-budget` (multiple-testing ledger — stream submits with `search_n_trials` unset → Crucible's DSR charges n_trials=1, never deflating for search breadth) + D208 `forge prereg` (pre-registration vs the §8.4 same-cohort post-selection bias) + D209 learned-lane drift monitor in `forge healthcheck`. Committed; CLI/telemetry, no loop wiring (drift checks go live on the next hourly healthcheck tick — no daemon restart).
 
 **Operator: "anything we're missing for improving strategies? have we unturned every stone?" → 4-agent audit → "lets start working on them all." The unturned stones cluster in methodology/honesty + feedback-loop integrity (the seams no prior review owns), plus one in-scope grammar lever (exit/holding-period timing).**

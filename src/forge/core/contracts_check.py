@@ -50,7 +50,16 @@ from crucible_contracts import (
 # config_hash (assembly-side, Forge neither computes nor reads it); and the per-component
 # CombinerSpec.rebalance_frequency Forge generates (sampler.py) stays identity-bearing
 # inside each StrategyConfig.config_hash, so Forge config_hashes are UNCHANGED. Pin-only.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.20.0"
+# 1.21.0 (D211): premium-R exit family — KNOWN_EXIT_IDS += delta_floor_stop / premium_r_target /
+# premium_r_time_stop (18->21); STOP_LOSS_EXIT_IDS += delta_floor_stop; SelectorSpec.stop_atr_mult
+# (None-sentinel, DROPPED from StrategyConfig.config_hash when unset — contracts' golden-hash suite
+# confirms byte-identity). NO-OP for Forge — verified: config_hash UNCHANGED (Forge never sets
+# stop_atr_mult so it drops); MANDATORY_EXIT_IDS unchanged (every determinism golden + e1_mandatory
+# safe); STOP_LOSS_EXIT_IDS grew but no Forge config composes delta_floor_stop (the E2
+# at_most_two_stop_loss count is unchanged); KNOWN_EXIT_IDS is not imported by Forge; the 3 new exit
+# ids are grammar-gated (Forge S3.5 E2, unbuilt) so they are NOT auto-enumerated — they go live only
+# when Forge bumps grammar to enumerate them. Pin-only; full suite green confirms.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.21.0"
 
 
 def check_contracts_version() -> str:
