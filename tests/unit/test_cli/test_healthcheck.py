@@ -12,6 +12,7 @@ from forge.cli.healthcheck_cmd import (
     Level,
     check_contracts_pin,
     check_file_freshness,
+    check_learning_drift,
     check_loop_liveness,
     check_service_active,
     check_submission_progress,
@@ -105,3 +106,25 @@ def test_contracts_pin_levels() -> None:
     assert check_contracts_pin("1.19.0", "1.20.0").level is Level.WARN
     # major drift -> CRITICAL (the daemon would hard-halt at startup).
     assert check_contracts_pin("1.19.0", "2.0.0").level is Level.CRITICAL
+
+
+def test_learning_drift_levels() -> None:
+    kw = {
+        "label": "wf_p25",
+        "warn_below": 0.0,
+        "critical_below": -0.10,
+        "regression_delta": 0.25,
+    }
+    # No eval data yet -> WARN (informational; mirrors "no backup found").
+    assert check_learning_drift([], **kw).level is Level.WARN
+    # Clearly anti-predictive latest -> CRITICAL (the live lane is mis-ranking).
+    assert check_learning_drift([0.3, 0.2, -0.15], **kw).level is Level.CRITICAL
+    # Weak (at/below the warn floor) but not anti-predictive -> WARN.
+    assert check_learning_drift([0.3, 0.2, -0.02], **kw).level is Level.WARN
+    # Healthy and stable -> OK.
+    assert check_learning_drift([0.30, 0.32, 0.31, 0.33], **kw).level is Level.OK
+    # Healthy latest, but a sharp drop vs its own trailing median -> WARN (drift).
+    # median([0.50, 0.52, 0.51]) = 0.51; 0.20 <= 0.51 - 0.25 -> regression WARN.
+    assert check_learning_drift([0.50, 0.52, 0.51, 0.20], **kw).level is Level.WARN
+    # Short history (< min_history) skips the regression check -> no false alarm.
+    assert check_learning_drift([0.9, 0.2], **kw).level is Level.OK

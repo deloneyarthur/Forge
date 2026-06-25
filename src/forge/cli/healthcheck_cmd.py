@@ -31,12 +31,14 @@ WARN stays informational in the journal.
 from __future__ import annotations
 
 import enum
+import json
 import re
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from statistics import median
 
 import typer
 
@@ -223,6 +225,60 @@ def check_contracts_pin(pinned: str, installed: str) -> HealthResult:
     )
 
 
+# Drift floors for the learned lanes surfaced by `forge status`. CRITICAL = the lane
+# is clearly anti-predictive (worse than no model); the WARN floor = it has lost its
+# edge over the §6.2 composite. Conservative, to avoid crying wolf on a noisy small-n
+# checkpoint — the regression check (vs the lane's own trailing median) catches drift
+# that stays above the floor.
+_F3_WARN_BELOW: float = 0.0
+_F3_CRITICAL_BELOW: float = -0.05
+_TAIL_WARN_BELOW: float = 0.0
+_TAIL_CRITICAL_BELOW: float = -0.10
+
+
+def check_learning_drift(
+    values: Sequence[float],
+    *,
+    label: str,
+    warn_below: float,
+    critical_below: float,
+    regression_delta: float,
+    min_history: int = 4,
+) -> HealthResult:
+    """Flag a learned model that has degraded — the drift a blind daily retrain invites.
+
+    Model adoption is newest-wins (`ranking/model.py`): a bad rotation silently goes
+    live and only a human reading `forge status` would catch it. This makes it loud.
+    `values` are the qualifying shadow-eval checkpoints (oldest->newest) for one lane —
+    AUC margin for F3, Spearman for the wf_p25 tail. CRITICAL when the latest is at or
+    below the anti-predictive floor; WARN when it is merely weak or has dropped sharply
+    from its own trailing median. Complements D192 continuous training (catches
+    regressions) without holding back improvements (no champion/challenger gate).
+    """
+    if not values:
+        return HealthResult(label, Level.WARN, f"{label}: no qualifying eval checkpoints yet")
+    latest = values[-1]
+    if latest <= critical_below:
+        return HealthResult(
+            label,
+            Level.CRITICAL,
+            f"{label} degraded: latest {latest:+.3f} <= floor {critical_below:+.3f}",
+        )
+    if len(values) >= min_history:
+        prior_median = median(values[-min_history:-1])
+        if latest <= prior_median - regression_delta:
+            return HealthResult(
+                label,
+                Level.WARN,
+                f"{label} regressed: latest {latest:+.3f} vs trailing median {prior_median:+.3f}",
+            )
+    if latest <= warn_below:
+        return HealthResult(
+            label, Level.WARN, f"{label} weak: latest {latest:+.3f} <= floor {warn_below:+.3f}"
+        )
+    return HealthResult(label, Level.OK, f"{label} ok (latest {latest:+.3f})")
+
+
 def _newest_mtime(directory: Path, pattern: str) -> datetime | None:
     if not directory.is_dir():
         return None
@@ -234,6 +290,32 @@ def _newest_mtime(directory: Path, pattern: str) -> datetime | None:
     if newest is None:
         return None
     return datetime.fromtimestamp(newest, tz=utc_now().tzinfo)
+
+
+def _read_metric_series(path: Path, metric_key: str) -> list[float]:
+    """Qualifying metric values (oldest->newest) from a ranker-eval streak JSONL.
+
+    Mirrors `forge status`: skip non-qualifying checkpoints (stall day / single-class
+    window) so the drift verdict isn't tripped by a known-degenerate eval. Cheap and
+    lock-free — the JSONL clocks carry no DB lock.
+    """
+    if not path.is_file():
+        return []
+    out: list[float] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(rec, dict) or not rec.get("qualifies"):
+            continue
+        value = rec.get(metric_key)
+        if isinstance(value, (int, float)):
+            out.append(float(value))
+    return out
 
 
 def _gather_journal(window_hours: float) -> JournalState | None:
@@ -293,6 +375,9 @@ def cmd_healthcheck(
     loop_critical_minutes: float = typer.Option(
         30.0, help="CRITICAL if no loop iteration in this many minutes"
     ),
+    drift_regression_delta: float = typer.Option(
+        0.25, help="WARN if a learned lane's metric drops this far below its trailing median"
+    ),
 ) -> None:
     """Report daemon health (alive AND productive); exit 0/1/2 = OK/WARN/CRITICAL."""
     from crucible_contracts import CONTRACT_VERSION
@@ -346,6 +431,29 @@ def cmd_healthcheck(
     )
     results.append(check_contracts_pin(FORGE_EXPECTED_CONTRACT_VERSION, CONTRACT_VERSION))
 
+    # Learned-lane drift: a blind daily retrain (newest-wins adoption) can rotate a
+    # degraded model live; catch it loudly instead of waiting for a human to read the
+    # `forge status` clocks. Reads the same JSONL clocks (no DB).
+    eval_dir = data_root / "ranker_eval"
+    results.append(
+        check_learning_drift(
+            _read_metric_series(eval_dir / "streak.jsonl", "auc_margin"),
+            label="F3 ranker drift",
+            warn_below=_F3_WARN_BELOW,
+            critical_below=_F3_CRITICAL_BELOW,
+            regression_delta=drift_regression_delta,
+        )
+    )
+    results.append(
+        check_learning_drift(
+            _read_metric_series(eval_dir / "robustness_streak_wfp25.jsonl", "spearman"),
+            label="wf_p25 drift",
+            warn_below=_TAIL_WARN_BELOW,
+            critical_below=_TAIL_CRITICAL_BELOW,
+            regression_delta=drift_regression_delta,
+        )
+    )
+
     overall = max((r.level for r in results), default=Level.OK)
     for r in results:
         typer.echo(f"[{r.level.name:^4}] {r.name}: {r.message}")
@@ -362,6 +470,7 @@ __all__ = [
     "Level",
     "check_contracts_pin",
     "check_file_freshness",
+    "check_learning_drift",
     "check_loop_liveness",
     "check_service_active",
     "check_submission_progress",

@@ -5153,3 +5153,21 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Scope/safety:** Additive, not wired into the production loop → reboot-safe; not deployed (CLI + read/write of a tracked file). New files: `src/forge/feedback/preregistration.py`, `src/forge/cli/prereg_cmd.py`, registered with one `add_typer` line. Tests: `tests/unit/test_feedback/test_preregistration.py` (anti-post-selection guard incl. exactly-at-cut exclusion, registry round-trip) + `tests/unit/test_cli/test_prereg.py` (register/list/resolve, validation). 13 new tests; ruff + mypy --strict clean; CLI+feedback scope 385/0. MANPAGE updated.
 
 **STATUS: shipped (committed, not deployed). Tier-1a (1a-i + 1a-ii) complete; next — champion/challenger model-adoption gate (1c), Q17 stub suppression.**
+
+---
+
+## D209 — 2026-06-25 — Learned-lane drift monitor in `forge healthcheck` (1c, drift half)
+
+**Spec section:** §8.6 (learning clocks); implements LEARNED_SYSTEMS_REVIEW B6 (drift monitoring) and answers B5 (the streak gate is telemetry-only — nothing acts on a FAIL).
+
+**Decision:** Add two learning-drift checks to `forge healthcheck`, one per learned lane (F3 verdict-ranker AUC margin; wf_p25 tail Spearman). They read the same `~/forge_data/ranker_eval/*.jsonl` clocks `forge status` prints (qualifying checkpoints only, no DB) and verdict: CRITICAL if the latest is at/below the anti-predictive floor (the lane is mis-ranking — worse than no model), WARN if it is merely weak (lost its edge over the §6.2 composite) or has dropped sharply from its own trailing median (drift). Surfaced hourly by the existing `forge-healthcheck` timer; CRITICAL marks the unit failed, so a bad model rotation is LOUD instead of silent.
+
+**Why drift-monitor, NOT champion/challenger (the realignment):** audit item 1c proposed a champion/challenger adoption gate to replace blind newest-wins (`ranking/model.py` `load_latest_robustness_model` returns max-by-`trained_through`). But the operator's D192 continuous-training + D193 "HOLD, judge by per-model IC as data grows" stance *intentionally* adopts the newest model as the wf_p25 head matures — a hard champion/challenger gate would FIGHT that design (hold back the improvements it is accruing). The drift monitor is the half of 1c the operator's strategy actually wants: it catches regressions in the continuous path without gating improvements. Whether to add an off-by-default champion/challenger safety to the load path is a genuine model-lifecycle decision flagged for the operator, NOT silently wired.
+
+**Thresholds (conservative, tunable):** F3 floor warn 0.0 / crit -0.05; wf_p25 floor warn 0.0 / crit -0.10; regression delta 0.25 (`--drift-regression-delta`); min-history 4 before the regression check fires. "No qualifying checkpoints yet" is WARN (informational, mirrors "no backup found"), not CRITICAL — a fresh box doesn't cry wolf.
+
+**Verified live:** `forge healthcheck` on the running daemon reports `F3 ranker drift: ok (latest +0.230)` and `wf_p25 drift: ok (latest +0.064)` — both correctly OK (weak-but-positive, not regressing). Same run flagged contracts 1.21.0 un-adopted vs pin 1.20.0 (operator-gated adoption — relayed, not actioned here).
+
+**Scope/safety:** Additive pure check (`check_learning_drift`) + JSONL reader in `cli/healthcheck_cmd.py`; no production-loop or model-adoption change. New test `test_learning_drift_levels`; ruff + mypy --strict clean; CLI scope 89/0. MANPAGE healthcheck section updated (Eight checks). The hourly `forge-healthcheck` timer runs `forge healthcheck` from this editable tree, so the new checks go live on the next tick after commit — no daemon restart.
+
+**STATUS: drift monitor SHIPPED (committed). Champion/challenger adoption gate DEFERRED — flagged to operator as in-tension with D192 continuous training.**

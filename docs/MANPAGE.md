@@ -268,12 +268,16 @@ model is live (D149); the wf_p25 quality lane flips via `--quality-rank` under i
 ### forge healthcheck
 
 Reports whether the daemon is alive AND productive, then exits 0 (OK) / 1 (WARN) / 2
-(CRITICAL). Six checks: **service** (`systemctl is-active forge.service`), **loop** (newest
+(CRITICAL). Eight checks: **service** (`systemctl is-active forge.service`), **loop** (newest
 `--- loop iteration` journal line — catches a wedged-but-active process), **submission**
 (newest `submitted=N` line + the latest `blocked:` reason — catches a chronically-stalled
 pipeline, e.g. a Crucible stall, and points upstream), **backup**/**model** freshness (a
 silently-broken daily timer), and **contracts** (installed vs `FORGE_EXPECTED_CONTRACT_VERSION`:
-minor drift WARN, major CRITICAL). Reads the journal + filesystem + version — no DB snapshot.
+minor drift WARN, major CRITICAL), and **learning drift** (the F3 + wf_p25 `forge status` clocks —
+CRITICAL if a learned lane has gone anti-predictive, WARN if it has lost its edge over the §6.2
+composite or dropped sharply from its trailing median; catches a bad daily model rotation that
+newest-wins adoption would otherwise put live silently, D209). Reads the journal + filesystem +
+version + the ranker-eval clocks — no DB snapshot.
 Run by hand or via the `forge-healthcheck` timer (hourly); the timer's unit sets
 `SuccessExitStatus=1` so only CRITICAL marks it failed (visible in `systemctl --user
 --state=failed`). Thresholds are tunable (`--submission-warn-hours`, `--loop-critical-minutes`, …).
