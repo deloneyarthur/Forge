@@ -298,6 +298,25 @@ learning improving?*. For the authoritative recompute use `forge ranker-model ev
 forge status
 ```
 
+### forge alpha-budget
+
+Reports how much statistical search the stream has spent and the search-luck Sharpe hurdle it
+implies (Tier-1a honesty ledger, D207). Forge submits to Crucible's Deflated-Sharpe gate with
+`search_n_trials` unset, so the gate charges `n_trials=1` and never deflates for the breadth of
+the search; this command measures that gap from the per-batch counts already in `batch_summaries`
+(no new schema). It brackets the honest trial count by `Σ batch_size` (distinct gated configs —
+the floor) and `Σ enumerated_count` (configs the ranker selected among — the breadth ceiling), and
+prints the Bailey-Lopez de Prado `E[max]` benchmark for each end (the Sharpe, in cross-trial
+SR-stdev units, a candidate must clear to beat the luckiest draw of a search that wide) plus a
+per-grammar-version breakdown. Read-only — the production loop never reads it; the accounting
+boundary (per-version vs cumulative) and the effective-N redundancy reduction are left to a Crucible
+coordination item, not pre-judged. Snapshot the live DB first (the daemon holds an RW lock), per the
+`ranker-model` convention.
+
+```
+cp ~/forge_data/forge.db /tmp/snap.db && forge alpha-budget --forge-db /tmp/snap.db
+```
+
 ### forge grammar list-proposals
 
 List pending refinement proposals. Recurring themes (3+ pending) tagged `[PERSISTENT]`.

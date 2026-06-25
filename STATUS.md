@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-06-25 — HONESTY/LOOP-INTEGRITY PROGRAM kicked off (Tier-1 of the "unturned stones" audit). D207 `forge alpha-budget` ledger SHIPPED — measures the multiple-testing gap (stream submits with `search_n_trials` unset → Crucible's DSR charges n_trials=1, never deflating for search breadth).
+
+**Operator: "anything we're missing for improving strategies? have we unturned every stone?" → 4-agent audit → "lets start working on them all." The unturned stones cluster in methodology/honesty + feedback-loop integrity (the seams no prior review owns), plus one in-scope grammar lever (exit/holding-period timing).**
+- **D207 `forge alpha-budget` (Tier-1a):** read-only ledger over `batch_summaries` (no new schema) — brackets the honest trial count by `Σ batch_size` (distinct gated; floor) and `Σ enumerated_count` (ranker selected-among; breadth ceiling) and prints the Bailey-Lopez de Prado E[max] search-luck hurdle for each end + per-grammar-version. Accounting boundary + effective-N clustering left to a Crucible handoff (not pre-judged). 11 tests, ruff/mypy clean, 372/0 scope. Committed; NOT deployed (no loop wiring → no restart needed).
+- **Program queue (8 items, tracked):** ✅ 1a-i ledger · 1a-ii pre-registration registry + proposer later-cohort confirmation (fixes the §8.4 same-cohort post-selection bias) · 1c champion/challenger model-adoption gate (replaces blind newest-wins `model.py`; + drift alert) · Q17 suppress ~96%-zero-trade stub families (pairs_zscore/EV relative_value) · Tier-2 exit/holding-period fair-test ladder (in-scope CPCV-p25 lever; determinism-gated) · 1b randomized exploration holdout (de-censor feedback) · Tier-5 Path-C re-pricing trigger doc · Tier-3 objective-reframe (standalone vs book-marginal) Crucible relay.
+- **Process:** in-tree, short dirty windows, verified small commits (D104 single-folder); new code lands additive + unwired (reboot-safe); grammar/determinism/deploy steps stay operator-gated.
+
+---
+
 ## 2026-06-24 — THRESHOLD AUTO-TIGHTENING RETIRED (D206) + 18 pre-D034 proposal fossils declined. Emptied `config/auto_tightened_thresholds.yaml` → enumeration falls back to the D031 baselines. Operator-approved loosening (OPEN_PROPOSALS c4d68531, hard rule #4); deployed via the D104 ritual.
 
 **Operator: "is prefilter tightening helping or hurting?" → analyzed → "retire now (one deploy)." Full record: [[D206]].**
