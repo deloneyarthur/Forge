@@ -318,6 +318,16 @@ The mental model conflates "indicator-would-fire times" with "trades the strateg
 
 ## 2026-05-20 — Q17 — `pairs_zscore` and `expected_value_estimator` show >93% zero-trade rate — Q14 follow-up status — **HIGH SEVERITY**
 
+> **✅ RESOLVED / STALE 2026-06-25 ([[D210]]).** The 96–98.7% zero-trade was a PRE-FIX cohort — Crucible's
+> pairs-loading bug (each run reached only 1–5 of 37 pairs), fixed in `4f5271f`; D098 cold-start then
+> deliberately DROPPED that poisoned cohort. Measured on the current honest-era pool (live `forge.db`
+> snapshot, 2026-06-25): `relative_value` zero-trade is **0.5% on v22** (1/218), **0.0% on v20/v21**, ≤2.2%
+> v17–v19 — i.e. it now trades fine and is one of the best-trading hypotheses (max_trades 376), and the
+> only `pairs`/cross-sectional diversity source. Suppressing it (sub-q 2/3) would DESTROY working diversity
+> for no gain — DECLINED. The global zero-trade-waste problem is independently solved ([[D206]]: 89% of
+> gated runs trade ≥10; highest current v22 zero-rate is volatility_event at 10.1%, not relative_value).
+> Same stale-evidence shape as the iv_rank stub trap [[D154]]. No grammar/filter change.
+
 **Question:** Q14 (2026-05-14) flagged 5 Crucible-registered indicators as stubs returning NaN: `iv_rank`, `expected_value_estimator`, `vix_level`, `pairs_zscore`, `put_call_flow`. Resolution authored `CRUCIBLE_STUB_IMPLEMENTATIONS_AGENT_PROMPT.md` and adopted "long-term hold" — include stubs in enumeration honestly while waiting for upstream. Six days later, gated-runs evidence shows the stubs have not been replaced (or were replaced with implementations that produce ~zero trades):
 
 **Per-indicator 0-trade rate in 1,213-run gated cohort (2026-05-15 → 2026-05-20):**

@@ -5171,3 +5171,19 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Scope/safety:** Additive pure check (`check_learning_drift`) + JSONL reader in `cli/healthcheck_cmd.py`; no production-loop or model-adoption change. New test `test_learning_drift_levels`; ruff + mypy --strict clean; CLI scope 89/0. MANPAGE healthcheck section updated (Eight checks). The hourly `forge-healthcheck` timer runs `forge healthcheck` from this editable tree, so the new checks go live on the next tick after commit — no daemon restart.
 
 **STATUS: drift monitor SHIPPED (committed). Champion/challenger adoption gate DEFERRED — flagged to operator as in-tension with D192 continuous training.**
+
+---
+
+## D210 — 2026-06-25 — Q17 closed as STALE — `relative_value` trades fine on the current pool; suppression declined
+
+**Spec section:** §5 (pre-filters), hard rule #1 (don't silently change grammar); lineage Q14 / Q16 / D076 / D098 / D154.
+
+**Decision:** Close Q17 (HIGH, 2026-05-20: "`pairs_zscore`/`expected_value_estimator` >93% zero-trade; `relative_value` non-functional") with NO grammar/filter change. The audit item "Forge-side suppression of zero-trade stub families" is DECLINED — its premise is stale.
+
+**Why (measured):** Q17's 96–98.7% zero-trade was a pre-fix cohort — Crucible's pairs-loading bug (each run reached only 1–5 of 37 pairs; documented in `trade_rate_priors.py`'s `COLD_START_HYPOTHESES` comment), fixed in `4f5271f`. D098 cold-start then deliberately DROPPED that poisoned pre-fix cohort so v5+ is `relative_value`'s first fair test. A live `forge.db` snapshot (2026-06-25, read-only, removed after query) shows the fair test passed: `relative_value` zero-trade is 0.5% on v22 (1/218), 0.0% on v20/v21, ≤2.2% v17–v19 (n≈1000+ each) — now one of the best-trading hypotheses (max_trades 376) and the only `pairs`/cross-sectional diversity source. The highest current-era (v22) zero-rate is `volatility_event` at 10.1%, not `relative_value`. The global zero-trade-waste problem is independently solved (D206: 89% of gated runs trade ≥10).
+
+**Why NOT suppress:** suppressing `relative_value` on the stale evidence would destroy a now-functional, diversity-providing hypothesis for zero gain — a direct "hurt our results" regression (the operator's explicit concern this session). Same stale-evidence shape as the iv_rank stub trap (D154): the root cause was upstream and since-fixed; the open question outlived its facts.
+
+**Action:** `OPEN_QUESTIONS.md` Q17 banner-resolved (RESOLVED/STALE). No code, grammar, filter, or enumeration change → determinism untouched, stream unchanged. Method note: this is the measure-before-acting / pre-registration discipline (D208) in practice — the premise was tested against current data, refuted, and the action declined.
+
+**STATUS: Q17 CLOSED-as-stale. No suppression. `relative_value` confirmed healthy + diversity-valuable on the current pool.**
