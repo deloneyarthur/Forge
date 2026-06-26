@@ -366,3 +366,108 @@ def test_spearman_corr_perfect_inverted_and_degenerate() -> None:
     assert spearman_corr([1.0, 2.0, 3.0, 4.0], [4.0, 3.0, 2.0, 1.0]) == pytest.approx(-1.0)
     assert spearman_corr([1.0, 1.0, 1.0], [1.0, 2.0, 3.0]) is None  # zero variance
     assert spearman_corr([1.0], [1.0]) is None  # < 2 points
+
+
+# ---------------------------------------------------------------------------
+# Gate-then-tail re-wire shadow (two-part lane: P gates eligibility, tail orders)
+# ---------------------------------------------------------------------------
+
+
+def test_rewire_topk_surfaces_better_floors_than_p_baseline() -> None:
+    from forge.ranking.evaluation import _rewire_topk
+
+    # tail predicts realized perfectly; P(component) is ANTI-correlated with realized
+    # (the empirical regime). Ranking by P tops out on the worst floors; gate-then-tail
+    # — keep the top half by P, then order by tail — must do better.
+    triples = [
+        (0.5 - 0.1 * ((i - 50) / 25.0), (i - 50) / 25.0, (i - 50) / 25.0) for i in range(100)
+    ]
+    ev = _rewire_topk(triples, keep_frac=0.5)
+    assert ev.n_decided == 100
+    assert ev.k == 10
+    assert ev.gate_top_k_mean is not None
+    assert ev.base_top_k_mean is not None
+    assert ev.delta is not None
+    assert ev.delta > 0
+    assert ev.gate_top_k_mean > ev.base_top_k_mean
+
+
+def test_rewire_topk_empty_returns_none_delta() -> None:
+    from forge.ranking.evaluation import _rewire_topk
+
+    ev = _rewire_topk([], keep_frac=0.5)
+    assert ev.n_decided == 0
+    assert ev.delta is None
+
+
+def _seed_rewire(
+    conn: duckdb.DuckDBPyConnection,
+    rows: list[tuple[str, float, float, float, bool]],
+    *,
+    tail_model_id: str = "tail111122223333",
+) -> None:
+    """rows: (config_hash, model_score(P), tail_score, realized_wf, honest)."""
+    for config_hash, p, tail_score, wf, honest in rows:
+        candidate_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
+            "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
+            [candidate_id, str(uuid.uuid4()), config_hash, _SINCE, "gated"],
+        )
+        conn.execute(
+            "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+            "composite_score, scored_at, tail_score, tail_model_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [candidate_id, "logistic00000000", p, 0.0, _SINCE, tail_score, tail_model_id],
+        )
+        record_verdicts(
+            conn, [_gated_run(config_hash=config_hash, decision="reject", honest=honest, wf=wf)]
+        )
+
+
+def test_evaluate_rewire_shadow_beats_p_baseline_on_wf() -> None:
+    from forge.ranking.evaluation import evaluate_rewire_shadow
+
+    # tail_score tracks realized wf; P(component) anti-tracks it. Ranking by P alone tops
+    # out on the worst floors, so the gate-then-tail re-wire must beat it (delta > 0).
+    rows = [
+        # (config_hash, P, tail_score, realized_wf, honest)
+        ("aaaa000000000001", 0.9, 0.1, 0.10, True),
+        ("aaaa000000000002", 0.7, 0.3, 0.30, True),
+        ("aaaa000000000003", 0.5, 0.5, 0.50, True),
+        ("aaaa000000000004", 0.3, 0.7, 0.80, True),
+        ("aaaa000000000005", 0.1, 0.9, 0.95, True),
+    ]
+    with db_connection() as conn:
+        _seed_rewire(conn, rows)
+        ev = evaluate_rewire_shadow(conn, since=_SINCE, gate="wf_sharpe_p25", keep_frac=0.6)
+
+    assert ev is not None
+    assert ev.n_decided == 5
+    assert ev.delta is not None
+    assert ev.delta > 0
+
+
+def test_evaluate_rewire_shadow_excludes_unverified() -> None:
+    from forge.ranking.evaluation import evaluate_rewire_shadow
+
+    with db_connection() as conn:
+        _seed_rewire(
+            conn,
+            [
+                ("aaaa000000000001", 0.9, 0.1, 0.10, True),
+                ("aaaa000000000002", 0.1, 0.9, 0.95, True),
+                ("aaaa000000000003", 0.5, 0.5, 0.99, False),  # unverified — excluded
+            ],
+        )
+        ev = evaluate_rewire_shadow(conn, since=_SINCE, gate="wf_sharpe_p25")
+
+    assert ev is not None
+    assert ev.n_decided == 2
+
+
+def test_evaluate_rewire_shadow_empty_returns_none() -> None:
+    from forge.ranking.evaluation import evaluate_rewire_shadow
+
+    with db_connection() as conn:
+        assert evaluate_rewire_shadow(conn, since=_SINCE, gate="wf_sharpe_p25") is None

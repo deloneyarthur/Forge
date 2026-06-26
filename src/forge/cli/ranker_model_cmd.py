@@ -306,6 +306,63 @@ def cmd_eval_robustness(
     )
 
 
+@ranker_model_app.command("eval-rewire")
+def cmd_eval_rewire(
+    forge_db: Path | None = typer.Option(
+        None, "--forge-db", help="forge.db path (use a /tmp snapshot of the live DB)"
+    ),
+    config: Path = typer.Option(
+        Path("config/forge.yaml"), "--config", help="forge.yaml (supplies db_path default)"
+    ),
+    since: str | None = typer.Option(
+        None, "--since", help="ISO window start (default: the clean-era boundary)"
+    ),
+    gate: str = typer.Option(
+        "wf_sharpe_p25", "--gate", help="realized worst-quartile gate to score against"
+    ),
+    keep_frac: float = typer.Option(
+        0.5, "--keep-frac", help="fraction kept by the P(component) eligibility gate"
+    ),
+) -> None:
+    """Gate-then-tail re-wire shadow: does an eligibility gate on P(component) + ordering the
+    survivors by the predicted WF floor surface configs with a higher REALIZED `--gate` than
+    ranking by P(component) alone (the deployed lane ≈ this baseline)? Prints the gate-then-tail
+    vs P-baseline top-K mean realized value over verified-coverage decided verdicts. Telemetry
+    only — no PASS/FAIL until the §8.6-style margin is set. Design:
+    docs/proposals/quality-lane-rewire.md."""
+    from forge.core.contracts_check import check_contracts_version
+
+    check_contracts_version()
+
+    from forge.persistence.db import db_connection
+    from forge.ranking.evaluation import evaluate_rewire_shadow
+
+    forge_db = _resolve_forge_db(forge_db, config)
+    cut = _resolve_era_cut(since)
+
+    with db_connection(forge_db) as conn:
+        ev = evaluate_rewire_shadow(conn, since=cut, gate=gate, keep_frac=keep_frac)
+
+    if ev is None:
+        typer.echo(
+            f"no tail-scored verdicts decided since {cut.isoformat()} "
+            "(re-wire shadow not yet accruing — needs a target_wf_p25 robustness model live)"
+        )
+        return
+    g = "n/a" if ev.gate_top_k_mean is None else f"{ev.gate_top_k_mean:+.3f}"
+    b = "n/a" if ev.base_top_k_mean is None else f"{ev.base_top_k_mean:+.3f}"
+    d = "n/a" if ev.delta is None else f"{ev.delta:+.3f}"
+    o = "n/a" if ev.overall_mean is None else f"{ev.overall_mean:+.3f}"
+    typer.echo(
+        f"gate-then-tail re-wire shadow (gate={gate} keep_frac={ev.keep_frac} "
+        f"P-floor={ev.p_floor:.4f}):"
+    )
+    typer.echo(
+        f"  n_decided={ev.n_decided} top-{ev.k} mean realized {gate}: "
+        f"gate-then-tail={g} vs P-baseline={b} (Δ={d}, overall={o})"
+    )
+
+
 @ranker_model_app.command("train-robustness")
 def cmd_train_robustness(
     forge_db: Path | None = typer.Option(

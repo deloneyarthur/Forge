@@ -317,9 +317,7 @@ def test_robustness_excludes_the_target_column_from_features() -> None:
     # excluded from the feature set — else the target leaks in and predicts itself.
     from forge.ranking.model import train_robustness_model
 
-    frame = _reg_frame(_reg_rows()).with_columns(
-        pl.col("target_cpcv_p25").alias("target_wf_p25")
-    )
+    frame = _reg_frame(_reg_rows()).with_columns(pl.col("target_cpcv_p25").alias("target_wf_p25"))
     model = train_robustness_model(frame, target="target_wf_p25", era_cut=_ERA_CUT)
     assert model.target == "target_wf_p25"
     assert "target_wf_p25" not in model.feature_names
@@ -377,3 +375,22 @@ def test_load_latest_robustness_model_filters_by_target(tmp_path: Path) -> None:
     assert cpcv.model_id == cpcv_model.model_id
     # A target with no artifact → None (not a fallback to a different target).
     assert load_latest_robustness_model(tmp_path, target="target_regime_stress") is None
+
+
+def test_gate_tail_rank_score_gates_then_ranks_by_tail() -> None:
+    """Two-part lane: P(component) gates eligibility; the tail prediction does the ordering."""
+    from forge.ranking.model import gate_tail_rank_score
+
+    # Eligible (P >= floor): the score IS the tail prediction — P never enters the order.
+    assert gate_tail_rank_score(0.9, -1.0, p_floor=0.5) == -1.0
+    assert gate_tail_rank_score(0.5, 2.0, p_floor=0.5) == 2.0
+
+    # An eligible config with a POOR tail still outranks an ineligible one with a GREAT tail.
+    eligible_poor = gate_tail_rank_score(0.9, -1.0, p_floor=0.5)
+    ineligible_great = gate_tail_rank_score(0.1, 5.0, p_floor=0.5)
+    assert eligible_poor > ineligible_great
+
+    # Among eligibles, higher tail ranks higher even when its P is lower (P is anti-signal).
+    high_tail_low_p = gate_tail_rank_score(0.51, 2.0, p_floor=0.5)
+    low_tail_high_p = gate_tail_rank_score(0.99, 1.0, p_floor=0.5)
+    assert high_tail_low_p > low_tail_high_p

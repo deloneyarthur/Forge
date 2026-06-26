@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from forge.feedback.rejection_weights import honest_regime_coverage_row
 from forge.ranking.dataset import label_for, parse_gate_results
-from forge.ranking.model import auc_score, brier_score
+from forge.ranking.model import auc_score, brier_score, gate_tail_rank_score
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -287,3 +287,118 @@ def evaluate_tail_shadow_pooled(
     if not pooled:
         return None
     return _build_tail_eval(_POOLED_TAIL_MODEL_ID, pooled)
+
+
+# ---------------------------------------------------------------------------
+# Gate-then-tail re-wire shadow — the two-part lane (P gates, tail orders)
+# ---------------------------------------------------------------------------
+# The deployed wf_p25 lane multiplies P(component) by the tail prediction; the
+# 2026-06-26 A/B showed that product is swamped by P (which anti-correlates with the
+# WF floor) and nets ~0. This readout shadows the re-wire — P gates eligibility, the
+# tail prediction orders the survivors — against the P-alone baseline, on realized
+# worst-quartile WF. Telemetry only; the production loop never reads it until the lane
+# mode is flipped. Design: docs/proposals/quality-lane-rewire.md.
+
+# Default eligibility gate: keep the top 50% by P(component), then rank by tail. The A/B's
+# strongest pre-specified two-part form; the production floor is calibrated separately.
+_REWIRE_KEEP_FRAC: float = 0.5
+
+
+@dataclass(frozen=True, slots=True)
+class RewireEvaluation:
+    """Gate-then-tail (two-part) lane vs the P(component) baseline over one window.
+
+    `delta` = gate-then-tail top-K mean realized minus the baseline's; positive ⇒ the
+    re-wire surfaces configs with a higher realized worst-quartile WF floor than ranking
+    by P(component) alone."""
+
+    n_decided: int
+    k: int
+    p_floor: float
+    keep_frac: float
+    gate_top_k_mean: float | None
+    base_top_k_mean: float | None
+    delta: float | None
+    overall_mean: float | None
+
+
+def _rewire_topk(
+    triples: Sequence[tuple[float, float, float]], keep_frac: float = _REWIRE_KEEP_FRAC
+) -> RewireEvaluation:
+    """`triples` = (P(component), tail_pred, realized). The gate keeps the top `keep_frac`
+    by P and ranks survivors by `tail_pred`; the baseline ranks all by P. Pure (no DB) so
+    the ranking contract is unit-testable. Top-K uses the same decile K as the tail eval."""
+    n = len(triples)
+    if n == 0:
+        return RewireEvaluation(0, 0, 0.0, keep_frac, None, None, None, None)
+    ps = sorted(t[0] for t in triples)
+    p_floor = ps[min(n - 1, int((1.0 - keep_frac) * n))]
+    realized = [t[2] for t in triples]
+    gate_scores = [gate_tail_rank_score(p, tail, p_floor=p_floor) for p, tail, _ in triples]
+    base_scores = [t[0] for t in triples]
+    k = max(1, n // 10)
+    gate_mean = _top_k_mean(list(zip(gate_scores, realized, strict=True)), k)
+    base_mean = _top_k_mean(list(zip(base_scores, realized, strict=True)), k)
+    delta = (
+        gate_mean - base_mean if gate_mean is not None and base_mean is not None else None
+    )
+    return RewireEvaluation(
+        n_decided=n,
+        k=k,
+        p_floor=p_floor,
+        keep_frac=keep_frac,
+        gate_top_k_mean=gate_mean,
+        base_top_k_mean=base_mean,
+        delta=delta,
+        overall_mean=sum(realized) / n,
+    )
+
+
+def _rewire_triples(
+    conn: duckdb.DuckDBPyConnection, *, since: datetime, gate: str
+) -> list[tuple[float, float, float]]:
+    """(P(component), tail_pred, realized `gate`) over verified-coverage decided verdicts
+    carrying a `gate` value — the gate-then-tail eval population. Same join/filter as the
+    tail eval, plus `model_score` (the F3 P(component) shadow score)."""
+    cut = since
+    if cut.tzinfo is not None:
+        cut = cut.astimezone(UTC).replace(tzinfo=None)
+    rows = conn.execute(
+        """
+        SELECT ss.model_score, ss.tail_score, v.gate_results
+        FROM shadow_scores ss
+        JOIN submissions s ON ss.forge_candidate_id = s.forge_candidate_id
+        JOIN verdicts v ON v.config_hash = s.config_hash
+        WHERE v.decided_at >= ? AND ss.tail_score IS NOT NULL AND ss.tail_model_id IS NOT NULL
+        ORDER BY ss.forge_candidate_id, v.crucible_run_id
+        """,
+        [cut],
+    ).fetchall()
+    triples: list[tuple[float, float, float]] = []
+    for model_score, tail_score, gate_results_json in rows:
+        gate_results = parse_gate_results(gate_results_json)
+        if not honest_regime_coverage_row(gate_results):
+            continue
+        realized = gate_results.get(gate)
+        if realized is None or realized.value is None:
+            continue
+        triples.append((float(model_score), float(tail_score), float(realized.value)))
+    return triples
+
+
+def evaluate_rewire_shadow(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    since: datetime,
+    gate: str = _DEFAULT_TAIL_GATE,
+    keep_frac: float = _REWIRE_KEEP_FRAC,
+) -> RewireEvaluation | None:
+    """Shadow readout for the gate-then-tail re-wire: does gating eligibility on
+    P(component) and ordering survivors by the predicted WF floor surface configs with a
+    higher REALIZED `gate` than ranking by P(component) alone? `None` when the window holds
+    no verified-coverage gate-bearing tail-scored verdict. Telemetry only — the production
+    loop never reads this until the lane mode is flipped."""
+    triples = _rewire_triples(conn, since=since, gate=gate)
+    if not triples:
+        return None
+    return _rewire_topk(triples, keep_frac)

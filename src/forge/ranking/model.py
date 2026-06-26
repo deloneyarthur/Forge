@@ -614,6 +614,29 @@ def robustness_tail_norm(model: RobustnessModel, features: Mapping[str, float]) 
     return 1.0 / (1.0 + math.exp(-z))
 
 
+# Demotion offset for ineligible configs in the gate-then-tail score: large enough that
+# any below-floor config sorts beneath every eligible one (tail predictions are O(1)).
+_REWIRE_DEMOTE: float = 1e9
+
+
+def gate_tail_rank_score(
+    p_component: float, tail_pred: float, *, p_floor: float, demote: float = _REWIRE_DEMOTE
+) -> float:
+    """Two-part quality-lane score: P(component) gates ELIGIBILITY, the robustness model's
+    predicted worst-quartile WF (``tail_pred``) does the ORDERING.
+
+    Configs at/above the eligibility floor are ranked by ``tail_pred``; configs below it
+    are demoted beneath every eligible config. Deterministic and ranking-only.
+
+    WHY a gate, not a blend: the 2026-06-26 offline A/B found P(component) is ANTI-correlated
+    with the realized WF floor, so any weight on P inside the ORDERING score drags it toward
+    worse floors (the deployed ``P x tail_norm`` blend is swamped by P and nets ~0). P
+    therefore decides who is eligible, never the order — the two-part ``E[wf_p25 | clears]``
+    decomposition. Design: docs/proposals/quality-lane-rewire.md.
+    """
+    return tail_pred if p_component >= p_floor else tail_pred - demote
+
+
 def save_robustness_model(model: RobustnessModel, models_dir: Path) -> Path:
     """Write the canonical artifact; content-hashed name → idempotent rewrite."""
     models_dir.mkdir(parents=True, exist_ok=True)
