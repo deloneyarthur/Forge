@@ -326,6 +326,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import os
+
 from forge.cli.ranker_model_cmd import _REWIRE_DELTA_CRITERION as CRIT
 from forge.core.clock import utc_now
 from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
@@ -366,9 +368,12 @@ if streak_log_path.exists():
     if prior:
         since_fresh = datetime.fromisoformat(json.loads(prior[-1])["ts"])
 
+# Absolute P floor -- the calibrated production gate (FORGE_REWIRE_P_FLOOR, default 0.02);
+# the shadow gates on the SAME floor so the streak tracks the gate the live scorer runs.
+p_floor = float(os.environ.get("FORGE_REWIRE_P_FLOOR", "0.02"))
 with db_connection(Path(snap)) as conn:
-    cumulative = evaluate_rewire_shadow(conn, since=CLEAN_ERA_LABEL_CUT, gate=gate)
-    fresh = evaluate_rewire_shadow(conn, since=since_fresh, gate=gate)
+    cumulative = evaluate_rewire_shadow(conn, since=CLEAN_ERA_LABEL_CUT, gate=gate, p_floor=p_floor)
+    fresh = evaluate_rewire_shadow(conn, since=since_fresh, gate=gate, p_floor=p_floor)
 
 print(f"  [cumulative since {CLEAN_ERA_LABEL_CUT.isoformat()}]")
 show(cumulative, "cumulative")

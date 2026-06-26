@@ -328,17 +328,27 @@ class RewireEvaluation:
 
 
 def _rewire_topk(
-    triples: Sequence[tuple[float, float, float]], keep_frac: float = _REWIRE_KEEP_FRAC
+    triples: Sequence[tuple[float, float, float]],
+    keep_frac: float = _REWIRE_KEEP_FRAC,
+    *,
+    p_floor: float | None = None,
 ) -> RewireEvaluation:
-    """`triples` = (P(component), tail_pred, realized). The gate keeps the top `keep_frac`
-    by P and ranks survivors by `tail_pred`; the baseline ranks all by P. Pure (no DB) so
-    the ranking contract is unit-testable. Top-K uses the same decile K as the tail eval."""
+    """`triples` = (P(component), tail_pred, realized). The gate keeps configs with P >= floor
+    and ranks survivors by `tail_pred`; the baseline ranks all by P. The floor is `p_floor`
+    when given (the production ABSOLUTE floor the live scorer uses) else the in-batch
+    `keep_frac` quantile. Pure (no DB) so the ranking contract is unit-testable.
+
+    Calibration 2026-06-26: on the skewed production P-distribution (median ~0.0004) the
+    keep_frac quantile collapses to ~0, so production gates on an absolute floor and the
+    shadow must use the same floor to measure the gate the live scorer actually runs."""
     n = len(triples)
     if n == 0:
         return RewireEvaluation(0, 0, 0.0, keep_frac, None, None, None, None)
-    p_floor = eligibility_floor([t[0] for t in triples], keep_frac)
+    floor = (
+        p_floor if p_floor is not None else eligibility_floor([t[0] for t in triples], keep_frac)
+    )
     realized = [t[2] for t in triples]
-    gate_scores = [gate_tail_rank_score(p, tail, p_floor=p_floor) for p, tail, _ in triples]
+    gate_scores = [gate_tail_rank_score(p, tail, p_floor=floor) for p, tail, _ in triples]
     base_scores = [t[0] for t in triples]
     k = max(1, n // 10)
     gate_mean = _top_k_mean(list(zip(gate_scores, realized, strict=True)), k)
@@ -347,7 +357,7 @@ def _rewire_topk(
     return RewireEvaluation(
         n_decided=n,
         k=k,
-        p_floor=p_floor,
+        p_floor=floor,
         keep_frac=keep_frac,
         gate_top_k_mean=gate_mean,
         base_top_k_mean=base_mean,
@@ -394,13 +404,15 @@ def evaluate_rewire_shadow(
     since: datetime,
     gate: str = _DEFAULT_TAIL_GATE,
     keep_frac: float = _REWIRE_KEEP_FRAC,
+    p_floor: float | None = None,
 ) -> RewireEvaluation | None:
     """Shadow readout for the gate-then-tail re-wire: does gating eligibility on
     P(component) and ordering survivors by the predicted WF floor surface configs with a
-    higher REALIZED `gate` than ranking by P(component) alone? `None` when the window holds
-    no verified-coverage gate-bearing tail-scored verdict. Telemetry only — the production
-    loop never reads this until the lane mode is flipped."""
+    higher REALIZED `gate` than ranking by P(component) alone? `p_floor` (the production
+    absolute floor) is used when given, else the in-batch `keep_frac` quantile. `None` when
+    the window holds no verified-coverage gate-bearing tail-scored verdict. Telemetry only —
+    the production loop never reads this until the lane mode is flipped."""
     triples = _rewire_triples(conn, since=since, gate=gate)
     if not triples:
         return None
-    return _rewire_topk(triples, keep_frac)
+    return _rewire_topk(triples, keep_frac, p_floor=p_floor)

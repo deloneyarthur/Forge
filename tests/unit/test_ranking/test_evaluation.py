@@ -471,3 +471,20 @@ def test_evaluate_rewire_shadow_empty_returns_none() -> None:
 
     with db_connection() as conn:
         assert evaluate_rewire_shadow(conn, since=_SINCE, gate="wf_sharpe_p25") is None
+
+
+def test_rewire_topk_absolute_floor_overrides_keep_frac() -> None:
+    """Calibration 2026-06-26: on the skewed production P-dist the keep_frac quantile is
+    near-zero, so an absolute floor is the right mechanism. p_floor must override the quantile."""
+    from forge.ranking.evaluation import _rewire_topk
+
+    # (P, tail_pred, realized). keep_frac=0.5 -> quantile floor 0.3 (eligible P>=0.3 = {0.3,0.4}).
+    triples = [(0.10, 0.9, 0.9), (0.20, 0.1, 0.2), (0.30, 0.5, 0.5), (0.40, 0.2, 0.1)]
+    ev_quantile = _rewire_topk(triples, 0.5)
+    ev_abs = _rewire_topk(triples, 0.5, p_floor=0.05)  # admits all four
+
+    assert ev_quantile.p_floor == 0.3
+    assert ev_abs.p_floor == 0.05
+    # k=1; the quantile floor excludes the high-tail low-P config, the absolute floor admits it.
+    assert ev_quantile.gate_top_k_mean == 0.5
+    assert ev_abs.gate_top_k_mean == 0.9

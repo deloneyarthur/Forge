@@ -328,8 +328,10 @@ def cmd_eval_rewire(
     gate: str = typer.Option(
         "wf_sharpe_p25", "--gate", help="realized worst-quartile gate to score against"
     ),
-    keep_frac: float = typer.Option(
-        0.5, "--keep-frac", help="fraction kept by the P(component) eligibility gate"
+    p_floor: float = typer.Option(
+        0.02,
+        "--p-floor",
+        help="absolute P(component) eligibility floor (production-calibrated default 0.02)",
     ),
 ) -> None:
     """Gate-then-tail re-wire shadow: does an eligibility gate on P(component) + ordering the
@@ -349,7 +351,7 @@ def cmd_eval_rewire(
     cut = _resolve_era_cut(since)
 
     with db_connection(forge_db) as conn:
-        ev = evaluate_rewire_shadow(conn, since=cut, gate=gate, keep_frac=keep_frac)
+        ev = evaluate_rewire_shadow(conn, since=cut, gate=gate, p_floor=p_floor)
 
     if ev is None:
         typer.echo(
@@ -361,10 +363,7 @@ def cmd_eval_rewire(
     b = "n/a" if ev.base_top_k_mean is None else f"{ev.base_top_k_mean:+.3f}"
     d = "n/a" if ev.delta is None else f"{ev.delta:+.3f}"
     o = "n/a" if ev.overall_mean is None else f"{ev.overall_mean:+.3f}"
-    typer.echo(
-        f"gate-then-tail re-wire shadow (gate={gate} keep_frac={ev.keep_frac} "
-        f"P-floor={ev.p_floor:.4f}):"
-    )
+    typer.echo(f"gate-then-tail re-wire shadow (gate={gate} p_floor={ev.p_floor:.4f}):")
     typer.echo(
         f"  n_decided={ev.n_decided} top-{ev.k} mean realized {gate}: "
         f"gate-then-tail={g} vs P-baseline={b} (Δ={d}, overall={o})"

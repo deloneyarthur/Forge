@@ -1938,16 +1938,15 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
 
             if _qmode == "gate-tail":
                 # Re-wire (docs/proposals/quality-lane-rewire.md): P(component) GATES
-                # eligibility (the batch's top keep_frac by P); the wf_p25 tail prediction
-                # ORDERS the survivors. P never enters the ordering score — it anti-correlates
-                # with the WF floor, so the blend wastes the tail signal. The floor is the
-                # in-batch P quantile, matching the §8.6 re-wire shadow streak.
-                from forge.ranking.model import eligibility_floor, gate_tail_prior
+                # eligibility, the wf_p25 tail prediction ORDERS the survivors. P never enters
+                # the ordering score — it anti-correlates with the WF floor, so the blend
+                # wastes the tail signal. Calibration 2026-06-26: production P is extremely
+                # skewed (median ~0.0004), so the floor is ABSOLUTE (an in-batch keep_frac
+                # quantile collapses to ~0); ~0.02 keeps the tail-boost to the top ~8% by P
+                # that could plausibly clear component. The shadow gates on the same floor.
+                from forge.ranking.model import gate_tail_prior
 
-                _keep = float(os.environ.get("FORGE_REWIRE_KEEP_FRAC", "0.5"))
-                _floor = eligibility_floor(
-                    [_base_scorer(r.config) for r in reports if r.passed], _keep
-                )
+                _floor = float(os.environ.get("FORGE_REWIRE_P_FLOOR", "0.02"))
 
                 def _gate_tail_score(config: StrategyConfig) -> float:
                     feats = extract_features(config, registry).as_dict()
@@ -1958,7 +1957,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                 verdict_scorer = _gate_tail_score
                 typer.echo(
                     f"quality_rank: wf_p25 GATE-TAIL ACTIVE "
-                    f"(model={_qm.model_id} floor={_floor:.4f} keep={_keep})"
+                    f"(model={_qm.model_id} p_floor={_floor:.4f})"
                 )
             else:
 

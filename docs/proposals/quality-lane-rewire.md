@@ -52,11 +52,15 @@ eval monitors.
    "tail alone" looks best only because `P` is pre-baked in. In production the lane scores the
    *full generation stream*, where dropping `P` would flood Crucible with non-clearing configs.
    The production form therefore KEEPS a `P` floor (gate-then-tail), never tail-alone.
-2. **Floor calibration.** The eligibility floor is the key knob. The shadow uses an in-cohort
-   `keep_frac` (default 0.5). The *production* floor must be an absolute `P` threshold
-   calibrated to the component-clear rate on the generation stream — a separate shadow that the
-   submitted-only data cannot supply. Over-gating costs WF floor (full-pool `q=0.25` → −0.097),
-   so calibrate conservatively (drop only clearly-ineligible configs).
+2. **Floor calibration (DONE 2026-06-26).** The eligibility floor is the key knob, and the
+   calibration (`scratchpad/floor_calibration.py`, reproducing enumerate→P with the live
+   registry + F3 model) found the in-batch `keep_frac` mechanism **unsuitable**: production
+   `P(component)` is extremely skewed (enumerated median **~0.0004**, p90 ~0.014, p99 ~0.15), so
+   `keep_frac=0.5` puts the floor at ~0.0004 — **~311× below** the shadow's verified-coverage
+   floor (0.136) and effectively a **no-op gate** (≈ the unsafe tail-alone form). Production
+   therefore gates on an **absolute floor** `FORGE_REWIRE_P_FLOOR` (default **0.02** → keeps the
+   top ~8% by P, ~100 of a ~1375 passed batch — the candidates that could plausibly clear
+   component), and the shadow gates on the *same* floor.
 
 ## Rollout (shadow-first, flip on streak — like D193)
 
@@ -72,22 +76,23 @@ eval monitors.
    Like the wf_p25 tail streak, the first record FAILs (the first fresh window spans the whole
    clean era = full-pool, Δ−0.07) and only climbs as recent per-checkpoint windows accrue — i.e.
    it tracks the recency-dependent win. Raw Δ recorded per row for re-judging.
-3. **Floor calibration (next).** One-time generation-stream shadow to set the absolute `P`
-   floor.
+3. **Floor calibration (DONE).** Switched production + shadow from the `keep_frac` quantile to
+   an absolute floor (0.02). See caveat 2.
 4. **Production scorer (built, flag-OFF).** Env `FORGE_QUALITY_RANK_MODE` selects the lane
    form; default `blend` = byte-identical. `gate-tail` makes the §6.2 prior
-   `gate_tail_prior(P, tail_norm, p_floor)` — `tail_norm∈(0,1)` for eligible configs, `0.0`
-   for those below the floor (stays on the `[0,1]` prior scale the F3/blend lanes use). The
-   floor is the **in-batch P quantile** (`eligibility_floor`, `FORGE_REWIRE_KEEP_FRAC`=0.5)
-   computed from the passed reports at rank time — the same floor definition the shadow uses,
-   so no global calibration is needed to wire it. Operator flips by setting the env in the
-   unit (like `FORGE_F3_RANKER`/`FORGE_QUALITY_RANKER`), on the streak clear, with a D-entry.
+   `gate_tail_prior(P, tail_norm, p_floor)` — `tail_norm∈(0,1)` for configs at/above the floor,
+   `0.0` below (stays on the `[0,1]` prior scale the F3/blend lanes use). The floor is the
+   **absolute** `FORGE_REWIRE_P_FLOOR` (default 0.02); the shadow gates on the same floor, so
+   the streak tracks the gate the live scorer runs. Operator flips by setting
+   `FORGE_QUALITY_RANK_MODE=gate-tail` in the unit, on the streak clear, with a D-entry.
 
-   **Shadow↔production population caveat:** the shadow gates within the *decided* (submitted)
-   cohort; production gates within the *passed* batch (a larger, lower-P pool). `keep_frac` is
-   shared but maps to different absolute floors, so the streak is a *directional* predictor of
-   the wired gate, not an exact one. A pre-flip generation-stream calibration (item 3) can pin
-   an absolute floor if the in-batch quantile proves too batch-composition-sensitive.
+   **The censoring wall — why the flip is a WATCHED experiment.** Even with a matched absolute
+   floor, the shadow only ever sees the *decided* (submitted) cohort — the passed configs the
+   production gate newly surfaces/excludes have NO realized `wf_p25`. At floor 0.02 the decided
+   cohort is ~all eligible (its P median 0.136 ≫ 0.02), so the shadow ≈ "does tail beat P on
+   recent decided configs": a useful **recency monitor** (recent Δ **+0.19**, full-pool +0.03),
+   but NOT a validation of the gate's exclusion of low-P passed configs. So the flip cannot be
+   fully proven offline — flip → watch realized component/promotion rate → revert if it dips.
 
 ## Hard-rule posture
 
