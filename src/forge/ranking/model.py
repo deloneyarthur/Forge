@@ -637,6 +637,31 @@ def gate_tail_rank_score(
     return tail_pred if p_component >= p_floor else tail_pred - demote
 
 
+def eligibility_floor(p_values: Sequence[float], keep_frac: float) -> float:
+    """The P(component) threshold that keeps the top ``keep_frac`` of a batch eligible for
+    the gate-then-tail lane. Empty batch -> 0.0 (permissive; nothing to gate).
+
+    Matched to the shadow eval's ``_rewire_topk`` so the §8.6 re-wire streak predicts the
+    wired gate. Design: docs/proposals/quality-lane-rewire.md.
+    """
+    if not p_values:
+        return 0.0
+    ordered = sorted(p_values)
+    return ordered[min(len(ordered) - 1, int((1.0 - keep_frac) * len(ordered)))]
+
+
+def gate_tail_prior(p_component: float, tail_norm: float, *, p_floor: float) -> float:
+    """Gate-then-tail prior on the §6.2 [0,1] prior scale: configs clearing the eligibility
+    floor are ordered by ``tail_norm`` (the robustness sigmoid, monotone in the WF-floor
+    prediction); configs below it get 0.0 — the bottom of the prior scale.
+
+    The production form of ``gate_tail_rank_score``: same gate, same eligible ordering
+    (tail_norm is monotone in the tail prediction), but mapped to [0,1] so it drops into the
+    same prior slot the F3 / blend lanes fill. Design: docs/proposals/quality-lane-rewire.md.
+    """
+    return tail_norm if p_component >= p_floor else 0.0
+
+
 def save_robustness_model(model: RobustnessModel, models_dir: Path) -> Path:
     """Write the canonical artifact; content-hashed name → idempotent rewrite."""
     models_dir.mkdir(parents=True, exist_ok=True)

@@ -1933,13 +1933,41 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         if _qmodel is not None:
             _qm = _qmodel  # non-None binding for the closure
             _base_scorer = verdict_scorer  # P(component) eligibility term
+            # FORGE_QUALITY_RANK_MODE picks the lane form; default "blend" = byte-identical.
+            _qmode = os.environ.get("FORGE_QUALITY_RANK_MODE", "blend").strip().lower()
 
-            def _quality_score(config: StrategyConfig) -> float:
-                feats = extract_features(config, registry).as_dict()
-                return _base_scorer(config) * robustness_tail_norm(_qm, feats)
+            if _qmode == "gate-tail":
+                # Re-wire (docs/proposals/quality-lane-rewire.md): P(component) GATES
+                # eligibility (the batch's top keep_frac by P); the wf_p25 tail prediction
+                # ORDERS the survivors. P never enters the ordering score — it anti-correlates
+                # with the WF floor, so the blend wastes the tail signal. The floor is the
+                # in-batch P quantile, matching the §8.6 re-wire shadow streak.
+                from forge.ranking.model import eligibility_floor, gate_tail_prior
 
-            verdict_scorer = _quality_score
-            typer.echo(f"quality_rank: wf_p25 BLEND ACTIVE (model={_qm.model_id})")
+                _keep = float(os.environ.get("FORGE_REWIRE_KEEP_FRAC", "0.5"))
+                _floor = eligibility_floor(
+                    [_base_scorer(r.config) for r in reports if r.passed], _keep
+                )
+
+                def _gate_tail_score(config: StrategyConfig) -> float:
+                    feats = extract_features(config, registry).as_dict()
+                    return gate_tail_prior(
+                        _base_scorer(config), robustness_tail_norm(_qm, feats), p_floor=_floor
+                    )
+
+                verdict_scorer = _gate_tail_score
+                typer.echo(
+                    f"quality_rank: wf_p25 GATE-TAIL ACTIVE "
+                    f"(model={_qm.model_id} floor={_floor:.4f} keep={_keep})"
+                )
+            else:
+
+                def _blend_score(config: StrategyConfig) -> float:
+                    feats = extract_features(config, registry).as_dict()
+                    return _base_scorer(config) * robustness_tail_norm(_qm, feats)
+
+                verdict_scorer = _blend_score
+                typer.echo(f"quality_rank: wf_p25 BLEND ACTIVE (model={_qm.model_id})")
         else:
             typer.echo("quality_rank: no target_wf_p25 model yet (prior unchanged)")
     elif quality_rank and verdict_scorer is None:

@@ -394,3 +394,29 @@ def test_gate_tail_rank_score_gates_then_ranks_by_tail() -> None:
     high_tail_low_p = gate_tail_rank_score(0.51, 2.0, p_floor=0.5)
     low_tail_high_p = gate_tail_rank_score(0.99, 1.0, p_floor=0.5)
     assert high_tail_low_p > low_tail_high_p
+
+
+def test_eligibility_floor_keeps_top_fraction() -> None:
+    from forge.ranking.model import eligibility_floor
+
+    ps = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    # keep top 50% -> floor at the (1-keep)=0.5 quantile (index int(0.5*10)=5 -> 0.6).
+    assert eligibility_floor(ps, 0.5) == 0.6
+    # keep all -> floor at the minimum, so every P clears it (no gating).
+    assert eligibility_floor(ps, 1.0) == 0.1
+    # unsorted input is handled; empty -> a permissive 0.0 (no gating).
+    assert eligibility_floor([0.9, 0.1, 0.5], 0.5) == 0.5
+    assert eligibility_floor([], 0.5) == 0.0
+
+
+def test_gate_tail_prior_zeroes_ineligible_keeps_tail_norm() -> None:
+    """Production [0,1] prior: eligible -> tail_norm (orders them); ineligible -> 0.0."""
+    from forge.ranking.model import gate_tail_prior
+
+    # Eligible (P >= floor): the prior IS tail_norm (the in-(0,1) ordering signal).
+    assert gate_tail_prior(0.9, 0.7, p_floor=0.5) == 0.7
+    assert gate_tail_prior(0.5, 0.42, p_floor=0.5) == 0.42
+    # Ineligible (P < floor): prior 0.0 -> bottom of the [0,1] prior scale (gated out).
+    assert gate_tail_prior(0.3, 0.95, p_floor=0.5) == 0.0
+    # An eligible config with a low tail_norm still outranks an ineligible high-tail one.
+    assert gate_tail_prior(0.6, 0.05, p_floor=0.5) > gate_tail_prior(0.1, 0.99, p_floor=0.5)

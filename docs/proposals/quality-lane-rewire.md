@@ -74,9 +74,20 @@ eval monitors.
    it tracks the recency-dependent win. Raw Δ recorded per row for re-judging.
 3. **Floor calibration (next).** One-time generation-stream shadow to set the absolute `P`
    floor.
-4. **Production scorer (next, flag-OFF).** A `--quality-rank-mode={blend,gate-tail}` (or a
-   replacement) on the lane; `gate-tail` makes the §6.2 prior use `gate_tail_rank_score`.
-   OFF/blend default = byte-identical. Operator flips on the streak clear, with a D-entry.
+4. **Production scorer (built, flag-OFF).** Env `FORGE_QUALITY_RANK_MODE` selects the lane
+   form; default `blend` = byte-identical. `gate-tail` makes the §6.2 prior
+   `gate_tail_prior(P, tail_norm, p_floor)` — `tail_norm∈(0,1)` for eligible configs, `0.0`
+   for those below the floor (stays on the `[0,1]` prior scale the F3/blend lanes use). The
+   floor is the **in-batch P quantile** (`eligibility_floor`, `FORGE_REWIRE_KEEP_FRAC`=0.5)
+   computed from the passed reports at rank time — the same floor definition the shadow uses,
+   so no global calibration is needed to wire it. Operator flips by setting the env in the
+   unit (like `FORGE_F3_RANKER`/`FORGE_QUALITY_RANKER`), on the streak clear, with a D-entry.
+
+   **Shadow↔production population caveat:** the shadow gates within the *decided* (submitted)
+   cohort; production gates within the *passed* batch (a larger, lower-P pool). `keep_frac` is
+   shared but maps to different absolute floors, so the streak is a *directional* predictor of
+   the wired gate, not an exact one. A pre-flip generation-stream calibration (item 3) can pin
+   an absolute floor if the in-batch quantile proves too batch-composition-sensitive.
 
 ## Hard-rule posture
 

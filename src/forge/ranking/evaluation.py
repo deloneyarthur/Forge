@@ -21,7 +21,12 @@ from typing import TYPE_CHECKING
 
 from forge.feedback.rejection_weights import honest_regime_coverage_row
 from forge.ranking.dataset import label_for, parse_gate_results
-from forge.ranking.model import auc_score, brier_score, gate_tail_rank_score
+from forge.ranking.model import (
+    auc_score,
+    brier_score,
+    eligibility_floor,
+    gate_tail_rank_score,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -331,17 +336,14 @@ def _rewire_topk(
     n = len(triples)
     if n == 0:
         return RewireEvaluation(0, 0, 0.0, keep_frac, None, None, None, None)
-    ps = sorted(t[0] for t in triples)
-    p_floor = ps[min(n - 1, int((1.0 - keep_frac) * n))]
+    p_floor = eligibility_floor([t[0] for t in triples], keep_frac)
     realized = [t[2] for t in triples]
     gate_scores = [gate_tail_rank_score(p, tail, p_floor=p_floor) for p, tail, _ in triples]
     base_scores = [t[0] for t in triples]
     k = max(1, n // 10)
     gate_mean = _top_k_mean(list(zip(gate_scores, realized, strict=True)), k)
     base_mean = _top_k_mean(list(zip(base_scores, realized, strict=True)), k)
-    delta = (
-        gate_mean - base_mean if gate_mean is not None and base_mean is not None else None
-    )
+    delta = gate_mean - base_mean if gate_mean is not None and base_mean is not None else None
     return RewireEvaluation(
         n_decided=n,
         k=k,
