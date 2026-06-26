@@ -68,6 +68,13 @@ def test_spearman_metric_key() -> None:
     assert s.consecutive_pass == 0
 
 
+def test_delta_metric_key() -> None:
+    recs = [_rec(0.16, "PASS", key="delta")]
+    s = summarize_streak(recs, label="re-wire", metric_key="delta", metric_name="delta vs P")
+    assert s.latest_metric == 0.16
+    assert s.consecutive_pass == 1
+
+
 def test_cmd_status_smoke(tmp_path: Path) -> None:
     eval_dir = tmp_path / "ranker_eval"
     eval_dir.mkdir()
@@ -76,3 +83,15 @@ def test_cmd_status_smoke(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.stdout
     assert "F3 verdict ranker" in result.stdout
     assert "wf_p25 tail" in result.stdout
+
+
+def test_cmd_status_shows_rewire_clock(tmp_path: Path) -> None:
+    eval_dir = tmp_path / "ranker_eval"
+    eval_dir.mkdir()
+    (eval_dir / "streak.jsonl").write_text(json.dumps(_rec(0.4, "PASS")) + "\n", encoding="utf-8")
+    (eval_dir / "rewire_streak_wfp25.jsonl").write_text(
+        json.dumps(_rec(0.16, "PASS", key="delta")) + "\n", encoding="utf-8"
+    )
+    result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
+    assert result.exit_code == 0, result.stdout
+    assert "re-wire gate-tail" in result.stdout

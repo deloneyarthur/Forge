@@ -41,6 +41,7 @@ OUT_DIR="$HOME/forge_data/ranker_eval"
 STREAK_LOG="$OUT_DIR/streak.jsonl"
 MIN_FRESH=150   # F3: >=150 fresh shadow-scored verdicts for a checkpoint to count
 ROBUSTNESS_STREAK_LOG="$OUT_DIR/robustness_streak_wfp25.jsonl"   # §8.6 wf_p25 tail clock, D191/D192
+REWIRE_STREAK_LOG="$OUT_DIR/rewire_streak_wfp25.jsonl"   # gate-then-tail re-wire candidate clock
 TAIL_GATE="wf_sharpe_p25"   # realized worst-quartile metric the tail model is judged against
 # §8.6 tail min-fresh: the verified-coverage+wf population is ~10-100x sparser than
 # the full verdict stream, so the per-checkpoint floor is far below F3's 150. PROVISIONAL
@@ -307,6 +308,113 @@ sp_str = "n/a" if fresh.spearman is None else f"{fresh.spearman:+.3f}"
 note = "" if qualifies else f"  (NOT counted: fresh={fresh.n_decided}<{min_fresh} or spearman=None)"
 print(
     f"daily-ranker-eval: tail pooled n={fresh.n_decided} spearman={sp_str} "
+    f"verdict={verdict} -> consecutive PASS streak = {streak}/3{note}"
+)
+PY
+
+# --- gate-then-tail re-wire streak (quality-lane re-wire, shadow-first) --------
+#     The shadow clock for the gate-then-tail re-wire candidate
+#     (docs/proposals/quality-lane-rewire.md): does a P(component) eligibility gate +
+#     tail-ordered survivors beat ranking by P(component) alone (≈ the deployed lane) on
+#     realized wf_p25? Judged on the same FRESH per-checkpoint window as the streaks above;
+#     PASS when the Δ clears the PROVISIONAL _REWIRE_DELTA_CRITERION. Telemetry only -- the
+#     lane flip is its own operator gate (D104); raw Δ recorded for re-judging.
+echo "daily-ranker-eval: re-wire streak (gate-then-tail, wf_p25)"
+uv run python - "$SNAP" "$REWIRE_STREAK_LOG" "$MIN_FRESH_TAIL" "$TAIL_GATE" <<'PY'
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from forge.cli.ranker_model_cmd import _REWIRE_DELTA_CRITERION as CRIT
+from forge.core.clock import utc_now
+from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
+from forge.persistence.db import db_connection
+from forge.ranking.evaluation import evaluate_rewire_shadow
+
+snap, streak_log_path, min_fresh, gate = (
+    sys.argv[1],
+    Path(sys.argv[2]),
+    int(sys.argv[3]),
+    sys.argv[4],
+)
+
+
+def verdict_of(ev):
+    if ev is None or ev.delta is None:
+        return "INSUFFICIENT"
+    return "PASS" if ev.delta >= CRIT else "FAIL"
+
+
+def show(ev, label):
+    if ev is None:
+        print(f"    {label}: no verified-coverage {gate}-bearing tail verdicts in window")
+        return
+    d = "n/a" if ev.delta is None else f"{ev.delta:+.3f}"
+    g = "n/a" if ev.gate_top_k_mean is None else f"{ev.gate_top_k_mean:.3f}"
+    b = "n/a" if ev.base_top_k_mean is None else f"{ev.base_top_k_mean:.3f}"
+    print(
+        f"    {label}: n={ev.n_decided} top{ev.k} {gate} gate-tail={g} vs P-base={b} "
+        f"delta={d} -> {verdict_of(ev)}"
+    )
+
+
+# Fresh-window start = previous run's ts (per-checkpoint window). First run -> clean era.
+since_fresh = CLEAN_ERA_LABEL_CUT
+if streak_log_path.exists():
+    prior = [ln for ln in streak_log_path.read_text().splitlines() if ln.strip()]
+    if prior:
+        since_fresh = datetime.fromisoformat(json.loads(prior[-1])["ts"])
+
+with db_connection(Path(snap)) as conn:
+    cumulative = evaluate_rewire_shadow(conn, since=CLEAN_ERA_LABEL_CUT, gate=gate)
+    fresh = evaluate_rewire_shadow(conn, since=since_fresh, gate=gate)
+
+print(f"  [cumulative since {CLEAN_ERA_LABEL_CUT.isoformat()}]")
+show(cumulative, "cumulative")
+print(f"  [fresh since {since_fresh.isoformat()} -- drives the streak]")
+show(fresh, "fresh")
+
+if fresh is None:
+    print("  no re-wire verdicts in the fresh window -- nothing to record")
+    sys.exit(0)
+
+verdict = verdict_of(fresh)
+qualifies = fresh.n_decided >= min_fresh and fresh.delta is not None
+
+record = {
+    "ts": utc_now().isoformat(),
+    "window_since": since_fresh.isoformat(),
+    "gate": gate,
+    "fresh_decided": fresh.n_decided,
+    "k": fresh.k,
+    "p_floor": fresh.p_floor,
+    "keep_frac": fresh.keep_frac,
+    "gate_top_k_mean": fresh.gate_top_k_mean,
+    "base_top_k_mean": fresh.base_top_k_mean,
+    "delta": fresh.delta,
+    "criterion": CRIT,
+    "verdict": verdict,
+    "qualifies": qualifies,
+}
+with streak_log_path.open("a") as fh:
+    fh.write(json.dumps(record) + "\n")
+
+# Streak = trailing consecutive *qualifying* PASS (mirrors the streaks above).
+streak = 0
+for line in reversed([ln for ln in streak_log_path.read_text().splitlines() if ln.strip()]):
+    row = json.loads(line)
+    if not row.get("qualifies"):
+        continue
+    if row.get("verdict") == "PASS":
+        streak += 1
+    else:
+        break
+
+d_str = "n/a" if fresh.delta is None else f"{fresh.delta:+.3f}"
+note = "" if qualifies else f"  (NOT counted: fresh={fresh.n_decided}<{min_fresh})"
+print(
+    f"daily-ranker-eval: re-wire n={fresh.n_decided} delta={d_str} "
     f"verdict={verdict} -> consecutive PASS streak = {streak}/3{note}"
 )
 PY

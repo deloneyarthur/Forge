@@ -9,6 +9,9 @@ promote over time*. The daily ranker-eval timer already distils that into two cu
     consecutive-PASS streak toward the F3 criterion.
   * **§8.6 wf_p25 tail** (`robustness_streak_wfp25.jsonl`) — Spearman of the quality
     lane's predicted WF-floor against the realized worst-quartile gate.
+  * **re-wire gate→tail** (`rewire_streak_wfp25.jsonl`) — the shadow clock for the
+    gate-then-tail re-wire candidate (docs/proposals/quality-lane-rewire.md): Δ of its
+    top-K realized WF floor vs ranking by P(component) alone (≈ the deployed lane).
 
 Until now reading them meant `tail -1 … | json` spelunking. This command pretty-prints
 both — the trend at a glance — with zero DB access (the JSONL files carry no lock, unlike
@@ -153,9 +156,16 @@ def cmd_status(
         metric_key="spearman",
         metric_name="Spearman",
     )
+    rewire = summarize_streak(
+        _read_jsonl(eval_dir / "rewire_streak_wfp25.jsonl"),
+        label="re-wire gate-tail",
+        metric_key="delta",
+        metric_name="Δ vs P",
+    )
     typer.echo(f"forge status — learning-signal clocks ({eval_dir}; no DB)")
     typer.echo(_format_summary(f3))
     typer.echo(_format_summary(tail))
+    typer.echo(_format_summary(rewire))
     typer.echo("(authoritative recompute: `forge ranker-model eval` / `eval-robustness`)")
 
 

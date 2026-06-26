@@ -65,9 +65,13 @@ eval monitors.
    `wf_sharpe_p25` over verified-coverage decided verdicts. Telemetry only — the production loop
    never reads it. Reuses the stored `model_score` (=P) + `tail_score`, so it needs no new
    scoring columns.
-2. **Streak (next).** Daily timer appends a §8.6-style streak (`rewire_streak_wfp25.jsonl`);
-   `forge status` surfaces it. Criterion: Δ(gate-then-tail − P) margin held for N consecutive
-   windows.
+2. **Streak (built).** The daily timer (`scripts/daily_ranker_eval.sh`) appends a §8.6-style
+   streak to `rewire_streak_wfp25.jsonl`; `forge status` surfaces it as the `re-wire gate-tail`
+   clock. A checkpoint PASSes when the fresh-window Δ(gate-then-tail − P) clears the PROVISIONAL
+   `_REWIRE_DELTA_CRITERION` (+0.05); the streak counts consecutive qualifying PASSes (target 3).
+   Like the wf_p25 tail streak, the first record FAILs (the first fresh window spans the whole
+   clean era = full-pool, Δ−0.07) and only climbs as recent per-checkpoint windows accrue — i.e.
+   it tracks the recency-dependent win. Raw Δ recorded per row for re-judging.
 3. **Floor calibration (next).** One-time generation-stream shadow to set the absolute `P`
    floor.
 4. **Production scorer (next, flag-OFF).** A `--quality-rank-mode={blend,gate-tail}` (or a

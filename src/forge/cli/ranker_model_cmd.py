@@ -43,6 +43,14 @@ _AUC_MARGIN_CRITERION = 0.05
 # sparser than the full verdict stream).
 _TAIL_SPEARMAN_CRITERION = 0.30
 
+# Gate-then-tail re-wire streak criterion — PROVISIONAL (docs/proposals/quality-lane-rewire.md).
+# A checkpoint PASSes when the fresh-window delta (gate-then-tail top-K minus the P(component)-
+# baseline top-K, on realized wf_sharpe_p25) clears this margin; the streak counts consecutive
+# qualifying PASSes. The A/B's recent-window delta was ~+0.16 (full-pool -0.07 — the win is
+# recency-dependent on the improving tail models); +0.05 is a modest "meaningfully beats the
+# deployed lane" bar. Raw delta is recorded per row so the operator can re-judge without a re-run.
+_REWIRE_DELTA_CRITERION = 0.05
+
 
 def _resolve_forge_db(forge_db: Path | None, config: Path) -> Path:
     if forge_db is not None:
