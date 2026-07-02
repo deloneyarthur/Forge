@@ -57,20 +57,25 @@ def _full_window(start: date, n_trading_days: int) -> list[date]:
 
 
 def _forward_cumulative_pool(
-    ordered_days: list[date], returns_map: Mapping[date, float], horizon: int
+    ordered_days: list[date],
+    returns_map: Mapping[date, float],
+    horizon: int,
+    *,
+    absolute: bool = False,
 ) -> dict[date, float]:
     """P1-1: cumulative forward return over the next ``horizon`` TRADING days for every
     trading day that has ``horizon`` successors — the null pool for ``cumulative_trading``.
 
     ``ordered_days`` ARE the trading days (the returns-index keys, sorted), so walking them
     is a trading-day shift by construction — no CALENDAR arithmetic, no weekend loss. The
-    map value at day ``ordered_days[i]`` is ``sum(returns[i+1 .. i+horizon])`` (T+1..T+k)."""
+    map value at day ``ordered_days[i]`` is ``sum(returns[i+1 .. i+horizon])`` (T+1..T+k).
+    ``absolute`` (P1-2a) takes ``|cumulative move|`` — the long-vol / straddle-payoff proxy
+    for ``volatility_event``, whose edge is move MAGNITUDE not direction."""
     out: dict[date, float] = {}
     n = len(ordered_days)
     for i in range(n - horizon):
-        out[ordered_days[i]] = sum(
-            returns_map[ordered_days[j]] for j in range(i + 1, i + 1 + horizon)
-        )
+        cumulative = sum(returns_map[ordered_days[j]] for j in range(i + 1, i + 1 + horizon))
+        out[ordered_days[i]] = abs(cumulative) if absolute else cumulative
     return out
 
 
@@ -79,19 +84,23 @@ def _real_forward_cumulative(
     ordered_days: list[date],
     returns_map: Mapping[date, float],
     horizon: int,
+    *,
+    absolute: bool = False,
 ) -> tuple[float, int]:
     """Real notional under ``cumulative_trading``: for each activation, the cumulative return
     over the first ``horizon`` TRADING days STRICTLY after it (via the returns index, so a
     Friday activation reads Mon.. not the dropped weekend). Activations without ``horizon``
     trading days left in the window are dropped, mirroring the legacy out-of-window drop; the
-    returned count is the effective sample size the null must match."""
+    returned count is the effective sample size the null must match. ``absolute`` (P1-2a) sums
+    ``|per-activation move|`` — the vol-appropriate statistic for ``volatility_event``."""
     total = 0.0
     effective_n = 0
     n = len(ordered_days)
     for d in activations:
         pos = bisect_right(ordered_days, d)  # first trading day strictly after d
         if pos + horizon <= n:
-            total += sum(returns_map[ordered_days[j]] for j in range(pos, pos + horizon))
+            cumulative = sum(returns_map[ordered_days[j]] for j in range(pos, pos + horizon))
+            total += abs(cumulative) if absolute else cumulative
             effective_n += 1
     return total, effective_n
 
@@ -141,14 +150,26 @@ class PermutationTestFilter:
         window = _full_window(ctx.registry.data_start_date, history)
         all_returns_map = ctx.feature_cache.returns(window)
 
+        # P1-2a: `volatility_event` profits from move MAGNITUDE (straddle payoff), not signed
+        # drift — test it on |cumulative move|. Gated on the flag AND cumulative mode; every
+        # other family stays on signed returns. Off (default) → absolute=False → byte-identical.
+        ve_absolute = (
+            config.hypothesis == "volatility_event"
+            and ctx.calibration.permutation_test.volatility_event_absolute_move
+        )
+
         if mode == "cumulative_trading" and horizon > 0:
             # P1-1: cumulative return over the next `horizon` TRADING days (T+1..T+k), null
             # built on the SAME statistic (else a k-day real sum vs 1-day null sums is a
             # scale mismatch). ordered_days == the trading-day index (returns-map keys).
             ordered_days = sorted(all_returns_map)
-            pool = list(_forward_cumulative_pool(ordered_days, all_returns_map, horizon).values())
+            pool = list(
+                _forward_cumulative_pool(
+                    ordered_days, all_returns_map, horizon, absolute=ve_absolute
+                ).values()
+            )
             real_notional, effective_n = _real_forward_cumulative(
-                activations, ordered_days, all_returns_map, horizon
+                activations, ordered_days, all_returns_map, horizon, absolute=ve_absolute
             )
         else:
             # Legacy single_day: the return on the single CALENDAR day at T+horizon (buggy —
@@ -195,6 +216,7 @@ class PermutationTestFilter:
                     "effective_n": effective_n,
                     "forward_horizon_days": horizon,
                     "forward_return_mode": mode,
+                    "volatility_event_absolute_move": ve_absolute,
                     "p_value_threshold": p_threshold,
                 }
             ),

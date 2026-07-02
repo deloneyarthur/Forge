@@ -81,15 +81,21 @@ def _trading_window(n_days: int) -> list[date]:
 
 
 def _ctx_mode(
-    cache: _ReturnsCache, mode: str, *, seed_root: int = 0, horizon: int | None = None
+    cache: _ReturnsCache,
+    mode: str,
+    *,
+    seed_root: int = 0,
+    horizon: int | None = None,
+    ve_absolute: bool = False,
 ) -> FilterContext:
     """A FilterContext whose permutation_test calibration overrides the forward-return mode
-    (and optionally the horizon) — P1-1 exercises `cumulative_trading` without a temp YAML."""
+    (and optionally the horizon / the P1-2a ve absolute-move flag) — exercises the fixes
+    without a temp YAML."""
     base = load_calibration(_PREFILTER_YAML)
     pt = base.permutation_test
     if horizon is not None:
         pt = dc_replace(pt, forward_horizon_days=horizon)
-    pt = dc_replace(pt, forward_return_mode=mode)
+    pt = dc_replace(pt, forward_return_mode=mode, volatility_event_absolute_move=ve_absolute)
     hierarchy = SeedHierarchy(seed_root)
     return FilterContext(
         registry=minimal_registry_snapshot(),
@@ -178,6 +184,72 @@ def test_cumulative_determinism_same_seed() -> None:
     a = f.apply(cfg, _ctx_mode(cache, "cumulative_trading", seed_root=7, horizon=3))
     b = f.apply(cfg, _ctx_mode(cache, "cumulative_trading", seed_root=7, horizon=3))
     assert a.details["p_value"] == b.details["p_value"]
+
+
+# ---------------------------------------------------------------------------
+# P1-2a — vol-appropriate (|move|) null for volatility_event
+# ---------------------------------------------------------------------------
+
+
+def _ve_config() -> object:
+    # model_copy doesn't re-validate (R3 event-proximity isn't needed — the filter only reads
+    # config.hypothesis + the directional signal).
+    return minimal_strategy_config().model_copy(update={"hypothesis": "volatility_event"})
+
+
+def test_default_ve_absolute_move_is_false() -> None:
+    assert (
+        load_calibration(_PREFILTER_YAML).permutation_test.volatility_event_absolute_move is False
+    )
+
+
+def test_ve_absolute_move_captures_magnitude_not_direction() -> None:
+    # The crux: a ve signal fires before BIG moves that ALTERNATE sign. Signed cumulative
+    # cancels to ~0 (rejected); |move| sums the magnitude (passes) — the long-straddle edge.
+    f = PermutationTestFilter()
+    ve_cfg = _ve_config()
+    window = _trading_window(200)
+    returns_map: dict[date, float] = {}
+    for i, d in enumerate(window):
+        if 1 <= i <= 50:
+            returns_map[d] = 2.0 if i % 2 == 1 else -2.0  # big alternating moves
+        else:
+            returns_map[d] = 0.0
+    activations = frozenset(window[i] for i in range(50))  # fire the day before each big move
+    cache = _ReturnsCache(activations, returns_map)
+
+    signed = f.apply(ve_cfg, _ctx_mode(cache, "cumulative_trading", horizon=1))
+    assert signed.details["volatility_event_absolute_move"] is False
+    assert signed.details["real_notional"] == pytest.approx(0.0)  # +2/-2 cancel
+    assert not signed.passed  # a real edge lost to the signed test
+
+    absolute = f.apply(ve_cfg, _ctx_mode(cache, "cumulative_trading", horizon=1, ve_absolute=True))
+    assert absolute.details["volatility_event_absolute_move"] is True
+    assert absolute.details["real_notional"] == pytest.approx(100.0)  # 50 x |2.0|
+    assert absolute.passed
+
+
+def test_ve_absolute_flag_ignored_for_non_ve_family() -> None:
+    # The flag is ve-scoped: a trend config with the flag ON still uses signed returns.
+    f = PermutationTestFilter()
+    trend_cfg = minimal_strategy_config().model_copy(update={"hypothesis": "trend_continuation"})
+    window = _trading_window(60)
+    returns_map = {d: float(i % 3) for i, d in enumerate(window)}
+    cache = _ReturnsCache(frozenset(window[:20]), returns_map)
+    result = f.apply(trend_cfg, _ctx_mode(cache, "cumulative_trading", horizon=2, ve_absolute=True))
+    assert result.details["volatility_event_absolute_move"] is False
+
+
+def test_ve_absolute_off_is_signed_for_ve() -> None:
+    # ve config, flag OFF → signed (byte-identical to the P1-1 cumulative path).
+    f = PermutationTestFilter()
+    ve_cfg = _ve_config()
+    window = _trading_window(10)
+    returns_map = {d: float(i) for i, d in enumerate(window)}
+    cache = _ReturnsCache(frozenset({window[2]}), returns_map)
+    result = f.apply(ve_cfg, _ctx_mode(cache, "cumulative_trading", horizon=2))
+    assert result.details["volatility_event_absolute_move"] is False
+    assert result.details["real_notional"] == pytest.approx(7.0)  # signed 3+4, not |3+4|
 
 
 def test_satisfies_filter_protocol() -> None:
