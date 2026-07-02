@@ -10,6 +10,7 @@ import re
 import shutil
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from forge.cli.main import app
@@ -78,6 +79,38 @@ def test_dry_run_is_deterministic_for_same_seed() -> None:
     assert a.exit_code == 0
     assert b.exit_code == 0
     assert a.stdout == b.stdout
+
+
+# ---------------------------------------------------------------------------
+# D216 Layer-2 floor — call-site integration (learned-audit P0.4b)
+# ---------------------------------------------------------------------------
+
+
+def test_orthogonal_family_floor_active_line_prints(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FORGE_ORTHOGONAL_FAMILY_FLOOR must actually REACH the iteration and lift the
+    family — a real dry-run batch prints the 'floor ACTIVE' line. Guards the D185
+    inert-call-site failure mode (a wired-but-unreached flag that passes the
+    parser unit tests yet silently no-ops in production)."""
+    monkeypatch.setenv("FORGE_ORTHOGONAL_FAMILY_FLOOR", "volatility_event=0.20")
+    result = runner.invoke(
+        app,
+        ["run", "--no-config", "--seed", "0", "--batch-size", "3", "--max", "30", "--dry-run"],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "orthogonal-family floor ACTIVE" in result.stdout
+    assert "volatility_event>=0.20" in result.stdout
+
+
+def test_orthogonal_family_floor_unset_prints_no_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Byte-identical OFF (hard rule 6): env unset → the block is skipped and no
+    floor line prints, so the emitted sequence is unchanged."""
+    monkeypatch.delenv("FORGE_ORTHOGONAL_FAMILY_FLOOR", raising=False)
+    result = runner.invoke(
+        app,
+        ["run", "--no-config", "--seed", "0", "--batch-size", "3", "--max", "30", "--dry-run"],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "floor ACTIVE" not in result.stdout
 
 
 # ---------------------------------------------------------------------------
