@@ -26,11 +26,12 @@ _RANKER_YAML = _REPO_ROOT / "config" / "ranker.yaml"
 def test_loads_repo_ranker_yaml_with_defaults() -> None:
     cfg = load_ranker_config(_RANKER_YAML)
     assert isinstance(cfg, RankerConfig)
-    assert cfg.weights.signal_density == pytest.approx(0.30)
-    assert cfg.weights.novelty == pytest.approx(0.25)
-    assert cfg.weights.regime_diversity == pytest.approx(0.20)
-    assert cfg.weights.permutation_test == pytest.approx(0.15)
-    assert cfg.weights.prior_promotion_proximity == pytest.approx(0.10)
+    # D220 (P1.4): prior_promotion_proximity raised 0.10 -> 0.50, hygiene renormalized.
+    assert cfg.weights.signal_density == pytest.approx(0.17)
+    assert cfg.weights.novelty == pytest.approx(0.14)
+    assert cfg.weights.regime_diversity == pytest.approx(0.11)
+    assert cfg.weights.permutation_test == pytest.approx(0.08)
+    assert cfg.weights.prior_promotion_proximity == pytest.approx(0.50)
     assert cfg.diversification.method == "greedy"
     assert cfg.diversification.similarity_metric == "jaccard"
 
