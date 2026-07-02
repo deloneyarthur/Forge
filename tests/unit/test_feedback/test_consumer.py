@@ -423,6 +423,53 @@ def test_consume_is_idempotent(tmp_path: Path) -> None:
     assert first.promoted_count == second.promoted_count
 
 
+def test_consume_skips_noop_update_for_already_gated_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P0-3 (pipeline-perf): a re-reconcile must NOT issue the no-op UPDATE for rows
+    already 'gated' (the `WHERE status='submitted'` clause matches nothing) — same
+    end-state, one fewer write per already-gated row."""
+    from forge.feedback import consumer as _consumer
+
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    cfg = minimal_strategy_config()
+    _insert_crucible_gated(crucible_db, config_hash=cfg.config_hash)
+    batch_id = uuid.uuid4()
+
+    calls: list[str] = []
+    real_update = _consumer._update_submission_to_gated
+
+    def _counting_update(
+        db: duckdb.DuckDBPyConnection, candidate_id: uuid.UUID, run_id: str
+    ) -> None:
+        calls.append(str(candidate_id))
+        real_update(db, candidate_id, run_id)
+
+    monkeypatch.setattr(_consumer, "_update_submission_to_gated", _counting_update)
+
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
+        _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
+        first_calls = len(calls)
+        calls.clear()
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
+        )
+        second_calls = len(calls)
+        row = conn.execute(
+            "SELECT status FROM submissions WHERE config_hash = ?", [cfg.config_hash]
+        ).fetchone()
+
+    assert first_calls == 1  # submitted -> gated on the first pass
+    assert second_calls == 0  # already gated -> skipped, no no-op UPDATE issued
+    assert row is not None
+    assert row[0] == "gated"  # end-state unchanged
+
+
 def test_consume_returns_outcomes_in_stable_order(tmp_path: Path) -> None:
     """Re-consume must return outcomes in the same order. Otherwise
     downstream analyzer reports would non-deterministically vary."""

@@ -304,7 +304,14 @@ def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
             )
         )
 
-    for cid, cfg, _status in submission_rows:
+    for cid, cfg, status in submission_rows:
+        # P0-3 (pipeline-perf): only 'submitted' rows transition; skip the ones
+        # already 'gated' (a re-reconcile). `_update_submission_to_gated`'s
+        # `WHERE status='submitted'` would no-op them anyway, so this is the same DB
+        # end-state with one fewer write (fsync) per already-gated row. `status`
+        # comes from the same `_load_submissions` pass — no extra query.
+        if status != "submitted":
+            continue
         matched_run = matched.get(cfg.config_hash)
         if matched_run is None:
             continue
