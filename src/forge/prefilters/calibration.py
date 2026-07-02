@@ -67,6 +67,16 @@ class SignalCorrelationCalibration:
     Lower = stricter (more distinct signals required)."""
 
     max_jaccard_overlap: float
+    # P1-2b (strategy-audit PRE-H3): exclude the `regime_filter`-role context gate
+    # from the pairwise comparison. A regime gate co-firing with the alpha signals it
+    # gates is STRUCTURAL (its job is to restrict firing to a regime), not the
+    # "two edges that are really one" redundancy this filter exists to catch —
+    # measured, 94% of vol_event kills are regime-gate co-firing (median Jaccard 0.949)
+    # on event-calendar gates (days_to_nfp/cpi/fomc/opex), while genuine content-pair
+    # redundancy is rare + marginal. When True, only alpha-bearing signals (non-
+    # regime_filter) are compared. Changes the config population → operator flip +
+    # prereg (docs/tasks/feedback-change.md). False (default) → byte-identical.
+    exclude_regime_filter: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +309,9 @@ def load_calibration(path: Path) -> Calibration:
                 "signal_correlation",
                 "max_jaccard_overlap",
             ),
+            # P1-2b — optional with default so existing prefilter.yaml keeps loading
+            # and an un-flipped tree is byte-identical.
+            exclude_regime_filter=bool(sc.get("exclude_regime_filter", False)),
         ),
         regime_exposure=RegimeExposureCalibration(
             max_single_regime_concentration=_validate_unit_float(

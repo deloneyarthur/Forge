@@ -47,13 +47,28 @@ class SignalCorrelationFilter:
     cost_tier = 7
 
     def apply(self, config: StrategyConfig, ctx: FilterContext) -> FilterResult:
-        signals = config.signals
+        # P1-2b (PRE-H3): optionally drop the `regime_filter`-role context gate before
+        # comparing. The gate co-firing with the alpha signals it gates is structural,
+        # not redundant alpha (94% of vol_event kills, median Jaccard 0.949). Off
+        # (default) → `compared` is `config.signals` verbatim → byte-identical.
+        n_signals = len(config.signals)
+        if ctx.calibration.signal_correlation.exclude_regime_filter:
+            compared = tuple(s for s in config.signals if s.role != "regime_filter")
+        else:
+            compared = tuple(config.signals)
+        signals = compared
         if len(signals) < 2:
             # Nothing to correlate; trivially passes.
             return FilterResult(
                 passed=True,
                 score=1.0,
-                details=MappingProxyType({"n_signals": len(signals), "max_jaccard": 0.0}),
+                details=MappingProxyType(
+                    {
+                        "n_signals": n_signals,
+                        "compared_signals": len(signals),
+                        "max_jaccard": 0.0,
+                    }
+                ),
             )
 
         # Cache activations once per signal — avoids re-fetching for each
@@ -76,7 +91,8 @@ class SignalCorrelationFilter:
         score = 1.0 - max_overlap if passed else 0.0
 
         details: dict[str, object] = {
-            "n_signals": len(signals),
+            "n_signals": n_signals,
+            "compared_signals": len(signals),
             "max_jaccard": max_overlap,
             "threshold": threshold,
         }

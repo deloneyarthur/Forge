@@ -243,3 +243,120 @@ def test_empty_activation_sets_are_treated_as_uncorrelated() -> None:
     result = f.apply(cfg, _ctx(cache))
     assert result.passed is True
     assert result.details["max_jaccard"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# PRE-H3 (strategy-audit P1-2b): exclude the regime_filter context gate from the
+# pairwise overlap. The gate co-firing with the alpha signals it gates is
+# structural, not the "two edges that are really one" redundancy this filter
+# exists to catch (measured: 94% of vol_event kills are regime-gate co-firing,
+# median Jaccard 0.949; genuine content-pair redundancy is rare + marginal).
+# Flag default False → byte-identical.
+# ---------------------------------------------------------------------------
+
+from dataclasses import replace as _dc_replace  # noqa: E402
+
+
+def _config_dir_regime_confluence(
+    *,
+    directional: str = "ema_50",
+    regime: str = "days_to_fomc",
+    confluence: str = "chain_realized_vol",
+) -> StrategyConfig:
+    """A ve-shaped config: directional + regime_filter gate + confluence."""
+    return StrategyConfig(
+        name="ve_cfg",
+        hypothesis="volatility_event",
+        dte_bucket="swing_short",
+        underlying="SPY",
+        tier=1,
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=(directional,),
+                params={"threshold": 0.0},
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=(regime,),
+                params={"threshold": 5.0},
+            ),
+            SignalSpec(
+                id="sig_conf",
+                type="passthrough",
+                role="confluence",
+                indicators=(confluence,),
+                params={},
+            ),
+        ),
+        combiner=CombinerSpec(),
+        selector=SelectorSpec(delta_target=0.45, delta_tolerance=0.05, dte_min=14, dte_max=21),
+        sizer=SizerSpec(mode="fixed_risk_pct"),
+        exits=_MANDATORY_EXITS,
+    )
+
+
+def _ctx_exclude_regime(cache: object) -> FilterContext:
+    base = load_calibration(_PREFILTER_YAML)
+    sc = _dc_replace(base.signal_correlation, exclude_regime_filter=True)
+    return _dc_replace(_ctx(cache), calibration=_dc_replace(base, signal_correlation=sc))
+
+
+def test_default_still_rejects_regime_gate_cofiring() -> None:
+    """Flag OFF (default): the regime gate co-firing with content still rejects
+    (byte-identical to pre-P1-2b)."""
+    cfg = _config_dir_regime_confluence()
+    dates = _date_range(date(2024, 1, 1), 30)  # gate + content fire on identical days
+    cache = _StubCache({"sig_directional": dates, "sig_regime": dates, "sig_conf": dates})
+    result = SignalCorrelationFilter().apply(cfg, _ctx(cache))
+    assert result.passed is False
+    assert result.details["max_jaccard"] == pytest.approx(1.0)
+
+
+def test_exclude_regime_recovers_gate_cofiring() -> None:
+    """Flag ON: the same gate-cofiring config passes, because the regime_filter is
+    excluded and the two remaining alpha signals are uncorrelated."""
+    cfg = _config_dir_regime_confluence()
+    cache = _StubCache(
+        {
+            "sig_directional": _date_range(date(2024, 1, 1), 30),
+            "sig_conf": _date_range(date(2024, 6, 1), 30),  # disjoint from directional
+            "sig_regime": _date_range(date(2024, 1, 1), 30),  # co-fires with directional
+        }
+    )
+    result = SignalCorrelationFilter().apply(cfg, _ctx_exclude_regime(cache))
+    assert result.passed is True
+    # The gate is not among the compared signals.
+    assert result.details.get("compared_signals") == 2
+
+
+def test_exclude_regime_still_catches_content_redundancy() -> None:
+    """Flag ON: two ALPHA signals (directional + confluence) that co-fire are still
+    rejected — the filter's actual purpose is preserved."""
+    cfg = _config_dir_regime_confluence()
+    dates = _date_range(date(2024, 1, 1), 30)
+    cache = _StubCache(
+        {
+            "sig_directional": dates,
+            "sig_conf": dates,  # content redundancy: directional == confluence
+            "sig_regime": _date_range(date(2024, 6, 1), 10),  # gate elsewhere, irrelevant
+        }
+    )
+    result = SignalCorrelationFilter().apply(cfg, _ctx_exclude_regime(cache))
+    assert result.passed is False
+    assert result.details["max_jaccard"] == pytest.approx(1.0)
+
+
+def test_exclude_regime_trivial_pass_with_one_alpha_signal() -> None:
+    """Flag ON: a config whose only non-regime signal is the directional trivially
+    passes (nothing to correlate once the gate is excluded)."""
+    cfg = _config_two_signals()  # directional + regime_filter only
+    dates = _date_range(date(2024, 1, 1), 30)
+    cache = _StubCache({"sig_directional": dates, "sig_regime": dates})
+    result = SignalCorrelationFilter().apply(cfg, _ctx_exclude_regime(cache))
+    assert result.passed is True
+    assert result.details.get("compared_signals") == 1
