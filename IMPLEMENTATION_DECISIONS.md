@@ -5550,3 +5550,23 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Ritual.** Telemetry only — no daemon submission-path change. No prereg (diagnostics, not a prediction).
 
 **STATUS: P3.2 SHIPPED (`156e523`, 368 ranking+cli tests green). Telemetry only; daemon untouched. Drift + adoption signals now surfaced in `forge status` / `forge healthcheck` / `eval`; the hypothesis-weights silent-degrade is no longer invisible. NEXT: P3.3 (randomized exploration holdout — operator-gated, flag-OFF build) or P4.1 (wf_p25 lane retire-or-keep, now that both its skill gate (D229) and drift guard read the paired signal).**
+
+## D231 — 2026-07-02 — wf_p25 lane per-family skill probe → KEEP (not retire); the marginal pooled signal is the mean_reversion drag (learned-audit P4.1)
+
+**Spec section:** learned-systems plan P4.1 ("decide the wf_p25 lane's fate on a clock; run the cheap wf_p25-IC-on-vol_event-subset probe — if the lane shows skill *specifically* on vol_event, that changes its value proposition even if pooled skill stays marginal"). The lane has been live since D193 with §8.6 0/3 forever and the honest defense had shrunk to "not harmful" — a retire candidate.
+
+**Probe (built P4.1, telemetry).** `evaluate_tail_shadow_by_hypothesis` splits the paired Δ Spearman (tail − incumbent P(component), same verified-coverage rows) by `config.hypothesis` (`json_extract_string(config_json,'$.hypothesis')`), pooled across tail models; `eval-robustness` prints it ve-first. Live (honest era, `forge_snap2.db`):
+
+| family | n | paired Δ Spearman | verdict (Δ>0.05) |
+|---|---|---|---|
+| **volatility_event** | 55 | **+0.080** | PASS |
+| trend_continuation | 4702 | **+0.143** | PASS |
+| mean_reversion | 3276 | −0.062 | FAIL |
+
+**Finding.** The lane's weak POOLED skill is an aggregation artifact: `mean_reversion` (the dominant row count) drags the pool to ~0, MASKING real, criterion-clearing skill on the two families the lane exists to serve — **vol_event (+0.080, the promotable single-name-ve book) and trend_continuation (+0.143, robust at n=4702, a decorrelating family)**. The lane down-ranks mr — the OVERSUPPLIED monoculture D216/D220 are trying to REDUCE — which is arguably correct behaviour, not a defect. This inverts the "only not-harmful" read: the lane is actively HELPFUL where it matters. (Caveat: ve n=55 is thin — suggestive, not tight; trend is rock-solid.)
+
+**Decision — the retire-or-keep RULE (set now, per P4.1).** Judge the lane on its PER-FAMILY paired Δ on the families it serves, NOT on pooled skill (which the mr mass distorts): **KEEP while `volatility_event` OR `trend_continuation` paired Δ clears the +0.05 criterion on fresh windows (the D228/D229 SPRT machinery, once per-family streaks accrue); RETIRE (demote to telemetry, `FORGE_QUALITY_RANKER=off`) only if BOTH lose skill.** The mr FAIL and the pooled §8.6 FAIL are NOT retire triggers — they're the expected shape of a lane that correctly de-prioritizes the monoculture. **Current verdict: KEEP** (ve + trend both PASS).
+
+**Ritual.** Telemetry + a decision RULE — no daemon change, no prereg (the lane is already live from D193; this decides its fate, it doesn't predict). Retiring or the per-family streak wiring, if pursued, is the operator's call on this basis.
+
+**STATUS: P4.1 probe SHIPPED (`e5ffc27`, 27 evaluation tests green) + the retire-or-keep rule set + KEEP recommended on the data. Completes the buildable P3/P4 learned-systems items (P3.1/D228, P3.1-followup/D229, P3.2/D230, P4.1/D231). REMAINING learned: P3.3 (exploration holdout — a core-submit-path + `submissions.selection_mode` schema change; bigger + byte-identical-sensitive, deferred to a dedicated increment, operator-gated activation) + P5 (Thompson/UCB, elite archive — mostly blocked/opportunistic). Still hold live-stream changes until D220 `b7ecc2d2` (≥07-04).**

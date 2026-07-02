@@ -1,6 +1,15 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Learned-audit P3.2 SHIPPED: feature/score-drift (PSI) + model-adoption gating + hypothesis-weights fallback WARN. Blind newest-wins rotation now has a drift signal + an ADOPT/BLOCK guard. Telemetry only. [[D230]]
+## 2026-07-02 (latest) — Learned-audit P4.1: wf_p25 lane per-family skill probe → KEEP. The marginal POOLED signal is the mean_reversion drag; the lane has real skill on ve (+0.080) + trend (+0.143). Retire-or-keep rule set. [[D231]]
+
+**Operator: "continue to the next thing." Pivoted P3.3 → P4.1 (P3.3 = a core-submit-path + schema change, bigger/byte-identical-sensitive → dedicated increment; P4.1 = higher-value, lower-risk telemetry using the D229 paired infra + targeting the ve goal).**
+- **P4.1 probe (`e5ffc27`, telemetry):** `evaluate_tail_shadow_by_hypothesis` splits the paired Δ Spearman (tail − incumbent, same rows) by family; `eval-robustness` prints it ve-first. Live (honest era):
+  - **volatility_event n=55 Δ=+0.080 PASS** · **trend_continuation n=4702 Δ=+0.143 PASS** · mean_reversion n=3276 Δ=−0.062 FAIL.
+- **Finding:** the lane's weak POOLED skill is an aggregation artifact — mr (dominant row count) drags the pool to ~0, MASKING real skill on the families the lane serves (ve = promotable book; trend = decorrelating). The lane down-ranks the mr monoculture we WANT less of. Inverts the "only not-harmful" read → the lane is actively helpful where it matters.
+- **Retire-or-keep RULE (set):** judge on PER-FAMILY Δ (ve OR trend clearing +0.05 on fresh windows via the D228/D229 SPRT), NOT pooled skill; RETIRE only if BOTH ve+trend lose skill. mr/pooled FAIL are NOT triggers. **Current verdict: KEEP.**
+- **POSTURE: telemetry + a decision rule; daemon untouched.** Completes the buildable learned P3/P4 items (D228/D229/D230/D231). **REMAINING:** P3.3 (exploration holdout — deferred, dedicated increment) + P5 (mostly blocked). Hold live-stream changes until D220 `b7ecc2d2` (≥07-04).
+
+## 2026-07-02 — Learned-audit P3.2 SHIPPED: feature/score-drift (PSI) + model-adoption gating + hypothesis-weights fallback WARN. Blind newest-wins rotation now has a drift signal + an ADOPT/BLOCK guard. Telemetry only. [[D230]]
 
 **Operator: "continue with follow-up and P3.2." Did both — §8.6 follow-up (D229) + P3.2 (this).**
 - **The gap:** the daemon adopts the newest daily-trained model by mtime with no guard — a bad retrain silently goes live, and no signal flags input-distribution drift.
