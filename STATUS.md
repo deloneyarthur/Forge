@@ -1,6 +1,13 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Learned-audit P3.1 SHIPPED: SPRT sequential test replaces the 12.5%-FP "3 consecutive PASS" flip gate. The gate-tail flip is now judged by a controlled-α significance test. Telemetry only; daemon untouched. [[D228]]
+## 2026-07-02 (latest) — Learned-audit P3.1 COMPLETE: §8.6 tail streak now a PAIRED SPRT too (tail Spearman − incumbent Spearman, same rows). Both promotion gates are controlled-α significance tests. Telemetry only. [[D229]]
+
+**Operator: "continue with follow-up and P3.2." Did the §8.6 follow-up (this); P3.2 next.**
+- **The defect:** the §8.6 tail clock PASSed on an ABSOLUTE Spearman ≥0.30 — rewards a model for tracking a signal the incumbent P(component) already ranks, not the marginal skill P4.1 needs to judge the lane.
+- **P3.1 follow-up (`463ed04`, 360 tests):** `TailEvaluation` gains `incumbent_spearman` + `spearman_delta` (tail − incumbent, same rows; the triples already had `composite_score`). New `shadow_tail_verdict` (paired). `_sprt_flip_gate` generalizes the D228 gate; `rewire_flip_gate` + new `tail_flip_gate` both delegate; `forge status` prints both gate lines. Daily timer + `eval-robustness` report the paired delta. Legacy rows (no `spearman_delta`) are skipped → gate stays NOT MET, no fabricated PASS (verified live).
+- **POSTURE: telemetry only; daemon untouched.** Completes P3.1 — both streak gates (rewire + §8.6) are controlled-α paired SPRTs; the ad-hoc absolute/coin-flip criteria are retired. **NOW: P3.2** (feature-drift PSI/JS per checkpoint + adoption gating: refuse to rotate to a model with negative fresh-window IC; surface the hypothesis-weights uniform-fallback as a healthcheck WARN). Then P3.3 / P4.1. Hold live-stream changes until D220 `b7ecc2d2` (≥07-04).
+
+## 2026-07-02 — Learned-audit P3.1 SHIPPED: SPRT sequential test replaces the 12.5%-FP "3 consecutive PASS" flip gate. The gate-tail flip is now judged by a controlled-α significance test. Telemetry only; daemon untouched. [[D228]]
 
 **Operator: "continue to the next tier" → learned-systems P3 (promotion & feedback discipline; P0/P1 done = D220–D223). P3.1/B5: the flip gates were statistically ad-hoc.**
 - **The defect:** the gate-tail flip gate (D223) needed "k≥3 fresh PASSes AND a fixed-sample 95% CI excluding 0." "3 consecutive" = **0.5³ = 12.5% false-promote** under a coin-flip null; and peeking a fixed-sample CI every day inflates Type-I (optional stopping). No explicit α, no effect size.
