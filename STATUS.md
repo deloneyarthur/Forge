@@ -1,6 +1,14 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Learned-audit P4.1: wf_p25 lane per-family skill probe → KEEP. The marginal POOLED signal is the mean_reversion drag; the lane has real skill on ve (+0.080) + trend (+0.143). Retire-or-keep rule set. [[D231]]
+## 2026-07-02 (latest) — Learned-audit P3.3 SHIPPED flag-OFF: exploration holdout (seeded ranking-bypass for unbiased labels). Byte-identical default; completes the buildable learned-systems audit (D228–D232). [[D232]]
+
+**Operator: "continue." Took the deferred P3.3 (B7) as its own careful build.**
+- **The defect:** every learned component (F3, wf_p25 lane, estimand) trains on Forge-SELECTED submissions — a direct feedback loop; the diversity floors mitigate but don't correct.
+- **P3.3 (`fc9e8b0`, 10 tests):** `FORGE_EXPLORATION_HOLDOUT_FRAC` (default 0.0 → OFF; clamp [0,0.10]). When >0, `rank_batch_with_holdout` rank-selects the top `n−holdout_n` then draws `holdout_n` at RANDOM from the survivors ranking did NOT pick (seeded via `SeedHierarchy`, rule #8); total submitted stays ≤ n (replaces slots, no oversubscription). `submissions.selection_mode` ('ranked'|'holdout') tags the draw so evals can split biased-vs-unbiased. `rank_batch` untouched; scoring shared.
+- **Byte-identical when OFF:** frac 0 → `holdout_n==0` → plain `rank_batch(n=batch_size)`, all rows 'ranked'; submitted stream + config_hashes unchanged (only forge.db gains the column). **124 invariants green**; dry-run integration test confirms the live branch.
+- **POSTURE: flag-OFF, NOT activated; daemon untouched.** Activation = a submission-mix change → operator-gated + D220 hold (≥07-04). **Completes the buildable learned-systems audit (P3.1/P3.2/P3.3/P4.1 = D228–D232).** Follow-ups: wire the eval selected-vs-holdout split (once holdout rows accrue); alpha-budget charging; P5 (Thompson/UCB, elite archive — mostly blocked). REMAINING teed-up flag-OFF levers for 07-04: `848a1f67` (cumulative_trading, validated win), `5082d332` (signal_correlation regime-gate), `9063b405` (gate-tail, now SPRT-gated), `FORGE_EXPLORATION_HOLDOUT_FRAC`; shelved: `e1a43ba8` (ve |move|, refuted).
+
+## 2026-07-02 — Learned-audit P4.1: wf_p25 lane per-family skill probe → KEEP. The marginal POOLED signal is the mean_reversion drag; the lane has real skill on ve (+0.080) + trend (+0.143). Retire-or-keep rule set. [[D231]]
 
 **Operator: "continue to the next thing." Pivoted P3.3 → P4.1 (P3.3 = a core-submit-path + schema change, bigger/byte-identical-sensitive → dedicated increment; P4.1 = higher-value, lower-risk telemetry using the D229 paired infra + targeting the ve goal).**
 - **P4.1 probe (`e5ffc27`, telemetry):** `evaluate_tail_shadow_by_hypothesis` splits the paired Δ Spearman (tail − incumbent, same rows) by family; `eval-robustness` prints it ve-first. Live (honest era):

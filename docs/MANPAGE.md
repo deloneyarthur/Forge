@@ -164,6 +164,16 @@ reads, which gates on the SAME `FORGE_REWIRE_P_FLOOR`). Consumed by `forge.cli.m
 `rank_batch(gate_tail_ordering=…)`. Flipping to `gate-tail` is an operator-gated deploy (prereg + the §8.6
 rewire streak); keep the floor env identical on `forge.service` and `forge-ranker-eval` so shadow==production.
 
+**Env-only knob — `FORGE_EXPLORATION_HOLDOUT_FRAC`** (P3.3/B7, D232): the fraction of each batch that
+BYPASSES the learned ranking as a seeded random draw from the prefiltered survivors — unbiased labels for
+F3 / the wf_p25 lane / the D076 estimand (which otherwise all train on Forge-*selected* submissions). Unset
+/ empty / `0` → **byte-identical** (no holdout, plain `rank_batch`). A value >0 reserves `round(frac·batch_size)`
+slots (the holdout REPLACES rank slots — total submitted stays ≤ batch_size, no oversubscription); clamped to
+`[0, 0.10]`; malformed → 0 (degrade-never-crash, warn-once). Draws via `SeedHierarchy(seed).rng(
+"exploration_holdout")` (deterministic, rule #8) and tags `submissions.selection_mode='holdout'` (vs `'ranked'`)
+so evals can split biased-vs-unbiased. Consumed by `forge.cli.main._resolve_exploration_holdout_frac` →
+`rank_batch_with_holdout`. Activation is an operator-gated submission-mix change (deploy ritual + the D220 hold).
+
 ```
 # One real batch, persisted:
 forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db --batch-size 200
