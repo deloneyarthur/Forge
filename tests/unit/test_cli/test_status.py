@@ -12,9 +12,11 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from forge.cli.main import app
-from forge.cli.status_cmd import summarize_streak
+from forge.cli.status_cmd import rewire_flip_gate, summarize_streak
 
 runner = CliRunner()
+
+_CLEAN_ERA_ISO = "2026-06-10T17:17:13"
 
 
 def _rec(metric: float, verdict: str, *, qualifies: bool = True, key: str = "auc_margin") -> dict:
@@ -23,6 +25,18 @@ def _rec(metric: float, verdict: str, *, qualifies: bool = True, key: str = "auc
         "verdict": verdict,
         "qualifies": qualifies,
         "ts": "2026-06-23T12:00:00+00:00",
+    }
+
+
+def _rewire_rec(
+    delta: float, verdict: str, *, window_since: str = "2026-07-01T00:00:00", qualifies: bool = True
+) -> dict:
+    return {
+        "delta": delta,
+        "verdict": verdict,
+        "qualifies": qualifies,
+        "window_since": window_since,
+        "ts": "2026-07-01T12:00:00+00:00",
     }
 
 
@@ -95,6 +109,59 @@ def test_cmd_status_shows_rewire_clock(tmp_path: Path) -> None:
     result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
     assert "re-wire gate-tail" in result.stdout
+
+
+def test_flip_gate_excludes_full_pool_look() -> None:
+    # P1.2: the contaminated full-pool first-look (window_since == clean-era) never counts,
+    # whether tagged is_first_look or identified by window_since.
+    records = [
+        {**_rewire_rec(0.007, "FAIL", window_since=_CLEAN_ERA_ISO), "is_first_look": True},
+        _rewire_rec(0.333, "PASS"),
+    ]
+    g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
+    assert g.fresh_pass_streak == 1  # only the fresh PASS; the full-pool FAIL is excluded
+    assert g.n_fresh_qualifying == 1
+    assert not g.met  # 1 < k=3, and n=1 has no CI
+
+
+def test_flip_gate_met_needs_streak_and_positive_ci() -> None:
+    # Three fresh PASSes with tight positive deltas -> streak 3/3 AND CI excludes 0 -> MET.
+    records = [_rewire_rec(d, "PASS") for d in (0.30, 0.33, 0.31)]
+    g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
+    assert g.fresh_pass_streak == 3
+    assert g.ci_low is not None
+    assert g.ci_low > 0.0
+    assert g.met
+
+
+def test_flip_gate_not_met_when_ci_spans_zero() -> None:
+    # Streak reaches 3 but the deltas straddle 0 (wide CI) -> NOT MET (the pooled-Δ arm fails).
+    records = [_rewire_rec(d, "PASS") for d in (0.40, -0.30, 0.35)]
+    g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
+    assert g.fresh_pass_streak == 3
+    assert g.ci_low is not None
+    assert g.ci_low <= 0.0
+    assert not g.met
+
+
+def test_flip_gate_streak_breaks_on_qualifying_fail() -> None:
+    records = [_rewire_rec(0.3, "PASS"), _rewire_rec(0.01, "FAIL"), _rewire_rec(0.33, "PASS")]
+    g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
+    assert g.fresh_pass_streak == 1  # trailing PASS only; the qualifying FAIL breaks it
+    assert not g.met
+
+
+def test_cmd_status_shows_flip_gate_line(tmp_path: Path) -> None:
+    eval_dir = tmp_path / "ranker_eval"
+    eval_dir.mkdir()
+    (eval_dir / "streak.jsonl").write_text(json.dumps(_rec(0.4, "PASS")) + "\n", encoding="utf-8")
+    (eval_dir / "rewire_streak_wfp25.jsonl").write_text(
+        json.dumps(_rewire_rec(0.333, "PASS")) + "\n", encoding="utf-8"
+    )
+    result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
+    assert result.exit_code == 0, result.stdout
+    assert "gate-tail flip gate" in result.stdout
+    assert "NOT MET" in result.stdout  # 1/3, no CI yet
 
 
 def test_cmd_status_shows_calibration_line(tmp_path: Path) -> None:

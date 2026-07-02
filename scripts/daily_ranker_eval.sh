@@ -397,7 +397,11 @@ if fresh is None:
     sys.exit(0)
 
 verdict = verdict_of(fresh)
-qualifies = fresh.n_decided >= min_fresh and fresh.delta is not None
+# P1.2: the first-ever run has no prior record, so its window is the whole clean-era pool
+# (a contaminated "look", not a fresh per-checkpoint window). NEVER let it count toward the
+# streak/flip gate — only genuinely fresh windows (a prior record exists) qualify.
+is_first_look = since_fresh == CLEAN_ERA_LABEL_CUT
+qualifies = (not is_first_look) and fresh.n_decided >= min_fresh and fresh.delta is not None
 
 record = {
     "ts": utc_now().isoformat(),
@@ -414,6 +418,7 @@ record = {
     "criterion": CRIT,
     "verdict": verdict,
     "qualifies": qualifies,
+    "is_first_look": is_first_look,  # P1.2: full-pool window, excluded from the flip gate
 }
 with streak_log_path.open("a") as fh:
     fh.write(json.dumps(record) + "\n")
