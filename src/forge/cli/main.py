@@ -429,6 +429,45 @@ def _enumerated_by_hypothesis(reports: object) -> dict[str, int]:
     return dict(counts)
 
 
+def _battery_survival_by_hypothesis(reports: object) -> dict[str, tuple[int, int]]:
+    """Per-hypothesis ``(survived, enumerated)`` counts through the pre-filter battery.
+
+    Surfaces the per-family battery survival RATE — e.g. that the battery admits a
+    far smaller fraction of `volatility_event` than `mean_reversion` — so the D216
+    orthogonal-family floor's effect on ACTUAL vol_event supply (not just its
+    sampling share) is readable per batch (fable-audit strategy P0-2). Derived from
+    the same `reports` as `sampler_attempts` (D065), so the two never drift.
+    """
+    from collections import Counter as _Counter
+
+    enumerated: _Counter[str] = _Counter()
+    survived: _Counter[str] = _Counter()
+    for r in reports:  # type: ignore[attr-defined]
+        cfg = getattr(r, "config", None)
+        if cfg is None:
+            continue
+        enumerated[cfg.hypothesis] += 1
+        if getattr(r, "passed", False):
+            survived[cfg.hypothesis] += 1
+    return {h: (survived[h], enumerated[h]) for h in enumerated}
+
+
+def _format_battery_survival_line(survival: Mapping[str, tuple[int, int]]) -> str:
+    """Render `battery_survival_by_hypothesis: hyp surv/enum (pct%), ...` in the
+    canonical `_HYPOTHESES` order; families absent this batch are omitted (0/0 is
+    N/A, not 0%)."""
+    from forge.enumeration.search_space import _HYPOTHESES
+
+    parts: list[str] = []
+    for h in _HYPOTHESES:
+        counts = survival.get(h)
+        if counts is None or counts[1] == 0:
+            continue
+        surv, enum = counts
+        parts.append(f"{h} {surv}/{enum} ({100.0 * surv / enum:.0f}%)")
+    return f"battery_survival_by_hypothesis: {', '.join(parts)}"
+
+
 def _log_hypothesis_distributions(
     reports: object,
     ranked: object,
@@ -454,6 +493,10 @@ def _log_hypothesis_distributions(
     typer.echo(
         _format_hypothesis_distribution_line("ranked_top_n_by_hypothesis", survivors),
     )
+    # fable-audit strategy P0-2: the per-family battery SURVIVAL rate (the D216
+    # activation is unreadable without it — the floor lifts vol_event's sampling
+    # share, but the battery then differentially kills it).
+    typer.echo(_format_battery_survival_line(_battery_survival_by_hypothesis(reports)))
 
 
 def _log_prefilter_rejections(

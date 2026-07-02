@@ -391,6 +391,39 @@ def test_quality_rank_mode_invalid_degrades_to_blend(
     assert "FORGE_QUALITY_RANK_MODE" in capsys.readouterr().err
 
 
+def test_battery_survival_by_hypothesis_counts_and_format() -> None:
+    """P0-2: per-family battery survival = passed/enumerated over the reports,
+    rendered in canonical order with families absent this batch omitted."""
+    from types import SimpleNamespace
+
+    from forge.cli.main import (
+        _battery_survival_by_hypothesis,
+        _format_battery_survival_line,
+    )
+
+    def _rep(hyp: str, passed: bool) -> SimpleNamespace:
+        return SimpleNamespace(config=SimpleNamespace(hypothesis=hyp), passed=passed)
+
+    reports = [
+        _rep("mean_reversion", True),
+        _rep("mean_reversion", True),
+        _rep("mean_reversion", False),
+        _rep("volatility_event", False),
+        _rep("volatility_event", False),
+    ]
+    survival = _battery_survival_by_hypothesis(reports)
+    assert survival["mean_reversion"] == (2, 3)
+    assert survival["volatility_event"] == (0, 2)
+
+    line = _format_battery_survival_line(survival)
+    assert line.startswith("battery_survival_by_hypothesis:")
+    assert "mean_reversion 2/3 (67%)" in line
+    assert "volatility_event 0/2 (0%)" in line
+    # canonical order (mr before volatility_event); families absent this batch omitted
+    assert "tail_hedge" not in line
+    assert line.index("mean_reversion") < line.index("volatility_event")
+
+
 def test_d063_hypothesis_weights_line_uses_canonical_order() -> None:
     """D063: hypotheses render in the canonical `_HYPOTHESES` order
     (trend_continuation, mean_reversion, regime_arbitrage, relative_value,

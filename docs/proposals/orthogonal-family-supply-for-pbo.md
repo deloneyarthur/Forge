@@ -75,6 +75,12 @@ Six consecutive live daemon iterations (`forge.service` journal, 2026-06-25) sho
 `regime_supply:` confirms the ranker selects **~85% ranging complement** every iteration (171/200), pool
 ~1,000/1,500 ranging.
 
+*Reading the activation (fable-audit strategy P0-2):* the `battery_survival_by_hypothesis` journal line
+now prints the enumerated→survived drop per family each batch, so the floor's effect on *supplied*
+vol_event (not just its sampling share, which floats with the oscillating max — see the D216 MANPAGE
+entry) is visible directly — the battery admits only a small fraction of `volatility_event`, so a
+sampling-share lift is only the first stage of getting more vol_event to Crucible.
+
 **What this means:**
 1. **"Throttle trend" is already done** — trend is ~8% of submissions, not 67%. The learned loop +
    Crucible's refit-lane prioritization over-corrected.
