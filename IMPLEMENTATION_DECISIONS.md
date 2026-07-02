@@ -5357,3 +5357,17 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Not a loosening (hard rule #4).** Disabling auto-tune removes both an auto-**loosen**-proposal path and an auto-**tighten** path; it relaxes nothing at the gate (rule #3 untouched) and touches no grammar (no version bump). Re-arm = flip to `true` once the estimand is re-keyed to a book-level / marginal-contribution signal (the Track-A re-aim, [[D216]], still HELD on the empty `component_contributions` export).
 
 **STATUS: §5.5 auto-tune DISARMED (config, hot-read, no restart). No grammar/gate/determinism change. Re-key + re-arm deferred to the Layer-1 estimand work.**
+
+## D219 — 2026-07-02 — Stop writing per-row REJECTED `pre_filter_logs` (pipeline-perf P0-1)
+
+**Spec section:** §9.1 (`pre_filter_logs`); `docs/tasks/feedback-change.md`; hard rule #6 (enumeration untouched). Operator-approved (fable-audit review: "recommended is good" — stop-writing over the CSV-rewrite alternative).
+
+**Why.** The submit phase fsynced **~31k rejected-config rows/batch** into `pre_filter_logs` via `db.executemany` (duckdb autocommits + WAL-fsyncs every row) — **~190s of the ~197s submit phase** (pipeline-perf audit F1), plus ~200MB/day DB growth (F7/F8). The table has **zero live readers** (verified: no `SELECT … FROM pre_filter_logs` in `src/` or `scripts/`), and the same pass/reject breakdown already lives in `batch_summaries.prefilter_rejections{,_by_hypothesis}` (the D062/D064 aggregates, written on the same submit pass) plus the new `battery_survival_by_hypothesis` journal line (strategy P0-2, `c365d14`). So the per-row rejected telemetry is redundant AND the pipeline's single largest fsync cost.
+
+**Change.** Removed `record_pre_filter_logs_for_rejected` (function + its `main.py` call site, the `forge.submission` re-export, and its 7 unit tests). The SURVIVOR-path writer (`record_pre_filter_logs`, ~200 candidates/batch) is unchanged — small, not the fsync problem, still carrying `config_hash`/`forge_batch_id` for join-back. `pre_filter_logs` is survivor-only again; the D076/Q16 "misleading 100% pass rate" concern is moot (nothing reads the table). No enumeration/gate/grammar change.
+
+**Alternative considered + rejected.** The CSV bulk-staging rewrite (temp-CSV + `read_csv`, ~190s → ~6s) keeps the per-row telemetry but carries real byte-equality risk (timestamp/quoting coercion) for data nothing reads — worse effort/risk for no reader benefit. Stop-writing is smaller, safer, AND kills the growth.
+
+**Retention.** Existing rejected rows (GBs already written) remain until a one-time offline compaction (DuckDB doesn't shrink on DELETE) — the P1-2 follow-up, an operator-scheduled deploy-window op; this only stops FUTURE growth.
+
+**STATUS: per-row rejected `pre_filter_logs` write REMOVED — ~190s off the submit phase + ~95% of the table's growth. Survivor write + all `batch_summaries` aggregates intact. Takes effect at the P0-2/P0-3/P0-1 deploy. No enumeration/gate/grammar/determinism change.**

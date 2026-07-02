@@ -19,13 +19,15 @@ D023/D8 wires it in Phase 4. The submitter mints `forge_candidate_id`
 when inserting into `submissions`; the survivor-path writer
 (`record_pre_filter_logs`) is called per-candidate right after that.
 
-D076 / Q16 (2026-05-20) adds the rejected-config path: rejected configs
-never reached `submissions`, so the survivor-only writer left the table
-showing a misleading 100% pass rate for every filter — Q16's sidenote.
-`record_pre_filter_logs_for_rejected` writes one row per (rejected
-config, filter that ran) with a fresh candidate_id plus the
-`config_hash` and `forge_batch_id` for join-back. Survivor rows ALSO
-get those columns populated now so the table is uniformly queryable.
+D076 / Q16 (2026-05-20) added a rejected-config path so the table wasn't
+survivor-only (which showed a misleading 100% pass rate per filter). D219
+(2026-07-02, pipeline-perf P0-1) REMOVED that per-row rejected write: it
+fsynced ~31k rows/batch (~190s of the submit phase) into a table with zero
+readers, and the same pass/reject breakdown already lives in
+`batch_summaries.prefilter_rejections{,_by_hypothesis}` plus the
+`battery_survival_by_hypothesis` journal line. The table is survivor-only
+again (the misleading-pass-rate concern is moot — nothing reads it); survivor
+rows still carry `config_hash` + `forge_batch_id` for join-back.
 """
 
 from __future__ import annotations
@@ -36,8 +38,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
     import duckdb
 
     from forge.prefilters.types import PreFilterReport
@@ -98,70 +98,4 @@ def record_pre_filter_logs(
     return len(rows)
 
 
-def record_pre_filter_logs_for_rejected(
-    db: duckdb.DuckDBPyConnection,
-    *,
-    reports: Iterable[PreFilterReport],
-    batch_id: uuid.UUID,
-    evaluated_at: datetime,
-) -> int:
-    """D076 / Q16 — write rejected configs' filter results to `pre_filter_logs`.
-
-    Iterates over `reports`, skipping passed configs (the submitter
-    handles those via `record_pre_filter_logs`). For each rejected
-    config, mints a fresh `forge_candidate_id` (the config isn't in
-    `submissions` so it has no existing ID) and writes one row per
-    filter the battery actually ran — the report's `filter_results`
-    dict has only those, the short-circuit drops the rest.
-
-    Returns the number of rows inserted. Skips silently when there
-    are no rejected reports (empty iterable / all-pass batch).
-    """
-    if evaluated_at.tzinfo is None:
-        msg = (
-            "record_pre_filter_logs_for_rejected: evaluated_at must be "
-            "timezone-aware; use forge.core.clock.utc_now()"
-        )
-        raise ValueError(msg)
-
-    rows: list[tuple[str, str, bool, float, str, datetime, str, str]] = []
-    batch_str = str(batch_id)
-    for report in reports:
-        if report.passed:
-            continue
-        # M-5: skip data_unavailable verdicts — recording them as filter rows
-        # would masquerade as signal-quality rejections and pollute the D076
-        # empirical-prior buckets. They're surfaced via the cache's loud
-        # logging + the `data_unavailable` rejection-histogram bucket instead.
-        if getattr(report, "data_unavailable", False):
-            continue
-        candidate_id = str(uuid.uuid4())
-        config_hash = report.config.config_hash
-        for filter_name, result in report.filter_results.items():
-            rows.append(
-                (
-                    candidate_id,
-                    filter_name,
-                    result.passed,
-                    float(result.score),
-                    json.dumps(dict(result.details)),
-                    evaluated_at,
-                    config_hash,
-                    batch_str,
-                ),
-            )
-    if not rows:
-        return 0
-    db.executemany(
-        """
-        INSERT INTO pre_filter_logs
-            (forge_candidate_id, filter_name, passed, score, details_json,
-             evaluated_at, config_hash, forge_batch_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        rows,
-    )
-    return len(rows)
-
-
-__all__ = ["record_pre_filter_logs", "record_pre_filter_logs_for_rejected"]
+__all__ = ["record_pre_filter_logs"]

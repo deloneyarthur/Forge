@@ -1777,7 +1777,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         BatchContext,
         check_rate_limit,
         mint_batch_id,
-        record_pre_filter_logs_for_rejected,
         submit_batch,
     )
     from forge.submission.submitter import record_prefilter_rejections
@@ -2210,18 +2209,12 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             batch_id=result.batch_id,
             reports=reports,
         )
-        # D076 / Q16: write pre_filter_logs rows for rejected configs too.
-        # Pre-D076 the table only held survivor rows (called from
-        # submitter), so every filter showed a misleading 100% pass rate.
-        # Rejected rows are joinable back to the batch via the new
-        # forge_batch_id column; the config_hash column distinguishes
-        # them from survivor rows (which now also carry both columns).
-        record_pre_filter_logs_for_rejected(
-            conn,
-            reports=reports,
-            batch_id=result.batch_id,
-            evaluated_at=batch.submitted_at,
-        )
+        # D219 (pipeline-perf P0-1): the per-row REJECTED pre_filter_logs write was
+        # removed here — it fsynced ~31k rows/batch (~190s of the submit phase) into
+        # a table with zero readers. The same pass/reject breakdown already lives in
+        # `batch_summaries.prefilter_rejections{,_by_hypothesis}` (recorded just
+        # above) plus the `battery_survival_by_hypothesis` journal line. Survivor
+        # rows are still written per-candidate by the submitter.
         # D096: refresh the pre-filter funnel export (Part B) + the
         # config_hash->grammar_version join-map (Part A interim) for Crucible's
         # combined funnel. Instrumentation only — a failure here must never

@@ -19,10 +19,7 @@ import pytest
 
 from forge.persistence.db import db_connection
 from forge.prefilters.types import FilterResult, PreFilterReport
-from forge.submission.pre_filter_logger import (
-    record_pre_filter_logs,
-    record_pre_filter_logs_for_rejected,
-)
+from forge.submission.pre_filter_logger import record_pre_filter_logs
 from tests.fixtures.strategy_configs import minimal_strategy_config
 
 
@@ -250,24 +247,8 @@ def test_naive_evaluated_at_raises(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# D076 / Q16 — config_hash + forge_batch_id columns + rejected-config writer
+# D076 / Q16 — config_hash + forge_batch_id columns (survivor path)
 # ---------------------------------------------------------------------------
-
-
-def _rejected_report() -> PreFilterReport:
-    """Short-circuited report — first three filters ran, third failed."""
-    return PreFilterReport(
-        config=minimal_strategy_config(),
-        passed=False,
-        filter_results=MappingProxyType(
-            {
-                "structural_redundancy": FilterResult(passed=True, score=1.0),
-                "resource_feasibility": FilterResult(passed=True, score=0.9),
-                "signal_density": FilterResult(passed=False, score=0.0),
-            },
-        ),
-        diagnostic_notes=("rejected by signal_density",),
-    )
 
 
 def test_survivor_writer_populates_config_hash_and_batch_id(tmp_path: Path) -> None:
@@ -313,143 +294,3 @@ def test_survivor_writer_batch_id_optional_back_compat(tmp_path: Path) -> None:
     assert row is not None
     assert row[0] is None
     assert str(row[1]) == report.config.config_hash
-
-
-def test_rejected_writer_writes_only_rejected(tmp_path: Path) -> None:
-    """The rejected-path writer skips reports where `passed=True`."""
-    forge_db = tmp_path / "forge.db"
-    batch_id = uuid.uuid4()
-    reports = (
-        _rejected_report(),
-        _report(n_filters=5),  # passed=True
-        _rejected_report(),
-    )
-    with db_connection(forge_db) as conn:
-        n = record_pre_filter_logs_for_rejected(
-            conn,
-            reports=reports,
-            batch_id=batch_id,
-            evaluated_at=datetime(2026, 5, 20, tzinfo=UTC),
-        )
-        # Two rejected x 3 filter_results each = 6 rows
-        assert n == 6
-        rows = conn.execute(
-            "SELECT COUNT(DISTINCT forge_candidate_id) FROM pre_filter_logs",
-        ).fetchone()
-        assert rows is not None
-        assert int(rows[0]) == 2  # one fresh candidate_id per rejected report
-
-
-def test_rejected_writer_skips_data_unavailable(tmp_path: Path) -> None:
-    """M-5: data_unavailable verdicts must NOT be written to pre_filter_logs —
-    they'd masquerade as signal-quality rejections and pollute the D076 priors."""
-    forge_db = tmp_path / "forge.db"
-    batch_id = uuid.uuid4()
-    dead = PreFilterReport(
-        config=minimal_strategy_config(),
-        passed=False,
-        filter_results=MappingProxyType({}),
-        diagnostic_notes=("data_unavailable: empty window",),
-        data_unavailable=True,
-    )
-    reports = (dead, _rejected_report())
-    with db_connection(forge_db) as conn:
-        n = record_pre_filter_logs_for_rejected(
-            conn,
-            reports=reports,
-            batch_id=batch_id,
-            evaluated_at=datetime(2026, 5, 20, tzinfo=UTC),
-        )
-        # Only the real rejected report (3 filter rows) — the dead one is skipped.
-        assert n == 3
-        distinct = conn.execute(
-            "SELECT COUNT(DISTINCT forge_candidate_id) FROM pre_filter_logs",
-        ).fetchone()
-    assert distinct is not None
-    assert int(distinct[0]) == 1
-
-
-def test_rejected_writer_mints_unique_candidate_ids(tmp_path: Path) -> None:
-    """Each rejected report gets its own UUID (no PK collisions across reports)."""
-    forge_db = tmp_path / "forge.db"
-    batch_id = uuid.uuid4()
-    # Three identical rejected reports (same config_hash) — writer must
-    # not collide on the PK because UUIDs are fresh per report.
-    reports = (_rejected_report(), _rejected_report(), _rejected_report())
-    with db_connection(forge_db) as conn:
-        n = record_pre_filter_logs_for_rejected(
-            conn,
-            reports=reports,
-            batch_id=batch_id,
-            evaluated_at=datetime(2026, 5, 20, tzinfo=UTC),
-        )
-        assert n == 9  # 3 reports x 3 filters
-        distinct_ids = conn.execute(
-            "SELECT COUNT(DISTINCT forge_candidate_id) FROM pre_filter_logs",
-        ).fetchone()
-        assert distinct_ids is not None
-        assert int(distinct_ids[0]) == 3
-
-
-def test_rejected_writer_populates_config_hash_and_batch_id(tmp_path: Path) -> None:
-    forge_db = tmp_path / "forge.db"
-    batch_id = uuid.uuid4()
-    report = _rejected_report()
-    with db_connection(forge_db) as conn:
-        record_pre_filter_logs_for_rejected(
-            conn,
-            reports=(report,),
-            batch_id=batch_id,
-            evaluated_at=datetime(2026, 5, 20, tzinfo=UTC),
-        )
-        rows = conn.execute(
-            "SELECT config_hash, forge_batch_id, passed, filter_name "
-            "FROM pre_filter_logs ORDER BY filter_name",
-        ).fetchall()
-    assert {str(r[0]) for r in rows} == {report.config.config_hash}
-    assert {str(r[1]) for r in rows} == {str(batch_id)}
-    # The first two filters passed; the third (signal_density) failed.
-    passed_map = {str(r[3]): bool(r[2]) for r in rows}
-    assert passed_map["signal_density"] is False
-    assert passed_map["structural_redundancy"] is True
-
-
-def test_rejected_writer_empty_iterable_no_op(tmp_path: Path) -> None:
-    forge_db = tmp_path / "forge.db"
-    with db_connection(forge_db) as conn:
-        n = record_pre_filter_logs_for_rejected(
-            conn,
-            reports=(),
-            batch_id=uuid.uuid4(),
-            evaluated_at=datetime(2026, 5, 20, tzinfo=UTC),
-        )
-    assert n == 0
-    assert _row_count(forge_db) == 0
-
-
-def test_rejected_writer_all_pass_no_op(tmp_path: Path) -> None:
-    """If every report is `passed=True`, nothing is written."""
-    forge_db = tmp_path / "forge.db"
-    with db_connection(forge_db) as conn:
-        n = record_pre_filter_logs_for_rejected(
-            conn,
-            reports=(_report(n_filters=3), _report(n_filters=3)),
-            batch_id=uuid.uuid4(),
-            evaluated_at=datetime(2026, 5, 20, tzinfo=UTC),
-        )
-    assert n == 0
-    assert _row_count(forge_db) == 0
-
-
-def test_rejected_writer_naive_evaluated_at_raises(tmp_path: Path) -> None:
-    forge_db = tmp_path / "forge.db"
-    with (
-        db_connection(forge_db) as conn,
-        pytest.raises(ValueError, match=r"timezone"),
-    ):
-        record_pre_filter_logs_for_rejected(
-            conn,
-            reports=(_rejected_report(),),
-            batch_id=uuid.uuid4(),
-            evaluated_at=datetime(2026, 5, 20),  # noqa: DTZ001
-        )
