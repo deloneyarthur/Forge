@@ -102,23 +102,23 @@ from datetime import datetime
 from pathlib import Path
 
 from forge.cli.ranker_model_cmd import _AUC_MARGIN_CRITERION as CRIT
+from forge.cli.ranker_model_cmd import _MAX_CE_CRITERION as CAL_CRIT
 from forge.core.clock import utc_now
 from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
 from forge.persistence.db import db_connection
-from forge.ranking.evaluation import evaluate_shadow
+from forge.ranking.evaluation import (
+    evaluate_shadow,
+    shadow_auc_verdict,
+    shadow_calibration_verdict,
+)
 
 snap, streak_log_path, min_fresh = sys.argv[1], Path(sys.argv[2]), int(sys.argv[3])
 
 
 def verdict_of(ev):
-    if ev.auc_margin is None:
-        return "INSUFFICIENT"
-    p_ok = (
-        ev.model_precision_at_k is not None
-        and ev.incumbent_precision_at_k is not None
-        and ev.model_precision_at_k >= ev.incumbent_precision_at_k
-    )
-    return "PASS" if (ev.auc_margin >= CRIT and p_ok) else "FAIL"
+    # Single source of truth — the same AUC/precision verdict `forge ranker-model eval`
+    # prints, so the streak cannot drift from the manual CLI. (P1.3 centralized this.)
+    return shadow_auc_verdict(ev, auc_margin_criterion=CRIT)
 
 
 def show(ev):
@@ -173,6 +173,11 @@ record = {
     "verdict": verdict,
     "qualifies": qualifies,
     "n_models_fresh": len(fresh_evals),
+    # P1.3 calibration telemetry (tracks drift across checkpoints; gates no live behavior).
+    "model_ece": dominant.model_ece,
+    "model_max_ce": dominant.model_max_ce,
+    "model_ece_platt": dominant.model_ece_platt,
+    "calibration_verdict": shadow_calibration_verdict(dominant, max_ce_criterion=CAL_CRIT),
 }
 with streak_log_path.open("a") as fh:
     fh.write(json.dumps(record) + "\n")
@@ -193,6 +198,13 @@ tail = "" if qualifies else f"  (NOT counted: fresh={fresh_decided}<{min_fresh} 
 print(
     f"daily-ranker-eval: dominant={dominant.model_id} verdict={verdict} "
     f"fresh_decided={fresh_decided} -> consecutive PASS streak = {streak}/3{tail}"
+)
+# P1.3 calibration readout (the floor-relevant co-primary; telemetry only).
+mce = "n/a" if dominant.model_max_ce is None else f"{dominant.model_max_ce:.3f}"
+plt = "n/a" if dominant.model_ece_platt is None else f"{dominant.model_ece_platt:.3f}"
+print(
+    f"daily-ranker-eval: calibration ece={dominant.model_ece:.4f} max_ce={mce} "
+    f"ece_platt={plt} verdict={record['calibration_verdict']} (max_ce<={CAL_CRIT})"
 )
 PY
 

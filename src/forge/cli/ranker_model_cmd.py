@@ -33,6 +33,17 @@ _MIN_TRAIN_POSITIVES = 5
 
 _AUC_MARGIN_CRITERION = 0.05
 
+# P1.3 calibration criterion (co-primary with AUC, but for the OTHER consumption). The
+# AUC verdict blesses the model for the blend (RANKING); this one blesses P for the
+# absolute gate-then-tail floor (CALIBRATION). A checkpoint PASSes when its max calibration
+# error over adequately-populated bins is <= this bar. 0.20 is PROVISIONAL — the live
+# dominant model's high-P bins run ~0.15-0.36 off (learned-audit §1), so this starts as an
+# honest FAIL until the P is recalibrated (the recalibrator lands with P1.1's floor
+# re-derivation). Telemetry only: reported + JSONL-tracked; it gates no live behavior and
+# is kept separate from the AUC streak so a well-ranking-but-miscalibrated model isn't
+# wrongly failed for ranking.
+_MAX_CE_CRITERION = 0.20
+
 # §8.6 tail (T1) streak criterion — PROVISIONAL, pending operator finalization of the
 # margin once the pooled distribution is visible (D147). A checkpoint PASSes when the
 # pooled Spearman(tail_score, realized cpcv_p25) clears this; the streak counts
@@ -209,7 +220,11 @@ def cmd_eval(
     check_contracts_version()
 
     from forge.persistence.db import db_connection
-    from forge.ranking.evaluation import evaluate_shadow
+    from forge.ranking.evaluation import (
+        evaluate_shadow,
+        shadow_auc_verdict,
+        shadow_calibration_verdict,
+    )
 
     forge_db = _resolve_forge_db(forge_db, config)
     cut = _resolve_era_cut(since)
@@ -225,20 +240,11 @@ def cmd_eval(
         if ev.auc_margin is None:
             typer.echo("  auc: insufficient (single-class window) — criterion=INSUFFICIENT")
         else:
-            verdict = (
-                "PASS"
-                if (
-                    ev.auc_margin >= _AUC_MARGIN_CRITERION
-                    and ev.model_precision_at_k is not None
-                    and ev.incumbent_precision_at_k is not None
-                    and ev.model_precision_at_k >= ev.incumbent_precision_at_k
-                )
-                else "FAIL"
-            )
             typer.echo(
                 f"  auc: model={ev.model_auc:.3f} incumbent={ev.incumbent_auc:.3f} "
                 f"auc_margin={ev.auc_margin:+.3f} "
-                f"criterion(+{_AUC_MARGIN_CRITERION:.2f})={verdict}"
+                f"criterion(+{_AUC_MARGIN_CRITERION:.2f})="
+                f"{shadow_auc_verdict(ev, auc_margin_criterion=_AUC_MARGIN_CRITERION)}"
             )
         if ev.model_precision_at_k is not None and ev.incumbent_precision_at_k is not None:
             typer.echo(
@@ -246,11 +252,19 @@ def cmd_eval(
                 f"incumbent={ev.incumbent_precision_at_k:.3f}"
             )
         typer.echo(f"  brier(model)={ev.model_brier:.4f}")
+        # P1.3: calibration diagnostics + the co-primary floor criterion (telemetry only).
+        max_ce = "n/a" if ev.model_max_ce is None else f"{ev.model_max_ce:.3f}"
+        platt = "n/a" if ev.model_ece_platt is None else f"{ev.model_ece_platt:.3f}"
+        cal_verdict = shadow_calibration_verdict(ev, max_ce_criterion=_MAX_CE_CRITERION)
+        typer.echo(
+            f"  calibration: ece={ev.model_ece:.4f} max_ce={max_ce} ece_platt={platt} "
+            f"criterion(max_ce<={_MAX_CE_CRITERION:.2f})={cal_verdict}"
+        )
         cal = " | ".join(
             f"[{lo:.1f}) n={n} mean={mean:.3f} rate={rate:.3f}"
             for lo, n, mean, rate in ev.calibration
         )
-        typer.echo(f"  calibration: {cal}")
+        typer.echo(f"  reliability: {cal}")
 
 
 @ranker_model_app.command("eval-robustness")

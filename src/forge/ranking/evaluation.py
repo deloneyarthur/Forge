@@ -20,6 +20,13 @@ from datetime import UTC
 from typing import TYPE_CHECKING
 
 from forge.feedback.rejection_weights import honest_regime_coverage_row
+from forge.ranking.calibration import (
+    expected_calibration_error,
+    logit,
+    platt_apply,
+    platt_fit,
+    reliability_table,
+)
 from forge.ranking.dataset import label_for, parse_gate_results
 from forge.ranking.model import (
     auc_score,
@@ -53,6 +60,16 @@ class ShadowEvaluation:
     incumbent_precision_at_k: float | None
     model_brier: float
     calibration: tuple[CalibrationRow, ...]
+    # P1.3 calibration diagnostics. ``model_ece`` is the standard frequency-weighted ECE
+    # (dominated by the well-calibrated low-P mass, so ~small even when the top bins are
+    # 3-5x over-predicted). ``model_max_ce`` is the max calibration gap over adequately-
+    # populated bins — the floor-relevant measure, since the gate-then-tail floor selects
+    # exactly the high-P sliver where the miscalibration lives. ``model_ece_platt`` is the
+    # ECE a held-out Platt recal achieves (the reachable calibration floor). None when the
+    # window can't support the estimate.
+    model_ece: float
+    model_max_ce: float | None
+    model_ece_platt: float | None
 
 
 def _precision_at_k(labels: list[int], scores: list[float], k: int) -> float:
@@ -65,6 +82,75 @@ def _safe_auc(labels: list[int], scores: list[float]) -> float | None:
         return auc_score(labels, scores)
     except ValueError:
         return None
+
+
+# A bin needs this many rows before its calibration gap counts toward the max
+# calibration error (MCE) — keeps a 2-row high-P bin from dominating the criterion.
+_MIN_CE_BIN = 20
+# Min rows per half for the held-out Platt recalibration estimate.
+_MIN_PLATT_SPLIT = 50
+
+
+def _max_calibration_error(labels: list[int], scores: list[float]) -> float | None:
+    """Largest |mean_pred - realized_rate| over bins with >= ``_MIN_CE_BIN`` rows.
+
+    The floor-relevant calibration measure: the gate-then-tail floor keeps the high-P
+    sliver, so a stark gap in a populated upper bin matters even when it carries little
+    of the frequency-weighted ECE. None when no bin clears the population floor.
+    """
+    gaps = [
+        abs(mean_pred - rate)
+        for _lo, n, mean_pred, rate in reliability_table(labels, scores)
+        if n >= _MIN_CE_BIN
+    ]
+    return max(gaps) if gaps else None
+
+
+def _held_out_platt_ece(labels: list[int], scores: list[float]) -> float | None:
+    """ECE after a held-out Platt recalibration: fit ``(a, b)`` on even-index rows, score
+    the odd-index rows. The reachable-calibration floor — how well P *could* be calibrated.
+    None when either half is too small or single-class to fit stably."""
+    fit_z: list[float] = []
+    fit_y: list[int] = []
+    ev_z: list[float] = []
+    ev_y: list[int] = []
+    for i, (score, label) in enumerate(zip(scores, labels, strict=True)):
+        z = logit(score)
+        if i % 2 == 0:
+            fit_z.append(z)
+            fit_y.append(label)
+        else:
+            ev_z.append(z)
+            ev_y.append(label)
+    if min(len(fit_y), len(ev_y)) < _MIN_PLATT_SPLIT:
+        return None
+    if sum(fit_y) in (0, len(fit_y)) or sum(ev_y) in (0, len(ev_y)):
+        return None
+    a, b = platt_fit(fit_z, fit_y)
+    return expected_calibration_error(ev_y, [platt_apply(a, b, z) for z in ev_z])
+
+
+def shadow_auc_verdict(ev: ShadowEvaluation, *, auc_margin_criterion: float) -> str:
+    """Ranking (blend) criterion: does the model beat the incumbent §6.2 composite on AUC
+    margin AND precision@K? This is the F3 streak's verdict — the blend consumes the model's
+    RANKING, so calibration is deliberately excluded here (it gates a different consumption)."""
+    if ev.auc_margin is None:
+        return "INSUFFICIENT"
+    p_ok = (
+        ev.model_precision_at_k is not None
+        and ev.incumbent_precision_at_k is not None
+        and ev.model_precision_at_k >= ev.incumbent_precision_at_k
+    )
+    return "PASS" if (ev.auc_margin >= auc_margin_criterion and p_ok) else "FAIL"
+
+
+def shadow_calibration_verdict(ev: ShadowEvaluation, *, max_ce_criterion: float) -> str:
+    """Floor (gate-then-tail) criterion — co-primary with the AUC verdict but for the OTHER
+    consumption: the absolute P eligibility floor must read a P that is calibrated where it
+    bites (the populated upper bins). INSUFFICIENT until a bin clears the population floor."""
+    if ev.model_max_ce is None:
+        return "INSUFFICIENT"
+    return "PASS" if ev.model_max_ce <= max_ce_criterion else "FAIL"
 
 
 def _calibration(labels: list[int], scores: list[float]) -> tuple[CalibrationRow, ...]:
@@ -140,6 +226,9 @@ def evaluate_shadow(
                 ),
                 model_brier=brier_score(labels, model_scores),
                 calibration=_calibration(labels, model_scores),
+                model_ece=expected_calibration_error(labels, model_scores),
+                model_max_ce=_max_calibration_error(labels, model_scores),
+                model_ece_platt=_held_out_platt_ece(labels, model_scores),
             )
         )
     return tuple(evaluations)

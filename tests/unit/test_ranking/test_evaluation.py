@@ -15,7 +15,11 @@ import pytest
 
 from forge.persistence.db import db_connection
 from forge.persistence.verdicts import record_verdicts
-from forge.ranking.evaluation import evaluate_shadow
+from forge.ranking.evaluation import (
+    evaluate_shadow,
+    shadow_auc_verdict,
+    shadow_calibration_verdict,
+)
 
 _SINCE = datetime(2026, 6, 10, 17, 17, 13)  # noqa: DTZ001 — naive-UTC convention
 
@@ -116,6 +120,54 @@ def test_perfect_model_beats_inverted_incumbent() -> None:
     assert ev.model_precision_at_k == pytest.approx(1.0)
     assert ev.incumbent_precision_at_k == pytest.approx(0.0)
     assert 0.0 <= ev.model_brier <= 0.1
+
+
+def test_calibration_verdict_fails_on_miscalibrated_populated_bin() -> None:
+    # P1.3: a well-calibrated low bin holding the mass + a populated high bin that
+    # over-predicts ~5x. Overall ECE stays small (frequency-weighted) but max_ce is large,
+    # so the calibration verdict must FAIL — the floor-relevant signal the AUC verdict misses.
+    rows: list[tuple[str, float, str]] = []
+    for i in range(200):  # bin [0.0): score 0.02, ~2% realized -> well calibrated
+        rows.append((f"{i:016x}", 0.02, "component" if i < 4 else "reject"))
+    for i in range(25):  # bin [0.4): score 0.45, ~8% realized -> 5x over-predicted
+        rows.append((f"{i + 100000:016x}", 0.45, "component" if i < 2 else "reject"))
+    with db_connection() as conn:
+        _seed(conn, [(h, s, 0.5, d) for h, s, d in rows])
+        ev = evaluate_shadow(conn, since=_SINCE)[0]
+
+    assert ev.model_max_ce is not None
+    assert ev.model_max_ce > 0.20
+    assert ev.model_ece < ev.model_max_ce  # frequency-weighting dilutes the overall ECE
+    assert shadow_calibration_verdict(ev, max_ce_criterion=0.20) == "FAIL"
+    # The AUC verdict is a SEPARATE consumption — calibration failing must not touch it.
+    assert shadow_auc_verdict(ev, auc_margin_criterion=0.05) in ("PASS", "FAIL", "INSUFFICIENT")
+
+
+def test_calibration_verdict_insufficient_when_no_bin_populated() -> None:
+    # Fewer than _MIN_CE_BIN rows in every bin -> no MCE, verdict INSUFFICIENT (not a fake PASS).
+    rows = [
+        ("aaaa000000000001", 0.9, 0.1, "component"),
+        ("aaaa000000000002", 0.2, 0.8, "reject"),
+    ]
+    with db_connection() as conn:
+        _seed(conn, rows)
+        ev = evaluate_shadow(conn, since=_SINCE)[0]
+
+    assert ev.model_max_ce is None
+    assert shadow_calibration_verdict(ev, max_ce_criterion=0.20) == "INSUFFICIENT"
+    assert 0.0 <= ev.model_ece <= 1.0  # ECE is always defined
+
+
+def test_held_out_platt_reduces_ece_vs_raw() -> None:
+    # A populated, over-predicted high bin: the held-out Platt estimate should land at or
+    # below the raw over-prediction (recalibration is the reachable floor).
+    rows = [(f"{i:016x}", 0.6, "component" if i < 6 else "reject") for i in range(120)]
+    with db_connection() as conn:
+        _seed(conn, [(h, s, 0.5, d) for h, s, d in rows])
+        ev = evaluate_shadow(conn, since=_SINCE)[0]
+
+    assert ev.model_ece_platt is not None  # 120 rows -> both halves clear _MIN_PLATT_SPLIT
+    assert ev.model_ece_platt <= ev.model_ece + 1e-9
 
 
 def test_dishonest_component_labels_zero_in_eval() -> None:
