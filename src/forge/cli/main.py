@@ -35,6 +35,7 @@ from forge.cli.grammar_cmd import grammar_app
 from forge.cli.healthcheck_cmd import cmd_healthcheck
 from forge.cli.prereg_cmd import prereg_app
 from forge.cli.ranker_model_cmd import ranker_model_app
+from forge.cli.shadow_null_cmd import shadow_null_app
 from forge.cli.status_cmd import cmd_status
 from forge.core.logging import configure_logging
 from forge.version import __version__
@@ -2674,6 +2675,7 @@ app.command("alpha-budget")(cmd_alpha_budget)
 app.add_typer(grammar_app, name="grammar")
 app.add_typer(prereg_app, name="prereg")
 app.add_typer(ranker_model_app, name="ranker-model")
+app.add_typer(shadow_null_app, name="shadow-null")
 
 
 def main() -> None:

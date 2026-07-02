@@ -79,6 +79,31 @@ pass/fail counts. Phase 3 diagnostic.
 forge prefilter --max 500 --summary --synthetic-cache
 ```
 
+### forge shadow-null run
+
+Shadow-count the two teed-up permutation-test (§5.3.7) null corrections **before flipping
+either** (strategy-audit P1-2). Runs the §5.2 battery over the LIVE feature cache under the
+production null, then re-scores ONLY `permutation_test` under the corrected null
+(`cumulative_trading` + `volatility_event` |move|) on the very same configs, and reports the
+per-family survival delta (`gained` = prod FAIL → corr PASS, `lost` = the reverse). Submits
+nothing, never writes `prefilter.yaml`, and leaves the daemon untouched — a read-only telemetry
+pass that measures what preregs 848a1f67 / e1a43ba8 predict. The set of configs reaching the
+last filter is identical under both nulls (filters 1..8 read none of the changed knobs), so this
+is a clean within-population A/B; the per-family **delta** is the decision signal, absolute rates
+are diagnostic (fixed seed, empty priors). Appends one JSONL record per run.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--seed` | int | `0` | RNG root seed (fixed → reproducible, family-diverse sample). |
+| `--max`, `-n` | int | `2000` | Configs to enumerate through the battery (min 1). Bump if the `volatility_event` `reached` count is too small to trust. |
+| `--config` | path | `config/forge.yaml` | Supplies the telemetry-dir default. |
+| `--out` | path | `<config db_path parent>/shadow_null/shadow_null.jsonl` | Telemetry JSONL. |
+| `--synthetic-cache` | flag | off | Force `SyntheticFeatureCache` (offline smoke only — survival numbers are noise). |
+
+```
+forge shadow-null run -n 3000        # live-cache shadow-count before the D220-gated flip
+```
+
 ### forge run
 
 The full cycle: enumerate → prefilter → rank → submit. With `--loop` it runs as a
