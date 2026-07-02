@@ -1,6 +1,13 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Learned-audit P3.3 SHIPPED flag-OFF: exploration holdout (seeded ranking-bypass for unbiased labels). Byte-identical default; completes the buildable learned-systems audit (D228–D232). [[D232]]
+## 2026-07-02 (latest) — Learned-audit P5.5: honest out-of-sample R² for the ridge (temporal holdout) — replaces the overfit-optimistic in-sample train_r2. Telemetry only; artifact byte-identical. [[D233]]
+
+**Operator: "continue." Took P5.5 (the plan's cheap honesty win) after the buildable P3/P4 items.**
+- **The defect:** `train_robustness_model` reports an IN-SAMPLE `r2` (fit + scored on the same rows) — overfit-optimistic; the daily ridge always looks decent, and the P4.1/D231 lane KEEP call leans on its apparent skill.
+- **P5.5 (`a6e40fa`, 3 tests):** new `robustness_oos_r2` — deterministic TEMPORAL holdout (order by `decided_at`, fit on older train split, score newer test split; None below 20 rows). `train-robustness` now prints `oos_r2=` next to `train_r2=`. Kept OUT of the artifact (`train_metrics` is hashed into `model_id`) → artifact **byte-identical** (invariants green).
+- **POSTURE: telemetry only; artifact + daemon untouched.** Part B (precision@N/NDCG@N at the submission cutoff) deferred. Remaining P5 (Thompson/UCB — best after the D216 floor settles; elite archive — blocked on the B8 effective-N handoff; dead-code sweep — chore) stays low-priority. The learned-systems audit is now effectively complete (D228–D233). Live-stream changes still held until D220 `b7ecc2d2` (≥07-04).
+
+## 2026-07-02 — Learned-audit P3.3 SHIPPED flag-OFF: exploration holdout (seeded ranking-bypass for unbiased labels). Byte-identical default; completes the buildable learned-systems audit (D228–D232). [[D232]]
 
 **Operator: "continue." Took the deferred P3.3 (B7) as its own careful build.**
 - **The defect:** every learned component (F3, wf_p25 lane, estimand) trains on Forge-SELECTED submissions — a direct feedback loop; the diversity floors mitigate but don't correct.
