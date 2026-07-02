@@ -1,11 +1,17 @@
 # Ranker weights and diversification. See FORGE_DESIGN.md §10.3.
 ranker:
+  # D220 (2026-07-02, learned-audit P1.4, prereg b7ecc2d2e96f): prior_promotion_proximity
+  # 0.10 -> 0.50. The offline prior-weight A/B (n=131k decided) found the deployed 0.10 slot
+  # ranked realized components BELOW their base rate (AUC 0.488) while the learned prior alone
+  # is AUC 0.838 — the four hygiene terms are anti-correlated with promotion and drowned it.
+  # Hygiene renormalized to 0.50 total (proportions ~preserved); the diversifier floors
+  # (D103/D136) protect family variety independently. Revert = restore the 0.30/0.25/0.20/0.15/0.10 set.
   weights:
-    signal_density: 0.30
-    novelty: 0.25
-    regime_diversity: 0.20
-    permutation_test: 0.15
-    prior_promotion_proximity: 0.10
+    signal_density: 0.17
+    novelty: 0.14
+    regime_diversity: 0.11
+    permutation_test: 0.08
+    prior_promotion_proximity: 0.50
   diversification:
     method: greedy   # 'greedy' or 'dpp'
     similarity_metric: jaccard
