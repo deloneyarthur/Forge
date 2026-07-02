@@ -19,6 +19,13 @@ WorkingDirectory=/home/aj/proj/Forge
 # code; ENABLED here. Needs F3's P(component) base (the blend multiplies it) + a
 # target_wf_p25 model in ~/forge_data/models (the daily timer publishes it). Env
 # kill-switch FORGE_QUALITY_RANKER=off; remove the flag to revert byte-identical.
+# FORGE_ORTHOGONAL_FAMILY_FLOOR (D216 Layer-2): floor single-name volatility_event's
+# learned hypothesis weight to 0.20 (max semantics — starves nothing), lifting its
+# sampling share ~2.9%->~10.7% so assembly has more of the PBO-orthogonal family
+# (Crucible-validated 2026-06-29: PC1 load 0.10, mixed book CSCV PBO 0.107). A/B
+# feedback knob; empty/unset => byte-identical (hard rule 6). REVERT = delete this
+# line + restart. Pre-registered (D208) + alpha-budget-charged (D207); confirm §8.4.
+Environment=FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
