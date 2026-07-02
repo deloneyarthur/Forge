@@ -369,10 +369,12 @@ Spearman vs the realized worst-quartile gate). Each line shows the latest verdic
 trailing consecutive-PASS streak (N/3), the latest metric, and an N-checkpoint trend. A
 **`P calibration/floor`** line (P1.3) adds the drift guard: the latest floor-relevant
 calibration verdict + `max_ce` (from the F3 streak) and the gate-tail floor keep-rate
-(`eligible_fraction`, from the rewire clock) — tolerant of pre-P1.3 records (`n/a`).
-Distinct from `forge healthcheck` (is the daemon *alive/producing?*); this is *is the
-learning improving?*. For the authoritative recompute use `forge ranker-model eval` /
-`eval-robustness`.
+(`eligible_fraction`, from the rewire clock) — tolerant of pre-P1.3 records (`n/a`). A
+**`gate-tail flip gate`** line (P1.2) shows whether gate-tail is safe to flip: `MET` only
+when the fresh-window PASS streak ≥ 3 AND the pooled fresh-window Δ's 95% CI excludes 0
+(full-pool "look" records excluded). Distinct from `forge healthcheck` (is the daemon
+*alive/producing?*); this is *is the learning improving?*. For the authoritative recompute
+use `forge ranker-model eval` / `eval-robustness`.
 
 ```
 forge status
