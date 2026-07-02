@@ -319,13 +319,14 @@ def cmd_eval_robustness(
     check_contracts_version()
 
     from forge.persistence.db import db_connection
-    from forge.ranking.evaluation import evaluate_tail_shadow
+    from forge.ranking.evaluation import evaluate_tail_shadow, evaluate_tail_shadow_by_hypothesis
 
     forge_db = _resolve_forge_db(forge_db, config)
     cut = _resolve_era_cut(since)
 
     with db_connection(forge_db) as conn:
         evaluations = evaluate_tail_shadow(conn, since=cut, gate=gate)
+        by_family = evaluate_tail_shadow_by_hypothesis(conn, since=cut, gate=gate)
 
     if not evaluations:
         typer.echo(
@@ -353,9 +354,17 @@ def cmd_eval_robustness(
         typer.echo(
             f"  top-{ev.k} mean realized {gate}: tail-model={mk} vs incumbent={ik} (overall={ok})"
         )
-    typer.echo(
-        "  criterion: §8.6 margin not yet set (fixed once the shadow distribution is visible)"
-    )
+    # P4.1 probe: does the wf_p25 lane have per-family skill — specifically on vol_event
+    # (its value proposition for the promotable single-name-ve book), where POOLED skill has
+    # stayed marginal? Paired Δ Spearman (tail - incumbent) per hypothesis, ve first.
+    typer.echo("per-family paired Δ Spearman (P4.1 retire-or-keep probe):")
+    fam_order = sorted(by_family, key=lambda h: (h != "volatility_event", h))
+    for family in fam_order:
+        fev = by_family[family]
+        fdl = f"{fev.spearman_delta:+.3f}" if fev.spearman_delta is not None else "n/a"
+        fverdict = shadow_tail_verdict(fev, delta_criterion=_TAIL_SPEARMAN_DELTA_CRITERION)
+        mark = "  <- ve" if family == "volatility_event" else ""
+        typer.echo(f"  {family:20s} n={fev.n_decided:5d} Δ={fdl} {fverdict}{mark}")
 
 
 @ranker_model_app.command("eval-rewire")

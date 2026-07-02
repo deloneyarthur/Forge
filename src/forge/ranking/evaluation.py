@@ -399,6 +399,56 @@ def evaluate_tail_shadow_pooled(
     return _build_tail_eval(_POOLED_TAIL_MODEL_ID, pooled)
 
 
+def _tail_triples_by_hypothesis(
+    conn: duckdb.DuckDBPyConnection, *, since: datetime, gate: str
+) -> dict[str, list[tuple[float, float, float]]]:
+    """Like `_tail_triples_by_model` but keyed by the config's `hypothesis` (extracted
+    from `submissions.config_json`), POOLED across tail models — the P4.1 per-family
+    probe input. Same verified-coverage + gate-bearing restriction."""
+    cut = since
+    if cut.tzinfo is not None:
+        cut = cut.astimezone(UTC).replace(tzinfo=None)
+    rows = conn.execute(
+        """
+        SELECT json_extract_string(s.config_json, '$.hypothesis') AS hypothesis,
+               ss.tail_score, ss.composite_score, v.gate_results
+        FROM shadow_scores ss
+        JOIN submissions s ON ss.forge_candidate_id = s.forge_candidate_id
+        JOIN verdicts v ON v.config_hash = s.config_hash
+        WHERE v.decided_at >= ? AND ss.tail_score IS NOT NULL AND ss.tail_model_id IS NOT NULL
+        ORDER BY hypothesis, ss.forge_candidate_id, v.crucible_run_id
+        """,
+        [cut],
+    ).fetchall()
+
+    by_family: dict[str, list[tuple[float, float, float]]] = {}
+    for hypothesis, tail_score, composite_score, gate_results_json in rows:
+        if hypothesis is None:
+            continue
+        gate_results = parse_gate_results(gate_results_json)
+        if not honest_regime_coverage_row(gate_results):
+            continue
+        realized = gate_results.get(gate)
+        if realized is None or realized.value is None:
+            continue
+        by_family.setdefault(str(hypothesis), []).append(
+            (float(tail_score), float(composite_score), float(realized.value))
+        )
+    return by_family
+
+
+def evaluate_tail_shadow_by_hypothesis(
+    conn: duckdb.DuckDBPyConnection, *, since: datetime, gate: str = _DEFAULT_TAIL_GATE
+) -> dict[str, TailEvaluation]:
+    """Per-family tail eval — the P4.1 retire-or-keep probe. Answers "does the wf_p25 lane
+    beat the incumbent P(component) ranking SPECIFICALLY on `volatility_event`?" (its
+    value proposition for the promotable single-name-ve book), where pooled skill has
+    stayed marginal. Each family's `TailEvaluation.spearman_delta` is the paired signal;
+    the eval id is the hypothesis."""
+    by_family = _tail_triples_by_hypothesis(conn, since=since, gate=gate)
+    return {family: _build_tail_eval(family, by_family[family]) for family in sorted(by_family)}
+
+
 def shadow_score_samples(conn: duckdb.DuckDBPyConnection, *, since: datetime) -> list[float]:
     """Pooled `model_score` values the F3 model produced since `since` (by `scored_at`).
     P3.2 drift input — compare a recent window against a reference (honest-era) window with

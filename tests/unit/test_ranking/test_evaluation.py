@@ -362,6 +362,69 @@ def _seed_tail_gates(
         )
 
 
+def _seed_tail_family(
+    conn: duckdb.DuckDBPyConnection,
+    rows: list[tuple[str, str, float, float, float]],
+) -> None:
+    """rows: (config_hash, hypothesis, tail_score, composite_score, realized_wf). Honest;
+    config_json carries the hypothesis so the by-family probe can split on it."""
+    import json
+
+    for config_hash, hypothesis, tail_score, composite_score, wf in rows:
+        candidate_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
+            "config_json, submitted_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                candidate_id,
+                str(uuid.uuid4()),
+                config_hash,
+                json.dumps({"hypothesis": hypothesis}),
+                _SINCE,
+                "gated",
+            ],
+        )
+        conn.execute(
+            "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+            "composite_score, scored_at, tail_score, tail_model_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [candidate_id, "logistic00000000", 0.5, composite_score, _SINCE, tail_score, "tail0"],
+        )
+        record_verdicts(
+            conn, [_gated_run(config_hash=config_hash, decision="reject", cpcv=0.5, wf=wf)]
+        )
+
+
+def test_evaluate_tail_shadow_by_hypothesis_splits_families() -> None:
+    # P4.1 probe: the tail model RANKS ve rows in line with realized wf (positive paired
+    # delta) but anti-ranks mr rows (negative) — the by-family split must surface that.
+    from forge.ranking.evaluation import evaluate_tail_shadow_by_hypothesis
+
+    rows = [
+        # ve: tail_score tracks realized wf; composite anti-tracks -> delta strongly +.
+        ("ve00000000000001", "volatility_event", 0.9, 0.1, 0.95),
+        ("ve00000000000002", "volatility_event", 0.7, 0.3, 0.80),
+        ("ve00000000000003", "volatility_event", 0.5, 0.5, 0.50),
+        ("ve00000000000004", "volatility_event", 0.3, 0.7, 0.30),
+        # mr: tail_score ANTI-tracks realized wf while composite TRACKS it -> delta negative.
+        ("mr00000000000001", "mean_reversion", 0.9, 0.1, 0.10),
+        ("mr00000000000002", "mean_reversion", 0.7, 0.5, 0.30),
+        ("mr00000000000003", "mean_reversion", 0.5, 0.9, 0.90),
+    ]
+    with db_connection() as conn:
+        _seed_tail_family(conn, rows)
+        by_fam = evaluate_tail_shadow_by_hypothesis(conn, since=_SINCE, gate="wf_sharpe_p25")
+
+    assert set(by_fam) == {"volatility_event", "mean_reversion"}
+    ve = by_fam["volatility_event"]
+    assert ve.tail_model_id == "volatility_event"  # the eval id is the family
+    assert ve.spearman_delta is not None
+    assert ve.spearman_delta > 0.0  # the lane HAS ve-specific ranking skill here
+    mr = by_fam["mean_reversion"]
+    assert mr.spearman_delta is not None
+    assert mr.spearman_delta < 0.0  # and anti-skill on mr
+
+
 def test_tail_eval_gate_param_selects_realized_column() -> None:
     # R3: the §8.6 tail eval must be parametrizable on the realized gate column so the
     # wf_p25 quality lane accrues its OWN justification streak (predicted vs realized
