@@ -249,6 +249,13 @@ class TailEvaluation:
     tail_model_id: str
     n_decided: int
     spearman: float | None
+    # P3.1 follow-up (B5): the PAIRED statistic. `incumbent_spearman` is Spearman(composite,
+    # realized) on the SAME rows; `spearman_delta = spearman - incumbent_spearman` is the
+    # challenger-minus-incumbent skill the §8.6 SPRT gate consumes (an absolute Spearman bar
+    # rewarded a model that merely tracks an already-cleared signal). None when either side is
+    # degenerate (all-ties / <2 points) — never a fabricated 0.
+    incumbent_spearman: float | None
+    spearman_delta: float | None
     k: int
     model_top_k_mean_cpcv: float | None
     incumbent_top_k_mean_cpcv: float | None
@@ -351,10 +358,19 @@ def _build_tail_eval(
     composites = [c for _, c, _ in triples]
     cpcvs = [v for _, _, v in triples]
     k = max(1, n // 10)
+    tail_spearman = spearman_corr(tail_scores, cpcvs)
+    incumbent_spearman = spearman_corr(composites, cpcvs)
+    delta = (
+        tail_spearman - incumbent_spearman
+        if tail_spearman is not None and incumbent_spearman is not None
+        else None
+    )
     return TailEvaluation(
         tail_model_id=tail_model_id,
         n_decided=n,
-        spearman=spearman_corr(tail_scores, cpcvs),
+        spearman=tail_spearman,
+        incumbent_spearman=incumbent_spearman,
+        spearman_delta=delta,
         k=k,
         model_top_k_mean_cpcv=_top_k_mean(list(zip(tail_scores, cpcvs, strict=True)), k),
         incumbent_top_k_mean_cpcv=_top_k_mean(list(zip(composites, cpcvs, strict=True)), k),
@@ -381,6 +397,17 @@ def evaluate_tail_shadow_pooled(
     if not pooled:
         return None
     return _build_tail_eval(_POOLED_TAIL_MODEL_ID, pooled)
+
+
+def shadow_tail_verdict(ev: TailEvaluation | None, *, delta_criterion: float) -> str:
+    """§8.6 tail criterion — PAIRED (P3.1 follow-up / B5): does the tail model beat the
+    incumbent P(component) on realized-gate Spearman, ON THE SAME ROWS, by more than
+    `delta_criterion`? The old absolute Spearman ≥ bar rewarded a model that merely tracks a
+    signal the incumbent already ranks; the paired delta measures the marginal skill the §8.6
+    SPRT gate accumulates. INSUFFICIENT when no paired delta exists (either side degenerate)."""
+    if ev is None or ev.spearman_delta is None:
+        return "INSUFFICIENT"
+    return "PASS" if ev.spearman_delta > delta_criterion else "FAIL"
 
 
 # ---------------------------------------------------------------------------

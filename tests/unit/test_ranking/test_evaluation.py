@@ -274,10 +274,38 @@ def test_tail_eval_spearman_and_top_k() -> None:
     assert ev.tail_model_id == "tail111122223333"
     assert ev.n_decided == 5
     assert ev.spearman == pytest.approx(1.0)
+    # P3.1 follow-up: the paired statistic — tail Spearman minus the incumbent's, same rows.
+    assert ev.incumbent_spearman == pytest.approx(-1.0)  # composite anti-correlates
+    assert ev.spearman_delta == pytest.approx(2.0)  # 1.0 - (-1.0)
     # K = top decile -> 1; top-by-tail picks the highest realized cpcv, top-by-composite the lowest.
     assert ev.model_top_k_mean_cpcv == pytest.approx(0.95)
     assert ev.incumbent_top_k_mean_cpcv == pytest.approx(0.10)
     assert ev.overall_mean_cpcv == pytest.approx(0.53)
+
+
+def test_shadow_tail_verdict_is_paired() -> None:
+    from forge.ranking.evaluation import TailEvaluation, shadow_tail_verdict
+
+    def _ev(delta: float | None) -> TailEvaluation:
+        return TailEvaluation(
+            tail_model_id="m",
+            n_decided=200,
+            spearman=0.4,
+            incumbent_spearman=(None if delta is None else 0.4 - delta),
+            spearman_delta=delta,
+            k=20,
+            model_top_k_mean_cpcv=0.5,
+            incumbent_top_k_mean_cpcv=0.4,
+            overall_mean_cpcv=0.3,
+        )
+
+    # PASS only when the tail model beats the incumbent by MORE than the paired margin.
+    assert shadow_tail_verdict(_ev(0.10), delta_criterion=0.05) == "PASS"
+    assert shadow_tail_verdict(_ev(0.02), delta_criterion=0.05) == "FAIL"
+    assert shadow_tail_verdict(_ev(-0.10), delta_criterion=0.05) == "FAIL"
+    # No paired delta available (one side degenerate) -> INSUFFICIENT, never a fabricated PASS.
+    assert shadow_tail_verdict(_ev(None), delta_criterion=0.05) == "INSUFFICIENT"
+    assert shadow_tail_verdict(None, delta_criterion=0.05) == "INSUFFICIENT"
 
 
 def _seed_tail_gates(

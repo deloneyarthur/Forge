@@ -231,11 +231,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from forge.cli.ranker_model_cmd import _TAIL_SPEARMAN_CRITERION as CRIT
+from forge.cli.ranker_model_cmd import _TAIL_SPEARMAN_DELTA_CRITERION as CRIT
 from forge.core.clock import utc_now
 from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
 from forge.persistence.db import db_connection
-from forge.ranking.evaluation import evaluate_tail_shadow, evaluate_tail_shadow_pooled
+from forge.ranking.evaluation import (
+    evaluate_tail_shadow,
+    evaluate_tail_shadow_pooled,
+    shadow_tail_verdict,
+)
 
 snap, streak_log_path, min_fresh, gate = (
     sys.argv[1],
@@ -246,9 +250,8 @@ snap, streak_log_path, min_fresh, gate = (
 
 
 def verdict_of(ev):
-    if ev is None or ev.spearman is None:
-        return "INSUFFICIENT"
-    return "PASS" if ev.spearman >= CRIT else "FAIL"
+    # P3.1 follow-up: paired (tail Spearman - incumbent Spearman) via the centralized verdict.
+    return shadow_tail_verdict(ev, delta_criterion=CRIT)
 
 
 def show(ev, label):
@@ -256,10 +259,12 @@ def show(ev, label):
         print(f"    {label}: no verified-coverage {gate}-bearing tail verdicts in window")
         return
     sp = "n/a" if ev.spearman is None else f"{ev.spearman:+.3f}"
+    isp = "n/a" if ev.incumbent_spearman is None else f"{ev.incumbent_spearman:+.3f}"
+    dl = "n/a" if ev.spearman_delta is None else f"{ev.spearman_delta:+.3f}"
     mk = "n/a" if ev.model_top_k_mean_cpcv is None else f"{ev.model_top_k_mean_cpcv:.3f}"
     ik = "n/a" if ev.incumbent_top_k_mean_cpcv is None else f"{ev.incumbent_top_k_mean_cpcv:.3f}"
     print(
-        f"    {label}: pooled n={ev.n_decided} spearman={sp} "
+        f"    {label}: pooled n={ev.n_decided} spearman tail={sp} incumbent={isp} Δ={dl} "
         f"top{ev.k} {gate} tail={mk} vs incumbent={ik} -> {verdict_of(ev)}"
     )
 
@@ -286,7 +291,8 @@ if fresh is None:
     sys.exit(0)
 
 verdict = verdict_of(fresh)
-qualifies = fresh.n_decided >= min_fresh and fresh.spearman is not None
+# P3.1 follow-up: qualify on the PAIRED delta being computable (both Spearmans defined).
+qualifies = fresh.n_decided >= min_fresh and fresh.spearman_delta is not None
 
 record = {
     "ts": utc_now().isoformat(),
@@ -295,6 +301,8 @@ record = {
     "fresh_decided": fresh.n_decided,
     "n_models_fresh": len(fresh_per_model),
     "spearman": fresh.spearman,
+    "incumbent_spearman": fresh.incumbent_spearman,
+    "spearman_delta": fresh.spearman_delta,
     "k": fresh.k,
     "model_top_k_mean": fresh.model_top_k_mean_cpcv,
     "incumbent_top_k_mean": fresh.incumbent_top_k_mean_cpcv,
@@ -316,10 +324,14 @@ for line in reversed([ln for ln in streak_log_path.read_text().splitlines() if l
     else:
         break
 
-sp_str = "n/a" if fresh.spearman is None else f"{fresh.spearman:+.3f}"
-note = "" if qualifies else f"  (NOT counted: fresh={fresh.n_decided}<{min_fresh} or spearman=None)"
+dl_str = "n/a" if fresh.spearman_delta is None else f"{fresh.spearman_delta:+.3f}"
+note = (
+    ""
+    if qualifies
+    else f"  (NOT counted: fresh={fresh.n_decided}<{min_fresh} or spearman_delta=None)"
+)
 print(
-    f"daily-ranker-eval: tail pooled n={fresh.n_decided} spearman={sp_str} "
+    f"daily-ranker-eval: tail pooled n={fresh.n_decided} Δspearman={dl_str} "
     f"verdict={verdict} -> consecutive PASS streak = {streak}/3{note}"
 )
 PY

@@ -54,6 +54,16 @@ _MAX_CE_CRITERION = 0.20
 # sparser than the full verdict stream).
 _TAIL_SPEARMAN_CRITERION = 0.30
 
+# §8.6 tail PAIRED criterion (P3.1 follow-up / B5). The per-checkpoint PASS margin on the
+# PAIRED statistic — tail-model Spearman minus the incumbent P(component) Spearman on the same
+# rows (`TailEvaluation.spearman_delta`). Replaces the absolute `_TAIL_SPEARMAN_CRITERION`
+# (which rewarded a model that merely tracks a signal the incumbent already ranks). This is now
+# a DISPLAY-only per-checkpoint label; the FLIP/keep gate is the Wald SPRT over the delta
+# history (`status_cmd.tail_flip_gate`, alpha=0.05). +0.05 = a modest "beats the incumbent's
+# ranking" margin — the tail model historically beat P ~+0.23 on verified rows but tied on the
+# unverified majority, so the honest pooled delta is small.
+_TAIL_SPEARMAN_DELTA_CRITERION = 0.05
+
 # Gate-then-tail re-wire per-checkpoint PASS margin (docs/proposals/quality-lane-rewire.md).
 # A checkpoint's fresh-window delta (gate-then-tail top-K minus the P(component)-baseline top-K,
 # on realized wf_sharpe_p25) PASSes when it clears this margin. P3.1 (B5): this is now a
@@ -311,11 +321,17 @@ def cmd_eval_robustness(
             "(tail shadow not yet accruing — needs the D141 code live + a robustness model)"
         )
         return
+    from forge.ranking.evaluation import shadow_tail_verdict
+
     for ev in evaluations:
         sp = f"{ev.spearman:+.3f}" if ev.spearman is not None else "n/a"
+        isp = f"{ev.incumbent_spearman:+.3f}" if ev.incumbent_spearman is not None else "n/a"
+        dl = f"{ev.spearman_delta:+.3f}" if ev.spearman_delta is not None else "n/a"
+        verdict = shadow_tail_verdict(ev, delta_criterion=_TAIL_SPEARMAN_DELTA_CRITERION)
         typer.echo(
             f"tail_model={ev.tail_model_id} decided={ev.n_decided} "
-            f"spearman(pred,realized {gate})={sp}"
+            f"spearman(pred,realized {gate}): tail={sp} incumbent={isp} "
+            f"Δ={dl} criterion(Δ>{_TAIL_SPEARMAN_DELTA_CRITERION:.2f})={verdict}"
         )
         mk = "n/a" if ev.model_top_k_mean_cpcv is None else f"{ev.model_top_k_mean_cpcv:.3f}"
         ik = (

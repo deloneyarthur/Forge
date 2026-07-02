@@ -42,6 +42,10 @@ _FLIP_GATE_K = 3
 _FLIP_ALPHA = 0.05  # target false-promote rate
 _FLIP_BETA = 0.20  # target false-reject rate
 _FLIP_MIN_EFFECT = 0.05  # the mean WF-floor Δ worth flipping for (matches the old margin)
+# §8.6 tail lane (P3.1 follow-up): the paired Spearman-delta (tail minus incumbent) worth
+# crediting as marginal skill. Modest — the tail model beat the incumbent ~+0.23 on verified
+# rows historically, but ties on the unverified majority, so the honest mean delta is small.
+_TAIL_FLIP_MIN_EFFECT = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +92,7 @@ class FlipGateStatus:
     Full-pool "look" records are excluded; `fresh_pass_streak` is a display-only diagnostic
     (the SPRT weighs delta magnitudes, not the binary PASS)."""
 
+    label: str
     fresh_pass_streak: int
     k: int
     n_fresh_qualifying: int
@@ -107,31 +112,39 @@ def _is_full_pool_look(rec: dict[str, object], clean_era_iso: str) -> bool:
     return rec.get("window_since") == clean_era_iso
 
 
-def rewire_flip_gate(
-    records: Sequence[dict[str, object]], *, clean_era_iso: str, k: int = _FLIP_GATE_K
+def _sprt_flip_gate(
+    records: Sequence[dict[str, object]],
+    *,
+    clean_era_iso: str,
+    delta_key: str,
+    min_effect: float,
+    label: str,
+    k: int = _FLIP_GATE_K,
 ) -> FlipGateStatus:
-    """The gate-tail flip gate over the rewire streak records. Excludes full-pool looks
-    (P1.2), then runs a Wald SPRT (P3.1) on every fresh-window paired Δ: `met` == the SPRT
-    decided ``"promote"``. `k` is the SPRT's min_observations (never flip on <k fresh
-    checkpoints). Pure/testable — the daily verdict is recorded, not re-derived."""
+    """Shared SPRT flip gate (P3.1). Excludes full-pool looks (P1.2), then runs a Wald SPRT
+    on every data-sufficient (`qualifies`) fresh-window paired Δ read from `delta_key`:
+    `met` == the SPRT decided ``"promote"``. `k` is the SPRT's min_observations (never flip on
+    <k fresh checkpoints). Pure/testable — the daily verdict is recorded, not re-derived."""
     fresh = [r for r in records if not _is_full_pool_look(r, clean_era_iso)]
     streak = _consecutive_pass(fresh)
     # Only data-sufficient checkpoints feed the SPRT: `qualifies` is the timer's
-    # (fresh_decided >= min_fresh) gate — an under-powered window's Δ is noise.
+    # (fresh_decided >= min_fresh) gate — an under-powered window's Δ is noise. Rows that
+    # predate `delta_key` (older streak schema) lack it and are skipped by the isinstance check.
     deltas = [
         float(d)
         for r in fresh
-        if r.get("qualifies") and isinstance((d := r.get("delta")), (int, float))
+        if r.get("qualifies") and isinstance((d := r.get(delta_key)), (int, float))
     ]
     mean = sum(deltas) / len(deltas) if deltas else None
     sprt = sequential_mean_test(
         deltas,
         alpha=_FLIP_ALPHA,
         beta=_FLIP_BETA,
-        min_effect=_FLIP_MIN_EFFECT,
+        min_effect=min_effect,
         min_observations=k,
     )
     return FlipGateStatus(
+        label=label,
         fresh_pass_streak=streak,
         k=k,
         n_fresh_qualifying=len(deltas),
@@ -140,6 +153,38 @@ def rewire_flip_gate(
         sprt_log_lr=sprt.log_lr,
         sprt_upper=sprt.upper,
         met=sprt.decision == "promote",
+    )
+
+
+def rewire_flip_gate(
+    records: Sequence[dict[str, object]], *, clean_era_iso: str, k: int = _FLIP_GATE_K
+) -> FlipGateStatus:
+    """The gate-tail flip gate: SPRT over the rewire streak's per-checkpoint `delta` (top-K
+    WF floor of the gate-then-tail lane minus the P(component) baseline)."""
+    return _sprt_flip_gate(
+        records,
+        clean_era_iso=clean_era_iso,
+        delta_key="delta",
+        min_effect=_FLIP_MIN_EFFECT,
+        label="gate-tail flip gate",
+        k=k,
+    )
+
+
+def tail_flip_gate(
+    records: Sequence[dict[str, object]], *, clean_era_iso: str, k: int = _FLIP_GATE_K
+) -> FlipGateStatus:
+    """The §8.6 tail-lane skill gate (P3.1 follow-up): SPRT over the streak's per-checkpoint
+    `spearman_delta` (tail-model Spearman minus the incumbent P(component) Spearman, same rows).
+    Replaces the absolute Spearman ≥ 0.30 bar with a paired significance test — the input P4.1
+    (retire-or-keep) should read instead of the streak count."""
+    return _sprt_flip_gate(
+        records,
+        clean_era_iso=clean_era_iso,
+        delta_key="spearman_delta",
+        min_effect=_TAIL_FLIP_MIN_EFFECT,
+        label="§8.6 tail flip gate",
+        k=k,
     )
 
 
@@ -234,7 +279,7 @@ def _format_flip_gate(g: FlipGateStatus) -> str:
     md = f"mean Δ {g.mean_delta:+.3f}" if g.mean_delta is not None else "mean Δ n/a"
     sprt = f"SPRT {g.sprt_decision} (logLR {g.sprt_log_lr:+.2f} / {g.sprt_upper:.2f})"
     return (
-        f"{'gate-tail flip gate':<22} {verdict:<7} {sprt}  {md}  "
+        f"{g.label:<22} {verdict:<7} {sprt}  {md}  "
         f"fresh-PASS {g.fresh_pass_streak}/{g.k} n={g.n_fresh_qualifying}"
     )
 
@@ -261,6 +306,7 @@ def cmd_status(
     eval_dir = data_root / "ranker_eval"
     f3_records = _read_jsonl(eval_dir / "streak.jsonl")
     rewire_records = _read_jsonl(eval_dir / "rewire_streak_wfp25.jsonl")
+    tail_records = _read_jsonl(eval_dir / "robustness_streak_wfp25.jsonl")
     f3 = summarize_streak(
         f3_records,
         label="F3 verdict ranker",
@@ -268,10 +314,10 @@ def cmd_status(
         metric_name="AUC margin",
     )
     tail = summarize_streak(
-        _read_jsonl(eval_dir / "robustness_streak_wfp25.jsonl"),
+        tail_records,
         label="§8.6 wf_p25 tail",
-        metric_key="spearman",
-        metric_name="Spearman",
+        metric_key="spearman_delta",
+        metric_name="Δ Spearman vs P",
     )
     rewire = summarize_streak(
         rewire_records,
@@ -286,8 +332,9 @@ def cmd_status(
     typer.echo(_format_calibration(f3_records, rewire_records))
     from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
 
-    flip_gate = rewire_flip_gate(rewire_records, clean_era_iso=CLEAN_ERA_LABEL_CUT.isoformat())
-    typer.echo(_format_flip_gate(flip_gate))
+    clean_era_iso = CLEAN_ERA_LABEL_CUT.isoformat()
+    typer.echo(_format_flip_gate(rewire_flip_gate(rewire_records, clean_era_iso=clean_era_iso)))
+    typer.echo(_format_flip_gate(tail_flip_gate(tail_records, clean_era_iso=clean_era_iso)))
     typer.echo("(authoritative recompute: `forge ranker-model eval` / `eval-robustness`)")
 
 
@@ -297,4 +344,5 @@ __all__ = [
     "cmd_status",
     "rewire_flip_gate",
     "summarize_streak",
+    "tail_flip_gate",
 ]

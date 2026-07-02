@@ -12,7 +12,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from forge.cli.main import app
-from forge.cli.status_cmd import rewire_flip_gate, summarize_streak
+from forge.cli.status_cmd import rewire_flip_gate, summarize_streak, tail_flip_gate
 
 runner = CliRunner()
 
@@ -149,6 +149,40 @@ def test_flip_gate_streak_breaks_on_qualifying_fail() -> None:
     records = [_rewire_rec(0.3, "PASS"), _rewire_rec(0.01, "FAIL"), _rewire_rec(0.33, "PASS")]
     g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
     assert g.fresh_pass_streak == 1  # trailing PASS only; the qualifying FAIL breaks it
+    assert not g.met
+
+
+def _tail_rec(
+    spearman_delta: float, verdict: str, *, window_since: str = "2026-07-01T00:00:00"
+) -> dict:
+    return {
+        "spearman_delta": spearman_delta,
+        "verdict": verdict,
+        "qualifies": True,
+        "window_since": window_since,
+        "ts": "2026-07-01T12:00:00+00:00",
+    }
+
+
+def test_tail_flip_gate_uses_paired_spearman_delta() -> None:
+    # P3.1 follow-up: three fresh checkpoints where the tail model beats the incumbent by a
+    # tight, large margin -> SPRT promotes -> MET. Labelled as the §8.6 gate.
+    records = [_tail_rec(d, "PASS") for d in (0.30, 0.33, 0.31)]
+    g = tail_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
+    assert g.label.startswith("§8.6")
+    assert g.sprt_decision == "promote"
+    assert g.met
+
+
+def test_tail_flip_gate_ignores_rows_without_delta() -> None:
+    # Legacy rows carry `spearman` (absolute) but not the paired `spearman_delta` -> skipped,
+    # so the gate stays NOT MET rather than crediting the un-paired signal.
+    records = [
+        {"spearman": 0.5, "verdict": "PASS", "qualifies": True, "ts": "t", "window_since": "w"}
+        for _ in range(4)
+    ]
+    g = tail_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
+    assert g.n_fresh_qualifying == 0
     assert not g.met
 
 
