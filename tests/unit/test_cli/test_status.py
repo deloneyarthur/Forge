@@ -95,3 +95,34 @@ def test_cmd_status_shows_rewire_clock(tmp_path: Path) -> None:
     result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
     assert "re-wire gate-tail" in result.stdout
+
+
+def test_cmd_status_shows_calibration_line(tmp_path: Path) -> None:
+    # P1.3: the latest calibration verdict + max_ce (from streak.jsonl) and floor keep-rate
+    # (from the rewire clock) render on the drift-guard line.
+    eval_dir = tmp_path / "ranker_eval"
+    eval_dir.mkdir()
+    f3 = _rec(0.4, "PASS")
+    f3["model_max_ce"] = 0.356
+    f3["calibration_verdict"] = "FAIL"
+    (eval_dir / "streak.jsonl").write_text(json.dumps(f3) + "\n", encoding="utf-8")
+    rw = _rec(0.16, "PASS", key="delta")
+    rw["eligible_fraction"] = 0.9869
+    (eval_dir / "rewire_streak_wfp25.jsonl").write_text(json.dumps(rw) + "\n", encoding="utf-8")
+    result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
+    assert result.exit_code == 0, result.stdout
+    assert "P calibration/floor" in result.stdout
+    assert "FAIL" in result.stdout
+    assert "0.356" in result.stdout
+    assert "0.9869" in result.stdout
+
+
+def test_cmd_status_calibration_line_tolerates_old_records(tmp_path: Path) -> None:
+    # Records predating P1.3 lack the calibration fields — the line still renders (n/a).
+    eval_dir = tmp_path / "ranker_eval"
+    eval_dir.mkdir()
+    (eval_dir / "streak.jsonl").write_text(json.dumps(_rec(0.4, "PASS")) + "\n", encoding="utf-8")
+    result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
+    assert result.exit_code == 0, result.stdout
+    assert "P calibration/floor" in result.stdout
+    assert "n/a" in result.stdout

@@ -124,6 +124,30 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return out
 
 
+def _latest_field(records: list[dict[str, object]], key: str) -> object | None:
+    """Most recent non-null value of ``key`` across ``records`` (older rows may predate
+    the field — P1.3 added the calibration/keep-rate columns mid-stream)."""
+    for rec in reversed(records):
+        value = rec.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _format_calibration(
+    f3_records: list[dict[str, object]], rewire_records: list[dict[str, object]]
+) -> str:
+    """P1.3 drift guard: the latest floor-relevant calibration verdict (does the P the
+    absolute gate-then-tail floor reads stay calibrated?) + the floor keep-rate."""
+    max_ce = _latest_field(f3_records, "model_max_ce")
+    verdict = _latest_field(f3_records, "calibration_verdict")
+    keep_rate = _latest_field(rewire_records, "eligible_fraction")
+    mce = "n/a" if not isinstance(max_ce, (int, float)) else f"{float(max_ce):.3f}"
+    kr = "n/a" if not isinstance(keep_rate, (int, float)) else f"{float(keep_rate):.4f}"
+    cv = str(verdict) if verdict is not None else "?"
+    return f"{'P calibration/floor':<22} {cv:<4} max_ce {mce}   keep-rate(P>=floor) {kr}"
+
+
 def _format_summary(s: StreakSummary) -> str:
     if s.n_records == 0:
         return f"{s.label:<22} (no checkpoints recorded yet)"
@@ -144,8 +168,10 @@ def cmd_status(
 ) -> None:
     """Show the learning-signal clocks (is the stream improving?) — no DB access."""
     eval_dir = data_root / "ranker_eval"
+    f3_records = _read_jsonl(eval_dir / "streak.jsonl")
+    rewire_records = _read_jsonl(eval_dir / "rewire_streak_wfp25.jsonl")
     f3 = summarize_streak(
-        _read_jsonl(eval_dir / "streak.jsonl"),
+        f3_records,
         label="F3 verdict ranker",
         metric_key="auc_margin",
         metric_name="AUC margin",
@@ -157,7 +183,7 @@ def cmd_status(
         metric_name="Spearman",
     )
     rewire = summarize_streak(
-        _read_jsonl(eval_dir / "rewire_streak_wfp25.jsonl"),
+        rewire_records,
         label="re-wire gate-tail",
         metric_key="delta",
         metric_name="Δ vs P",
@@ -166,6 +192,7 @@ def cmd_status(
     typer.echo(_format_summary(f3))
     typer.echo(_format_summary(tail))
     typer.echo(_format_summary(rewire))
+    typer.echo(_format_calibration(f3_records, rewire_records))
     typer.echo("(authoritative recompute: `forge ranker-model eval` / `eval-robustness`)")
 
 
