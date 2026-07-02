@@ -21,6 +21,7 @@ from forge.ranking.prior_promotion import compute_prior_promotion_proximity
 from forge.ranking.types import RankedCandidate
 
 if TYPE_CHECKING:
+    import random
     from collections.abc import Set as AbstractSet
 
     from crucible_contracts import StrategyConfig
@@ -102,6 +103,33 @@ def rank_batch(
     blend `ranker.score(report, prior)` — byte-identical. Only meaningful with a `verdict_scorer`
     returning a gate-tail value; a no-op on the Jaccard/blend paths.
     """
+    scored = _score_reports(
+        ranker,
+        reports,
+        promoted_strategies,
+        verdict_scorer=verdict_scorer,
+        gate_tail_ordering=gate_tail_ordering,
+    )
+    return select_top_n(
+        scored,
+        n,
+        similarity_fn=similarity_fn,
+        min_per_hypothesis=min_per_hypothesis,
+        floor_exempt_hypotheses=floor_exempt_hypotheses,
+        mature_arms=mature_arms,
+    )
+
+
+def _score_reports(
+    ranker: Ranker,
+    reports: Iterable[PreFilterReport],
+    promoted_strategies: Sequence[StrategyConfig],
+    *,
+    verdict_scorer: Callable[[StrategyConfig], float] | None,
+    gate_tail_ordering: bool,
+) -> list[RankedCandidate]:
+    """§6.2 score every passed report into a `RankedCandidate` (pre-diversification).
+    Shared by `rank_batch` and `rank_batch_with_holdout` so their scoring is identical."""
     scored: list[RankedCandidate] = []
     for report in reports:
         if not report.passed:
@@ -121,14 +149,62 @@ def rank_batch(
                 composite_score=composite,
             ),
         )
-    return select_top_n(
+    return scored
+
+
+def sample_exploration_holdout(
+    pool: Sequence[RankedCandidate], holdout_n: int, rng: random.Random
+) -> list[RankedCandidate]:
+    """P3.3 (B7): deterministically draw up to `holdout_n` candidates at RANDOM from `pool`
+    (the rank-NON-selected survivors). Sorted by config_hash first so the draw is reproducible
+    for a given `rng` seed (hard rule #6); the RNG must come from `SeedHierarchy` (rule #8)."""
+    if holdout_n <= 0 or not pool:
+        return []
+    ordered = sorted(pool, key=lambda c: c.report.config.config_hash)
+    return rng.sample(ordered, min(holdout_n, len(ordered)))
+
+
+def rank_batch_with_holdout(
+    ranker: Ranker,
+    reports: Iterable[PreFilterReport],
+    promoted_strategies: Sequence[StrategyConfig],
+    n: int,
+    *,
+    holdout_n: int,
+    rng: random.Random,
+    similarity_fn: Callable[[StrategyConfig, StrategyConfig], float] = jaccard_signal_ids,
+    min_per_hypothesis: int = 0,
+    floor_exempt_hypotheses: AbstractSet[str] = frozenset(),
+    mature_arms: AbstractSet[Arm] | None = None,
+    verdict_scorer: Callable[[StrategyConfig], float] | None = None,
+    gate_tail_ordering: bool = False,
+) -> tuple[list[RankedCandidate], list[RankedCandidate]]:
+    """P3.3 (B7) exploration holdout: rank-select the top ``n - holdout_n`` as usual, then draw
+    ``holdout_n`` at RANDOM from the survivors ranking did NOT pick — configs that bypass the
+    learned ranking, giving F3 / the wf_p25 lane / the estimand UNBIASED labels (they train on
+    Forge-selected submissions otherwise — a direct feedback loop). Returns
+    ``(selected, holdout)``. Total submitted is still ``<= n`` (holdout REPLACES rank slots, it
+    doesn't add). `holdout_n == 0` reduces to a plain `rank_batch` selection with an empty
+    holdout, so the caller's flag-OFF path stays byte-identical."""
+    scored = _score_reports(
+        ranker,
+        reports,
+        promoted_strategies,
+        verdict_scorer=verdict_scorer,
+        gate_tail_ordering=gate_tail_ordering,
+    )
+    selected = select_top_n(
         scored,
-        n,
+        max(0, n - holdout_n),
         similarity_fn=similarity_fn,
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
     )
+    selected_hashes = {c.report.config.config_hash for c in selected}
+    pool = [c for c in scored if c.report.config.config_hash not in selected_hashes]
+    holdout = sample_exploration_holdout(pool, holdout_n, rng)
+    return selected, holdout
 
 
-__all__ = ["rank_batch"]
+__all__ = ["rank_batch", "rank_batch_with_holdout", "sample_exploration_holdout"]

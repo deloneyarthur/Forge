@@ -13,12 +13,15 @@ from types import MappingProxyType
 import pytest
 from crucible_contracts import SignalSpec, StrategyConfig
 
+from forge.core.seed import SeedHierarchy
 from forge.prefilters.types import FilterResult, PreFilterReport
 from forge.ranking.model import gate_tail_prior, gate_tail_rank_score
 from forge.ranking.queue import (
     _PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
     _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
     rank_batch,
+    rank_batch_with_holdout,
+    sample_exploration_holdout,
 )
 from forge.ranking.scorer import Ranker
 from forge.ranking.types import RankedCandidate, RankerWeights
@@ -497,3 +500,72 @@ def test_rank_batch_exempts_relative_value_from_the_d103_floor() -> None:
     )
     n_rv_floored = sum(1 for c in floored if c.report.config.hypothesis == "relative_value")
     assert n_rv_floored >= 1  # rescued when NOT exempt — proves the exemption is the cause
+
+
+# ---------------------------------------------------------------------------
+# P3.3 (B7) — exploration holdout
+# ---------------------------------------------------------------------------
+
+
+def _holdout_rng() -> object:
+    return SeedHierarchy(0).rng("exploration_holdout")
+
+
+def test_holdout_zero_matches_rank_batch() -> None:
+    # holdout_n=0 -> selection identical to plain rank_batch, empty holdout (byte-identical path).
+    r = Ranker(weights=_default_weights())
+    reports = tuple(_report(f"c{i}", signals=(f"S{i}",), signal_density=i / 10.0) for i in range(8))
+    plain = rank_batch(r, reports, promoted_strategies=(), n=4)
+    selected, holdout = rank_batch_with_holdout(
+        r, reports, promoted_strategies=(), n=4, holdout_n=0, rng=_holdout_rng()
+    )
+    assert holdout == []
+    assert [c.report.config.config_hash for c in selected] == [
+        c.report.config.config_hash for c in plain
+    ]
+
+
+def test_holdout_reserves_slots_from_unselected_survivors() -> None:
+    r = Ranker(weights=_default_weights())
+    reports = tuple(
+        _report(f"c{i}", signals=(f"S{i}",), signal_density=i / 10.0) for i in range(10)
+    )
+    selected, holdout = rank_batch_with_holdout(
+        r, reports, promoted_strategies=(), n=4, holdout_n=2, rng=_holdout_rng()
+    )
+    assert len(selected) == 2  # n - holdout_n
+    assert len(holdout) == 2
+    sel_hashes = {c.report.config.config_hash for c in selected}
+    hold_hashes = {c.report.config.config_hash for c in holdout}
+    # Holdout is disjoint from the rank-selected set (drawn from what ranking did NOT pick).
+    assert sel_hashes.isdisjoint(hold_hashes)
+    # The top-ranked configs (highest signal_density) go to `selected`, not holdout.
+    top_two = {
+        c.report.config.config_hash for c in rank_batch(r, reports, promoted_strategies=(), n=2)
+    }
+    assert top_two == sel_hashes
+
+
+def test_holdout_is_deterministic_for_same_seed() -> None:
+    r = Ranker(weights=_default_weights())
+    reports = tuple(
+        _report(f"c{i}", signals=(f"S{i}",), signal_density=i / 10.0) for i in range(10)
+    )
+    a = rank_batch_with_holdout(
+        r, reports, promoted_strategies=(), n=4, holdout_n=2, rng=_holdout_rng()
+    )
+    b = rank_batch_with_holdout(
+        r, reports, promoted_strategies=(), n=4, holdout_n=2, rng=_holdout_rng()
+    )
+    assert [c.report.config.config_hash for c in a[1]] == [
+        c.report.config.config_hash for c in b[1]
+    ]
+
+
+def test_sample_exploration_holdout_bounds() -> None:
+    r = Ranker(weights=_default_weights())
+    scored = rank_batch(r, tuple(_report(f"c{i}", signals=(f"S{i}",)) for i in range(3)), (), n=3)
+    assert sample_exploration_holdout([], 2, _holdout_rng()) == []
+    assert sample_exploration_holdout(scored, 0, _holdout_rng()) == []
+    # holdout_n exceeds the pool -> take the whole pool, never raise.
+    assert len(sample_exploration_holdout(scored, 99, _holdout_rng())) == 3

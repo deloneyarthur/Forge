@@ -134,6 +134,7 @@ def _submit_one(
     batch: BatchContext,
     candidate: RankedCandidate,
     inbox_root: Path,
+    selection_mode: str = "ranked",
 ) -> SubmissionRecord:
     candidate_id = uuid.uuid4()
     config = candidate.report.config
@@ -188,8 +189,8 @@ def _submit_one(
                 """
                 INSERT INTO submissions
                     (forge_candidate_id, forge_batch_id, config_hash, config_json,
-                     submitted_at, status)
-                VALUES (?, ?, ?, ?, ?, ?)
+                     submitted_at, status, selection_mode)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     str(candidate_id),
@@ -198,6 +199,7 @@ def _submit_one(
                     config_json,
                     batch.submitted_at,
                     "pending",
+                    selection_mode,
                 ],
             )
         except duckdb.ConstraintException:
@@ -271,6 +273,7 @@ def submit_batch(
     enumerated_count: int | None = None,
     survived_count: int | None = None,
     enumerated_by_hypothesis: Mapping[str, int] | None = None,
+    holdout_hashes: frozenset[str] = frozenset(),
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
@@ -302,11 +305,17 @@ def submit_batch(
     dropped_overlay = 0
 
     for candidate in candidates:
+        # P3.3 (B7): tag the exploration-holdout draw so evals can split biased-vs-unbiased
+        # labels. Empty `holdout_hashes` (default / flag-OFF) → every row is 'ranked'.
+        selection_mode = (
+            "holdout" if candidate.report.config.config_hash in holdout_hashes else "ranked"
+        )
         record = _submit_one(
             db,
             batch=batch,
             candidate=candidate,
             inbox_root=inbox_root,
+            selection_mode=selection_mode,
         )
         records.append(record)
         if record.status == "submitted":

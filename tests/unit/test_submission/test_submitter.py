@@ -138,6 +138,33 @@ def test_records_one_submissions_row_per_candidate(tmp_path: Path) -> None:
         assert status == "submitted"
 
 
+def test_selection_mode_tags_holdout_vs_ranked(tmp_path: Path) -> None:
+    # P3.3: `holdout_hashes` tags the exploration draw; everything else is 'ranked'.
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    a = _candidate("a", "dir_a")
+    b = _candidate("b", "dir_b")
+    holdout = frozenset({b.report.config.config_hash})
+    with db_connection(forge_db) as conn:
+        submit_batch(
+            conn, batch=_ctx(), candidates=(a, b), inbox_root=inbox, holdout_hashes=holdout
+        )
+        rows = dict(conn.execute("SELECT config_hash, selection_mode FROM submissions").fetchall())
+    assert rows[a.report.config.config_hash] == "ranked"
+    assert rows[b.report.config.config_hash] == "holdout"
+
+
+def test_selection_mode_defaults_ranked_when_no_holdout(tmp_path: Path) -> None:
+    # Flag-OFF / default: no holdout_hashes -> every row 'ranked' (byte-identical tag).
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    cands = (_candidate("a", "dir_a"), _candidate("b", "dir_b"))
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=_ctx(), candidates=cands, inbox_root=inbox)
+        modes = [r[0] for r in conn.execute("SELECT selection_mode FROM submissions").fetchall()]
+    assert modes == ["ranked", "ranked"]
+
+
 def test_writes_pre_filter_logs(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     inbox = tmp_path / "inbox"

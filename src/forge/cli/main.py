@@ -622,6 +622,38 @@ def _rewire_p_floor() -> float:
         return _DEFAULT_REWIRE_P_FLOOR
 
 
+_EXPLORATION_HOLDOUT_PARSE_FAILED_LOGGED: bool = False
+# P3.3 (B7): cap the exploration-holdout fraction. Above ~10% the learned ranking barely
+# drives the stream (the audit suggests 2-5%); a degenerate value clamps to this ceiling.
+_MAX_EXPLORATION_HOLDOUT_FRAC = 0.10
+
+
+def _resolve_exploration_holdout_frac() -> float:
+    """Parse ``FORGE_EXPLORATION_HOLDOUT_FRAC`` (P3.3 / B7): the fraction of each batch that
+    BYPASSES the learned ranking as a seeded random draw, giving the learned components
+    unbiased labels. Unset/empty/0 → 0.0 (flag-OFF → byte-identical: no holdout, plain
+    `rank_batch`). Degrades to 0.0 on a malformed value (warn-once) rather than crash-looping
+    the daemon; a valid value is clamped to `[0, _MAX_EXPLORATION_HOLDOUT_FRAC]`."""
+    import os
+
+    raw = os.environ.get("FORGE_EXPLORATION_HOLDOUT_FRAC", "").strip()
+    if not raw:
+        return 0.0
+    try:
+        frac = float(raw)
+    except ValueError:
+        global _EXPLORATION_HOLDOUT_PARSE_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
+        if not _EXPLORATION_HOLDOUT_PARSE_FAILED_LOGGED:
+            typer.echo(
+                f"exploration_holdout: FORGE_EXPLORATION_HOLDOUT_FRAC={raw!r} is not a float — "
+                "using 0.0 (no holdout). Subsequent parse failures will be silent this process.",
+                err=True,
+            )
+            _EXPLORATION_HOLDOUT_PARSE_FAILED_LOGGED = True
+        return 0.0
+    return max(0.0, min(frac, _MAX_EXPLORATION_HOLDOUT_FRAC))
+
+
 def _quality_rank_mode() -> str:
     """Parse ``FORGE_QUALITY_RANK_MODE`` into a recognized quality-lane form
     (``blend`` — the default, byte-identical — or ``gate-tail``, the re-wire).
@@ -2132,24 +2164,55 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     elif quality_rank and verdict_scorer is None:
         typer.echo("quality_rank: inert — needs the F3 P(component) base (FORGE_F3_RANKER off)")
 
-    ranked = rank_batch(
-        ranker,
-        reports,
-        promoted_strategies=tuple(promoted),
-        n=batch_size,
+    # Shared §6 ranking kwargs so the holdout path scores identically to the plain path.
+    _rank_kwargs = {
         # D103 — guarantee each enumerable hypothesis a minimum batch share so
         # the orthogonal relative_value sleeve can't be starved by a feedback
         # oscillation (the midday mean_reversion flood).
-        min_per_hypothesis=_PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
+        "min_per_hypothesis": _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
         # D145 — but exempt structurally 0-yielding sleeves (relative_value, Q40)
         # from that floor so their guaranteed share is reclaimed by merit.
-        floor_exempt_hypotheses=_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
-        mature_arms=mature_arms,
+        "floor_exempt_hypotheses": _PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
+        "mature_arms": mature_arms,
         # D149 — None = Jaccard kill-switch.
-        verdict_scorer=verdict_scorer,
+        "verdict_scorer": verdict_scorer,
         # P1.1 — gate-tail mode: rank by the gate-tail value directly (hard gate).
-        gate_tail_ordering=_gate_tail_ordering,
-    )
+        "gate_tail_ordering": _gate_tail_ordering,
+    }
+    # P3.3 (B7) — exploration holdout: reserve a seeded random fraction of the batch for
+    # configs that BYPASS the learned ranking (unbiased labels for F3 / the wf_p25 lane /
+    # the estimand). Flag-OFF (frac 0) → `_holdout_n == 0` → plain `rank_batch(n=batch_size)`,
+    # byte-identical, `_holdout_hashes` empty → every submission tagged 'ranked'.
+    _holdout_frac = _resolve_exploration_holdout_frac()
+    _holdout_n = round(_holdout_frac * batch_size) if _holdout_frac > 0.0 else 0
+    if _holdout_n > 0:
+        from forge.core.seed import SeedHierarchy
+        from forge.ranking import rank_batch_with_holdout
+
+        _selected, _holdout = rank_batch_with_holdout(
+            ranker,
+            reports,
+            promoted_strategies=tuple(promoted),
+            n=batch_size,
+            holdout_n=_holdout_n,
+            rng=SeedHierarchy(seed).rng("exploration_holdout"),
+            **_rank_kwargs,  # type: ignore[arg-type]
+        )
+        ranked = [*_selected, *_holdout]
+        _holdout_hashes = frozenset(c.report.config.config_hash for c in _holdout)
+        typer.echo(
+            f"exploration_holdout: {len(_holdout)} of {len(ranked)} submitted "
+            f"(frac={_holdout_frac:.3f}, seeded bypass of the ranker)"
+        )
+    else:
+        ranked = rank_batch(
+            ranker,
+            reports,
+            promoted_strategies=tuple(promoted),
+            n=batch_size,
+            **_rank_kwargs,  # type: ignore[arg-type]
+        )
+        _holdout_hashes = frozenset()
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
     # D065: complete per-hypothesis funnel — sampler_attempts (input to
@@ -2208,6 +2271,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             enumerated_count=len(reports),
             survived_count=passed,
             enumerated_by_hypothesis=_enumerated_by_hypothesis(reports),
+            holdout_hashes=_holdout_hashes,
         )
         # D062 + D064: persist per-filter rejection counts to batch_summaries
         # (aggregate + per-hypothesis breakdown). Same connection so the

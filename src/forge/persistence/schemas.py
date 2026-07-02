@@ -25,6 +25,10 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     )
     """,
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_submissions_config_hash ON submissions(config_hash)",
+    # P3.3 (B7): how a submission was selected — 'ranked' (learned §6.2 ranking) vs
+    # 'holdout' (the seeded exploration bypass). Lets evals split biased-vs-unbiased
+    # labels. Idempotent ALTER; pre-P3.3 rows are NULL (treated as 'ranked').
+    "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS selection_mode VARCHAR(16)",
     """
     CREATE TABLE IF NOT EXISTS batch_summaries (
         forge_batch_id      UUID PRIMARY KEY,

@@ -15,7 +15,12 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from forge.cli.main import _effective_seed, _next_iteration_number, app
+from forge.cli.main import (
+    _effective_seed,
+    _next_iteration_number,
+    _resolve_exploration_holdout_frac,
+    app,
+)
 from forge.persistence.db import db_connection
 from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
 
@@ -881,3 +886,51 @@ def test_l9_loop_requires_crucible_db(tmp_path: Path) -> None:
     # stderr; its exact capture varies by Click version, so the exit code is the
     # contract we assert.
     assert result.exit_code == 2, result.output
+
+
+def test_exploration_holdout_frac_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Unset / empty -> 0.0 (flag-OFF, byte-identical no-holdout path).
+    monkeypatch.delenv("FORGE_EXPLORATION_HOLDOUT_FRAC", raising=False)
+    assert _resolve_exploration_holdout_frac() == 0.0
+    # A valid fraction passes through.
+    monkeypatch.setenv("FORGE_EXPLORATION_HOLDOUT_FRAC", "0.03")
+    assert _resolve_exploration_holdout_frac() == pytest.approx(0.03)
+    # Clamped to the ceiling (never let the holdout swamp the ranker).
+    monkeypatch.setenv("FORGE_EXPLORATION_HOLDOUT_FRAC", "0.9")
+    assert _resolve_exploration_holdout_frac() == pytest.approx(0.10)
+    # Negative clamps to 0.
+    monkeypatch.setenv("FORGE_EXPLORATION_HOLDOUT_FRAC", "-0.5")
+    assert _resolve_exploration_holdout_frac() == 0.0
+    # Malformed -> 0.0 (degrade-never-crash), no raise.
+    monkeypatch.setenv("FORGE_EXPLORATION_HOLDOUT_FRAC", "not-a-float")
+    assert _resolve_exploration_holdout_frac() == 0.0
+
+
+def test_run_dry_run_exploration_holdout_prints_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # P3.3 integration: with the flag ON, the run cycle takes the holdout branch and
+    # prints the exploration_holdout line (dry-run -> no inbox/DB writes, no live cache).
+    monkeypatch.setenv("FORGE_EXPLORATION_HOLDOUT_FRAC", "0.10")
+    crucible_db = tmp_path / "crucible.db"
+    build_synthetic_crucible_db(crucible_db).close()
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--no-config",
+            "--seed",
+            "0",
+            "--batch-size",
+            "10",
+            "--max",
+            "300",
+            "--forge-db",
+            str(tmp_path / "forge.db"),
+            "--crucible-db",
+            str(crucible_db),
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "exploration_holdout:" in result.stdout
