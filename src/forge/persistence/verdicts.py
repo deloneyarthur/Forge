@@ -24,7 +24,7 @@ double-shift the moment Crucible starts emitting aware UTC.
 from __future__ import annotations
 
 import json
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from forge.core.clock import utc_now
@@ -48,14 +48,38 @@ def record_verdicts(
     known_hashes = {
         str(h) for (h,) in db.execute("SELECT DISTINCT config_hash FROM submissions").fetchall()
     }
-    recorded_at = utc_now().replace(tzinfo=None)
-    rows: list[tuple[str, str, str, object, int, str | None, str, object]] = []
+    # Filter to submitted configs + normalize decided_at FIRST (both cheap), before
+    # the expensive gate-results serialization. P0-2 (pipeline-perf audit): the old
+    # path built json.dumps(gate_results) for every matching export row each pass —
+    # ~10k on a rolling window — then INSERT OR IGNORE dropped the ~99% already
+    # recorded. Skip the already-recorded runs here so the JSON (the reconcile cost)
+    # is built only for the ~0-130 genuinely new runs.
+    candidates: list[tuple[GatedRun, datetime]] = []
     for gr in runs:
         if gr.run.config_hash not in known_hashes:
             continue
         decided = gr.decision.decided_at
         if decided.tzinfo is not None:
             decided = decided.astimezone(UTC).replace(tzinfo=None)
+        candidates.append((gr, decided))
+    if not candidates:
+        return 0
+    # Window-bounded fetch of already-recorded run_ids: a run in this batch has
+    # decided_at >= the batch minimum, so its existing verdicts row (same run, same
+    # conversion) is captured — the skip is complete, and INSERT OR IGNORE stays the
+    # race-safe backstop (append-only D111 history preserved either way).
+    min_decided = min(d for _, d in candidates)
+    existing_run_ids = {
+        str(rid)
+        for (rid,) in db.execute(
+            "SELECT crucible_run_id FROM verdicts WHERE decided_at >= ?", [min_decided]
+        ).fetchall()
+    }
+    recorded_at = utc_now().replace(tzinfo=None)
+    rows: list[tuple[str, str, str, object, int, str | None, str, object]] = []
+    for gr, decided in candidates:
+        if gr.run.run_id in existing_run_ids:
+            continue
         gate_json = json.dumps(
             {name: gate.model_dump() for name, gate in gr.decision.gate_results.items()},
             sort_keys=True,

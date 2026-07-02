@@ -180,6 +180,43 @@ def test_record_verdicts_regate_appends_second_row() -> None:
         assert [r[2] for r in rows] == ["reject", "component"]
 
 
+def test_record_verdicts_stages_only_new_runs() -> None:
+    """P0-2 (pipeline-perf): the delta-first insert serializes + stages ONLY the new
+    runs, not the already-recorded ones that INSERT OR IGNORE would drop (the
+    reconcile json.dumps cost on a ~10k-row rolling window). A mixed pass stages
+    exactly the new run — the old path staged both, then dropped one."""
+    from collections.abc import Iterable
+
+    class _SpyConn:
+        def __init__(self, real: duckdb.DuckDBPyConnection) -> None:
+            self._real = real
+            self.staged_counts: list[int] = []
+
+        def execute(self, *args: object, **kwargs: object) -> object:
+            return self._real.execute(*args, **kwargs)
+
+        def executemany(self, sql: str, rows: Iterable[object]) -> object:
+            materialized = list(rows)
+            self.staged_counts.append(len(materialized))
+            return self._real.executemany(sql, materialized)
+
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="aaaa000011112222")
+        existing = _gated_run(
+            config_hash="aaaa000011112222",
+            decided_at=datetime(2026, 6, 1, 10, 0, 0),  # noqa: DTZ001 — export ships naive
+        )
+        assert record_verdicts(conn, [existing]) == 1
+        spy = _SpyConn(conn)
+        new = _gated_run(
+            config_hash="aaaa000011112222",
+            decided_at=datetime(2026, 6, 9, 10, 0, 0),  # noqa: DTZ001 — export ships naive
+        )
+        n = record_verdicts(spy, [existing, new])  # type: ignore[arg-type]
+        assert n == 1
+        assert spy.staged_counts == [1]  # only `new` staged; `existing` skipped pre-serialization
+
+
 def test_record_verdicts_normalizes_aware_decided_at_to_naive_utc() -> None:
     with db_connection() as conn:
         _insert_submission(conn, config_hash="aaaa000011112222")
