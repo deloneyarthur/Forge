@@ -352,6 +352,8 @@ def cmd_prefilter(
 _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED: bool = False
 _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED: bool = False
 _TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED: bool = False
+_REWIRE_P_FLOOR_PARSE_FAILED_LOGGED: bool = False
+_QUALITY_RANK_MODE_INVALID_LOGGED: bool = False
 
 
 def _format_phase_timings_line(timings: Mapping[str, float]) -> str:
@@ -541,6 +543,65 @@ def _orthogonal_family_floors() -> dict[str, float]:
         if fam and 0.0 < floor <= 1.0:
             floors[fam] = floor
     return floors
+
+
+_VALID_QUALITY_RANK_MODES: frozenset[str] = frozenset({"blend", "gate-tail"})
+_DEFAULT_QUALITY_RANK_MODE: str = "blend"
+_DEFAULT_REWIRE_P_FLOOR: float = 0.02
+
+
+def _rewire_p_floor() -> float:
+    """Parse ``FORGE_REWIRE_P_FLOOR`` (the gate-tail ``P(component)`` eligibility
+    floor; docs/proposals/quality-lane-rewire.md) into a float, degrading to the
+    calibrated ``0.02`` default on a malformed value rather than raising — a
+    typo'd env value must never crash-loop the daemon (the same
+    degrade-never-crash contract as ``_orthogonal_family_floors``). Unset/empty →
+    default silently (byte-identical); a non-empty non-float warns once per
+    process so the operator sees the misconfiguration without per-iteration spam."""
+    import os
+
+    raw = os.environ.get("FORGE_REWIRE_P_FLOOR", "").strip()
+    if not raw:
+        return _DEFAULT_REWIRE_P_FLOOR
+    try:
+        return float(raw)
+    except ValueError:
+        global _REWIRE_P_FLOOR_PARSE_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
+        if not _REWIRE_P_FLOOR_PARSE_FAILED_LOGGED:
+            typer.echo(
+                f"quality_rank: FORGE_REWIRE_P_FLOOR={raw!r} is not a float — "
+                f"using default {_DEFAULT_REWIRE_P_FLOOR:.4f}. "
+                "Subsequent parse failures will be silent this process.",
+                err=True,
+            )
+            _REWIRE_P_FLOOR_PARSE_FAILED_LOGGED = True
+        return _DEFAULT_REWIRE_P_FLOOR
+
+
+def _quality_rank_mode() -> str:
+    """Parse ``FORGE_QUALITY_RANK_MODE`` into a recognized quality-lane form
+    (``blend`` — the default, byte-identical — or ``gate-tail``, the re-wire).
+    Unset/empty → ``blend`` silently; a non-empty unrecognized value degrades to
+    ``blend`` with a warn-once, so a typo can't silently ship the default ranking
+    when the operator intended the re-wire (learned-audit P0.4a)."""
+    import os
+
+    raw = os.environ.get("FORGE_QUALITY_RANK_MODE", "").strip().lower()
+    if not raw:
+        return _DEFAULT_QUALITY_RANK_MODE
+    if raw in _VALID_QUALITY_RANK_MODES:
+        return raw
+    global _QUALITY_RANK_MODE_INVALID_LOGGED  # noqa: PLW0603 — warn-once memo
+    if not _QUALITY_RANK_MODE_INVALID_LOGGED:
+        typer.echo(
+            f"quality_rank: FORGE_QUALITY_RANK_MODE={raw!r} unrecognized "
+            f"(expected {sorted(_VALID_QUALITY_RANK_MODES)}) — "
+            f"using {_DEFAULT_QUALITY_RANK_MODE!r}. "
+            "Subsequent invalid values will be silent this process.",
+            err=True,
+        )
+        _QUALITY_RANK_MODE_INVALID_LOGGED = True
+    return _DEFAULT_QUALITY_RANK_MODE
 
 
 def _load_hypothesis_weights(
@@ -1985,7 +2046,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             _qm = _qmodel  # non-None binding for the closure
             _base_scorer = verdict_scorer  # P(component) eligibility term
             # FORGE_QUALITY_RANK_MODE picks the lane form; default "blend" = byte-identical.
-            _qmode = os.environ.get("FORGE_QUALITY_RANK_MODE", "blend").strip().lower()
+            _qmode = _quality_rank_mode()
 
             if _qmode == "gate-tail":
                 # Re-wire (docs/proposals/quality-lane-rewire.md): P(component) GATES
@@ -1997,7 +2058,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                 # that could plausibly clear component. The shadow gates on the same floor.
                 from forge.ranking.model import gate_tail_prior
 
-                _floor = float(os.environ.get("FORGE_REWIRE_P_FLOOR", "0.02"))
+                _floor = _rewire_p_floor()
 
                 def _gate_tail_score(config: StrategyConfig) -> float:
                     feats = extract_features(config, registry).as_dict()

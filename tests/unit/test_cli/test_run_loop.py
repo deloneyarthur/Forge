@@ -333,6 +333,64 @@ def test_orthogonal_family_floors_parses_multiple_and_drops_invalid(
     }
 
 
+def test_rewire_p_floor_unset_is_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FORGE_REWIRE_P_FLOOR unset → the calibrated 0.02 default (byte-identical)."""
+    from forge.cli.main import _rewire_p_floor
+
+    monkeypatch.delenv("FORGE_REWIRE_P_FLOOR", raising=False)
+    assert _rewire_p_floor() == 0.02
+
+
+def test_rewire_p_floor_parses_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    from forge.cli.main import _rewire_p_floor
+
+    monkeypatch.setenv("FORGE_REWIRE_P_FLOOR", "0.05")
+    assert _rewire_p_floor() == 0.05
+
+
+def test_rewire_p_floor_malformed_degrades_to_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A non-float value must NOT crash the daemon (learned-audit P0.3): it
+    degrades to the 0.02 default with a warn-once and never raises."""
+    from forge.cli import main as _main
+
+    monkeypatch.setattr(_main, "_REWIRE_P_FLOOR_PARSE_FAILED_LOGGED", False)
+    monkeypatch.setenv("FORGE_REWIRE_P_FLOOR", "not-a-float")
+    assert _main._rewire_p_floor() == 0.02  # never raises
+    assert "FORGE_REWIRE_P_FLOOR" in capsys.readouterr().err
+
+
+def test_quality_rank_mode_unset_is_blend(monkeypatch: pytest.MonkeyPatch) -> None:
+    from forge.cli.main import _quality_rank_mode
+
+    monkeypatch.delenv("FORGE_QUALITY_RANK_MODE", raising=False)
+    assert _quality_rank_mode() == "blend"
+
+
+def test_quality_rank_mode_parses_gate_tail_normalized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whitespace/case are normalized so a stray env format still dispatches."""
+    from forge.cli.main import _quality_rank_mode
+
+    monkeypatch.setenv("FORGE_QUALITY_RANK_MODE", "  GATE-TAIL  ")
+    assert _quality_rank_mode() == "gate-tail"
+
+
+def test_quality_rank_mode_invalid_degrades_to_blend(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unrecognized mode (typo) degrades to blend with a warn-once, so it
+    can't silently ship the default ranking when gate-tail was intended (P0.4a)."""
+    from forge.cli import main as _main
+
+    monkeypatch.setattr(_main, "_QUALITY_RANK_MODE_INVALID_LOGGED", False)
+    monkeypatch.setenv("FORGE_QUALITY_RANK_MODE", "gatetail")
+    assert _main._quality_rank_mode() == "blend"
+    assert "FORGE_QUALITY_RANK_MODE" in capsys.readouterr().err
+
+
 def test_d063_hypothesis_weights_line_uses_canonical_order() -> None:
     """D063: hypotheses render in the canonical `_HYPOTHESES` order
     (trend_continuation, mean_reversion, regime_arbitrage, relative_value,
