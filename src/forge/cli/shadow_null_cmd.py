@@ -74,18 +74,27 @@ def _collect_tri_null_rows(
     ctx_prod: FilterContext,
     ctx_cumulative: FilterContext,
     ctx_corrected: FilterContext,
-) -> tuple[list[tuple[str, bool, bool, bool]], int, int]:
+) -> tuple[list[tuple[str, bool, bool, bool]], int, int, int]:
     """Score permutation_test under THREE nulls for each config that reaches it:
     A = production (single_day, signed); B = cumulative_trading, signed (flip-1);
     C = cumulative_trading + ve |move| (flip-1 AND flip-2).
 
-    Returns ``(rows, reached_total, unavailable)`` where each row is
+    Returns ``(rows, reached_total, unavailable, socket_skips)`` where each row is
     ``(hypothesis, a_passed, b_passed, c_passed)``. Only configs reaching the last
     filter get a row — a config rejected earlier can't be changed by the null. B and
     C differ ONLY for `volatility_event` (|move| is family-scoped), so non-ve configs
     take ``c := b`` for free (one fewer re-score). All three contexts share the
     feature cache (reusing the battery prefetch) and the rng_factory (identical
-    shuffles — only the null construction moves a verdict)."""
+    shuffles — only the null construction moves a verdict).
+
+    The live writer socket is shared with the daemon and can drop a connection
+    mid-run (broken pipe). The Crucible client reconnects on its next call, so a
+    single blip should not abort a long telemetry pass: a config whose fetch raises
+    `FeatureCacheUnavailableError` is skipped (counted in ``socket_skips``) and the
+    loop continues. `reached_total`/`rows` stay consistent — both are advanced only
+    after all three evals for a config succeed."""
+    from crucible_contracts import FeatureCacheUnavailableError
+
     from forge.prefilters import default_filters, run_battery
     from forge.prefilters.permutation_test import PermutationTestFilter
 
@@ -94,22 +103,28 @@ def _collect_tri_null_rows(
     rows: list[tuple[str, bool, bool, bool]] = []
     reached_total = 0
     unavailable = 0
+    socket_skips = 0
     for cfg in configs:
-        report = run_battery(cfg, ctx_prod, filters)
-        if report.data_unavailable:
-            unavailable += 1
-            continue
-        pt_a = report.filter_results.get(perm_filter.name)
-        if pt_a is None:
+        try:
+            report = run_battery(cfg, ctx_prod, filters)
+            if report.data_unavailable:
+                unavailable += 1
+                continue
+            pt_a = report.filter_results.get(perm_filter.name)
+            if pt_a is None:
+                continue
+            b_passed = perm_filter.apply(cfg, ctx_cumulative).passed
+            c_passed = (
+                perm_filter.apply(cfg, ctx_corrected).passed
+                if cfg.hypothesis == "volatility_event"
+                else b_passed
+            )
+        except FeatureCacheUnavailableError:
+            socket_skips += 1
             continue
         reached_total += 1
-        b_passed = perm_filter.apply(cfg, ctx_cumulative).passed
-        if cfg.hypothesis == "volatility_event":
-            c_passed = perm_filter.apply(cfg, ctx_corrected).passed
-        else:
-            c_passed = b_passed
         rows.append((cfg.hypothesis, pt_a.passed, b_passed, c_passed))
-    return rows, reached_total, unavailable
+    return rows, reached_total, unavailable, socket_skips
 
 
 @shadow_null_app.command("run")
@@ -211,7 +226,7 @@ def cmd_run(
     if callable(batch_prefetch):
         batch_prefetch(configs)
 
-    rows, reached_total, unavailable = _collect_tri_null_rows(
+    rows, reached_total, unavailable, socket_skips = _collect_tri_null_rows(
         configs, ctx_prod, ctx_cumulative, ctx_corrected
     )
     # flip-1 (848a1f67, all families): production A -> cumulative B.
@@ -225,7 +240,7 @@ def cmd_run(
     )
     typer.echo(
         f"\n-- shadow-null: {reached_total} configs reached permutation_test "
-        f"({unavailable} data_unavailable skipped) --"
+        f"({unavailable} data_unavailable, {socket_skips} socket-blip skipped) --"
     )
     _print_table(flip1, label="FLIP-1 cumulative_trading (848a1f67): prod -> cumulative")
     _print_table(flip2, label="FLIP-2 ve |move| (e1a43ba8): cumulative -> +ve|move| (ve only)")
@@ -240,6 +255,7 @@ def cmd_run(
         "cache_kind": cache_kind,
         "reached_total": reached_total,
         "data_unavailable": unavailable,
+        "socket_skips": socket_skips,
         "prod_null": {
             "forward_return_mode": pt.forward_return_mode,
             "volatility_event_absolute_move": pt.volatility_event_absolute_move,
