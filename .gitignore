@@ -57,3 +57,8 @@ Thumbs.db
 # Local Forge runtime data (lives under ~/forge_data per spec)
 forge_data/
 *.local.yaml
+
+# Probe/experiment scratchpad — disposable one-off probes kept local and out of
+# the production tree (D104); experiment results are recorded in D-entries/preregs
+# (e.g. prereg 9b88966c446a), not here (fable-audit codebase-quality item 4).
+scratchpad/
