@@ -24,8 +24,14 @@ scripts/deploy_preflight.sh                  # GATE (D199): deploy-surface clean
 systemctl --user stop forge.service          # journal exit 143 = normal --loop SIGTERM
 # commit / merge to main in the LIVE tree (service runs from here via editable install)
 systemctl --user reset-failed forge.service
+systemctl --user daemon-reload               # REQUIRED if deploy/systemd/forge.service changed (env/flag activation); else start runs the OLD unit and the change silently no-ops
 systemctl --user start forge.service
 ```
+
+If you changed the unit file (a flag/env activation like `--quality-rank` or
+`FORGE_ORTHOGONAL_FAMILY_FLOOR`), `daemon-reload` is mandatory before `start` — systemd
+warns "unit file changed on disk" and otherwise starts the stale unit (the flag looks set
+in the file but is absent from the process env). Confirm it took in Verify below.
 
 The preflight is read-only (it never stops/starts the service or touches the tree) and runs the
 full suite (tests use isolated temp DBs, so it's effectively uncontended even with the daemon up).
@@ -40,7 +46,8 @@ the point.
 
 ```bash
 journalctl --user -u forge.service -n 50 --no-pager
-systemctl --user show forge.service -p NRestarts   # expect 0
+systemctl --user show forge.service -p NRestarts    # expect 0
+systemctl --user show forge.service -p Environment  # unit/flag change: confirm the env is actually set (not just in the file)
 ```
 
 Expect: contracts version startup line, `grammar_version=v{N}`, `registry_loaded_from_export`
