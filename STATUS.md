@@ -1,6 +1,17 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — D216 Layer-2 ACTIVATED (deploy): `FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20` set on `forge.service` + daemon restarted. Prereg `5c4ba16ff6cf`. Lifts single-name vol_event sampling share ~2.9%→~10.7%; REVERT = delete the env line + restart (byte-identical). [[D216]]
+## 2026-07-02 (latest) — Fable-audit P0 execution: ungated learned-systems/strategy hardening (env-guard, floor call-site tests, eval-robustness label, D217 record). Daemon untouched; a deploy+restart follows once the batch lands. [[D217]]
+
+**Operator: "start fixing everything, follow the plan, update all docs" + "restart the service after all this." Working the `fable-audit/` P0 items that are ungated (build/test/doc); the operator landed the tree + activated D216 in parallel (single-folder D104).**
+- **learned-audit P0.3 (`6f44d86`):** `FORGE_REWIRE_P_FLOOR`'s bare `float()` could crash-loop the daemon on a typo'd unit env. Extracted `_rewire_p_floor()` + `_quality_rank_mode()` (degrade-never-crash, warn-once, mirrors `_orthogonal_family_floors`): malformed → default + one warn, never raises; unset → byte-identical. 6 tests.
+- **learned-audit P0.4b (`a075147`):** integration tests proving the D216 floor call site is LIVE (env set → `orthogonal-family floor ACTIVE` prints; unset → nothing) — guards the D185 inert-call-site class. Gate-tail dispatch left at parse-level coverage (off the live path; needs an F3+model fixture).
+- **learned-audit P0.5 (`73d6637`):** `eval-robustness` now labels the actual `--gate` (was hardcoded "cpcv_p25", mislabeled every non-cpcv gate); documented the D216 floor UNIT (max-normalized weight, NOT a delivered share — realized share floats with the oscillating max) in the docstring + MANPAGE.
+- **learned-audit P0.2 ([[D217]]):** backfilled the missing D-entry for the 2026-06-26 gate-then-tail scorer (`edb03e6`/`fdeed29`/`92e9061`/`ceeefa4`) — the blend-no-op A/B motivation, two-part form, flags/defaults, floor calibration, shadow evidence, flip gate.
+- **NEXT (this session):** strategy-audit P0-2 (vol_event per-family + regime-gate-class telemetry — makes the D216 activation prereg readable), `scratchpad/`+`fable-audit/` cleanup, then surface the operator-gated P0 decisions (auto-tune disarm, format commit) + the requested deploy/restart. **No grammar/gate/determinism change; all changes flag-OFF or telemetry/doc.**
+
+---
+
+## 2026-07-02 — D216 Layer-2 ACTIVATED (deploy): `FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20` set on `forge.service` + daemon restarted. Prereg `5c4ba16ff6cf`. Lifts single-name vol_event sampling share ~2.9%→~10.7%; REVERT = delete the env line + restart (byte-identical). [[D216]]
 
 **Operator: "activate Layer-2 (deploy call) to chase the first promotion" + "commit and push the tree" + floor 0.20. Deployed via `docs/tasks/deploy.md`, single-folder in-tree (D104).**
 - **Gate:** full uncontended suite **1745 passed** (165s) on the committed build (`ce83584`); ruff+mypy clean — fixed 4 pre-existing `E501`s in `contracts_check.py`'s 1.22.0 comment block mid-deploy so the pre-commit hook passed. Activation itself adds no src (unit env + prereg + docs).
