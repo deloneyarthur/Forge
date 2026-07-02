@@ -1,6 +1,13 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Fable-audit P0 execution + DEPLOY: ungated learned-systems/strategy hardening (env-guard, floor call-site tests, eval-robustness label, D217 record, per-family battery-survival telemetry) → restarted `forge.service` 2026-07-02T06:56Z (operator-requested). [[D217]]
+## 2026-07-02 (latest) — Learned-systems P1 started: the DEPLOYED ranker composite ranks components BELOW random (prior-weight A/B, D220). `eval-prior-weight` shipped; the `ranker.yaml` raise is recommended + operator-gated. [[D220]]
+
+**Operator: "start on the next tier you feel is best" → learned-systems P1 (the live ranking path — the audit's highest leverage).** P1.4/B2 (`cbdb232`): built `evaluate_prior_weight_ab` + `forge ranker-model eval-prior-weight` (offline A/B re-scoring submitted shadow rows under alternate composite prior weights, holding the hygiene terms' relative proportions). **Finding (live snapshot, n=131,187 decided / 6,326 components):** the deployed §6.2 composite (learned F3 prior at weight **0.10**) ranks realized components at precision@K **0.032 / AUC 0.488 — BELOW the 4.8% base rate**; the four hygiene terms (signal_density/novelty/regime_diversity/permutation_test = 0.90 of the weight) are ~coin-flip-to-anti vs realized promotion and DROWN the good F3 prior (pure-P AUC **0.838**). Corroborates the June-review B2 at scale. **Recommend raising `prior_promotion_proximity` 0.10 → ~0.50** (AUC→0.809; the diversifier D103/D136 floors protect family variety independently, post-ranking). **GATED:** censored within-submitted-set → confirm on a live shadow lane + prereg + deploy (ranking-policy change). No ranker behavior change shipped — the eval is telemetry.
+- **NEXT in P1 (ungated to build):** P1.3 (calibrate P(component) — 3–5× over-predicted, load-bearing for the gate-tail absolute floor + F3 eligibility) + P1.1 (close the gate-then-tail shadow-vs-production fidelity gap).
+
+---
+
+## 2026-07-02 — Fable-audit P0 execution + DEPLOY: ungated learned-systems/strategy hardening (env-guard, floor call-site tests, eval-robustness label, D217 record, per-family battery-survival telemetry) → restarted `forge.service` 2026-07-02T06:56Z (operator-requested). [[D217]]
 
 **Operator: "start fixing everything, follow the plan, update all docs" + "restart the service after all this." Working the `fable-audit/` P0 items that are ungated (build/test/doc); the operator landed the tree + activated D216 in parallel (single-folder D104).**
 - **learned-audit P0.3 (`6f44d86`):** `FORGE_REWIRE_P_FLOOR`'s bare `float()` could crash-loop the daemon on a typo'd unit env. Extracted `_rewire_p_floor()` + `_quality_rank_mode()` (degrade-never-crash, warn-once, mirrors `_orthogonal_family_floors`): malformed → default + one warn, never raises; unset → byte-identical. 6 tests.

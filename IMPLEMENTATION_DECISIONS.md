@@ -5371,3 +5371,23 @@ Each line: latest verdict, streak N/3, latest metric, and an N-checkpoint trend.
 **Retention.** Existing rejected rows (GBs already written) remain until a one-time offline compaction (DuckDB doesn't shrink on DELETE) — the P1-2 follow-up, an operator-scheduled deploy-window op; this only stops FUTURE growth.
 
 **STATUS: per-row rejected `pre_filter_logs` write REMOVED — ~190s off the submit phase + ~95% of the table's growth. Survivor write + all `batch_summaries` aggregates intact. Takes effect at the P0-2/P0-3/P0-1 deploy. No enumeration/gate/grammar/determinism change.**
+
+## D220 — 2026-07-02 — Prior-weight A/B: the 0.10 composite prior slot ranks components BELOW random (learned P1.4/B2)
+
+**Spec section:** §6.2 (ranker composite) / §10.3 (weights); `config/ranker.yaml`. fable-audit learned-systems P1.4/B2. Built `evaluate_prior_weight_ab` + `forge ranker-model eval-prior-weight` (`cbdb232`) — an OFFLINE A/B re-scoring the submitted shadow rows under alternate composite prior weights (holding the four hygiene terms' relative proportions).
+
+**Finding (live snapshot, n=131,187 decided verdicts / 6,326 components):**
+
+| prior weight | precision@K (K=6326) | AUC |
+|---|---|---|
+| **0.10 (deployed)** | **0.032** | **0.488** |
+| 0.30 | 0.164 | 0.703 |
+| 0.50 | 0.197 | 0.809 |
+| 0.70 | 0.208 | 0.832 |
+| 1.00 (pure P) | 0.214 | 0.838 |
+
+The deployed composite (prior at 0.10) ranks realized components at precision@K **0.032 — BELOW the 4.8% base rate** (AUC 0.488 ≈ slightly ANTI-correlated). The four hygiene terms (signal_density 0.30, novelty 0.25, regime_diversity 0.20, permutation_test 0.15 = 0.90 of the weight) are ~coin-flip-to-anti vs realized promotion and DROWN the learned F3 prior, which alone (w=1.0) separates components at AUC **0.838**. Independently corroborates the June-review B2 (incumbent composite ~0.45–0.53 AUC) at n=131k. The gain is steep to 0.30 (5× precision) and plateaus ~0.5–0.7.
+
+**Recommendation (GATED — not applied).** Raise `prior_promotion_proximity` from 0.10 toward **~0.50** (renormalizing the other four to 0.50 total) — captures AUC 0.488→0.809 while retaining half the hygiene weight. Variety is NOT at risk: the diversifier (D103/D136 greedy-Jaccard + min-per-hypothesis floors) enforces family spread SEPARATELY, post-ranking. **Caveat:** this A/B is CENSORED (only submitted configs carry verdicts) → it measures re-ranking quality WITHIN the submitted set, not the counterfactual of what a prior-heavy weight would NEWLY submit; the magnitude (ΔAUC +0.32) makes the direction unambiguous, but confirm the winner on a live shadow lane + prereg the realized-component-yield prediction before the `ranker.yaml` change + deploy (ranking-policy change → operator-gated).
+
+**STATUS: prior-weight A/B eval BUILT + measured (0.10 is a coin flip; pure-P is AUC 0.838). The `ranker.yaml` raise to ~0.50 is RECOMMENDED but operator-gated (prereg + deploy). No ranker behavior change from this D-entry — the eval is telemetry.**
