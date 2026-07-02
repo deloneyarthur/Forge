@@ -29,6 +29,7 @@ from pathlib import Path
 
 import typer
 
+from forge.ranking.drift import adoption_verdict
 from forge.ranking.sequential_test import sequential_mean_test
 
 _TREND_K = 8  # how many trailing checkpoints to show in the sparkline
@@ -273,6 +274,23 @@ def _format_calibration(
     return f"{'P calibration/floor':<22} {cv:<4} max_ce {mce}   keep-rate(P>=floor) {kr}"
 
 
+def _format_adoption(f3: StreakSummary, tail: StreakSummary) -> str:
+    """P3.2 (B6) adoption guard: should the daemon rotate to the newest artifact? Reads each
+    lane's latest fresh signal — F3 AUC margin, wf_p25 paired Δ Spearman — and BLOCKs adoption
+    when it isn't strictly positive (a model no better than the incumbent isn't worth the
+    rotation). Telemetry; the healthcheck raises the matching WARN/CRITICAL."""
+
+    def _m(v: float | None) -> str:
+        return f"{v:+.3f}" if v is not None else "n/a"
+
+    f3_v = adoption_verdict(f3.latest_metric)
+    tail_v = adoption_verdict(tail.latest_metric)
+    return (
+        f"{'adoption guard':<22} F3={f3_v} ({_m(f3.latest_metric)})  "
+        f"wf_p25={tail_v} ({_m(tail.latest_metric)})"
+    )
+
+
 def _format_flip_gate(g: FlipGateStatus) -> str:
     """P3.1 gate-tail flip gate line: SPRT verdict + log-LR vs boundary + mean Δ + MET/NOT-MET."""
     verdict = "MET" if g.met else "NOT MET"
@@ -330,6 +348,7 @@ def cmd_status(
     typer.echo(_format_summary(tail))
     typer.echo(_format_summary(rewire))
     typer.echo(_format_calibration(f3_records, rewire_records))
+    typer.echo(_format_adoption(f3, tail))
     from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
 
     clean_era_iso = CLEAN_ERA_LABEL_CUT.isoformat()

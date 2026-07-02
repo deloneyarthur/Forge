@@ -243,6 +243,18 @@ def cmd_eval(
 
     with db_connection(forge_db) as conn:
         evaluations = evaluate_shadow(conn, since=cut)
+        # P3.2 (B6) score-distribution drift: the `--since` window vs the honest-era baseline.
+        from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
+        from forge.ranking.evaluation import shadow_score_samples
+
+        ref_scores = shadow_score_samples(conn, since=CLEAN_ERA_LABEL_CUT)
+        cur_scores = shadow_score_samples(conn, since=cut)
+
+    from forge.ranking.drift import population_stability_index, psi_severity
+
+    psi = population_stability_index(ref_scores, cur_scores)
+    psi_str = "n/a (thin window)" if psi is None else f"{psi:.4f} ({psi_severity(psi)})"
+    typer.echo(f"score-drift PSI(window vs honest-era baseline)={psi_str}")
 
     if not evaluations:
         typer.echo(f"no shadow-scored verdicts decided since {cut.isoformat()}")

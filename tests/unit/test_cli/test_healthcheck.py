@@ -46,6 +46,28 @@ def test_parse_journal_empty() -> None:
     assert state.last_iteration_at is None
     assert state.last_submit_at is None
     assert state.last_block_reason is None
+    assert state.hypothesis_weights_degraded_at is None
+
+
+def test_parse_journal_detects_hypothesis_weights_degrade() -> None:
+    from forge.cli.healthcheck_cmd import Level, check_hypothesis_weights_fallback
+
+    lines = [
+        "2026-07-02T05:00:00-07:00 host forge[1]: --- loop iteration 10 (effective_seed=9) ---",
+        "2026-07-02T05:00:01-07:00 host forge[1]: hypothesis_weights: degraded to uniform "
+        "sampling — QueryError loading learned weights",
+    ]
+    state = parse_forge_journal(lines)
+    assert state.hypothesis_weights_degraded_at == datetime.fromisoformat(
+        "2026-07-02T05:00:01-07:00"
+    )
+    # WARN (not CRITICAL) — the daemon still produces, it just stops steering.
+    res = check_hypothesis_weights_fallback(state)
+    assert res.level == Level.WARN
+    assert "UNIFORM-fallback" in res.message
+    # Clean journal -> OK.
+    ok = check_hypothesis_weights_fallback(parse_forge_journal([]))
+    assert ok.level == Level.OK
 
 
 def test_service_active() -> None:

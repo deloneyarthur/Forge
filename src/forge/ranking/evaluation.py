@@ -399,6 +399,21 @@ def evaluate_tail_shadow_pooled(
     return _build_tail_eval(_POOLED_TAIL_MODEL_ID, pooled)
 
 
+def shadow_score_samples(conn: duckdb.DuckDBPyConnection, *, since: datetime) -> list[float]:
+    """Pooled `model_score` values the F3 model produced since `since` (by `scored_at`).
+    P3.2 drift input — compare a recent window against a reference (honest-era) window with
+    `population_stability_index` to catch the scored-population distribution drifting away from
+    what the model was trained on. No verdict join (drift is about the INPUT distribution)."""
+    cut = since
+    if cut.tzinfo is not None:
+        cut = cut.astimezone(UTC).replace(tzinfo=None)
+    rows = conn.execute(
+        "SELECT model_score FROM shadow_scores WHERE scored_at >= ? AND model_score IS NOT NULL",
+        [cut],
+    ).fetchall()
+    return [float(r[0]) for r in rows]
+
+
 def shadow_tail_verdict(ev: TailEvaluation | None, *, delta_criterion: float) -> str:
     """§8.6 tail criterion — PAIRED (P3.1 follow-up / B5): does the tail model beat the
     incumbent P(component) on realized-gate Spearman, ON THE SAME ROWS, by more than

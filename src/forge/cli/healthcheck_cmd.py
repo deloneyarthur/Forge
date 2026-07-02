@@ -68,6 +68,10 @@ class JournalState:
     last_submit_at: datetime | None
     last_block_at: datetime | None
     last_block_reason: str | None
+    # P3.2 (B6): the §6.2 sampler's `_load_hypothesis_weights` degraded to uniform (the
+    # learned yield weights failed to load) — a silent-degrade that mutes the whole
+    # feedback loop. Warn-once in the daemon; surfaced here so it isn't invisible.
+    hypothesis_weights_degraded_at: datetime | None = None
 
 
 # `<iso-ts> <host> forge[<pid>]: <message>` (journalctl -o short-iso).
@@ -75,6 +79,7 @@ _JOURNAL_LINE = re.compile(r"^(?P<ts>\S+)\s+\S+\s+forge\[\d+\]:\s+(?P<msg>.*)$")
 _ITER_PREFIX = "--- loop iteration"
 _BLOCK_PREFIX = "blocked:"
 _SUBMIT_RE = re.compile(r"\bsubmitted=(?P<n>\d+)\b")
+_HYPWEIGHTS_DEGRADE_PREFIX = "hypothesis_weights: degraded"
 
 
 def parse_forge_journal(lines: Iterable[str]) -> JournalState:
@@ -88,6 +93,7 @@ def parse_forge_journal(lines: Iterable[str]) -> JournalState:
     last_submit_at: datetime | None = None
     last_block_at: datetime | None = None
     last_block_reason: str | None = None
+    hypothesis_weights_degraded_at: datetime | None = None
 
     for line in lines:
         m = _JOURNAL_LINE.match(line.rstrip("\n"))
@@ -103,6 +109,8 @@ def parse_forge_journal(lines: Iterable[str]) -> JournalState:
         elif msg.startswith(_BLOCK_PREFIX):
             last_block_at = ts
             last_block_reason = msg[len(_BLOCK_PREFIX) :].strip()
+        elif msg.startswith(_HYPWEIGHTS_DEGRADE_PREFIX):
+            hypothesis_weights_degraded_at = ts
         else:
             sm = _SUBMIT_RE.search(msg)
             if sm is not None and int(sm.group("n")) > 0:
@@ -113,6 +121,7 @@ def parse_forge_journal(lines: Iterable[str]) -> JournalState:
         last_submit_at=last_submit_at,
         last_block_at=last_block_at,
         last_block_reason=last_block_reason,
+        hypothesis_weights_degraded_at=hypothesis_weights_degraded_at,
     )
 
 
@@ -300,6 +309,21 @@ def check_learning_drift(
     return HealthResult(label, Level.OK, f"{label} ok (latest {latest:+.3f})")
 
 
+def check_hypothesis_weights_fallback(journal: JournalState) -> HealthResult:
+    """P3.2 (B6): the §6.2 sampler degraded to UNIFORM hypothesis sampling (the learned
+    yield/cohort weights failed to load) — the feedback loop is silently muted. WARN
+    (not CRITICAL: the daemon still produces; it just stops steering) when the degrade
+    line appears in the journal window."""
+    when = journal.hypothesis_weights_degraded_at
+    if when is None:
+        return HealthResult("hypothesis_weights", Level.OK, "hypothesis weights: learned (loaded)")
+    return HealthResult(
+        "hypothesis_weights",
+        Level.WARN,
+        f"hypothesis weights: UNIFORM-fallback active (learned load failed; {when:%Y-%m-%d %H:%M})",
+    )
+
+
 def _newest_mtime(directory: Path, pattern: str) -> datetime | None:
     if not directory.is_dir():
         return None
@@ -475,13 +499,18 @@ def cmd_healthcheck(
     )
     results.append(
         check_learning_drift(
-            _read_metric_series(eval_dir / "robustness_streak_wfp25.jsonl", "spearman"),
+            # P3.2/D229: read the PAIRED delta (tail Spearman - incumbent), the real
+            # adoption signal — a negative delta means the lane is worse than the
+            # incumbent it would rotate over. Legacy rows (pre-delta) contribute nothing.
+            _read_metric_series(eval_dir / "robustness_streak_wfp25.jsonl", "spearman_delta"),
             label="wf_p25 drift",
             warn_below=_TAIL_WARN_BELOW,
             critical_below=_TAIL_CRITICAL_BELOW,
             regression_delta=drift_regression_delta,
         )
     )
+    if journal is not None:
+        results.append(check_hypothesis_weights_fallback(journal))
 
     overall = max((r.level for r in results), default=Level.OK)
     for r in results:
@@ -500,6 +529,7 @@ __all__ = [
     "check_component_contributions_export",
     "check_contracts_pin",
     "check_file_freshness",
+    "check_hypothesis_weights_fallback",
     "check_learning_drift",
     "check_loop_liveness",
     "check_service_active",

@@ -283,6 +283,27 @@ def test_tail_eval_spearman_and_top_k() -> None:
     assert ev.overall_mean_cpcv == pytest.approx(0.53)
 
 
+def test_shadow_score_samples_pools_by_scored_at() -> None:
+    from forge.ranking.evaluation import shadow_score_samples
+
+    with db_connection() as conn:
+        for score in (0.1, 0.5, 0.9, 0.3):
+            conn.execute(
+                "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+                "composite_score, scored_at) VALUES (?, ?, ?, ?, ?)",
+                [str(uuid.uuid4()), "m", score, 0.0, _SINCE],
+            )
+        # A row scored BEFORE the cut must be excluded.
+        conn.execute(
+            "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+            "composite_score, scored_at) VALUES (?, ?, ?, ?, ?)",
+            [str(uuid.uuid4()), "m", 99.0, 0.0, datetime(2026, 6, 1, 0, 0, 0)],  # noqa: DTZ001
+        )
+        samples = shadow_score_samples(conn, since=_SINCE)
+
+    assert sorted(samples) == [0.1, 0.3, 0.5, 0.9]  # the pre-cut 99.0 is excluded
+
+
 def test_shadow_tail_verdict_is_paired() -> None:
     from forge.ranking.evaluation import TailEvaluation, shadow_tail_verdict
 
