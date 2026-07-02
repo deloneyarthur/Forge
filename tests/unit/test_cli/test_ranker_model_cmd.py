@@ -336,7 +336,10 @@ def test_eval_robustness_command(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "tail_model=tailmodel0000001" in result.output
     assert "decided=60" in result.output
-    assert "spearman(pred,realized cpcv_p25)=" in result.output
+    # P0.5a: the readout labels the ACTUAL --gate (default cpcv_sharpe_p25), not a
+    # hardcoded "cpcv_p25" that mislabels every non-cpcv gate.
+    assert "spearman(pred,realized cpcv_sharpe_p25)=" in result.output
+    assert "realized cpcv_p25)" not in result.output
     assert "top-" in result.output
 
 

@@ -1350,6 +1350,14 @@ def apply_orthogonal_family_floor(
         lowered (a family already above its floor passes through; the D067
         floor and every other family's learned budget are preserved — the lift
         only redistributes SAMPLING SHARE via normalization, starving nothing).
+      - UNIT (read carefully when interpreting the A/B): ``floor`` is a
+        max-NORMALIZED weight — the top learned family sits at 1.0 — NOT a target
+        sampling share. The realized share of a floored family is
+        ``floor / sum(weights)`` and therefore FLOATS with the other (oscillating)
+        families' weights: ``volatility_event=0.20`` delivered ~10.7% share with
+        trend saturated at 1.0 (D216 activation), and RISES if the top family's
+        weight falls. Judge the lever on the journal's delivered share, not on the
+        floor number.
       - A name in ``family_floors`` but ABSENT from ``weights`` is ignored — an
         orthogonal floor never introduces a non-samplable hypothesis.
     """

@@ -299,7 +299,7 @@ def cmd_eval_robustness(
         sp = f"{ev.spearman:+.3f}" if ev.spearman is not None else "n/a"
         typer.echo(
             f"tail_model={ev.tail_model_id} decided={ev.n_decided} "
-            f"spearman(pred,realized cpcv_p25)={sp}"
+            f"spearman(pred,realized {gate})={sp}"
         )
         mk = "n/a" if ev.model_top_k_mean_cpcv is None else f"{ev.model_top_k_mean_cpcv:.3f}"
         ik = (
@@ -307,7 +307,7 @@ def cmd_eval_robustness(
         )
         ok = "n/a" if ev.overall_mean_cpcv is None else f"{ev.overall_mean_cpcv:.3f}"
         typer.echo(
-            f"  top-{ev.k} mean realized cpcv_p25: tail-model={mk} vs incumbent={ik} (overall={ok})"
+            f"  top-{ev.k} mean realized {gate}: tail-model={mk} vs incumbent={ik} (overall={ok})"
         )
     typer.echo(
         "  criterion: §8.6 margin not yet set (fixed once the shadow distribution is visible)"

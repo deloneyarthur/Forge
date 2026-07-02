@@ -116,7 +116,11 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 **Env-only knob — `FORGE_ORTHOGONAL_FAMILY_FLOOR`** (Layer-2 decorrelated-supply lever, D216): comma-separated
 `family=floor` pairs (e.g. `volatility_event=0.20`) that lift the named hypothesis families to a minimum
 sampling weight over the learned component-rate weights, so the estimand stops starving the PBO-orthogonal
-family (single-name `volatility_event`) to the D067 5% floor. Unset (default) → byte-identical (hard rule 6).
+family (single-name `volatility_event`) to the D067 5% floor. The `floor` is a **max-normalized weight** (the
+top learned family = 1.0), NOT a delivered sampling share — the realized share is `floor / sum(weights)`, so
+it floats with the other (oscillating) families: `volatility_event=0.20` delivered ~10.7% share with trend
+saturated at 1.0. Judge the A/B on the journal's `floor ACTIVE` delivered share, not the floor number. Unset
+(default) → byte-identical (hard rule 6).
 Only ever RAISES a family (`max` semantics; starves nothing). A/B feedback-change: activation is an
 operator-gated deploy, pre-registered (`forge prereg`, D208) + alpha-budget-charged (`forge alpha-budget`,
 D207) + later-cohort-confirmed (§8.4). Revert = drop the env var. Consumed by
