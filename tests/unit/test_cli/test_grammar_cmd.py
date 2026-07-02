@@ -473,12 +473,18 @@ def test_revert_promotes_prior_version_forward(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "grammar", "revert",
-            "--to-version", "v1",
-            "--initials", "AJ",
-            "--forge-db", str(forge_db),
-            "--grammar-yaml", str(grammar_yaml),
-            "--archive-dir", str(archive_dir),
+            "grammar",
+            "revert",
+            "--to-version",
+            "v1",
+            "--initials",
+            "AJ",
+            "--forge-db",
+            str(forge_db),
+            "--grammar-yaml",
+            str(grammar_yaml),
+            "--archive-dir",
+            str(archive_dir),
         ],
     )
     assert result.exit_code == 0, result.stdout
@@ -513,12 +519,18 @@ def test_revert_rejects_missing_version(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "grammar", "revert",
-            "--to-version", "v99",
-            "--initials", "AJ",
-            "--forge-db", str(forge_db),
-            "--grammar-yaml", str(grammar_yaml),
-            "--archive-dir", str(archive_dir),
+            "grammar",
+            "revert",
+            "--to-version",
+            "v99",
+            "--initials",
+            "AJ",
+            "--forge-db",
+            str(forge_db),
+            "--grammar-yaml",
+            str(grammar_yaml),
+            "--archive-dir",
+            str(archive_dir),
         ],
     )
     assert result.exit_code != 0
@@ -536,12 +548,18 @@ def test_revert_rejects_empty_initials(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "grammar", "revert",
-            "--to-version", "v1",
-            "--initials", "   ",
-            "--forge-db", str(forge_db),
-            "--grammar-yaml", str(grammar_yaml),
-            "--archive-dir", str(archive_dir),
+            "grammar",
+            "revert",
+            "--to-version",
+            "v1",
+            "--initials",
+            "   ",
+            "--forge-db",
+            str(forge_db),
+            "--grammar-yaml",
+            str(grammar_yaml),
+            "--archive-dir",
+            str(archive_dir),
         ],
     )
     assert result.exit_code == 2  # typer-style "bad input" exit

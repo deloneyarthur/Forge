@@ -496,7 +496,9 @@ def test_d033_underlying_none_falls_back_to_default() -> None:
         ),
     ]
     cache = CrucibleFeatureCache(
-        client, data_history_days=2, data_start_date=date(2024, 1, 1),
+        client,
+        data_history_days=2,
+        data_start_date=date(2024, 1, 1),
         underlying="SPY",
     )
     # underlying=None on the config — should resolve to "SPY" (the cache default).

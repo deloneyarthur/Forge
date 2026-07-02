@@ -155,8 +155,7 @@ def propose_threshold_tightenings(
         return []
 
     rows = db.execute(
-        "SELECT config_hash, config_json FROM submissions "
-        "WHERE config_hash IN (SELECT UNNEST(?))",
+        "SELECT config_hash, config_json FROM submissions WHERE config_hash IN (SELECT UNNEST(?))",
         [list(trades_by_hash.keys())],
     ).fetchall()
 
@@ -171,9 +170,7 @@ def propose_threshold_tightenings(
     proposals: list[ThresholdProposal] = []
     pct_low, pct_high = percentiles
     for (ind_id, role), pairs in samples.items():
-        high_trade_thresholds = [
-            thr for n, thr in pairs if n >= high_trade_floor
-        ]
+        high_trade_thresholds = [thr for n, thr in pairs if n >= high_trade_floor]
         if len(high_trade_thresholds) < min_high_trade_samples:
             continue
 
@@ -225,9 +222,11 @@ def _percentile(sorted_values: Sequence[float], pct: float) -> float:
         raise ValueError(msg)
     if len(sorted_values) == 1:
         return float(sorted_values[0])
-    return float(statistics.quantiles(sorted_values, n=100, method="inclusive")[
-        max(0, min(98, int(pct) - 1))
-    ])
+    return float(
+        statistics.quantiles(sorted_values, n=100, method="inclusive")[
+            max(0, min(98, int(pct) - 1))
+        ]
+    )
 
 
 def write_tightenings_to_yaml(

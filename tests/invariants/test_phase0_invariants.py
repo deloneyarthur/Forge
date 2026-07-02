@@ -47,7 +47,8 @@ _RNG_CONSTRUCTORS = (
 # be imported. Direct reaches into `optbt`/`crucible` are forbidden.
 _OPTBT_IMPORT = re.compile(r"^\s*(from\s+optbt|import\s+optbt)\b", re.MULTILINE)
 _CRUCIBLE_INTERNAL_IMPORT = re.compile(
-    r"^\s*(from\s+crucible(?!_contracts)|import\s+crucible(?!_contracts))\b", re.MULTILINE,
+    r"^\s*(from\s+crucible(?!_contracts)|import\s+crucible(?!_contracts))\b",
+    re.MULTILINE,
 )
 # Hard rule #5: no LLM SDK in the production loop. Claude-as-collaborator
 # happens outside the running system; the enumerator/pre-filters/ranker/

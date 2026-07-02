@@ -43,6 +43,7 @@ def _baseline_table_from_d031() -> dict[
     proposer expects: indicator_id → (d_low, d_high, r_low, r_high).
     None for skip indicators or roles without a range."""
     from forge.enumeration.indicator_thresholds import _INDICATOR_THRESHOLD_TABLE
+
     out: dict[str, tuple[float | None, float | None, float | None, float | None]] = {}
     for ind_id, spec in _INDICATOR_THRESHOLD_TABLE.items():
         if spec.is_skip:
@@ -62,34 +63,40 @@ def _resolve_latest_export(exports_dir: Path) -> Path | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--gated-runs-export", type=Path, default=None,
-        help="Path to a gated_runs JSON export. Default: latest in "
-        "~/optbt_data/exports/.",
+        "--gated-runs-export",
+        type=Path,
+        default=None,
+        help="Path to a gated_runs JSON export. Default: latest in ~/optbt_data/exports/.",
     )
     parser.add_argument(
-        "--exports-dir", type=Path,
+        "--exports-dir",
+        type=Path,
         default=Path.home() / "optbt_data" / "exports",
         help="Directory to scan for the latest gated_runs export.",
     )
     parser.add_argument(
-        "--forge-db", type=Path,
+        "--forge-db",
+        type=Path,
         default=Path.home() / "forge_data" / "forge.db",
         help="Path to Forge's submissions DB.",
     )
     parser.add_argument(
-        "--out-yaml", type=Path,
+        "--out-yaml",
+        type=Path,
         default=_REPO_ROOT / "config" / "auto_tightened_thresholds.yaml",
         help="Where to write the tightenings YAML.",
     )
     parser.add_argument(
-        "--open-proposals", type=Path,
+        "--open-proposals",
+        type=Path,
         default=_REPO_ROOT / "OPEN_PROPOSALS.md",
         help="Where to append loosening proposals.",
     )
     parser.add_argument("--high-trade-floor", type=int, default=10)
     parser.add_argument("--min-samples", type=int, default=5)
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Print proposals but don't write files.",
     )
     args = parser.parse_args()
@@ -106,17 +113,20 @@ def main() -> int:
 
     # Load gated_runs (using the contracts helper for schema-version validation)
     from crucible_contracts import load_recent_gated_runs_from_export
+
     gated_runs = load_recent_gated_runs_from_export(args.exports_dir, limit=10000)
     print(f"Loaded {len(gated_runs)} gated_runs from {export_path.name}")
 
     # Open Forge DB
     from forge.persistence.db import db_connection
+
     with db_connection(args.forge_db) as conn:
         from forge.feedback.threshold_proposer import (
             propose_threshold_tightenings,
             write_loosening_proposals_to_open_proposals,
             write_tightenings_to_yaml,
         )
+
         baseline = _baseline_table_from_d031()
         proposals = propose_threshold_tightenings(
             conn,
@@ -128,8 +138,7 @@ def main() -> int:
 
     print(f"\n=== {len(proposals)} proposals across (indicator, role) pairs ===")
     print(
-        f"  {'indicator':<25} {'role':<14} "
-        f"{'baseline':<22} {'proposed':<22} {'n':>4} dir",
+        f"  {'indicator':<25} {'role':<14} {'baseline':<22} {'proposed':<22} {'n':>4} dir",
     )
     for p in sorted(proposals, key=lambda x: (x.indicator_id, x.role)):
         print(
@@ -144,12 +153,16 @@ def main() -> int:
         return 0
 
     n_tightened = write_tightenings_to_yaml(
-        proposals, args.out_yaml, cohort_size=len(gated_runs),
+        proposals,
+        args.out_yaml,
+        cohort_size=len(gated_runs),
     )
     print(f"\nWrote {n_tightened} tightenings → {args.out_yaml}")
 
     n_loosened = write_loosening_proposals_to_open_proposals(
-        proposals, args.open_proposals, cohort_size=len(gated_runs),
+        proposals,
+        args.open_proposals,
+        cohort_size=len(gated_runs),
     )
     print(f"Appended {n_loosened} loosening proposals → {args.open_proposals}")
 

@@ -95,6 +95,7 @@ def featurize(genome: Mapping[str, Any], columns: Sequence[str]) -> list[float]:
             vector.append(0.0)
     return vector
 
+
 _NUMERIC_COLUMNS = [
     "num:underlying_is_null",
     "num:has_regime_filter",

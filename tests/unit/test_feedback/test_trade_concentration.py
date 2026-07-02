@@ -130,8 +130,13 @@ def test_fallback_path_when_top3_share_absent() -> None:
     """Pre-Crucible-6a57ee5 runs have no top_3_trade_pnl_share key.
     Analyzer uses the heuristic proxy + the fallback threshold (0.05)."""
     runs = [
-        _gated_run(decision="promote", profit_factor=8.0, win_rate=0.2, n_trades=40,
-                   top_3_trade_pnl_share=None),
+        _gated_run(
+            decision="promote",
+            profit_factor=8.0,
+            win_rate=0.2,
+            n_trades=40,
+            top_3_trade_pnl_share=None,
+        ),
     ]
     flags = analyze_promotion_concentration(runs)
     assert len(flags) == 1
@@ -141,8 +146,13 @@ def test_fallback_path_when_top3_share_absent() -> None:
 
 def test_fallback_path_balanced_passes() -> None:
     runs = [
-        _gated_run(decision="promote", profit_factor=1.6, win_rate=0.55, n_trades=200,
-                   top_3_trade_pnl_share=None),
+        _gated_run(
+            decision="promote",
+            profit_factor=1.6,
+            win_rate=0.55,
+            n_trades=200,
+            top_3_trade_pnl_share=None,
+        ),
     ]
     flags = analyze_promotion_concentration(runs)
     assert flags == []
@@ -157,8 +167,13 @@ def test_mixed_export_uses_real_metric_when_available_proxy_otherwise() -> None:
     """An export with pre- and post-deploy rows: each row uses its own metric."""
     runs = [
         # Pre-deploy: no top_3_share, proxy says concentrated
-        _gated_run(decision="promote", profit_factor=8.0, win_rate=0.2, n_trades=40,
-                   top_3_trade_pnl_share=None),
+        _gated_run(
+            decision="promote",
+            profit_factor=8.0,
+            win_rate=0.2,
+            n_trades=40,
+            top_3_trade_pnl_share=None,
+        ),
         # Post-deploy: real metric says concentrated
         _gated_run(decision="promote", top_3_trade_pnl_share=0.55, n_trades=100),
         # Post-deploy: real metric says balanced
@@ -197,8 +212,13 @@ def test_analyzer_sorts_flags_by_score_descending() -> None:
 
 def test_concentration_flag_carries_diagnostic_fields() -> None:
     runs = [
-        _gated_run(decision="promote", top_3_trade_pnl_share=0.55,
-                   profit_factor=4.5, n_trades=80, win_rate=0.35),
+        _gated_run(
+            decision="promote",
+            top_3_trade_pnl_share=0.55,
+            profit_factor=4.5,
+            n_trades=80,
+            win_rate=0.35,
+        ),
     ]
     flags = analyze_promotion_concentration(runs)
     assert len(flags) == 1

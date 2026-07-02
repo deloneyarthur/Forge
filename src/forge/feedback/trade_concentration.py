@@ -113,7 +113,9 @@ def _extract_metric(
     n = int(metrics.get("n_trades", 0) or 0)
     wr = float(metrics.get("win_rate", 0.0) or 0.0)
     proxy = compute_concentration_proxy(
-        profit_factor=pf, n_trades=n, win_rate=wr,
+        profit_factor=pf,
+        n_trades=n,
+        win_rate=wr,
     )
     return (proxy, "fallback_proxy", _DEFAULT_FALLBACK_PROXY_THRESHOLD)
 
@@ -146,9 +148,7 @@ def analyze_promotion_concentration(
         if score is None:
             continue
         threshold = (
-            top_3_share_threshold
-            if metric_type == "top_3_share"
-            else fallback_proxy_threshold
+            top_3_share_threshold if metric_type == "top_3_share" else fallback_proxy_threshold
         )
         del default_threshold  # only used as a parameter-default sanity check
         if score > threshold:

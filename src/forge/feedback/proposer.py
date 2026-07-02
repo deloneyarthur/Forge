@@ -395,8 +395,7 @@ def should_auto_apply_proposal(
     if proposal.confidence < min_confidence:
         return (
             False,
-            f"confidence={proposal.confidence:.2f} below auto-apply threshold "
-            f"{min_confidence:.2f}",
+            f"confidence={proposal.confidence:.2f} below auto-apply threshold {min_confidence:.2f}",
         )
     return (True, None)
 

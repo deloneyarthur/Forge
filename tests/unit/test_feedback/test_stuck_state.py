@@ -151,7 +151,8 @@ def test_d035_since_floor_excludes_pre_floor_zeros(tmp_path: Path) -> None:
         # 10 zero-promotion batches before the floor.
         for i in range(10):
             _insert_batch(
-                conn, promotion_rate=0.0,
+                conn,
+                promotion_rate=0.0,
                 submitted_at=now - timedelta(hours=24, minutes=10 - i),
             )
         floor = now - timedelta(hours=12)
@@ -179,7 +180,8 @@ def test_d035_is_stuck_resets_on_grammar_change(tmp_path: Path) -> None:
         # Pre-bump zero streak.
         for i in range(15):
             _insert_batch(
-                conn, promotion_rate=0.0,
+                conn,
+                promotion_rate=0.0,
                 submitted_at=now - timedelta(hours=6, minutes=15 - i),
             )
         bump_at = now - timedelta(minutes=30)

@@ -68,8 +68,7 @@ def cmd_list_proposals(
     for proposal_id, proposed_at, proposal_type, rationale, evidence_raw in rows:
         try:
             evidence = (
-                json.loads(evidence_raw) if isinstance(evidence_raw, str)
-                else (evidence_raw or {})
+                json.loads(evidence_raw) if isinstance(evidence_raw, str) else (evidence_raw or {})
             )
         except (json.JSONDecodeError, TypeError):
             evidence = {}
@@ -90,11 +89,7 @@ def cmd_list_proposals(
             ),
         )
     persistent = detect_persistent_proposals(proposals)
-    persistent_ids: set[str] = {
-        pid
-        for pp in persistent
-        for pid in pp.proposal_ids
-    }
+    persistent_ids: set[str] = {pid for pp in persistent for pid in pp.proposal_ids}
 
     typer.echo(f"{len(rows)} pending proposal(s):")
     for proposal_id, proposed_at, proposal_type, rationale, _ev in rows:
@@ -411,8 +406,7 @@ def cmd_revert(
             conn,
             change_type="revert",
             description=(
-                f"reverted to {to_version} content as new {new_version}; "
-                f"operator={initials}"
+                f"reverted to {to_version} content as new {new_version}; operator={initials}"
             ),
             at=now,
         )

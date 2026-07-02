@@ -135,10 +135,12 @@ def test_name_and_cost_tier() -> None:
 def test_passes_when_intersection_above_threshold() -> None:
     """When directional AND regime co-fire on 20+ dates, passes (floor=10)."""
     dates = _date_range(date(2024, 1, 1), 20)
-    cache = _StubCache({
-        "sig_directional": dates,
-        "sig_regime": dates,  # full overlap
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": dates,
+            "sig_regime": dates,  # full overlap
+        }
+    )
     f = PredictedActivationsFilter()
     result = f.apply(_config_with_regime(), _ctx(cache))
     assert result.passed is True
@@ -149,10 +151,12 @@ def test_passes_when_intersection_above_threshold() -> None:
 def test_rejects_when_intersection_below_threshold() -> None:
     """5 co-fires < 10 floor → reject."""
     dates = _date_range(date(2024, 1, 1), 5)
-    cache = _StubCache({
-        "sig_directional": dates,
-        "sig_regime": dates,
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": dates,
+            "sig_regime": dates,
+        }
+    )
     f = PredictedActivationsFilter()
     result = f.apply(_config_with_regime(), _ctx(cache))
     assert result.passed is False
@@ -169,10 +173,12 @@ def test_rejects_when_intersection_empty_silent_failure_case() -> None:
     """
     directional_dates = _date_range(date(2020, 1, 1), 1000)
     regime_dates: frozenset[date] = frozenset()  # silent-failure case
-    cache = _StubCache({
-        "sig_directional": directional_dates,
-        "sig_regime": regime_dates,
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": directional_dates,
+            "sig_regime": regime_dates,
+        }
+    )
     f = PredictedActivationsFilter()
     result = f.apply(_config_with_regime(), _ctx(cache))
     assert result.passed is False
@@ -184,10 +190,12 @@ def test_intersection_disjoint_dates_yields_zero() -> None:
     """Directional fires on month 1; regime fires on month 2. No overlap."""
     directional = _date_range(date(2024, 1, 1), 30)
     regime = _date_range(date(2024, 2, 15), 30)  # entirely disjoint
-    cache = _StubCache({
-        "sig_directional": directional,
-        "sig_regime": regime,
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": directional,
+            "sig_regime": regime,
+        }
+    )
     f = PredictedActivationsFilter()
     result = f.apply(_config_with_regime(), _ctx(cache))
     assert result.passed is False
@@ -200,10 +208,12 @@ def test_intersection_partial_overlap_counted_correctly() -> None:
     regime = frozenset(
         date.fromordinal(date(2024, 1, 1).toordinal() + i) for i in range(29, 80)
     )  # ordinals 29..79
-    cache = _StubCache({
-        "sig_directional": directional,
-        "sig_regime": regime,
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": directional,
+            "sig_regime": regime,
+        }
+    )
     f = PredictedActivationsFilter()
     result = f.apply(_config_with_regime(), _ctx(cache))
     assert result.passed is True
@@ -220,12 +230,15 @@ def test_rejects_when_no_directional_signal_present() -> None:
     ValueError if not (mirrors SignalDensityFilter's pattern)."""
     cfg = _config_with_regime()
     # Remove the directional signal
-    no_directional = cfg.model_copy(update={
-        "signals": tuple(s for s in cfg.signals if s.role != "directional"),
-    })
+    no_directional = cfg.model_copy(
+        update={
+            "signals": tuple(s for s in cfg.signals if s.role != "directional"),
+        }
+    )
     cache = _StubCache({})
     f = PredictedActivationsFilter()
     import pytest
+
     with pytest.raises(ValueError, match="expected exactly one directional"):
         f.apply(no_directional, _ctx(cache))
 
@@ -246,11 +259,13 @@ def test_handles_multiple_regime_gates() -> None:
         params={"threshold": 25.0, "op": ">"},
     )
     cfg = cfg.model_copy(update={"signals": (*cfg.signals, extra_regime)})
-    cache = _StubCache({
-        "sig_directional": directional,
-        "sig_regime": regime_a,
-        "sig_regime_b": regime_b,
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": directional,
+            "sig_regime": regime_a,
+            "sig_regime_b": regime_b,
+        }
+    )
     f = PredictedActivationsFilter()
     result = f.apply(cfg, _ctx(cache))
     # dir (ord 0..49) ∩ regime_a (ord 0..29) ∩ regime_b (ord 10..34) = ord 10..29 = 20 days

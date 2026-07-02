@@ -306,7 +306,9 @@ class CrucibleFeatureCache:
             )
             if missing_dates and group and group[0].signals:
                 self._fetch_window_for_dates(
-                    missing_dates, group[0].signals[0], underlying,
+                    missing_dates,
+                    group[0].signals[0],
+                    underlying,
                 )
 
         # M-6: per-batch coverage telemetry. The only operator-visible signal
@@ -348,9 +350,7 @@ class CrucibleFeatureCache:
         # 2) Rebuild the per-config index. content_keys collide across
         # configs only when the spec is semantically identical AND the
         # underlying matches — keyed lookup handles that automatically.
-        self._display_id_index = {
-            spec.id: signal_content_key(spec) for spec in config.signals
-        }
+        self._display_id_index = {spec.id: signal_content_key(spec) for spec in config.signals}
         new_specs = [
             spec
             for spec in config.signals
@@ -381,7 +381,9 @@ class CrucibleFeatureCache:
         )
         if missing_dates and config.signals:
             self._fetch_window_for_dates(
-                missing_dates, config.signals[0], underlying,
+                missing_dates,
+                config.signals[0],
+                underlying,
             )
 
     # ------------------------------------------------------------------

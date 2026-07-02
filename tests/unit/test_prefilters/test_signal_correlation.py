@@ -135,10 +135,12 @@ def test_name_and_cost_tier() -> None:
 def test_passes_when_signals_uncorrelated() -> None:
     """Signals firing on disjoint date sets → Jaccard = 0 → passes."""
     cfg = _config_two_signals()
-    cache = _StubCache({
-        "sig_directional": _date_range(date(2024, 1, 1), 30),
-        "sig_regime": _date_range(date(2024, 6, 1), 30),  # disjoint
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": _date_range(date(2024, 1, 1), 30),
+            "sig_regime": _date_range(date(2024, 6, 1), 30),  # disjoint
+        }
+    )
     f = SignalCorrelationFilter()
     result = f.apply(cfg, _ctx(cache))
     assert result.passed is True
@@ -231,10 +233,12 @@ def test_single_signal_trivially_passes() -> None:
 def test_empty_activation_sets_are_treated_as_uncorrelated() -> None:
     """Defensive: a signal with zero activations doesn't divide-by-zero."""
     cfg = _config_two_signals()
-    cache = _StubCache({
-        "sig_directional": frozenset(),
-        "sig_regime": _date_range(date(2024, 1, 1), 30),
-    })
+    cache = _StubCache(
+        {
+            "sig_directional": frozenset(),
+            "sig_regime": _date_range(date(2024, 1, 1), 30),
+        }
+    )
     f = SignalCorrelationFilter()
     result = f.apply(cfg, _ctx(cache))
     assert result.passed is True

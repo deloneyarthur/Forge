@@ -125,7 +125,8 @@ def test_property_submission_idempotency(
         for cfg in configs
     )
     submittable = tuple(
-        c for c in cands
+        c
+        for c in cands
         if c.report.config.hypothesis not in OVERLAY_ONLY_HYPOTHESES  # type: ignore[attr-defined]
     )
     overlay = tuple(c for c in cands if c not in submittable)

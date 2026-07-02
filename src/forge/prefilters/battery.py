@@ -88,7 +88,9 @@ def run_battery(
     # — BEFORE any filter runs. Otherwise regime_exposure/permutation_test would
     # mislabel a thin-data underlying as a genuine rejection (the D080 class).
     unavailable_check = getattr(
-        ctx.feature_cache, "active_underlying_data_unavailable", None,
+        ctx.feature_cache,
+        "active_underlying_data_unavailable",
+        None,
     )
     if callable(unavailable_check) and unavailable_check():
         return _data_unavailable_report(config, results)

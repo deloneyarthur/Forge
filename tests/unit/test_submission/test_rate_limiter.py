@@ -403,13 +403,21 @@ def test_sentinel_flushed_gated_rows_do_not_count_toward_pct(tmp_path: Path) -> 
     # 1 still in flight, 1 genuinely gated (real run_id), 3 sentinel-flushed.
     _insert_submission(forge_db, forge_batch_id=batch, config_hash="sub_0", submitted_at=at)
     _insert_submission(
-        forge_db, forge_batch_id=batch, config_hash="real_0", submitted_at=at,
-        status="gated", crucible_run_id=str(uuid.uuid4()),
+        forge_db,
+        forge_batch_id=batch,
+        config_hash="real_0",
+        submitted_at=at,
+        status="gated",
+        crucible_run_id=str(uuid.uuid4()),
     )
     for i in range(3):
         _insert_submission(
-            forge_db, forge_batch_id=batch, config_hash=f"sent_{i}", submitted_at=at,
-            status="gated", crucible_run_id=_SENTINEL,
+            forge_db,
+            forge_batch_id=batch,
+            config_hash=f"sent_{i}",
+            submitted_at=at,
+            status="gated",
+            crucible_run_id=_SENTINEL,
         )
     status = check_rate_limit(
         forge_db, crucible_db, threshold=0.8, exports_dir=tmp_path / "noexports"

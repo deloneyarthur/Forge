@@ -518,9 +518,7 @@ def test_ensure_grammar_version_recorded_lands_active_grammar(tmp_path: Path) ->
             yaml_path=yaml_path,
             at=datetime(2026, 5, 18, tzinfo=UTC),
         )
-        rows = conn.execute(
-            "SELECT version, rule_count FROM grammar_versions"
-        ).fetchall()
+        rows = conn.execute("SELECT version, rule_count FROM grammar_versions").fetchall()
     assert len(rows) == 1
     version, rule_count = rows[0]
     assert str(version) == grammar.grammar_version
@@ -700,7 +698,10 @@ def test_enumerated_configs_respect_absolute_risk_caps(tmp_path: Path) -> None:
     registry = load_registry()
     n_checked = 0
     for cfg in enumerate_candidates(
-        grammar, registry, seed=0xD056, max_candidates=50,
+        grammar,
+        registry,
+        seed=0xD056,
+        max_candidates=50,
     ):
         assert cfg.sizer.per_trade_risk_pct <= ABSOLUTE_MAX_PER_TRADE_RISK_PCT
         assert cfg.sizer.max_concurrent_risk_pct <= ABSOLUTE_MAX_CONCURRENT_RISK_PCT

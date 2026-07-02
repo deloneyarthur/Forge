@@ -59,11 +59,13 @@ def test_d055_filter_keeps_only_current_grammar_version(tmp_path: Path) -> None:
     mod = _load_script()
     forge_db = tmp_path / "forge.db"
     _insert_batch_with_submissions(
-        forge_db, grammar_version="v1",
+        forge_db,
+        grammar_version="v1",
         config_hashes=["v1_hash_aaa", "v1_hash_bbb"],
     )
     _insert_batch_with_submissions(
-        forge_db, grammar_version="v2",
+        forge_db,
+        grammar_version="v2",
         config_hashes=["v2_hash_ccc"],
     )
     matching, skipped = mod.filter_to_current_grammar_version(
@@ -82,7 +84,9 @@ def test_d055_filter_handles_unknown_hashes(tmp_path: Path) -> None:
     mod = _load_script()
     forge_db = tmp_path / "forge.db"
     _insert_batch_with_submissions(
-        forge_db, grammar_version="v2", config_hashes=["v2_hash_ccc"],
+        forge_db,
+        grammar_version="v2",
+        config_hashes=["v2_hash_ccc"],
     )
     matching, skipped = mod.filter_to_current_grammar_version(
         forge_db,
@@ -98,11 +102,14 @@ def test_d055_filter_no_skips_when_all_match(tmp_path: Path) -> None:
     mod = _load_script()
     forge_db = tmp_path / "forge.db"
     _insert_batch_with_submissions(
-        forge_db, grammar_version="v2",
+        forge_db,
+        grammar_version="v2",
         config_hashes=["a", "b", "c"],
     )
     matching, skipped = mod.filter_to_current_grammar_version(
-        forge_db, ["a", "b", "c"], current_grammar_version="v2",
+        forge_db,
+        ["a", "b", "c"],
+        current_grammar_version="v2",
     )
     assert sorted(matching) == ["a", "b", "c"]
     assert skipped == {}

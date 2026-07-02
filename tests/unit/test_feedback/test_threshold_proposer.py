@@ -53,20 +53,27 @@ def _gated_run(*, config_hash: str, trade_count: int) -> GatedRun:
 
 
 def _config_json(
-    indicator_id: str, role: str, threshold: float, hypothesis: str = "mean_reversion",
+    indicator_id: str,
+    role: str,
+    threshold: float,
+    hypothesis: str = "mean_reversion",
 ) -> str:
     """Minimal config_json with one threshold signal."""
-    return json.dumps({
-        "name": f"cfg_{indicator_id}_{threshold}",
-        "hypothesis": hypothesis,
-        "signals": [{
-            "id": "sig_directional",
-            "type": "threshold",
-            "role": role,
-            "indicators": [indicator_id],
-            "params": {"threshold": threshold, "op": "<"},
-        }],
-    })
+    return json.dumps(
+        {
+            "name": f"cfg_{indicator_id}_{threshold}",
+            "hypothesis": hypothesis,
+            "signals": [
+                {
+                    "id": "sig_directional",
+                    "type": "threshold",
+                    "role": role,
+                    "indicators": [indicator_id],
+                    "params": {"threshold": threshold, "op": "<"},
+                }
+            ],
+        }
+    )
 
 
 def _insert_submission(conn: object, *, config_hash: str, config_json: str) -> None:
@@ -109,8 +116,11 @@ def test_proposes_tightening_when_high_trade_configs_cluster(tmp_path: Path) -> 
 
         baseline = {"rsi_2": (5.0, 15.0, 20.0, 50.0)}
         proposals = propose_threshold_tightenings(
-            conn, gated, baseline_table=baseline,
-            high_trade_floor=10, min_high_trade_samples=5,
+            conn,
+            gated,
+            baseline_table=baseline,
+            high_trade_floor=10,
+            min_high_trade_samples=5,
         )
 
     assert len(proposals) == 1
@@ -141,8 +151,11 @@ def test_min_samples_floor_skips_low_evidence(tmp_path: Path) -> None:
 
         baseline = {"rsi_2": (5.0, 15.0, 20.0, 50.0)}
         proposals = propose_threshold_tightenings(
-            conn, gated, baseline_table=baseline,
-            high_trade_floor=10, min_high_trade_samples=5,
+            conn,
+            gated,
+            baseline_table=baseline,
+            high_trade_floor=10,
+            min_high_trade_samples=5,
         )
 
     assert proposals == []
@@ -162,8 +175,11 @@ def test_loosening_detected_when_high_trade_outside_baseline(tmp_path: Path) -> 
 
         baseline = {"rsi_2": (5.0, 15.0, 20.0, 50.0)}
         proposals = propose_threshold_tightenings(
-            conn, gated, baseline_table=baseline,
-            high_trade_floor=10, min_high_trade_samples=5,
+            conn,
+            gated,
+            baseline_table=baseline,
+            high_trade_floor=10,
+            min_high_trade_samples=5,
         )
 
     assert len(proposals) == 1
@@ -174,18 +190,28 @@ def test_yaml_writer_only_includes_tightenings(tmp_path: Path) -> None:
     """write_tightenings_to_yaml writes only `direction='tighten'` entries."""
     proposals = [
         ThresholdProposal(
-            indicator_id="rsi_2", role="directional",
-            baseline_low=5.0, baseline_high=15.0,
-            proposed_low=8.0, proposed_high=12.0,
-            direction="tighten", n_high_trade_samples=6,
-            high_trade_floor=10, cohort_size=100,
+            indicator_id="rsi_2",
+            role="directional",
+            baseline_low=5.0,
+            baseline_high=15.0,
+            proposed_low=8.0,
+            proposed_high=12.0,
+            direction="tighten",
+            n_high_trade_samples=6,
+            high_trade_floor=10,
+            cohort_size=100,
         ),
         ThresholdProposal(
-            indicator_id="iv_rank", role="regime_filter",
-            baseline_low=10.0, baseline_high=50.0,
-            proposed_low=5.0, proposed_high=55.0,  # loosening
-            direction="loosen", n_high_trade_samples=8,
-            high_trade_floor=10, cohort_size=100,
+            indicator_id="iv_rank",
+            role="regime_filter",
+            baseline_low=10.0,
+            baseline_high=50.0,
+            proposed_low=5.0,
+            proposed_high=55.0,  # loosening
+            direction="loosen",
+            n_high_trade_samples=8,
+            high_trade_floor=10,
+            cohort_size=100,
         ),
     ]
     out_yaml = tmp_path / "auto_tightened_thresholds.yaml"
@@ -202,18 +228,28 @@ def test_loosening_writer_appends_to_open_proposals(tmp_path: Path) -> None:
     """write_loosening_proposals_to_open_proposals appends a markdown table."""
     proposals = [
         ThresholdProposal(
-            indicator_id="iv_rank", role="regime_filter",
-            baseline_low=10.0, baseline_high=50.0,
-            proposed_low=5.0, proposed_high=55.0,
-            direction="loosen", n_high_trade_samples=8,
-            high_trade_floor=10, cohort_size=100,
+            indicator_id="iv_rank",
+            role="regime_filter",
+            baseline_low=10.0,
+            baseline_high=50.0,
+            proposed_low=5.0,
+            proposed_high=55.0,
+            direction="loosen",
+            n_high_trade_samples=8,
+            high_trade_floor=10,
+            cohort_size=100,
         ),
         ThresholdProposal(
-            indicator_id="rsi_2", role="directional",
-            baseline_low=5.0, baseline_high=15.0,
-            proposed_low=8.0, proposed_high=12.0,
-            direction="tighten", n_high_trade_samples=6,
-            high_trade_floor=10, cohort_size=100,
+            indicator_id="rsi_2",
+            role="directional",
+            baseline_low=5.0,
+            baseline_high=15.0,
+            proposed_low=8.0,
+            proposed_high=12.0,
+            direction="tighten",
+            n_high_trade_samples=6,
+            high_trade_floor=10,
+            cohort_size=100,
         ),
     ]
     op_md = tmp_path / "OPEN_PROPOSALS.md"
@@ -233,6 +269,8 @@ def test_empty_gated_runs_returns_no_proposals(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     with db_connection(forge_db) as conn:
         proposals = propose_threshold_tightenings(
-            conn, [], baseline_table={"rsi_2": (5.0, 15.0, 20.0, 50.0)},
+            conn,
+            [],
+            baseline_table={"rsi_2": (5.0, 15.0, 20.0, 50.0)},
         )
     assert proposals == []

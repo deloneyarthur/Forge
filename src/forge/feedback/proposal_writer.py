@@ -73,13 +73,16 @@ _HEADER_BLOCK = (
 
 
 def _str_representer(
-    dumper: yaml.SafeDumper, data: str,
+    dumper: yaml.SafeDumper,
+    data: str,
 ) -> yaml.ScalarNode:
     """Force literal-block style for multi-line strings — keeps
     ``proposal_yaml`` readable instead of quoted-with-newlines."""
     if "\n" in data:
         return dumper.represent_scalar(
-            "tag:yaml.org,2002:str", data, style="|",
+            "tag:yaml.org,2002:str",
+            data,
+            style="|",
         )
     return dumper.represent_scalar("tag:yaml.org,2002:str", data)
 
@@ -111,11 +114,7 @@ def _format_v1_document(proposal: GrammarProposal) -> str:
         "proposal_type": proposal.proposal_type,
         "target": proposal.target,
         "rationale": proposal.rationale,
-        "evidence": (
-            dict(proposal.evidence_json)
-            if proposal.evidence_json
-            else {}
-        ),
+        "evidence": (dict(proposal.evidence_json) if proposal.evidence_json else {}),
         "proposal_yaml": proposal.proposal_yaml,
     }
     return yaml.safe_dump(
@@ -138,7 +137,8 @@ def _atomic_write(path: Path, content: str) -> None:
 
 
 def _compose_new_body(
-    existing_text: str, v1_doc: str,
+    existing_text: str,
+    v1_doc: str,
 ) -> str:
     """Build the full file content after appending ``v1_doc``."""
     if not existing_text:
@@ -183,10 +183,7 @@ def _intent_key(evidence: Mapping[str, Any] | None) -> tuple[str, str]:
     ev = evidence or {}
     trigger = str(ev.get("trigger", ""))
     detail = str(
-        ev.get("target")
-        or ev.get("hypothesis")
-        or ev.get("family")
-        or "",
+        ev.get("target") or ev.get("hypothesis") or ev.get("family") or "",
     )
     return (trigger, detail)
 

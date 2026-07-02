@@ -302,8 +302,11 @@ def test_consume_excludes_sentinel_rows_from_promotion_rate(tmp_path: Path) -> N
         for i in range(2):
             other = minimal_strategy_config().model_copy(update={"name": f"sent_{i}"})
             _insert_forge_submission(
-                conn, config=other, batch_id=batch_id,
-                status="gated", crucible_run_id=sentinel,
+                conn,
+                config=other,
+                batch_id=batch_id,
+                status="gated",
+                crucible_run_id=sentinel,
             )
         consume_batch_results(
             conn, crucible_db, batch_id=batch_id, exports_dir=tmp_path / "noexports"
@@ -520,16 +523,18 @@ def test_reconcile_all_pending_processes_every_in_flight_batch(tmp_path: Path) -
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
         _insert_forge_submission(
-            conn, config=old_cfg, batch_id=old_batch,
+            conn,
+            config=old_cfg,
+            batch_id=old_batch,
             submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
         )
         _insert_forge_submission(
-            conn, config=new_cfg, batch_id=new_batch,
+            conn,
+            config=new_cfg,
+            batch_id=new_batch,
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
-        feedbacks = reconcile_all_pending(
-            conn, crucible_db, exports_dir=tmp_path / "noexports"
-        )
+        feedbacks = reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
         # Verify both batches' rows were transitioned to status='gated'.
         gated_rows = conn.execute(
             "SELECT forge_batch_id FROM submissions WHERE status = 'gated' ORDER BY submitted_at"
@@ -551,13 +556,9 @@ def test_reconcile_all_pending_is_idempotent(tmp_path: Path) -> None:
         _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
         _insert_forge_submission(conn, config=cfg, batch_id=batch_id)
         # First pass: row transitions to gated.
-        first = reconcile_all_pending(
-            conn, crucible_db, exports_dir=tmp_path / "noexports"
-        )
+        first = reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
         # Second pass: nothing to reconcile (no `submitted` rows left).
-        second = reconcile_all_pending(
-            conn, crucible_db, exports_dir=tmp_path / "noexports"
-        )
+        second = reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
     assert len(first) == 1
     assert len(second) == 0  # no `submitted` rows remain → empty batch list
 
@@ -567,9 +568,7 @@ def test_reconcile_all_pending_returns_empty_when_no_submitted_rows(tmp_path: Pa
     forge_db, crucible_db = _setup_paths(tmp_path)
     build_synthetic_crucible_db(crucible_db).close()
     with db_connection(forge_db) as conn:
-        feedbacks = reconcile_all_pending(
-            conn, crucible_db, exports_dir=tmp_path / "noexports"
-        )
+        feedbacks = reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
     assert feedbacks == ()
 
 
@@ -601,24 +600,30 @@ def test_reconcile_all_pending_flushes_predates_export_window(tmp_path: Path) ->
     # equaled 05-13 14:00, so any date before it sufficed; the margin needs more.
     with db_connection(forge_db) as conn:
         _insert_batch_summary(
-            conn, batch_id=stranded_batch, batch_size=1,
+            conn,
+            batch_id=stranded_batch,
+            batch_size=1,
             submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         _insert_batch_summary(
-            conn, batch_id=visible_batch, batch_size=1,
+            conn,
+            batch_id=visible_batch,
+            batch_size=1,
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
         _insert_forge_submission(
-            conn, config=stranded_cfg, batch_id=stranded_batch,
+            conn,
+            config=stranded_cfg,
+            batch_id=stranded_batch,
             submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         _insert_forge_submission(
-            conn, config=visible_cfg, batch_id=visible_batch,
+            conn,
+            config=visible_cfg,
+            batch_id=visible_batch,
             submitted_at=datetime(2026, 5, 13, tzinfo=UTC),
         )
-        feedbacks = reconcile_all_pending(
-            conn, crucible_db, exports_dir=tmp_path / "noexports"
-        )
+        feedbacks = reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
         rows = conn.execute(
             "SELECT config_hash, status, crucible_run_id FROM submissions ORDER BY submitted_at"
         ).fetchall()
@@ -653,19 +658,19 @@ def test_reconcile_all_pending_does_not_flush_rows_inside_export_window(
     batch = uuid.uuid4()
     with db_connection(forge_db) as conn:
         _insert_batch_summary(
-            conn, batch_id=batch, batch_size=1,
+            conn,
+            batch_id=batch,
+            batch_size=1,
             submitted_at=datetime(2026, 5, 14, tzinfo=UTC),
         )
         _insert_forge_submission(
-            conn, config=in_flight_cfg, batch_id=batch,
+            conn,
+            config=in_flight_cfg,
+            batch_id=batch,
             submitted_at=datetime(2026, 5, 14, tzinfo=UTC),
         )
-        reconcile_all_pending(
-            conn, crucible_db, exports_dir=tmp_path / "noexports"
-        )
-        rows = conn.execute(
-            "SELECT status, crucible_run_id FROM submissions"
-        ).fetchall()
+        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
+        rows = conn.execute("SELECT status, crucible_run_id FROM submissions").fetchall()
     assert rows[0][0] == "submitted"  # untouched
     assert rows[0][1] is None  # no sentinel either
 
@@ -683,11 +688,15 @@ def test_reconcile_all_pending_aged_out_flush_idempotent(tmp_path: Path) -> None
         # D110: 05-01 is beyond STRANDED_AFTER (8d) before the decision so it
         # flushes under the max(decided_at)-margin watermark.
         _insert_batch_summary(
-            conn, batch_id=batch, batch_size=1,
+            conn,
+            batch_id=batch,
+            batch_size=1,
             submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         _insert_forge_submission(
-            conn, config=stranded_cfg, batch_id=batch,
+            conn,
+            config=stranded_cfg,
+            batch_id=batch,
             submitted_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
@@ -715,17 +724,19 @@ def test_reconcile_all_pending_no_flush_when_export_empty(tmp_path: Path) -> Non
     batch = uuid.uuid4()
     with db_connection(forge_db) as conn:
         _insert_batch_summary(
-            conn, batch_id=batch, batch_size=1,
+            conn,
+            batch_id=batch,
+            batch_size=1,
             submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
         )
         _insert_forge_submission(
-            conn, config=stranded_cfg, batch_id=batch,
+            conn,
+            config=stranded_cfg,
+            batch_id=batch,
             submitted_at=datetime(2026, 5, 10, tzinfo=UTC),
         )
         reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
-        row = conn.execute(
-            "SELECT status, crucible_run_id FROM submissions"
-        ).fetchone()
+        row = conn.execute("SELECT status, crucible_run_id FROM submissions").fetchone()
     assert row[0] == "submitted"  # no false flush on Crucible-offline
     assert row[1] is None
 
@@ -741,14 +752,10 @@ def test_d110_flushes_stranded_row_in_deep_export_window(tmp_path: Path) -> None
     # Wide window: an old in-window decision AND a recent one, 13 days apart
     # (mirrors the 2026-06-07 production spike that compressed the window).
     old_visible = minimal_strategy_config().model_copy(update={"name": "old_visible"})
-    recent_visible = minimal_strategy_config().model_copy(
-        update={"name": "recent_visible"}
-    )
+    recent_visible = minimal_strategy_config().model_copy(update={"name": "recent_visible"})
     recent_dec = datetime(2026, 6, 8, 16, tzinfo=UTC)
     old_dec = recent_dec - timedelta(days=13)
-    _insert_crucible_gated(
-        crucible_db, config_hash=old_visible.config_hash, decided_at=old_dec
-    )
+    _insert_crucible_gated(crucible_db, config_hash=old_visible.config_hash, decided_at=old_dec)
     _insert_crucible_gated(
         crucible_db, config_hash=recent_visible.config_hash, decided_at=recent_dec
     )
@@ -760,12 +767,8 @@ def test_d110_flushes_stranded_row_in_deep_export_window(tmp_path: Path) -> None
     assert stranded_at > old_dec  # precondition: survives the old min-watermark
     batch = uuid.uuid4()
     with db_connection(forge_db) as conn:
-        _insert_batch_summary(
-            conn, batch_id=batch, batch_size=1, submitted_at=stranded_at
-        )
-        _insert_forge_submission(
-            conn, config=stranded, batch_id=batch, submitted_at=stranded_at
-        )
+        _insert_batch_summary(conn, batch_id=batch, batch_size=1, submitted_at=stranded_at)
+        _insert_forge_submission(conn, config=stranded, batch_id=batch, submitted_at=stranded_at)
         reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
         row = conn.execute(
             "SELECT status, crucible_run_id FROM submissions WHERE config_hash = ?",
@@ -784,9 +787,7 @@ def test_d110_does_not_flush_recent_row_within_stranded_margin(
     in the window. Flushing it would void §7.3 backpressure."""
     forge_db, crucible_db = _setup_paths(tmp_path)
     build_synthetic_crucible_db(crucible_db).close()
-    recent_visible = minimal_strategy_config().model_copy(
-        update={"name": "recent_visible"}
-    )
+    recent_visible = minimal_strategy_config().model_copy(update={"name": "recent_visible"})
     recent_dec = datetime(2026, 6, 8, 16, tzinfo=UTC)
     _insert_crucible_gated(
         crucible_db, config_hash=recent_visible.config_hash, decided_at=recent_dec
@@ -799,12 +800,8 @@ def test_d110_does_not_flush_recent_row_within_stranded_margin(
     assert pending_at > recent_dec - STRANDED_AFTER  # ...but inside the margin
     batch = uuid.uuid4()
     with db_connection(forge_db) as conn:
-        _insert_batch_summary(
-            conn, batch_id=batch, batch_size=1, submitted_at=pending_at
-        )
-        _insert_forge_submission(
-            conn, config=pending, batch_id=batch, submitted_at=pending_at
-        )
+        _insert_batch_summary(conn, batch_id=batch, batch_size=1, submitted_at=pending_at)
+        _insert_forge_submission(conn, config=pending, batch_id=batch, submitted_at=pending_at)
         reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "noexports")
         row = conn.execute(
             "SELECT status, crucible_run_id FROM submissions WHERE config_hash = ?",

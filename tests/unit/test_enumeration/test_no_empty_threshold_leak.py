@@ -134,9 +134,7 @@ def test_sampler_raises_on_synthetic_threshold_leak() -> None:
                 continue
             for sig in cfg.signals:
                 if sig.type == "threshold" and "threshold" not in sig.params:
-                    pytest.fail(
-                        f"assert in sample_config failed to fire on leak: {sig}"
-                    )
+                    pytest.fail(f"assert in sample_config failed to fire on leak: {sig}")
         # Restore table for any subsequent tests
         _INDICATOR_THRESHOLD_TABLE.clear()
         _INDICATOR_THRESHOLD_TABLE.update(original_table)
