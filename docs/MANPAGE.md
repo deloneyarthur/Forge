@@ -235,7 +235,20 @@ is on) blended into the §6.2 prior. Design: §8.3 / §1.2 (Forge consumes Cruci
 Shadow vs incumbent readout on decided verdicts (the F3 criterion: model AUC ≥
 incumbent + 0.05 AND precision@K ≥ incumbent's, on ≥3 consecutive daily
 checkpoints of ≥150 fresh verdicts each). Prints AUC/precision@K/Brier and a
-calibration table per model_id.
+reliability table per model_id.
+
+**Calibration line (P1.3)** — `ece` (overall, frequency-weighted, ~small because the
+mass sits in well-calibrated low-P bins), `max_ce` (**the floor-relevant measure**: max
+calibration gap over bins with ≥20 rows — the gate-then-tail floor selects the high-P
+sliver where P over-predicts ~3-5x), `ece_platt` (the ECE a held-out Platt recal reaches —
+the *recoverable* calibration floor), and a **co-primary calibration criterion**
+(`max_ce ≤ 0.20`). This blesses `P` for the ABSOLUTE floor, distinct from the AUC verdict
+that blesses the model for the blend's RANKING — a well-ranking-but-miscalibrated model
+passes AUC and fails calibration. Telemetry only (gates no live behavior); the daily timer
+tracks `model_ece`/`model_max_ce`/`model_ece_platt`/`calibration_verdict` in `streak.jsonl`.
+The recalibrator's *application* to the live `P` is deferred to the gate-tail floor
+re-derivation (P1.1) — recalibrating the `P` that fills the §6.2 prior slot would change
+the composite sort.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -284,6 +297,8 @@ Gate-then-tail re-wire shadow (§8.6): does gating on `P(component)` (eligibilit
 and then ordering the survivors by the predicted WF floor surface configs with a higher REALIZED
 `--gate` than ranking by `P(component)` alone (the deployed lane ≈ the P-baseline)? Prints the
 gate-then-tail vs P-baseline top-K mean realized value over verified-coverage decided verdicts.
+Also prints **`eligible_fraction`** (P1.3) — the fraction clearing `--p-floor`, i.e. the floor's
+KEEP-RATE; watch it for silent drift (P miscalibration moves the eligible set under a fixed floor).
 Telemetry only — no PASS/FAIL until the §8.6-style margin is set. Design:
 `docs/proposals/quality-lane-rewire.md`.
 
@@ -341,7 +356,10 @@ Pretty-prints the two curated learning clocks the daily ranker-eval timer writes
 `tail|json` spelunking and **no DB access**: the **F3 verdict ranker** (`streak.jsonl`, AUC
 margin over the §6.2 incumbent) and the **§8.6 wf_p25 tail** (`robustness_streak_wfp25.jsonl`,
 Spearman vs the realized worst-quartile gate). Each line shows the latest verdict, the
-trailing consecutive-PASS streak (N/3), the latest metric, and an N-checkpoint trend.
+trailing consecutive-PASS streak (N/3), the latest metric, and an N-checkpoint trend. A
+**`P calibration/floor`** line (P1.3) adds the drift guard: the latest floor-relevant
+calibration verdict + `max_ce` (from the F3 streak) and the gate-tail floor keep-rate
+(`eligible_fraction`, from the rewire clock) — tolerant of pre-P1.3 records (`n/a`).
 Distinct from `forge healthcheck` (is the daemon *alive/producing?*); this is *is the
 learning improving?*. For the authoritative recompute use `forge ranker-model eval` /
 `eval-robustness`.
