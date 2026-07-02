@@ -23,17 +23,25 @@ recompute from the DB, use `forge ranker-model eval` / `eval-robustness`.
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 import typer
 
+from forge.ranking.sequential_test import sequential_mean_test
+
 _TREND_K = 8  # how many trailing checkpoints to show in the sparkline
-# P1.2 — the gate-tail flip gate: k fresh-window PASSes AND the pooled fresh-window Δ's 95%
-# CI excluding 0. Both must hold before FORGE_QUALITY_RANK_MODE=gate-tail is flipped on.
+# P3.1 (B5) — the gate-tail flip gate is a Wald SPRT on the fresh-window paired deltas.
+# H0: mean Δ = 0 (gate-tail no better than the P(component) baseline); H1: mean Δ =
+# _FLIP_MIN_EFFECT. The SPRT controls the false-promote rate at ~alpha under the daily
+# peeking the streak does — which the D223 fixed-sample CI ("k PASSes AND CI>0") did NOT
+# (a 3-consecutive coin-flip is a 12.5% false-promote). `_FLIP_GATE_K` is reused as the
+# SPRT's min_observations (never flip on fewer than k fresh checkpoints).
 _FLIP_GATE_K = 3
+_FLIP_ALPHA = 0.05  # target false-promote rate
+_FLIP_BETA = 0.20  # target false-reject rate
+_FLIP_MIN_EFFECT = 0.05  # the mean WF-floor Δ worth flipping for (matches the old margin)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,15 +82,19 @@ def _consecutive_pass(records: Sequence[dict[str, object]]) -> int:
 
 @dataclass(frozen=True, slots=True)
 class FlipGateStatus:
-    """Whether the gate-tail flip gate is met. `met` = `fresh_pass_streak >= k` AND the pooled
-    fresh-window Δ's 95% CI excludes 0 (both, per P1.2). Full-pool "look" records are excluded."""
+    """Whether the gate-tail flip gate is met. P3.1 (B5): the gate is a Wald SPRT on the
+    fresh-window paired deltas — `met` == the SPRT decided ``"promote"`` (log-LR crossed the
+    upper Wald boundary), which controls the false-promote rate at ~alpha under daily peeking.
+    Full-pool "look" records are excluded; `fresh_pass_streak` is a display-only diagnostic
+    (the SPRT weighs delta magnitudes, not the binary PASS)."""
 
     fresh_pass_streak: int
     k: int
     n_fresh_qualifying: int
-    pooled_delta: float | None
-    ci_low: float | None
-    ci_high: float | None
+    mean_delta: float | None
+    sprt_decision: str
+    sprt_log_lr: float
+    sprt_upper: float
     met: bool
 
 
@@ -95,36 +107,40 @@ def _is_full_pool_look(rec: dict[str, object], clean_era_iso: str) -> bool:
     return rec.get("window_since") == clean_era_iso
 
 
-def _mean_ci95(values: Sequence[float]) -> tuple[float | None, float | None, float | None]:
-    """Sample mean + 95% normal-approx CI. (None, None, None) on empty; a point with no CI on
-    a single value (CI undefined). Deterministic — no RNG (hard rules #5/#6)."""
-    n = len(values)
-    if n == 0:
-        return None, None, None
-    mean = sum(values) / n
-    if n < 2:
-        return mean, None, None
-    variance = sum((v - mean) ** 2 for v in values) / (n - 1)
-    se = math.sqrt(variance / n)
-    return mean, mean - 1.96 * se, mean + 1.96 * se
-
-
 def rewire_flip_gate(
     records: Sequence[dict[str, object]], *, clean_era_iso: str, k: int = _FLIP_GATE_K
 ) -> FlipGateStatus:
-    """The numeric gate-tail flip gate over the rewire streak records. Excludes full-pool looks
-    (P1.2), counts the trailing fresh-window PASS streak, and requires the pooled fresh-window
-    Δ's 95% CI to exclude 0. Pure/testable — the daily verdict is recorded, not re-derived."""
+    """The gate-tail flip gate over the rewire streak records. Excludes full-pool looks
+    (P1.2), then runs a Wald SPRT (P3.1) on every fresh-window paired Δ: `met` == the SPRT
+    decided ``"promote"``. `k` is the SPRT's min_observations (never flip on <k fresh
+    checkpoints). Pure/testable — the daily verdict is recorded, not re-derived."""
     fresh = [r for r in records if not _is_full_pool_look(r, clean_era_iso)]
     streak = _consecutive_pass(fresh)
-    deltas: list[float] = []
-    for r in fresh:
-        delta = r.get("delta")
-        if r.get("qualifies") and isinstance(delta, (int, float)):
-            deltas.append(float(delta))
-    pooled, lo, hi = _mean_ci95(deltas)
-    met = streak >= k and lo is not None and lo > 0.0
-    return FlipGateStatus(streak, k, len(deltas), pooled, lo, hi, met)
+    # Only data-sufficient checkpoints feed the SPRT: `qualifies` is the timer's
+    # (fresh_decided >= min_fresh) gate — an under-powered window's Δ is noise.
+    deltas = [
+        float(d)
+        for r in fresh
+        if r.get("qualifies") and isinstance((d := r.get("delta")), (int, float))
+    ]
+    mean = sum(deltas) / len(deltas) if deltas else None
+    sprt = sequential_mean_test(
+        deltas,
+        alpha=_FLIP_ALPHA,
+        beta=_FLIP_BETA,
+        min_effect=_FLIP_MIN_EFFECT,
+        min_observations=k,
+    )
+    return FlipGateStatus(
+        fresh_pass_streak=streak,
+        k=k,
+        n_fresh_qualifying=len(deltas),
+        mean_delta=mean,
+        sprt_decision=sprt.decision,
+        sprt_log_lr=sprt.log_lr,
+        sprt_upper=sprt.upper,
+        met=sprt.decision == "promote",
+    )
 
 
 def summarize_streak(
@@ -213,15 +229,14 @@ def _format_calibration(
 
 
 def _format_flip_gate(g: FlipGateStatus) -> str:
-    """P1.2 gate-tail flip gate line: fresh-PASS streak + pooled Δ CI + MET/NOT-MET."""
+    """P3.1 gate-tail flip gate line: SPRT verdict + log-LR vs boundary + mean Δ + MET/NOT-MET."""
     verdict = "MET" if g.met else "NOT MET"
-    if g.pooled_delta is None:
-        ci = "pooled Δ n/a"
-    elif g.ci_low is None:
-        ci = f"pooled Δ {g.pooled_delta:+.3f} (n={g.n_fresh_qualifying}, CI needs ≥2)"
-    else:
-        ci = f"pooled Δ {g.pooled_delta:+.3f} CI [{g.ci_low:+.3f},{g.ci_high:+.3f}]"
-    return f"{'gate-tail flip gate':<22} {verdict:<7} fresh-PASS {g.fresh_pass_streak}/{g.k}   {ci}"
+    md = f"mean Δ {g.mean_delta:+.3f}" if g.mean_delta is not None else "mean Δ n/a"
+    sprt = f"SPRT {g.sprt_decision} (logLR {g.sprt_log_lr:+.2f} / {g.sprt_upper:.2f})"
+    return (
+        f"{'gate-tail flip gate':<22} {verdict:<7} {sprt}  {md}  "
+        f"fresh-PASS {g.fresh_pass_streak}/{g.k} n={g.n_fresh_qualifying}"
+    )
 
 
 def _format_summary(s: StreakSummary) -> str:

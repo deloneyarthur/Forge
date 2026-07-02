@@ -54,12 +54,14 @@ _MAX_CE_CRITERION = 0.20
 # sparser than the full verdict stream).
 _TAIL_SPEARMAN_CRITERION = 0.30
 
-# Gate-then-tail re-wire streak criterion — PROVISIONAL (docs/proposals/quality-lane-rewire.md).
-# A checkpoint PASSes when the fresh-window delta (gate-then-tail top-K minus the P(component)-
-# baseline top-K, on realized wf_sharpe_p25) clears this margin; the streak counts consecutive
-# qualifying PASSes. The A/B's recent-window delta was ~+0.16 (full-pool -0.07 — the win is
-# recency-dependent on the improving tail models); +0.05 is a modest "meaningfully beats the
-# deployed lane" bar. Raw delta is recorded per row so the operator can re-judge without a re-run.
+# Gate-then-tail re-wire per-checkpoint PASS margin (docs/proposals/quality-lane-rewire.md).
+# A checkpoint's fresh-window delta (gate-then-tail top-K minus the P(component)-baseline top-K,
+# on realized wf_sharpe_p25) PASSes when it clears this margin. P3.1 (B5): this is now a
+# DISPLAY-only per-checkpoint label — the actual FLIP GATE is a Wald SPRT on the raw deltas
+# (`forge.ranking.sequential_test` via `status_cmd.rewire_flip_gate`, alpha=0.05), which controls
+# the false-promote rate under daily peeking where "k consecutive PASSes" did not. So this
+# margin no longer gates the flip and is no longer provisional; +0.05 stays a modest
+# "meaningfully beats the deployed lane" bar for the eye. Raw delta is recorded per row.
 _REWIRE_DELTA_CRITERION = 0.05
 
 

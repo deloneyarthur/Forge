@@ -121,26 +121,27 @@ def test_flip_gate_excludes_full_pool_look() -> None:
     g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
     assert g.fresh_pass_streak == 1  # only the fresh PASS; the full-pool FAIL is excluded
     assert g.n_fresh_qualifying == 1
-    assert not g.met  # 1 < k=3, and n=1 has no CI
+    assert not g.met  # 1 < k=3 (SPRT min_observations) -> continue, never met
 
 
-def test_flip_gate_met_needs_streak_and_positive_ci() -> None:
-    # Three fresh PASSes with tight positive deltas -> streak 3/3 AND CI excludes 0 -> MET.
+def test_flip_gate_met_when_sprt_promotes() -> None:
+    # P3.1: three fresh checkpoints with tight positive deltas >> min_effect -> the SPRT
+    # log-LR crosses the upper Wald boundary -> promote -> MET.
     records = [_rewire_rec(d, "PASS") for d in (0.30, 0.33, 0.31)]
     g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
     assert g.fresh_pass_streak == 3
-    assert g.ci_low is not None
-    assert g.ci_low > 0.0
+    assert g.sprt_decision == "promote"
+    assert g.sprt_log_lr >= g.sprt_upper
     assert g.met
 
 
-def test_flip_gate_not_met_when_ci_spans_zero() -> None:
-    # Streak reaches 3 but the deltas straddle 0 (wide CI) -> NOT MET (the pooled-Δ arm fails).
+def test_flip_gate_not_met_when_evidence_inconclusive() -> None:
+    # Three fresh checkpoints but the deltas straddle 0 (high variance) -> the SPRT stays
+    # between the boundaries -> continue -> NOT MET.
     records = [_rewire_rec(d, "PASS") for d in (0.40, -0.30, 0.35)]
     g = rewire_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
     assert g.fresh_pass_streak == 3
-    assert g.ci_low is not None
-    assert g.ci_low <= 0.0
+    assert g.sprt_decision == "continue"
     assert not g.met
 
 
