@@ -202,6 +202,27 @@ def check_file_freshness(
     return HealthResult(label, Level.OK, f"fresh ({hrs:.1f}h old)")
 
 
+def check_component_contributions_export(
+    newest_mtime: datetime | None,
+    now: datetime,
+) -> HealthResult:
+    """Soft presence check for Crucible's `component_contributions` export (D216).
+
+    The export is scored per-promoted-PORTFOLIO (leave-one-out
+    `correlation_to_incumbent` / `marginal_sharpe`), so it is **absent until the
+    first promotion** — that is the PBO wall, not a fault. Absence therefore
+    returns OK (never a WARN that would pollute OVERALL); present → OK with age.
+    Forward-looking ops instrumentation: once books promote and Crucible's
+    publisher runs, this shows the Layer-1 contribution signal is flowing (the
+    estimand re-aim, held per D216, consumes it). No typed read — glob+mtime
+    only, so it does not pre-empt the contracts-hosted loader."""
+    label = "component_contributions"
+    if newest_mtime is None:
+        return HealthResult(label, Level.OK, "no export yet (expected until first promotion)")
+    hrs = _age_hours(newest_mtime, now)
+    return HealthResult(label, Level.OK, f"present ({hrs:.1f}h old)")
+
+
 def check_contracts_pin(pinned: str, installed: str) -> HealthResult:
     """Surface contracts drift before a reboot turns it into a hard halt.
 
@@ -430,6 +451,14 @@ def cmd_healthcheck(
         )
     )
     results.append(check_contracts_pin(FORGE_EXPECTED_CONTRACT_VERSION, CONTRACT_VERSION))
+    # Crucible's component_contributions export (D216): the Layer-1 decorrelated-
+    # supply signal. Soft — absent is expected until the first promotion.
+    results.append(
+        check_component_contributions_export(
+            _newest_mtime(Path.home() / "optbt_data" / "exports", "component_contributions_*.json"),
+            now,
+        )
+    )
 
     # Learned-lane drift: a blind daily retrain (newest-wins adoption) can rotate a
     # degraded model live; catch it loudly instead of waiting for a human to read the
@@ -468,6 +497,7 @@ __all__ = [
     "HealthResult",
     "JournalState",
     "Level",
+    "check_component_contributions_export",
     "check_contracts_pin",
     "check_file_freshness",
     "check_learning_drift",

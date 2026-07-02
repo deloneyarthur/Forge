@@ -299,6 +299,40 @@ def test_d063_hypothesis_weights_line_fills_prior_for_missing_keys() -> None:
     assert "(*=prior, no data)" in line
 
 
+def test_orthogonal_family_floors_unset_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Layer-2 decorrelated-supply lever OFF by default: env unset → {} → the
+    call site skips the lift entirely (byte-identical, hard rule 6)."""
+    from forge.cli.main import _orthogonal_family_floors
+
+    monkeypatch.delenv("FORGE_ORTHOGONAL_FAMILY_FLOOR", raising=False)
+    assert _orthogonal_family_floors() == {}
+
+
+def test_orthogonal_family_floors_parses_single_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    from forge.cli.main import _orthogonal_family_floors
+
+    monkeypatch.setenv("FORGE_ORTHOGONAL_FAMILY_FLOOR", "volatility_event=0.20")
+    assert _orthogonal_family_floors() == {"volatility_event": 0.20}
+
+
+def test_orthogonal_family_floors_parses_multiple_and_drops_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Comma-separated pairs parse; out-of-range floors (>1 or <=0) and
+    malformed tokens (no `=`) are dropped, not raised — a bad env never
+    crashes the iteration loop."""
+    from forge.cli.main import _orthogonal_family_floors
+
+    monkeypatch.setenv(
+        "FORGE_ORTHOGONAL_FAMILY_FLOOR",
+        "volatility_event=0.20, relative_value=0.10, toohigh=2.0, malformed",
+    )
+    assert _orthogonal_family_floors() == {
+        "volatility_event": 0.20,
+        "relative_value": 0.10,
+    }
+
+
 def test_d063_hypothesis_weights_line_uses_canonical_order() -> None:
     """D063: hypotheses render in the canonical `_HYPOTHESES` order
     (trend_continuation, mean_reversion, regime_arbitrage, relative_value,

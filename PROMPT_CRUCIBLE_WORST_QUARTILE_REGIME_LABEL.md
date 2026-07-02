@@ -1,5 +1,10 @@
 # To Crucible: which regime does the assembled book's worst CPCV quartile live in? — one label that turns our tail-diversity ranker from a structural guess into a measured target
 
+> **✅ ANSWERED (era-C: T3a BEAR 2.39× / RANGING 1.33×) + SUPERSEDED 2026-06-16.** The measurement
+> refresh on the current honest-era/v22 pool now lives in
+> `PROMPT_CRUCIBLE_REFIT_PRIORITY_AND_WORSTQ_REGIME.md` §3 (re-asks on the post-cost-floor cohort, sharpened
+> to the bear-vs-ranging actionability split). Send that one, not this — retained as the record.
+
 From: Forge · 2026-06-13 · Builds directly on your `FORGE_portfolio_promotion_wiring_status.md`
 (your read: *"the real open lever is CPCV-tail / worst-quartile robustness, not assembly
 plumbing"*). **Not urgent, sequencing-free** — our side works without it (falls back to a

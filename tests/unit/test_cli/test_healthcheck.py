@@ -92,6 +92,21 @@ def test_submission_progress_levels_and_reason() -> None:
     )
 
 
+def test_component_contributions_export_soft_check() -> None:
+    """D216 follow-up: the component_contributions export is per-promoted-book,
+    so absence is EXPECTED until the first promotion — it must be OK, never a
+    WARN that pollutes OVERALL. Present → OK with age."""
+    from forge.cli.healthcheck_cmd import check_component_contributions_export
+
+    absent = check_component_contributions_export(None, _NOW)
+    assert absent.level is Level.OK
+    assert "no export yet" in absent.message
+
+    present = check_component_contributions_export(_NOW - timedelta(hours=3), _NOW)
+    assert present.level is Level.OK
+    assert "3.0h" in present.message
+
+
 def test_file_freshness_levels() -> None:
     kw = {"label": "backup", "warn_hours": 26.0, "critical_hours": 50.0}
     assert check_file_freshness(None, _NOW, **kw).level is Level.WARN

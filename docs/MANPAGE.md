@@ -113,6 +113,15 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 | `--config` | path | `config/forge.yaml` | YAML defaults file. |
 | `--no-config` | flag | off | Ignore YAML; use hardcoded defaults + CLI flags only. |
 
+**Env-only knob — `FORGE_ORTHOGONAL_FAMILY_FLOOR`** (Layer-2 decorrelated-supply lever, D216): comma-separated
+`family=floor` pairs (e.g. `volatility_event=0.20`) that lift the named hypothesis families to a minimum
+sampling weight over the learned component-rate weights, so the estimand stops starving the PBO-orthogonal
+family (single-name `volatility_event`) to the D067 5% floor. Unset (default) → byte-identical (hard rule 6).
+Only ever RAISES a family (`max` semantics; starves nothing). A/B feedback-change: activation is an
+operator-gated deploy, pre-registered (`forge prereg`, D208) + alpha-budget-charged (`forge alpha-budget`,
+D207) + later-cohort-confirmed (§8.4). Revert = drop the env var. Consumed by
+`forge.cli.main._orthogonal_family_floors` → `rejection_weights.apply_orthogonal_family_floor`.
+
 ```
 # One real batch, persisted:
 forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db --batch-size 200
@@ -264,6 +273,23 @@ re-judging). Both judge a **fresh per-checkpoint window** (verdicts decided sinc
 the cumulative `--since` default — read the clocks there instead of re-deriving them. The F3 verdict
 model is live (D149); the wf_p25 quality lane flips via `--quality-rank` under its own operator gate
 (D104), and the operator may override the §8.6 streak.
+
+### forge ranker-model eval-rewire
+
+Gate-then-tail re-wire shadow (§8.6): does gating on `P(component)` (eligibility floor `--p-floor`)
+and then ordering the survivors by the predicted WF floor surface configs with a higher REALIZED
+`--gate` than ranking by `P(component)` alone (the deployed lane ≈ the P-baseline)? Prints the
+gate-then-tail vs P-baseline top-K mean realized value over verified-coverage decided verdicts.
+Telemetry only — no PASS/FAIL until the §8.6-style margin is set. Design:
+`docs/proposals/quality-lane-rewire.md`.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML default for the DB path. |
+| `--since` | str | clean-era boundary | ISO window start (naive = UTC). |
+| `--gate` | str | `wf_sharpe_p25` | Realized worst-quartile gate to score against. |
+| `--p-floor` | float | `0.02` | Absolute `P(component)` eligibility floor (production-calibrated). |
 
 ### forge healthcheck
 

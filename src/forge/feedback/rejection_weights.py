@@ -1322,6 +1322,44 @@ def apply_exploration_floor(
     return result
 
 
+def apply_orthogonal_family_floor(
+    weights: Mapping[str, float],
+    family_floors: Mapping[str, float],
+) -> dict[str, float]:
+    """Lift designated orthogonal families to a per-family floor over the
+    learned hypothesis weights (Layer-2 decorrelated-supply lever; see
+    docs/proposals/orthogonal-family-supply-for-pbo.md §3 Layer 2).
+
+    The learned component-rate estimand (``compute_hypothesis_component_weights``)
+    rewards "more of what already clears as a component" — the homogeneity PBO
+    penalizes — so it starves the one PBO-orthogonal in-v1 family (single-name
+    ``volatility_event``, Crucible-validated 2026-06-29 as the second factor:
+    PC1 load 0.10, the book clearing real CSCV PBO 0.107) down to the D067 5%
+    exploration floor while the 0.78-correlated trend~mr core oscillates at the
+    top. This applies a bounded, EXPLICIT floor for the named families so
+    assembly has orthogonal material to build a low-PBO book from — WITHOUT
+    touching Crucible's gate (hard rule 3) or the grammar (rule 1).
+
+    Contract:
+      - Empty ``family_floors`` → ``dict(weights)`` with identical numeric
+        values (the flag-OFF cold path). The sampler's family draw is a pure
+        function of these values (``rng.choices(..., weights=…)``), so an
+        identical-valued map preserves the byte-identical emitted sequence
+        (hard rule 6). Always a COPY — never mutate the caller's learned map.
+      - ``max(weights[f], floor)``: a family is only ever RAISED, never
+        lowered (a family already above its floor passes through; the D067
+        floor and every other family's learned budget are preserved — the lift
+        only redistributes SAMPLING SHARE via normalization, starving nothing).
+      - A name in ``family_floors`` but ABSENT from ``weights`` is ignored — an
+        orthogonal floor never introduces a non-samplable hypothesis.
+    """
+    result = dict(weights)
+    for fam, floor in family_floors.items():
+        if fam in result:
+            result[fam] = max(result[fam], floor)
+    return result
+
+
 __all__ = [
     "COMPONENT_ALPHA",
     "COMPONENT_BETA",
@@ -1343,6 +1381,7 @@ __all__ = [
     "DEFAULT_TRADE_PRODUCTION_WEIGHT",
     "FEEDBACK_GATED_RUNS_LIMIT",
     "apply_exploration_floor",
+    "apply_orthogonal_family_floor",
     "component_prior_mean",
     "compute_hypothesis_bucket_weights",
     "compute_hypothesis_component_weights",

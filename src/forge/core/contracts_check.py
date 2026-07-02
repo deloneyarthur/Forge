@@ -59,7 +59,16 @@ from crucible_contracts import (
 # at_most_two_stop_loss count is unchanged); KNOWN_EXIT_IDS is not imported by Forge; the 3 new exit
 # ids are grammar-gated (Forge S3.5 E2, unbuilt) so they are NOT auto-enumerated — they go live only
 # when Forge bumps grammar to enumerate them. Pin-only; full suite green confirms.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.21.0"
+# 1.22.0 (D216): component_contributions export reader for the Layer-1
+# decorrelated-supply signal — ComponentContribution (frozen: portfolio_id,
+# correlation_to_incumbent, marginal_sharpe; marginal_sharpe may be NEGATIVE — do
+# not clamp) + load_component_contributions_from_export + COMPONENT_CONTRIBUTIONS_SCHEMA
+# (Crucible afbe737, reply to PROMPT_CRUCIBLE_CONTRIB_LOADER_IN_CONTRACTS). NO-OP for
+# Forge — verified: purely ADDITIVE (no existing model/hash changed → no major-guard
+# trips); nothing in Forge imports the loader yet (the estimand re-aim that consumes it
+# is HELD until the export carries real promoted-book data, currently empty). Cold-start
+# {} on absent/empty/unknown-schema. Pin-only.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.22.0"
 
 
 def check_contracts_version() -> str:

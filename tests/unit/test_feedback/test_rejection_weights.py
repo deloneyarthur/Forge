@@ -27,6 +27,7 @@ from forge.feedback.rejection_weights import (
     DEFAULT_BETA,
     DEFAULT_EXPLORATION_FLOOR,
     apply_exploration_floor,
+    apply_orthogonal_family_floor,
     compute_hypothesis_reward_weights,
     compute_hypothesis_weights,
     compute_relative_value_regime_weights,
@@ -295,6 +296,59 @@ def test_d067_custom_floor_threshold() -> None:
     assert out["regime_arbitrage"] == pytest.approx(0.10)
     # prior_mean ≈ 0.091 < 0.10, so unobserved gets the higher floor.
     assert out["trend_continuation"] == pytest.approx(0.10)
+
+
+# --- Layer-2 orthogonal-family floor-lift (decorrelated-supply lever) ---
+# docs/proposals/orthogonal-family-supply-for-pbo.md §3 Layer 2. The learned
+# component-rate estimand starves the one PBO-orthogonal family (single-name
+# volatility_event, Crucible-validated 2026-06-29 as the in-v1 second factor)
+# to the D067 5% floor while the 0.78-correlated trend~mr core oscillates at
+# the top. This lever lifts a bounded, explicit floor for the named families.
+
+
+def test_orthogonal_family_floor_empty_map_is_identity() -> None:
+    """Flag OFF (empty floor map) → the returned weights equal the input
+    exactly. Hard rule 6 cold path: the sampler draw is a pure function of the
+    numeric weights, so identical values ⇒ byte-identical emitted sequence."""
+    raw = {"trend_continuation": 1.0, "mean_reversion": 0.17, "volatility_event": 0.05}
+    out = apply_orthogonal_family_floor(raw, {})
+    assert out == raw
+    assert out is not raw  # a copy — never mutate the caller's learned map
+
+
+def test_orthogonal_family_floor_lifts_named_family() -> None:
+    """A named family below its floor is raised to it; the correlated core is
+    untouched (only its sampling SHARE drops, via rng.choices normalization)."""
+    raw = {"trend_continuation": 1.0, "mean_reversion": 0.17, "volatility_event": 0.05}
+    out = apply_orthogonal_family_floor(raw, {"volatility_event": 0.20})
+    assert out["volatility_event"] == pytest.approx(0.20)
+    assert out["trend_continuation"] == pytest.approx(1.0)
+    assert out["mean_reversion"] == pytest.approx(0.17)
+
+
+def test_orthogonal_family_floor_never_lowers_a_family() -> None:
+    """`max` semantics: a family already above its floor passes through
+    unchanged — the lever only ever RAISES an orthogonal family, never starves."""
+    raw = {"volatility_event": 0.42}
+    out = apply_orthogonal_family_floor(raw, {"volatility_event": 0.20})
+    assert out["volatility_event"] == pytest.approx(0.42)
+
+
+def test_orthogonal_family_floor_ignores_unknown_family() -> None:
+    """A floor for a family absent from the learned weights is ignored — the
+    lever never introduces a non-samplable hypothesis into the draw."""
+    raw = {"trend_continuation": 1.0}
+    out = apply_orthogonal_family_floor(raw, {"not_a_hypothesis": 0.5})
+    assert out == raw
+
+
+def test_orthogonal_family_floor_multiple_families() -> None:
+    """Several orthogonal families can be lifted at once; each independent."""
+    raw = {"trend_continuation": 1.0, "volatility_event": 0.05, "relative_value": 0.05}
+    out = apply_orthogonal_family_floor(raw, {"volatility_event": 0.20, "relative_value": 0.10})
+    assert out["volatility_event"] == pytest.approx(0.20)
+    assert out["relative_value"] == pytest.approx(0.10)
+    assert out["trend_continuation"] == pytest.approx(1.0)
 
 
 def test_handles_corrupt_config_json_gracefully(tmp_path: Path) -> None:

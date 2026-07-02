@@ -508,6 +508,41 @@ def _format_hypothesis_weights_line(weights: Mapping[str, float]) -> str:
     return f"hypothesis_weights: {', '.join(parts)} (*=prior, no data)"
 
 
+def _orthogonal_family_floors() -> dict[str, float]:
+    """Parse ``FORGE_ORTHOGONAL_FAMILY_FLOOR`` into a ``{family: floor}`` map
+    (Layer-2 decorrelated-supply lever; docs/proposals/orthogonal-family-supply-for-pbo.md
+    §3 Layer 2). Format: comma-separated ``family=floor`` pairs, e.g.
+    ``volatility_event=0.20`` or ``volatility_event=0.20,relative_value=0.10``.
+
+    Unset / empty → ``{}`` — the flag-OFF cold path (hard rule 6): the loop then
+    skips the lift entirely and enumeration is byte-identical. Malformed tokens
+    (no ``=``) and out-of-range floors (``<= 0`` or ``> 1``) are dropped, never
+    raised — a bad env value degrades to "no lift", it never crashes the
+    iteration loop. ``apply_orthogonal_family_floor`` further ignores any family
+    absent from the learned weights, so an unknown family here is a harmless
+    no-op. This is an A/B feedback-change knob (docs/tasks/feedback-change.md):
+    activating it is an operator-gated deploy, pre-registered (D208) and
+    alpha-budget-charged (D207), confirmed on a later time-cut cohort (§8.4)."""
+    import os
+
+    raw = os.environ.get("FORGE_ORTHOGONAL_FAMILY_FLOOR", "").strip()
+    if not raw:
+        return {}
+    floors: dict[str, float] = {}
+    for token in raw.split(","):
+        fam, sep, val = token.partition("=")
+        if not sep:
+            continue
+        fam = fam.strip()
+        try:
+            floor = float(val.strip())
+        except ValueError:
+            continue
+        if fam and 0.0 < floor <= 1.0:
+            floors[fam] = floor
+    return floors
+
+
 def _load_hypothesis_weights(
     forge_db_path: Path,
     current_grammar_version: str | None = None,
@@ -1726,6 +1761,22 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     hypothesis_weights = _load_hypothesis_weights(
         forge_db_path, current_grammar_version=grammar.grammar_version
     )
+    # Layer-2 decorrelated-supply lever (A/B, OFF by default). Env unset →
+    # `_orthogonal_family_floors()` returns {} → this block is skipped → the
+    # emitted sequence is byte-identical (hard rule 6). When active, it lifts
+    # the PBO-orthogonal family (single-name volatility_event) off the D067 5%
+    # floor so the estimand's trend~mr core-chasing stops starving it; the gate
+    # (rule 3) and grammar (rule 1) are untouched.
+    _ortho_floors = _orthogonal_family_floors()
+    if _ortho_floors:
+        from forge.feedback.rejection_weights import apply_orthogonal_family_floor
+
+        hypothesis_weights = apply_orthogonal_family_floor(hypothesis_weights, _ortho_floors)
+        typer.echo(
+            "hypothesis_weights: orthogonal-family floor ACTIVE ("
+            + ", ".join(f"{fam}>={floor:.2f}" for fam, floor in sorted(_ortho_floors.items()))
+            + ")"
+        )
     if hypothesis_weights:
         typer.echo(_format_hypothesis_weights_line(hypothesis_weights))
     # D103 — dynamic relative_value regime-gate weights (component-rate per

@@ -1,13 +1,16 @@
 # Prompt — Crucible: v22 is DEPLOYED — run the hypothesis-sliced `funnel --compare v21 v22` (post-drain)
 
-> **⏳ DRAFTED 2026-06-15, HELD — awaiting operator relay** (`docs/tasks/crucible-handoff.md`).
+> **✅ REFRESHED 2026-06-16 — MATURITY MET, send-ready** (was: HELD for cohort maturity).
+> v22 now has **4,010 decided** (≥1500 gate cleared) and the v21 drain is complete (last v21 decision
+> 2026-06-16 03:09 UTC; v22 active through 16:41 UTC) — so the maturity caveat in point 2 below is
+> satisfied. The only remaining Crucible-side dependency is the `funnel.py --hypothesis` tooling add (point 1).
 >
 > **From:** Forge ([[D170]]). **To:** the Crucible agent — re: the answered Lever B
 > (`FORGE_mr_rv_hurst_overlap_response.md`) + time-cut fair test (`FORGE_v22_exit_timecut_fairtest_response.md`).
-> **TL;DR.** **v22 is live** (deployed 2026-06-15 ~18:48:42 UTC, `grammar_version=v22`,
-> `registry_hash=308afa16ecf996f5`). It carries the two changes you sized, on disjoint hypothesis slices. When
-> the v22 cohort matures, run the **hypothesis-sliced** `funnel --compare v21 v22` you confirmed — and the read
-> needs the `--hypothesis` tooling add you flagged.
+> **TL;DR.** **v22 is live** (deployed 2026-06-16 01:48:42 UTC = 18:48:42 PDT, `grammar_version=v22`,
+> `registry_hash=308afa16ecf996f5`). It carries the two changes you sized, on disjoint hypothesis slices. The
+> v22 cohort is now mature (4,010 decided) — run the **hypothesis-sliced** `funnel --compare v21 v22` you
+> confirmed; the read needs the `--hypothesis` tooling add you flagged.
 
 ## What shipped in v22
 
@@ -28,8 +31,9 @@ Run `funnel --compare v21 v22`, reported **separately per slice** (your Ask-2 pr
 **Three things you flagged that gate / shape the read (carried here so they aren't lost):**
 1. **Tooling:** `funnel.py` slices by version only — the mr-vs-vol split needs the `--hypothesis` add (or a
    dedicated sliced-compare). Low effort, but not free.
-2. **Maturity:** trustworthy only at **≥1500 decided in v22** with maturity-skew watched — v22 drains gradually
-   behind v21; don't read early.
+2. **Maturity:** ✅ **MET as of 2026-06-16** — v22 has **4,010 decided** (≥1500 gate cleared) and the v21
+   drain is complete (last v21 decision 03:09 UTC; v22 has been the sole active version since). Read is no
+   longer early; the maturity-skew caveat is retired.
 3. **The (B) read is DILUTED by design (your masking finding).** Widening `event_passed` past 5 is inert for any
    genome composing `time_stop@≤5` (SOXL-vol capped; AMD-vol runs to theta_cliff). So a **muted vol-slice lift
    is partly masking, not a dead lever** — and disentangle the trade-count drop (wider event_passed → fewer,
