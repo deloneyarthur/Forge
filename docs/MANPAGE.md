@@ -82,15 +82,18 @@ forge prefilter --max 500 --summary --synthetic-cache
 ### forge shadow-null run
 
 Shadow-count the two teed-up permutation-test (§5.3.7) null corrections **before flipping
-either** (strategy-audit P1-2). Runs the §5.2 battery over the LIVE feature cache under the
-production null, then re-scores ONLY `permutation_test` under the corrected null
-(`cumulative_trading` + `volatility_event` |move|) on the very same configs, and reports the
-per-family survival delta (`gained` = prod FAIL → corr PASS, `lost` = the reverse). Submits
-nothing, never writes `prefilter.yaml`, and leaves the daemon untouched — a read-only telemetry
-pass that measures what preregs 848a1f67 / e1a43ba8 predict. The set of configs reaching the
-last filter is identical under both nulls (filters 1..8 read none of the changed knobs), so this
-is a clean within-population A/B; the per-family **delta** is the decision signal, absolute rates
-are diagnostic (fixed seed, empty priors). Appends one JSONL record per run.
+either** (strategy-audit P1-2). Runs the §5.2 battery over the LIVE feature cache and scores
+`permutation_test` under THREE nulls on the very same configs — A = production (single_day,
+signed), B = `cumulative_trading` signed (**FLIP-1**, prereg 848a1f67), C = `cumulative_trading`
++ `volatility_event` |move| (**FLIP-2**, prereg e1a43ba8) — and prints a per-family survival-delta
+table for EACH sequenced flip (`gained` = before-FAIL → after-PASS, `lost` = the reverse; `net`
+= after − before). FLIP-1's effect is B vs A (all families); FLIP-2's marginal effect is C vs B,
+non-zero ONLY for `volatility_event` (|move| is family-scoped), so the two flips are attributed
+apart, not conflated. Submits nothing, never writes `prefilter.yaml`, leaves the daemon untouched
+— a read-only telemetry pass. The set of configs reaching the last filter is identical under all
+three nulls, so it's a clean within-population A/B; the per-family **delta** is the decision
+signal, absolute rates are diagnostic (fixed seed, empty priors). Appends one JSONL record per run
+(keys `flip1_cumulative_trading` / `flip2_ve_absolute_move`, each with `per_family` + `totals`).
 
 | Option | Type | Default | Description |
 |---|---|---|---|

@@ -1,21 +1,23 @@
 """`forge shadow-null` — permutation-test null-correction shadow-count (P1-2).
 
-Two flag-OFF corrections to the §5.3.7 permutation_test are teed up for a flip
-after the D220 hold clears: `cumulative_trading` (prereg 848a1f67) and the
-`volatility_event` |move| null (prereg e1a43ba8). This command is the sanctioned
+Two flag-OFF corrections to the §5.3.7 permutation_test are teed up to flip — one
+at a time — after the D220 hold clears: `cumulative_trading` (prereg 848a1f67,
+FLIP-1, all families) and the `volatility_event` |move| null (prereg e1a43ba8,
+FLIP-2, ve-only, requires cumulative mode). This command is the sanctioned
 "shadow-count first" step: it runs the real battery over the LIVE feature cache
-under the production null, then re-scores ONLY permutation_test under the
-corrected null on the very same configs, and reports the per-family survival
-delta. Nothing is submitted; `prefilter.yaml` is never written; the daemon is
-untouched. It exists so the flip's predicted effect (the preregs) is measured on
-real data before the operator flips the bit.
+and scores permutation_test under THREE nulls on the very same configs, reporting
+a per-family survival-delta table for EACH sequenced flip. Nothing is submitted;
+`prefilter.yaml` is never written; the daemon is untouched.
 
-The corrected calibration differs from production in exactly two knobs
-(`corrected_null_calibration`), and both contexts share the same feature cache
-and the same seeded RNG — so for every config the two permutation runs draw the
-identical shuffles and the ONLY thing that moves the verdict is the null
-construction. The set of configs that reach permutation_test is identical under
-both (filters 1..8 read none of the changed knobs), making this a clean
+The three nulls are: A = production (single_day, signed); B = cumulative_trading,
+signed (after FLIP-1); C = cumulative_trading + ve |move| (after FLIP-1 AND
+FLIP-2). FLIP-1's effect is B vs A (every family); FLIP-2's marginal effect is C
+vs B, which is non-zero ONLY for `volatility_event` (|move| is family-scoped) —
+so the two sequenced flips are attributed apart rather than conflated. All three
+contexts share the feature cache and the seeded RNG, so for every config the
+permutation runs draw identical shuffles and the ONLY thing that moves a verdict
+is the null construction. The set of configs reaching permutation_test is identical
+under all three (filters 1..8 read none of the changed knobs) — a clean
 within-population A/B.
 
 Runs against the live Crucible writer socket by default — a separate process
@@ -36,13 +38,13 @@ import typer
 if TYPE_CHECKING:
     from crucible_contracts import StrategyConfig
 
-    from forge.prefilters.shadow_null import ShadowNullRecord, ShadowNullSummary
+    from forge.prefilters.shadow_null import ShadowNullSummary
     from forge.prefilters.types import FilterContext
 
 shadow_null_app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
-    help="Permutation-test null-correction shadow-count (P1-2): prod vs corrected null.",
+    help="Permutation-test null-correction shadow-count (P1-2): per-flip survival delta.",
 )
 
 # A fixed-seed enumeration is a reproducible, family-diverse sample — NOT the
@@ -67,26 +69,29 @@ def _resolve_out(out: Path | None, config: Path) -> Path:
     return load_forge_config(config).db_path.parent / "shadow_null" / "shadow_null.jsonl"
 
 
-def _collect_dual_null_records(
+def _collect_tri_null_rows(
     configs: list[StrategyConfig],
     ctx_prod: FilterContext,
+    ctx_cumulative: FilterContext,
     ctx_corrected: FilterContext,
-) -> tuple[list[ShadowNullRecord], int, int]:
-    """Run the §5.2 battery under the production null, then re-score ONLY
-    permutation_test under the corrected null for each config that reached it.
+) -> tuple[list[tuple[str, bool, bool, bool]], int, int]:
+    """Score permutation_test under THREE nulls for each config that reaches it:
+    A = production (single_day, signed); B = cumulative_trading, signed (flip-1);
+    C = cumulative_trading + ve |move| (flip-1 AND flip-2).
 
-    Returns ``(records, reached_total, unavailable)``. Only configs that reached
-    the last filter get a record — a config rejected earlier can't have its verdict
-    changed by the null correction. ``ctx_prod`` and ``ctx_corrected`` share the
-    feature cache (so the corrected re-score reuses the battery's prefetch) and the
-    rng_factory (so both draw identical shuffles)."""
+    Returns ``(rows, reached_total, unavailable)`` where each row is
+    ``(hypothesis, a_passed, b_passed, c_passed)``. Only configs reaching the last
+    filter get a row — a config rejected earlier can't be changed by the null. B and
+    C differ ONLY for `volatility_event` (|move| is family-scoped), so non-ve configs
+    take ``c := b`` for free (one fewer re-score). All three contexts share the
+    feature cache (reusing the battery prefetch) and the rng_factory (identical
+    shuffles — only the null construction moves a verdict)."""
     from forge.prefilters import default_filters, run_battery
     from forge.prefilters.permutation_test import PermutationTestFilter
-    from forge.prefilters.shadow_null import ShadowNullRecord
 
     filters = default_filters()
     perm_filter = PermutationTestFilter()
-    records: list[ShadowNullRecord] = []
+    rows: list[tuple[str, bool, bool, bool]] = []
     reached_total = 0
     unavailable = 0
     for cfg in configs:
@@ -94,20 +99,17 @@ def _collect_dual_null_records(
         if report.data_unavailable:
             unavailable += 1
             continue
-        pt_prod = report.filter_results.get(perm_filter.name)
-        if pt_prod is None:
-            # Rejected before the last filter — the null correction can't change it.
+        pt_a = report.filter_results.get(perm_filter.name)
+        if pt_a is None:
             continue
         reached_total += 1
-        pt_corr = perm_filter.apply(cfg, ctx_corrected)
-        records.append(
-            ShadowNullRecord(
-                hypothesis=cfg.hypothesis,
-                prod_passed=pt_prod.passed,
-                corr_passed=pt_corr.passed,
-            )
-        )
-    return records, reached_total, unavailable
+        b_passed = perm_filter.apply(cfg, ctx_cumulative).passed
+        if cfg.hypothesis == "volatility_event":
+            c_passed = perm_filter.apply(cfg, ctx_corrected).passed
+        else:
+            c_passed = b_passed
+        rows.append((cfg.hypothesis, pt_a.passed, b_passed, c_passed))
+    return rows, reached_total, unavailable
 
 
 @shadow_null_app.command("run")
@@ -128,11 +130,11 @@ def cmd_run(
         help="Force SyntheticFeatureCache (offline smoke only — survival numbers are noise).",
     ),
 ) -> None:
-    """Shadow-count the permutation-test null correction over the live cache.
+    """Shadow-count the permutation-test null corrections over the live cache.
 
-    Runs the §5.2 battery under the production null, re-scores permutation_test
-    under the corrected null on the configs that reached it, and writes one
-    per-family survival-delta record to the telemetry JSONL.
+    Scores permutation_test under three nulls (production / flip-1 cumulative /
+    flip-1+flip-2) on the configs that reach it, prints a per-family survival-delta
+    table for EACH sequenced flip, and writes one telemetry record.
     """
     from forge.core.clock import utc_now
     from forge.core.contracts_check import check_contracts_version
@@ -142,7 +144,9 @@ def cmd_run(
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters import SyntheticFeatureCache, load_calibration
     from forge.prefilters.shadow_null import (
+        ShadowNullRecord,
         corrected_null_calibration,
+        cumulative_only_calibration,
         summarize_shadow_null,
         summary_payload,
     )
@@ -160,7 +164,8 @@ def cmd_run(
     # fallback only when the caller explicitly forces the synthetic cache.
     registry = load_registry(allow_demo_fallback=synthetic_cache)
     calibration = load_calibration(prefilter_yaml)
-    corrected = corrected_null_calibration(calibration)
+    cumulative = cumulative_only_calibration(calibration)  # flip-1 (848a1f67)
+    corrected = corrected_null_calibration(calibration)  # flip-1 + flip-2 (e1a43ba8)
     seed_hierarchy = SeedHierarchy(seed)
 
     if synthetic_cache:
@@ -188,8 +193,9 @@ def cmd_run(
         calibration=calibration,
         rng_factory=seed_hierarchy.rng,
     )
-    # Same cache (already prefetched by run_battery) and same rng_factory — only the
-    # null construction differs, so the corrected re-score draws identical shuffles.
+    # Every context shares the cache (reusing the battery prefetch) and rng_factory —
+    # only the null construction differs, so each re-score draws identical shuffles.
+    ctx_cumulative = replace(ctx_prod, calibration=cumulative)
     ctx_corrected = replace(ctx_prod, calibration=corrected)
 
     typer.echo(
@@ -205,11 +211,24 @@ def cmd_run(
     if callable(batch_prefetch):
         batch_prefetch(configs)
 
-    records, reached_total, unavailable = _collect_dual_null_records(
-        configs, ctx_prod, ctx_corrected
+    rows, reached_total, unavailable = _collect_tri_null_rows(
+        configs, ctx_prod, ctx_cumulative, ctx_corrected
     )
-    summary = summarize_shadow_null(records)
-    _print_table(summary, reached_total=reached_total, unavailable=unavailable)
+    # flip-1 (848a1f67, all families): production A -> cumulative B.
+    flip1 = summarize_shadow_null(
+        ShadowNullRecord(hypothesis=h, prod_passed=a, corr_passed=b) for (h, a, b, _c) in rows
+    )
+    # flip-2 (e1a43ba8, ve |move|, marginal ON TOP of cumulative): B -> C. Non-ve
+    # families show net 0 by construction (|move| is ve-scoped), isolating the ve effect.
+    flip2 = summarize_shadow_null(
+        ShadowNullRecord(hypothesis=h, prod_passed=b, corr_passed=c) for (h, _a, b, c) in rows
+    )
+    typer.echo(
+        f"\n-- shadow-null: {reached_total} configs reached permutation_test "
+        f"({unavailable} data_unavailable skipped) --"
+    )
+    _print_table(flip1, label="FLIP-1 cumulative_trading (848a1f67): prod -> cumulative")
+    _print_table(flip2, label="FLIP-2 ve |move| (e1a43ba8): cumulative -> +ve|move| (ve only)")
 
     pt = calibration.permutation_test
     record: dict[str, object] = {
@@ -228,13 +247,8 @@ def cmd_run(
             "n_permutations": pt.n_permutations,
             "p_value_threshold": pt.p_value_threshold,
         },
-        "corrected_null": {
-            "forward_return_mode": corrected.permutation_test.forward_return_mode,
-            "volatility_event_absolute_move": (
-                corrected.permutation_test.volatility_event_absolute_move
-            ),
-        },
-        **summary_payload(summary),
+        "flip1_cumulative_trading": summary_payload(flip1),
+        "flip2_ve_absolute_move": summary_payload(flip2),
     }
     out_path = _resolve_out(out, config)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,14 +257,11 @@ def cmd_run(
     typer.echo(f"\nappended shadow-null record -> {out_path}")
 
 
-def _print_table(summary: ShadowNullSummary, *, reached_total: int, unavailable: int) -> None:
-    """Per-family survival table: reach / prod-pass / corr-pass / gain / lost / net."""
+def _print_table(summary: ShadowNullSummary, *, label: str) -> None:
+    """Per-family survival-delta table: reach / before-pass / after-pass / gain / lost / net."""
+    typer.echo(f"\n[{label}]")
     typer.echo(
-        f"\n-- shadow-null: {reached_total} configs reached permutation_test "
-        f"({unavailable} data_unavailable skipped) --"
-    )
-    typer.echo(
-        f"{'family':24s} {'reach':>6s} {'prodP':>6s} {'corrP':>6s} "
+        f"{'family':24s} {'reach':>6s} {'before':>6s} {'after':>6s} "
         f"{'gain':>5s} {'lost':>5s} {'net':>5s}"
     )
     for f in summary.per_family:

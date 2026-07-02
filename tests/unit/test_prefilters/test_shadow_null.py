@@ -18,6 +18,7 @@ from forge.prefilters.shadow_null import (
     FamilyShadowDelta,
     ShadowNullRecord,
     corrected_null_calibration,
+    cumulative_only_calibration,
     summarize_shadow_null,
 )
 
@@ -151,3 +152,19 @@ def test_corrected_null_flips_only_the_two_null_knobs() -> None:
     # Production default is the buggy single_day null (so the daemon is unaffected).
     assert prod.permutation_test.forward_return_mode == "single_day"
     assert prod.permutation_test.volatility_event_absolute_move is False
+
+
+def test_cumulative_only_is_flip1_alone() -> None:
+    # The flip-1 (848a1f67) arm: cumulative mode ON, ve |move| still OFF — so the
+    # ve family stays on signed returns and flip-1 vs flip-2 can be attributed apart.
+    prod = load_calibration(_REPO_ROOT / "config" / "prefilter.yaml")
+    b = cumulative_only_calibration(prod)
+    assert b.permutation_test.forward_return_mode == "cumulative_trading"
+    assert b.permutation_test.volatility_event_absolute_move is False
+    # It differs from the fully-corrected arm ONLY by the ve |move| knob.
+    c = corrected_null_calibration(prod)
+    assert c.permutation_test.volatility_event_absolute_move is True
+    assert b.permutation_test.forward_return_mode == c.permutation_test.forward_return_mode
+    # Non-null sections untouched.
+    assert b.signal_density == prod.signal_density
+    assert b.regime_exposure == prod.regime_exposure

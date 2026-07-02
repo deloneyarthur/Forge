@@ -32,16 +32,32 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
+def cumulative_only_calibration(production: Calibration) -> Calibration:
+    """The FLIP-1 arm (prereg 848a1f67): `forward_return_mode="cumulative_trading"`
+    with `volatility_event_absolute_move` still OFF.
+
+    This is the intermediate the operator lands on after flipping cumulative_trading
+    but BEFORE the ve |move| flip. Keeping ve on signed returns here lets the
+    shadow-count attribute the two sequenced flips apart: flip-1 = this arm vs
+    production (all families); flip-2 = the fully-corrected arm vs this one (ve only,
+    since |move| is family-scoped). Non-null sections are identity."""
+    cumulative_pt = replace(
+        production.permutation_test,
+        forward_return_mode="cumulative_trading",
+    )
+    return replace(production, permutation_test=cumulative_pt)
+
+
 def corrected_null_calibration(production: Calibration) -> Calibration:
-    """Return `production` with ONLY the two teed-up permutation_test null knobs
-    flipped ON — `forward_return_mode="cumulative_trading"` (prereg 848a1f67) and
+    """The FULLY-CORRECTED arm: BOTH teed-up permutation_test null knobs ON —
+    `forward_return_mode="cumulative_trading"` (prereg 848a1f67) and
     `volatility_event_absolute_move=True` (prereg e1a43ba8).
 
     Every other section is left identical, which is what makes the shadow-count a
     clean A/B: filters 1..8 read only the untouched sections, so the set of configs
-    reaching permutation_test is the same under both calibrations, and the corrected
-    calibration is never persisted — the daemon keeps loading the single_day default
-    from `prefilter.yaml`.
+    reaching permutation_test is the same under every calibration, and none of these
+    are ever persisted — the daemon keeps loading the single_day default from
+    `prefilter.yaml`.
     """
     corrected_pt = replace(
         production.permutation_test,
@@ -217,6 +233,7 @@ __all__ = [
     "ShadowNullRecord",
     "ShadowNullSummary",
     "corrected_null_calibration",
+    "cumulative_only_calibration",
     "summarize_shadow_null",
     "summary_payload",
 ]

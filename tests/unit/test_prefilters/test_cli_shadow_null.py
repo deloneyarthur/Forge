@@ -27,20 +27,25 @@ def test_shadow_null_runs_and_writes_jsonl(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.stdout
     assert "cache=synthetic" in result.stdout
     assert "reached permutation_test" in result.stdout
-    assert "family" in result.stdout  # table header
+    # Both sequenced-flip tables print.
+    assert "FLIP-1 cumulative_trading" in result.stdout
+    assert "FLIP-2 ve |move|" in result.stdout
     assert "TOTAL" in result.stdout
 
     assert out.exists()
     record = json.loads(out.read_text(encoding="utf-8").strip())
     assert record["cache_kind"] == "synthetic"
-    # The two teed-up corrections are recorded as ON in the corrected null.
-    assert record["corrected_null"]["forward_return_mode"] == "cumulative_trading"
-    assert record["corrected_null"]["volatility_event_absolute_move"] is True
     # Production null recorded as the un-flipped default.
     assert record["prod_null"]["forward_return_mode"] == "single_day"
-    # Net-delta identity holds at the totals level.
-    t = record["totals"]
-    assert t["net_delta"] == t["pass_corr"] - t["pass_prod"] == t["gained"] - t["lost"]
+    # Both flips are recorded with per_family + totals.
+    for flip in ("flip1_cumulative_trading", "flip2_ve_absolute_move"):
+        t = record[flip]["totals"]
+        # Net-delta identity holds at the totals level.
+        assert t["net_delta"] == t["pass_corr"] - t["pass_prod"] == t["gained"] - t["lost"]
+    # flip-2 (|move|) is family-scoped to volatility_event: every OTHER family nets 0.
+    for fam in record["flip2_ve_absolute_move"]["per_family"]:
+        if fam["hypothesis"] != "volatility_event":
+            assert fam["net_delta"] == 0
 
 
 def test_shadow_null_table_is_deterministic_for_same_seed(tmp_path: Path) -> None:
