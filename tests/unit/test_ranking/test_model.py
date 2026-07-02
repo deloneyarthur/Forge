@@ -289,6 +289,33 @@ def test_robustness_score_defaults_coverage_verified_to_one() -> None:
     )
 
 
+def test_robustness_oos_r2_generalizes_on_clean_signal() -> None:
+    # P5.5: a clean linear target -> the temporal-holdout OOS R2 is strongly positive
+    # (the model beats predicting the mean on UNSEEN rows), unlike a fabricated 0.
+    from forge.ranking.model import robustness_oos_r2
+
+    oos = robustness_oos_r2(_reg_frame(_reg_rows()), target="target_cpcv_p25", lambda_=0.01)
+    assert oos is not None
+    assert oos > 0.5
+
+
+def test_robustness_oos_r2_none_on_thin_data() -> None:
+    from forge.ranking.model import robustness_oos_r2
+
+    # Too few rows to carve a meaningful temporal holdout -> None (never a fabricated score).
+    thin = _reg_frame(_reg_rows()[:5])
+    assert robustness_oos_r2(thin, target="target_cpcv_p25") is None
+
+
+def test_robustness_oos_r2_is_deterministic() -> None:
+    from forge.ranking.model import robustness_oos_r2
+
+    frame = _reg_frame(_reg_rows())
+    a = robustness_oos_r2(frame, target="target_cpcv_p25", lambda_=0.01)
+    b = robustness_oos_r2(frame, target="target_cpcv_p25", lambda_=0.01)
+    assert a == b
+
+
 def test_robustness_drops_null_target_rows() -> None:
     from forge.ranking.model import train_robustness_model
 

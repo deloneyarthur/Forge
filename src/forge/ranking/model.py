@@ -576,6 +576,65 @@ def train_robustness_model(
     )
 
 
+# P5.5 (B/June-review §5): a temporal holdout is enough rows to fit a train split AND
+# score a >=2-row test split. Below this the OOS estimate is noise → report None.
+_MIN_OOS_ROWS = 20
+
+
+def robustness_oos_r2(
+    frame: pl.DataFrame,
+    *,
+    target: str = "target_cpcv_p25",
+    lambda_: float = 1.0,
+    holdout_frac: float = 0.2,
+) -> float | None:
+    """Out-of-sample R² for the ridge, via a TEMPORAL holdout — the honest generalization
+    metric the daily train reports IN-SAMPLE `r2` overstates (P5.5). Deterministic (order by
+    `decided_at`, last `holdout_frac` = test; no RNG): fit ridge on the older train split,
+    score the newer test split, `R² = 1 - ss_res/ss_tot` vs the test mean (can go negative —
+    a model worse than predicting the mean OOS). Telemetry only — NEVER stored in the artifact
+    (`train_metrics` is hashed into `model_id`; adding a field would churn every model_id).
+    None when too few rows for a meaningful split, so it's never a fabricated score.
+
+    The standardization means/stds are taken over the full design (a negligible leak — it uses
+    only feature distributions, not the target); the ridge COEFFICIENTS, whose overfit the
+    in-sample r2 hides, are fit on the train split alone."""
+    target_raw = frame[target].to_list()
+    keep = [i for i, v in enumerate(target_raw) if v is not None]
+    n = len(keep)
+    if n < _MIN_OOS_ROWS:
+        return None
+    y = [float(target_raw[i]) for i in keep]
+    raw_names = [c for c in frame.columns if c not in _REGRESSION_NON_FEATURES and c != target]
+    raw_columns = {name: frame[name].to_list() for name in raw_names}
+    columns = {name: [float(raw_columns[name][i]) for i in keep] for name in raw_names}
+    _, _, _, x_rows = _standardize_design(columns, raw_names, n)
+
+    decided = frame["decided_at"].to_list()
+    order = sorted(range(n), key=lambda j: decided[keep[j]])
+    n_test = round(n * holdout_frac)
+    if n_test < 2 or n - n_test < 2:
+        return None
+    train_idx, test_idx = order[: n - n_test], order[n - n_test :]
+
+    y_train = [y[j] for j in train_idx]
+    train_mean = sum(y_train) / len(y_train)
+    coefficients = _solve_ridge(
+        [x_rows[j] for j in train_idx], [y[j] - train_mean for j in train_idx], lambda_
+    )
+    y_test = [y[j] for j in test_idx]
+    preds = [
+        train_mean + sum(b * v for b, v in zip(coefficients, x_rows[j], strict=True))
+        for j in test_idx
+    ]
+    ss_res = sum((t - p) ** 2 for t, p in zip(y_test, preds, strict=True))
+    test_mean = sum(y_test) / len(y_test)
+    ss_tot = sum((t - test_mean) ** 2 for t in y_test)
+    if ss_tot <= 0.0:
+        return None
+    return 1.0 - ss_res / ss_tot
+
+
 def score_robustness(model: RobustnessModel, features: Mapping[str, float]) -> float:
     """Predicted worst-quartile value for one feature dict. ``coverage_verified``
     is fixed to 1.0 when absent (the §8.2 score-time convention: predict the

@@ -579,10 +579,16 @@ def cmd_train_robustness(
     model = train_robustness_model(frame, target=target, lambda_=lambda_, era_cut=cut)
     path = save_robustness_model(model, models_dir)
     metrics = dict(model.train_metrics)
+    # P5.5: report the HONEST out-of-sample R² (temporal holdout) next to the optimistic
+    # in-sample train_r2 — the artifact is unchanged (OOS R² is telemetry, never hashed in).
+    from forge.ranking.model import robustness_oos_r2
+
+    oos = robustness_oos_r2(frame, target=target, lambda_=lambda_)
+    oos_str = "n/a (thin)" if oos is None else f"{oos:+.3f}"
     typer.echo(
         f"trained robustness[{target}]: model_id={model.model_id} rows={model.n_rows}, "
         f"features={len(model.feature_names)}, train_r2={metrics['r2']:.3f} "
-        f"rmse={metrics['rmse']:.4f} -> {path}"
+        f"oos_r2={oos_str} rmse={metrics['rmse']:.4f} -> {path}"
     )
     top = sorted(
         zip(model.feature_names, model.coefficients, strict=True),
