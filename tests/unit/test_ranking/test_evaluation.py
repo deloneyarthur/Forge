@@ -488,3 +488,63 @@ def test_rewire_topk_absolute_floor_overrides_keep_frac() -> None:
     # k=1; the quantile floor excludes the high-tail low-P config, the absolute floor admits it.
     assert ev_quantile.gate_top_k_mean == 0.5
     assert ev_abs.gate_top_k_mean == 0.9
+
+
+# ---------------------------------------------------------------------------
+# Prior-weight A/B (B2 / P1.4)
+# ---------------------------------------------------------------------------
+
+
+def test_prior_weighted_composite_identities() -> None:
+    from forge.ranking.evaluation import prior_weighted_composite
+
+    # At the base 0.10 weight the stored composite is returned unchanged.
+    assert prior_weighted_composite(0.9, 0.3, 0.10) == pytest.approx(0.3)
+    assert prior_weighted_composite(0.1, 0.8, 0.10) == pytest.approx(0.8)
+    # At weight 1.0 the score is pure P (hygiene block zeroed).
+    assert prior_weighted_composite(0.7, 0.3, 1.0) == pytest.approx(0.7)
+    # As weight rises (P high, composite low) the score moves monotonically toward P.
+    lo = prior_weighted_composite(0.9, 0.1, 0.10)
+    mid = prior_weighted_composite(0.9, 0.1, 0.5)
+    hi = prior_weighted_composite(0.9, 0.1, 0.9)
+    assert lo < mid < hi
+
+
+def test_prior_weight_evals_higher_weight_lifts_component_yield() -> None:
+    """P perfectly ranks components; the composite is INVERTED (hygiene fights the
+    label). Raising the prior weight must lift the top-K component yield + AUC."""
+    from forge.ranking.evaluation import _prior_weight_evals
+
+    pairs = [  # (P, composite, label) — components have high P + low composite
+        (0.9, 0.1, 1),
+        (0.8, 0.2, 1),
+        (0.2, 0.8, 0),
+        (0.1, 0.9, 0),
+    ]
+    base, pure = _prior_weight_evals(pairs, [0.10, 1.0])
+    assert base.weight == 0.10
+    assert base.n_positive == 2
+    assert base.k == 2
+    assert base.precision_at_k == pytest.approx(0.0)  # inverted composite ranks components last
+    assert base.auc == pytest.approx(0.0)
+    assert pure.precision_at_k == pytest.approx(1.0)  # pure P ranks components first
+    assert pure.auc == pytest.approx(1.0)
+
+
+def test_evaluate_prior_weight_ab_db_roundtrip() -> None:
+    from forge.ranking.evaluation import evaluate_prior_weight_ab
+
+    rows = [
+        ("aaaa000000000001", 0.9, 0.1, "component"),
+        ("aaaa000000000002", 0.8, 0.2, "component"),
+        ("aaaa000000000003", 0.2, 0.8, "reject"),
+        ("aaaa000000000004", 0.1, 0.9, "reject"),
+    ]
+    with db_connection() as conn:
+        _seed(conn, rows)
+        evals = evaluate_prior_weight_ab(conn, since=_SINCE, weights=[0.10, 1.0])
+    assert len(evals) == 2
+    assert evals[0].n_decided == 4
+    assert evals[0].n_positive == 2
+    assert evals[0].auc == pytest.approx(0.0)  # w=0.10: the inverted composite
+    assert evals[1].auc == pytest.approx(1.0)  # w=1.0: pure P

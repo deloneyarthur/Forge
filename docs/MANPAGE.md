@@ -295,6 +295,24 @@ Telemetry only — no PASS/FAIL until the §8.6-style margin is set. Design:
 | `--gate` | str | `wf_sharpe_p25` | Realized worst-quartile gate to score against. |
 | `--p-floor` | float | `0.02` | Absolute `P(component)` eligibility floor (production-calibrated). |
 
+### forge ranker-model eval-prior-weight
+
+Prior-weight A/B (B2): the §6.2 composite scores candidates as a weighted sum whose learned
+`P(component)` term (`prior_promotion_proximity`) sits at weight **0.10** — the other four
+(hygiene) terms carry 0.90 and measure ~coin-flip AUC vs realized promotion. Re-scores the
+submitted shadow rows under each `--weights` value (holding the hygiene terms' relative
+proportions) and prints the top-K realized component yield (precision@K, AUC) per weight.
+Higher at higher weight ⇒ the 0.10 slot under-weights the (good) prior. Offline + censored
+(only submitted configs carry verdicts) — a first-pass signal; confirm the winner on a live
+shadow lane before any `ranker.yaml` change. fable-audit learned-systems P1.4/B2.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML default for the DB path. |
+| `--since` | str | clean-era boundary | ISO window start (naive = UTC). |
+| `--weights` | str | `0.10,0.30,0.50,0.70,1.0` | Comma-separated prior weights to A/B (0.10 = the live slot). |
+
 ### forge healthcheck
 
 Reports whether the daemon is alive AND productive, then exits 0 (OK) / 1 (WARN) / 2

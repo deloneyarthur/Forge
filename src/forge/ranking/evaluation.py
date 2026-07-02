@@ -416,3 +416,113 @@ def evaluate_rewire_shadow(
     if not triples:
         return None
     return _rewire_topk(triples, keep_frac, p_floor=p_floor)
+
+
+# ---------------------------------------------------------------------------
+# Prior-weight A/B (B2) — how much promotion-ranking does the 0.10 prior slot leave?
+# ---------------------------------------------------------------------------
+# The learned F3 prior (P(component)) enters the §6.2 composite as the
+# `prior_promotion_proximity` term at weight 0.10; the other four terms (0.90 total)
+# are the hygiene composite, which measures ~coin-flip AUC vs realized promotion
+# (the F3 eval above). This offline A/B re-scores the SUBMITTED shadow rows under
+# alternate prior weights — holding the four hygiene terms' RELATIVE proportions
+# fixed — and reports the realized component yield of the re-ranking, to quantify
+# whether the prior is under-weighted. Censored (only submitted configs carry
+# verdicts) → a first-pass signal, not a full counterfactual: the winning weight is
+# confirmed on a live shadow lane before any ranker.yaml change. fable-audit P1.4/B2.
+
+_BASE_PRIOR_WEIGHT: float = 0.10
+_BASE_OTHER_SUM: float = 0.90
+
+
+def prior_weighted_composite(p: float, composite: float, weight: float) -> float:
+    """Re-derive the §6.2 composite with the prior term at ``weight`` (0..1), holding
+    the four hygiene terms' RELATIVE proportions fixed.
+
+    The stored ``composite`` = ``_BASE_PRIOR_WEIGHT*p + H`` where ``H`` is the weighted
+    hygiene sum (the ``_BASE_OTHER_SUM`` block). Scaling that block to ``1-weight`` and
+    the prior to ``weight``::
+
+        new = weight*p + ((1-weight)/_BASE_OTHER_SUM) * (composite - _BASE_PRIOR_WEIGHT*p)
+
+    Correctness pins: ``weight == _BASE_PRIOR_WEIGHT`` returns ``composite`` unchanged;
+    ``weight == 1.0`` returns pure ``p``. Pure (no DB, no model) → unit-testable."""
+    hygiene = composite - _BASE_PRIOR_WEIGHT * p
+    return weight * p + ((1.0 - weight) / _BASE_OTHER_SUM) * hygiene
+
+
+@dataclass(frozen=True, slots=True)
+class PriorWeightEvaluation:
+    """Top-K realized component yield of the composite re-scored at ``weight``.
+
+    ``precision_at_k`` = fraction of the top-K (K = #realized components) that realized
+    component/promote when ranking by the re-weighted composite; ``auc`` = separation of
+    components under that ranking. Both rising with ``weight`` ⇒ the hygiene terms dilute
+    a promotion-relevant prior (the 0.10 slot leaves ranking quality on the table).
+    ``None`` on a single-class window."""
+
+    weight: float
+    n_decided: int
+    n_positive: int
+    k: int
+    precision_at_k: float | None
+    auc: float | None
+
+
+def _prior_weight_evals(
+    pairs: Sequence[tuple[float, float, int]], weights: Sequence[float]
+) -> tuple[PriorWeightEvaluation, ...]:
+    """Pure core of ``evaluate_prior_weight_ab``. ``pairs`` = (P, composite, label);
+    one ``PriorWeightEvaluation`` per weight, in the given order."""
+    labels = [y for _, _, y in pairs]
+    n = len(labels)
+    n_pos = sum(labels)
+    k = max(1, n_pos)
+    out: list[PriorWeightEvaluation] = []
+    for w in weights:
+        scored = [prior_weighted_composite(p, c, w) for p, c, _ in pairs]
+        out.append(
+            PriorWeightEvaluation(
+                weight=w,
+                n_decided=n,
+                n_positive=n_pos,
+                k=k,
+                precision_at_k=(_precision_at_k(labels, scored, k) if n_pos else None),
+                auc=_safe_auc(labels, scored),
+            )
+        )
+    return tuple(out)
+
+
+def evaluate_prior_weight_ab(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    since: datetime,
+    weights: Sequence[float],
+) -> tuple[PriorWeightEvaluation, ...]:
+    """Offline A/B (B2): for each candidate prior ``weight``, re-score the submitted
+    shadow rows and report the top-K realized component yield. Pools every model_id over
+    the window (the weight is a composite-structure parameter, not a model). Labels via
+    ``label_for`` (same as training/eval). Empty tuple when no verdict decided in the
+    window."""
+    cut = since
+    if cut.tzinfo is not None:
+        cut = cut.astimezone(UTC).replace(tzinfo=None)
+    rows = conn.execute(
+        """
+        SELECT ss.model_score, ss.composite_score, v.decision, v.gate_results
+        FROM shadow_scores ss
+        JOIN submissions s ON ss.forge_candidate_id = s.forge_candidate_id
+        JOIN verdicts v ON v.config_hash = s.config_hash
+        WHERE v.decided_at >= ?
+        ORDER BY ss.forge_candidate_id, v.crucible_run_id
+        """,
+        [cut],
+    ).fetchall()
+    pairs: list[tuple[float, float, int]] = [
+        (float(model_score), float(composite_score), label_for(decision, parse_gate_results(gr)))
+        for model_score, composite_score, decision, gr in rows
+    ]
+    if not pairs:
+        return ()
+    return _prior_weight_evals(pairs, weights)

@@ -370,6 +370,68 @@ def cmd_eval_rewire(
     )
 
 
+@ranker_model_app.command("eval-prior-weight")
+def cmd_eval_prior_weight(
+    forge_db: Path | None = typer.Option(
+        None, "--forge-db", help="forge.db path (use a /tmp snapshot of the live DB)"
+    ),
+    config: Path = typer.Option(
+        Path("config/forge.yaml"), "--config", help="forge.yaml (supplies db_path default)"
+    ),
+    since: str | None = typer.Option(
+        None, "--since", help="ISO window start (default: the clean-era boundary)"
+    ),
+    weights: str = typer.Option(
+        "0.10,0.30,0.50,0.70,1.0",
+        "--weights",
+        help="comma-separated prior weights to A/B (0.10 = the live composite slot)",
+    ),
+) -> None:
+    """Prior-weight A/B (B2): how much realized promotion-ranking does the §6.2 composite's
+    0.10 prior (P(component)) slot leave on the table? Re-scores the submitted shadow rows
+    under each `--weights` value (holding the four hygiene terms' relative proportions) and
+    prints the top-K realized component yield (precision@K, AUC) per weight. Rising with
+    weight ⇒ the hygiene terms dilute a promotion-relevant prior. Offline + censored (only
+    submitted configs carry verdicts) — a first-pass signal; confirm the winner on a live
+    shadow lane before any `ranker.yaml` change. fable-audit learned-systems P1.4/B2."""
+    from forge.core.contracts_check import check_contracts_version
+
+    check_contracts_version()
+
+    from forge.persistence.db import db_connection
+    from forge.ranking.evaluation import evaluate_prior_weight_ab
+
+    forge_db = _resolve_forge_db(forge_db, config)
+    cut = _resolve_era_cut(since)
+    try:
+        parsed = [float(w) for w in weights.split(",") if w.strip()]
+    except ValueError:
+        typer.echo(f"invalid --weights {weights!r}: expected comma-separated floats", err=True)
+        raise typer.Exit(code=2) from None
+
+    with db_connection(forge_db) as conn:
+        evals = evaluate_prior_weight_ab(conn, since=cut, weights=parsed)
+
+    if not evals:
+        typer.echo(
+            f"no decided verdicts since {cut.isoformat()} (prior-weight A/B has nothing to score)"
+        )
+        return
+    typer.echo(
+        f"prior-weight A/B (n_decided={evals[0].n_decided}, "
+        f"n_components={evals[0].n_positive}, K={evals[0].k}):"
+    )
+    for ev in evals:
+        pk = "n/a" if ev.precision_at_k is None else f"{ev.precision_at_k:.3f}"
+        au = "n/a" if ev.auc is None else f"{ev.auc:.3f}"
+        live = "  (live)" if ev.weight == 0.10 else ""
+        typer.echo(f"  weight={ev.weight:.2f}  precision@K={pk}  AUC={au}{live}")
+    typer.echo(
+        "  higher precision@K/AUC at higher weight => the 0.10 slot under-weights the prior; "
+        "the diversifier (D103/D136 floors) preserves variety independently."
+    )
+
+
 @ranker_model_app.command("train-robustness")
 def cmd_train_robustness(
     forge_db: Path | None = typer.Option(
