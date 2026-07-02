@@ -5533,3 +5533,20 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Ritual.** Telemetry only — the tail gate informs P4.1 (the lane's retire-or-keep decision), changing no daemon submission behavior. No prereg (a decision rule, not a prediction).
 
 **STATUS: P3.1 follow-up SHIPPED (`463ed04`, 360 ranking+cli tests green; all 3 timer heredocs compile). Completes P3.1 — BOTH streak gates (rewire + §8.6) are now controlled-α paired SPRTs; `_TAIL_SPEARMAN_CRITERION`/`_REWIRE_DELTA_CRITERION` de-provisionalized to display-only. NEXT: P3.2 (feature-drift PSI/JS + adoption gating) then P3.3 / P4.1.**
+
+## D230 — 2026-07-02 — Feature/score drift + model-adoption gating (learned-audit P3.2 / B6)
+
+**Spec section:** learned-systems B6 / plan P3.2. Model adoption is blind newest-wins (the daemon loads the newest artifact by mtime): a bad daily retrain silently goes live, and there is no signal for the input distribution drifting away from what the model was trained on. B6 asks for a drift metric (PSI/JS) + adoption gating (at minimum: refuse to rotate to a model whose fresh-window paired IC is negative) + surfacing the `_load_hypothesis_weights` uniform-fallback silent-degrade.
+
+**Decision.** New pure `forge/ranking/drift.py` (7 tests): `population_stability_index` (quantile-binned PSI, the standard drift metric, None on thin samples, eps-floored bins), `psi_severity` (stable <0.1 / moderate <0.25 / major), `adoption_verdict` (ADOPT/BLOCK/UNKNOWN — BLOCK a non-positive fresh signal, "gate adoption not training"). Wired as telemetry:
+- **healthcheck** — `check_hypothesis_weights_fallback` WARNs when the journal shows `hypothesis_weights: degraded to uniform` (the §6.2 sampler stopped steering — feedback loop muted; WARN not CRITICAL because the daemon still produces). AND the `wf_p25 drift` check now reads the PAIRED `spearman_delta` (D229) instead of the absolute `spearman` — a negative delta means the lane is worse than the incumbent it would rotate over, which is the real adoption signal. `check_learning_drift` was already framed as the newest-wins adoption guard; this points it at the right metric.
+- **`forge status`** — an `adoption guard` line: `adoption_verdict` per lane (F3 AUC margin, wf_p25 paired Δ Spearman). Verified live: `F3=ADOPT (+0.440)  wf_p25=UNKNOWN`.
+- **`eval`** — a score-distribution PSI line (`--since` window vs the honest-era baseline) via a new `shadow_score_samples` helper (pooled `model_score` by `scored_at`, no verdict join — drift is about the input distribution).
+
+**Transition note.** Pointing the healthcheck tail-drift at `spearman_delta` means it reads "no qualifying checkpoints yet" (a WARN) until the daily timer writes the first paired-delta row (D229) — self-healing after one timer run; WARN is informational (the timer's `SuccessExitStatus=1`).
+
+**Scope / NOT here.** This surfaces the signals; the ACTUAL adoption block (the daemon refusing to load a BLOCK-verdict artifact) is a production change to the model-load path → operator-gated + flag-OFF, deferred (the plan's "at minimum … gate adoption" is satisfied as a loud signal first). Full feature-vector PSI (vs the score-distribution proxy shipped) needs per-scoring-row feature vectors persisted — not currently stored; deferred.
+
+**Ritual.** Telemetry only — no daemon submission-path change. No prereg (diagnostics, not a prediction).
+
+**STATUS: P3.2 SHIPPED (`156e523`, 368 ranking+cli tests green). Telemetry only; daemon untouched. Drift + adoption signals now surfaced in `forge status` / `forge healthcheck` / `eval`; the hypothesis-weights silent-degrade is no longer invisible. NEXT: P3.3 (randomized exploration holdout — operator-gated, flag-OFF build) or P4.1 (wf_p25 lane retire-or-keep, now that both its skill gate (D229) and drift guard read the paired signal).**

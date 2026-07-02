@@ -1,6 +1,13 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Learned-audit P3.1 COMPLETE: §8.6 tail streak now a PAIRED SPRT too (tail Spearman − incumbent Spearman, same rows). Both promotion gates are controlled-α significance tests. Telemetry only. [[D229]]
+## 2026-07-02 (latest) — Learned-audit P3.2 SHIPPED: feature/score-drift (PSI) + model-adoption gating + hypothesis-weights fallback WARN. Blind newest-wins rotation now has a drift signal + an ADOPT/BLOCK guard. Telemetry only. [[D230]]
+
+**Operator: "continue with follow-up and P3.2." Did both — §8.6 follow-up (D229) + P3.2 (this).**
+- **The gap:** the daemon adopts the newest daily-trained model by mtime with no guard — a bad retrain silently goes live, and no signal flags input-distribution drift.
+- **P3.2 (`156e523`, 7+ tests):** new pure `forge/ranking/drift.py` — `population_stability_index` (quantile PSI) + `psi_severity` (0.1/0.25 bands) + `adoption_verdict` (BLOCK a non-positive fresh signal). Wired as telemetry: **healthcheck** gains `check_hypothesis_weights_fallback` (WARN when the §6.2 sampler degraded to UNIFORM — feedback loop muted) AND its `wf_p25 drift` check now reads the PAIRED `spearman_delta` (the real adoption signal); **`forge status`** gains an `adoption guard` line (F3=ADOPT +0.440 / wf_p25 per lane); **`eval`** gains a score-distribution PSI line (window vs honest-era baseline). Verified live.
+- **POSTURE: telemetry only; daemon untouched.** Surfaces the signals; the ACTUAL adoption block (daemon refusing a BLOCK artifact) is an operator-gated production change, deferred. **RESUME:** P3.3 (randomized exploration holdout — operator-gated, flag-OFF) or **P4.1** (wf_p25 lane retire-or-keep — now that its skill gate (D229) + drift guard (D230) both read the paired signal, the retire-or-keep call is well-instrumented). Hold live-stream changes until D220 `b7ecc2d2` (≥07-04).
+
+## 2026-07-02 — Learned-audit P3.1 COMPLETE: §8.6 tail streak now a PAIRED SPRT too (tail Spearman − incumbent Spearman, same rows). Both promotion gates are controlled-α significance tests. Telemetry only. [[D229]]
 
 **Operator: "continue with follow-up and P3.2." Did the §8.6 follow-up (this); P3.2 next.**
 - **The defect:** the §8.6 tail clock PASSed on an ABSOLUTE Spearman ≥0.30 — rewards a model for tracking a signal the incumbent P(component) already ranks, not the marginal skill P4.1 needs to judge the lane.
