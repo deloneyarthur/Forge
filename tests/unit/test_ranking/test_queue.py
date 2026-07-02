@@ -7,12 +7,14 @@ diversification to pick `n`. Mirrors how `forge run` will use it.
 
 from __future__ import annotations
 
+import math
 from types import MappingProxyType
 
 import pytest
 from crucible_contracts import SignalSpec, StrategyConfig
 
 from forge.prefilters.types import FilterResult, PreFilterReport
+from forge.ranking.model import gate_tail_prior, gate_tail_rank_score
 from forge.ranking.queue import (
     _PRODUCTION_FLOOR_EXEMPT_HYPOTHESES,
     _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS,
@@ -110,6 +112,88 @@ def test_n_zero_returns_empty() -> None:
         n=0,
     )
     assert out == []
+
+
+# ---------------------------------------------------------------------------
+# P1.1 — gate-tail hard-gate ordering (shadow↔production parity)
+# ---------------------------------------------------------------------------
+
+_GATE_TAIL_FLOOR = 0.02
+
+
+def _tnorm(t: float) -> float:
+    """Any strictly-increasing map into (0,1) — stands in for robustness_tail_norm, which
+    is monotone in the raw tail prediction the shadow ranks by."""
+    return 1.0 / (1.0 + math.exp(-t))
+
+
+def test_gate_tail_ordering_hard_gates_and_matches_shadow() -> None:
+    # (name, P(component), tail_pred). Disjoint signals -> jaccard 0 -> the diversifier applies
+    # no penalty, so rank_batch's output order is exactly the composite order.
+    specs = [
+        ("hi_elig", 0.50, 2.0),  # eligible, highest tail
+        ("mid_elig", 0.30, 0.5),  # eligible, mid tail
+        ("lo_elig", 0.10, -1.0),  # eligible, low tail
+        ("hi_inelig", 0.005, 3.0),  # INELIGIBLE (P<floor) but very high tail — the soft-gate trap
+        ("lo_inelig", 0.001, -2.0),  # ineligible, low tail
+    ]
+    p_of = {n: p for n, p, _ in specs}
+    t_of = {n: t for n, _, t in specs}
+    reports = tuple(_report(n, signals=(n.upper(),)) for n, _, _ in specs)
+
+    def scorer(cfg: StrategyConfig) -> float:
+        return gate_tail_prior(p_of[cfg.name], _tnorm(t_of[cfg.name]), p_floor=_GATE_TAIL_FLOOR)
+
+    ranked = rank_batch(
+        Ranker(weights=_default_weights()),
+        reports,
+        promoted_strategies=(),
+        n=len(specs),
+        verdict_scorer=scorer,
+        gate_tail_ordering=True,
+    )
+    prod_order = [c.report.config.name for c in ranked]
+    eligible = {"hi_elig", "mid_elig", "lo_elig"}
+
+    # 1. HARD gate: every eligible outranks every ineligible (the whole fidelity fix).
+    assert max(prod_order.index(n) for n in eligible) < min(
+        prod_order.index(n) for n in prod_order if n not in eligible
+    )
+    # 2. The high-tail INELIGIBLE — which a soft blend could float to the top — is gated out.
+    assert prod_order[0] == "hi_elig"
+    assert "hi_inelig" not in prod_order[: len(eligible)]
+    # 3. Ineligible composites pin to 0.0 (the diversifier-proof hard-gate fixed point).
+    for c in ranked:
+        if c.report.config.name not in eligible:
+            assert c.composite_score == 0.0
+    # 4. PARITY: eligible order == the shadow's gate_tail_rank_score order (same inputs).
+    shadow_order = [
+        n
+        for n, _, _ in sorted(
+            specs,
+            key=lambda s: gate_tail_rank_score(s[1], s[2], p_floor=_GATE_TAIL_FLOOR),
+            reverse=True,
+        )
+    ]
+    assert [n for n in prod_order if n in eligible] == [n for n in shadow_order if n in eligible]
+
+
+def test_gate_tail_ordering_off_keeps_the_blend() -> None:
+    # Default (False) is byte-identical: composite = the §6.2 blend, not the raw prior.
+    r = Ranker(weights=_default_weights())
+    report = _report("x", signals=("X",), signal_density=0.8)
+
+    def scorer(_cfg: StrategyConfig) -> float:
+        return 0.4
+
+    off = rank_batch(r, (report,), promoted_strategies=(), n=1, verdict_scorer=scorer)
+    assert off[0].composite_score == pytest.approx(r.score(report, 0.4))
+    assert off[0].composite_score != pytest.approx(0.4)  # the blend is not the raw prior
+
+    on = rank_batch(
+        r, (report,), promoted_strategies=(), n=1, verdict_scorer=scorer, gate_tail_ordering=True
+    )
+    assert on[0].composite_score == pytest.approx(0.4)  # gate-tail: composite IS the prior
 
 
 # ---------------------------------------------------------------------------

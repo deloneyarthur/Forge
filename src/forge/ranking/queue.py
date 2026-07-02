@@ -59,6 +59,7 @@ def rank_batch(
     floor_exempt_hypotheses: AbstractSet[str] = frozenset(),
     mature_arms: AbstractSet[Arm] | None = None,
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
+    gate_tail_ordering: bool = False,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
 
@@ -90,6 +91,16 @@ def rank_batch(
     The caller (the production loop) builds the scorer from the latest verdict
     model under an env kill-switch and shadow-compares before trusting it; the
     §6.2 weights and every other term are untouched (it only fills the prior slot).
+
+    `gate_tail_ordering` (P1.1) closes the gate-then-tail shadow↔production fidelity
+    gap. In `gate-tail` mode the `verdict_scorer` returns `gate_tail_prior` — `tail_norm`
+    for configs clearing the P(component) floor, **0.0 for ineligibles**. When this flag is
+    True the composite IS that value (the §6.2 hygiene blend is BYPASSED), so the gate is
+    HARD: ineligibles pin to 0.0 (a fixed point of the diversifier's `score·(1-penalty)`
+    multiply → they can never outrank an eligible config), and eligibles order by `tail_norm`
+    — the same order the shadow's `gate_tail_rank_score` produces. False (default) keeps the
+    blend `ranker.score(report, prior)` — byte-identical. Only meaningful with a `verdict_scorer`
+    returning a gate-tail value; a no-op on the Jaccard/blend paths.
     """
     scored: list[RankedCandidate] = []
     for report in reports:
@@ -100,7 +111,9 @@ def rank_batch(
             if verdict_scorer is not None
             else compute_prior_promotion_proximity(report.config, promoted_strategies)
         )
-        composite = ranker.score(report, prior)
+        # gate-tail (P1.1): the prior IS the ranking key — a HARD gate matching the shadow.
+        # Otherwise the §6.2 weighted blend (default; byte-identical).
+        composite = prior if gate_tail_ordering else ranker.score(report, prior)
         scored.append(
             RankedCandidate(
                 report=report,

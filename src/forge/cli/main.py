@@ -2078,6 +2078,10 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         "false",
         "no",
     }
+    # P1.1: gate-tail mode ranks by the gate-tail value DIRECTLY (hard gate), bypassing the
+    # §6.2 hygiene blend so production matches the hard-gate form the shadow streak validates.
+    # False on the blend/Jaccard paths → the composite is unchanged (byte-identical).
+    _gate_tail_ordering = False
     if quality_rank and not _quality_off and verdict_scorer is not None:
         from forge.ranking.model import load_latest_robustness_model, robustness_tail_norm
 
@@ -2109,9 +2113,10 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                     )
 
                 verdict_scorer = _gate_tail_score
+                _gate_tail_ordering = True  # P1.1: rank by the gate-tail value (HARD gate)
                 typer.echo(
                     f"quality_rank: wf_p25 GATE-TAIL ACTIVE "
-                    f"(model={_qm.model_id} p_floor={_floor:.4f})"
+                    f"(model={_qm.model_id} p_floor={_floor:.4f}) hard-gate (composite bypassed)"
                 )
             else:
 
@@ -2141,6 +2146,8 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         mature_arms=mature_arms,
         # D149 — None = Jaccard kill-switch.
         verdict_scorer=verdict_scorer,
+        # P1.1 — gate-tail mode: rank by the gate-tail value directly (hard gate).
+        gate_tail_ordering=_gate_tail_ordering,
     )
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
