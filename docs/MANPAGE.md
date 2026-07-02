@@ -126,6 +126,16 @@ operator-gated deploy, pre-registered (`forge prereg`, D208) + alpha-budget-char
 D207) + later-cohort-confirmed (§8.4). Revert = drop the env var. Consumed by
 `forge.cli.main._orthogonal_family_floors` → `rejection_weights.apply_orthogonal_family_floor`.
 
+**Env-only knob — `FORGE_QUALITY_RANK_MODE`** (the `--quality-rank` lane form, D217/P1.1): `blend` (default,
+unset → byte-identical) computes `prior := P(component) × tail_norm` into the §6.2 slot; `gate-tail`
+switches to the validated hard-gate form — `P(component)` GATES eligibility at `FORGE_REWIRE_P_FLOOR`
+(default 0.02) and the wf_p25 tail prediction ORDERS the survivors. **P1.1:** under `gate-tail` the composite
+IS the gate-tail value (the §6.2 hygiene blend is BYPASSED), so the gate is HARD — below-floor configs pin
+to 0.0 and can never outrank an eligible config (matching the `rewire_streak_wfp25` shadow the flip decision
+reads, which gates on the SAME `FORGE_REWIRE_P_FLOOR`). Consumed by `forge.cli.main._quality_rank_mode` →
+`rank_batch(gate_tail_ordering=…)`. Flipping to `gate-tail` is an operator-gated deploy (prereg + the §8.6
+rewire streak); keep the floor env identical on `forge.service` and `forge-ranker-eval` so shadow==production.
+
 ```
 # One real batch, persisted:
 forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db --batch-size 200
