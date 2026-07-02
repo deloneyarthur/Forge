@@ -414,6 +414,10 @@ class RewireEvaluation:
     base_top_k_mean: float | None
     delta: float | None
     overall_mean: float | None
+    # P1.3: fraction of the window clearing the absolute P floor — the gate-then-tail
+    # KEEP-RATE. P(component) miscalibration (learned-audit §1) or drift silently moves this
+    # under a fixed floor; tracking it makes a shifting eligible set visible. None on empty.
+    eligible_fraction: float | None
 
 
 def _rewire_topk(
@@ -432,7 +436,7 @@ def _rewire_topk(
     shadow must use the same floor to measure the gate the live scorer actually runs."""
     n = len(triples)
     if n == 0:
-        return RewireEvaluation(0, 0, 0.0, keep_frac, None, None, None, None)
+        return RewireEvaluation(0, 0, 0.0, keep_frac, None, None, None, None, None)
     floor = (
         p_floor if p_floor is not None else eligibility_floor([t[0] for t in triples], keep_frac)
     )
@@ -452,6 +456,7 @@ def _rewire_topk(
         base_top_k_mean=base_mean,
         delta=delta,
         overall_mean=sum(realized) / n,
+        eligible_fraction=sum(1 for p, _, _ in triples if p >= floor) / n,
     )
 
 

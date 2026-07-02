@@ -377,11 +377,14 @@ def cmd_eval_rewire(
     b = "n/a" if ev.base_top_k_mean is None else f"{ev.base_top_k_mean:+.3f}"
     d = "n/a" if ev.delta is None else f"{ev.delta:+.3f}"
     o = "n/a" if ev.overall_mean is None else f"{ev.overall_mean:+.3f}"
+    elig = "n/a" if ev.eligible_fraction is None else f"{ev.eligible_fraction:.4f}"
     typer.echo(f"gate-then-tail re-wire shadow (gate={gate} p_floor={ev.p_floor:.4f}):")
     typer.echo(
         f"  n_decided={ev.n_decided} top-{ev.k} mean realized {gate}: "
         f"gate-then-tail={g} vs P-baseline={b} (Δ={d}, overall={o})"
     )
+    # P1.3: the keep-rate under the absolute floor — watch this for silent drift.
+    typer.echo(f"  eligible_fraction(P>={ev.p_floor:.4f})={elig}")
 
 
 @ranker_model_app.command("eval-prior-weight")

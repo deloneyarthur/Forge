@@ -410,6 +410,7 @@ record = {
     "gate_top_k_mean": fresh.gate_top_k_mean,
     "base_top_k_mean": fresh.base_top_k_mean,
     "delta": fresh.delta,
+    "eligible_fraction": fresh.eligible_fraction,  # P1.3: floor keep-rate (watch for drift)
     "criterion": CRIT,
     "verdict": verdict,
     "qualifies": qualifies,

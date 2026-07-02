@@ -540,6 +540,15 @@ def test_rewire_topk_absolute_floor_overrides_keep_frac() -> None:
     # k=1; the quantile floor excludes the high-tail low-P config, the absolute floor admits it.
     assert ev_quantile.gate_top_k_mean == 0.5
     assert ev_abs.gate_top_k_mean == 0.9
+    # P1.3: the eligible fraction reflects the floor's keep-rate.
+    assert ev_quantile.eligible_fraction == pytest.approx(0.5)  # {0.30, 0.40} of 4
+    assert ev_abs.eligible_fraction == pytest.approx(1.0)  # floor 0.05 admits all four
+
+
+def test_rewire_topk_empty_has_no_eligible_fraction() -> None:
+    from forge.ranking.evaluation import _rewire_topk
+
+    assert _rewire_topk([], keep_frac=0.5).eligible_fraction is None
 
 
 # ---------------------------------------------------------------------------
