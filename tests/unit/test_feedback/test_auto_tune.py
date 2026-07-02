@@ -145,6 +145,36 @@ def test_auto_tune_tightens_when_rolling_rate_above_max(tmp_path: Path) -> None:
     assert new_cal.novelty.max_jaccard_overlap < cal.novelty.max_jaccard_overlap
 
 
+def test_auto_tune_disabled_does_not_fire_even_above_max(tmp_path: Path) -> None:
+    """strategy-audit P0-1 (D218): with auto_tune.enabled=False, a promote-rate
+    above max_promotion_rate must NOT write prefilter.yaml or an OPEN_PROPOSALS
+    proposal — the disarm is the leash before first promotions arm the trigger."""
+    from dataclasses import replace
+
+    forge_db = tmp_path / "forge.db"
+    yaml_path = tmp_path / "prefilter.yaml"
+    proposals_path = tmp_path / "OPEN_PROPOSALS.md"
+    disabled = replace(
+        _default_calibration(),
+        auto_tune=replace(_default_calibration().auto_tune, enabled=False),
+    )
+    write_calibration_yaml(disabled, yaml_path)
+    before = yaml_path.read_text(encoding="utf-8")
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, promotion_rate=0.06, submitted_at=_AT)
+        _insert_batch_summary(conn, promotion_rate=0.07, submitted_at=_AT)
+        new_cal = auto_tune(
+            db=conn,
+            calibration=disabled,
+            prefilter_yaml_path=yaml_path,
+            open_proposals_path=proposals_path,
+            at=_AT,
+        )
+    assert new_cal is disabled  # returned unchanged, no tighten applied
+    assert yaml_path.read_text(encoding="utf-8") == before  # no unattended yaml write
+    assert not proposals_path.exists()  # and no loosen proposal
+
+
 def test_auto_tune_tighten_writes_yaml_back(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     yaml_path = tmp_path / "prefilter.yaml"
@@ -369,12 +399,8 @@ def test_ensure_grammar_version_is_idempotent(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     grammar, yaml_path = _real_grammar()
     with db_connection(forge_db) as conn:
-        first = ensure_grammar_version_recorded(
-            conn, grammar=grammar, yaml_path=yaml_path, at=_AT
-        )
-        second = ensure_grammar_version_recorded(
-            conn, grammar=grammar, yaml_path=yaml_path, at=_AT
-        )
+        first = ensure_grammar_version_recorded(conn, grammar=grammar, yaml_path=yaml_path, at=_AT)
+        second = ensure_grammar_version_recorded(conn, grammar=grammar, yaml_path=yaml_path, at=_AT)
         count = conn.execute("SELECT COUNT(*) FROM grammar_versions").fetchone()
     assert first is True
     assert second is False
@@ -404,9 +430,7 @@ def test_ensure_grammar_version_skips_when_existing_row_present(tmp_path: Path) 
                 "AJ",
             ],
         )
-        wrote = ensure_grammar_version_recorded(
-            conn, grammar=grammar, yaml_path=yaml_path, at=_AT
-        )
+        wrote = ensure_grammar_version_recorded(conn, grammar=grammar, yaml_path=yaml_path, at=_AT)
         rows = conn.execute(
             "SELECT change_type, rule_count, operator_initials FROM grammar_versions"
         ).fetchall()
@@ -467,7 +491,10 @@ def test_d058_ensure_grammar_version_no_duplicate_under_concurrent_writers(
             try:
                 barrier.wait(timeout=5.0)
                 wrote = ensure_grammar_version_recorded(
-                    conn, grammar=grammar, yaml_path=yaml_path, at=_AT,
+                    conn,
+                    grammar=grammar,
+                    yaml_path=yaml_path,
+                    at=_AT,
                 )
                 results[idx] = (wrote, None)
             finally:

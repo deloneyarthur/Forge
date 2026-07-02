@@ -46,7 +46,12 @@ prefilter:
     # typical for swing strategies). 0 preserves legacy same-day behavior.
     forward_horizon_days: 5
   auto_tune:
-    enabled: true
+    # DISARMED 2026-07-02 (D218, strategy-audit P0-1): the §5.5 self-apply is keyed on
+    # a per-config verdict-level promotion rate — a dead estimand under book-level
+    # promotion — and its trigger becomes reachable the day the first book promotes
+    # (which D216 is chasing), likely at tiny denominators. Disarm the unattended
+    # tracked-file write path until the estimand is re-keyed. Re-enable = flip to true.
+    enabled: false
     min_promotion_rate: 0.005          # 0.5%
     max_promotion_rate: 0.05           # 5%
     adjustment_pct_per_step: 0.10

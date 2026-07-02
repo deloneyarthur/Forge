@@ -55,7 +55,7 @@ def test_calibration_nested_shape_matches_yaml() -> None:
     assert c.permutation_test.p_value_threshold == 0.10
     # D075: forward-horizon parameter for the return comparison.
     assert c.permutation_test.forward_horizon_days == 5
-    assert c.auto_tune.enabled is True
+    assert c.auto_tune.enabled is False  # D218: §5.5 auto-tune disarmed (strategy-audit P0-1)
     assert c.auto_tune.min_promotion_rate == 0.005
     assert c.auto_tune.max_promotion_rate == 0.05
     assert c.auto_tune.adjustment_pct_per_step == 0.10
@@ -264,8 +264,7 @@ def test_apply_tightening_raises_and_caps_min_pass_probability() -> None:
     p = AdjustmentProposal(direction="tighten", magnitude_pct=0.10, reason="above 5%")
     new = apply_tightening(c, p)
     assert (
-        new.expected_trade_count.min_pass_probability
-        > c.expected_trade_count.min_pass_probability
+        new.expected_trade_count.min_pass_probability > c.expected_trade_count.min_pass_probability
     )
     # Cap holds even starting near 1.0.
     near = replace(
