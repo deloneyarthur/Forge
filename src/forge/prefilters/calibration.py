@@ -83,6 +83,15 @@ class PermutationTestCalibration:
     # before reading returns — addresses the systemic permutation_test
     # rejection of leading / trend-family directional signals.
     forward_horizon_days: int
+    # P1-1 (strategy-audit): how the forward return is read.
+    #   "single_day"        — legacy: the return on the single calendar day at T+horizon
+    #                         (two bugs: point-in-time not cumulative; CALENDAR-day shift
+    #                         drops weekend-adjacent samples).
+    #   "cumulative_trading"— the fix: cumulative return over the next `horizon` TRADING
+    #                         days (T+1..T+k via the returns index), null built on the same
+    #                         statistic. Changes the config population → operator-flip +
+    #                         prereg (docs/tasks/feedback-change.md). Absent → legacy.
+    forward_return_mode: str = "single_day"
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +176,19 @@ def _validate_int(value: Any, section: str, key: str, *, minimum: int) -> int:
         msg = f"prefilter.yaml: {section}.{key} must be int >= {minimum}; got {value!r}"
         raise ValueError(msg)
     return value
+
+
+_FORWARD_RETURN_MODES = ("single_day", "cumulative_trading")
+
+
+def _validate_forward_return_mode(value: Any) -> str:
+    if value not in _FORWARD_RETURN_MODES:
+        msg = (
+            f"prefilter.yaml: permutation_test.forward_return_mode must be one of "
+            f"{_FORWARD_RETURN_MODES}; got {value!r}"
+        )
+        raise ValueError(msg)
+    return str(value)
 
 
 def _validate_unit_float(value: Any, section: str, key: str) -> float:
@@ -296,6 +318,9 @@ def load_calibration(path: Path) -> Calibration:
                 "permutation_test",
                 "forward_horizon_days",
                 minimum=0,
+            ),
+            forward_return_mode=_validate_forward_return_mode(
+                pt.get("forward_return_mode", "single_day")
             ),
         ),
         auto_tune=AutoTuneCalibration(

@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import random
 from collections.abc import Iterable, Mapping
+from dataclasses import replace as dc_replace
 from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 
 from forge.core.seed import SeedHierarchy
-from forge.prefilters.calibration import load_calibration
+from forge.prefilters.calibration import _validate_forward_return_mode, load_calibration
 from forge.prefilters.feature_cache import REGIMES, Regime
 from forge.prefilters.permutation_test import PermutationTestFilter, _significance_score
 from forge.prefilters.types import Filter, FilterContext
@@ -77,6 +78,106 @@ def _ctx(cache: _ReturnsCache, *, seed_root: int = 0) -> FilterContext:
 def _trading_window(n_days: int) -> list[date]:
     d0 = date(2022, 1, 1).toordinal()
     return [date.fromordinal(d0 + i) for i in range(n_days)]
+
+
+def _ctx_mode(
+    cache: _ReturnsCache, mode: str, *, seed_root: int = 0, horizon: int | None = None
+) -> FilterContext:
+    """A FilterContext whose permutation_test calibration overrides the forward-return mode
+    (and optionally the horizon) — P1-1 exercises `cumulative_trading` without a temp YAML."""
+    base = load_calibration(_PREFILTER_YAML)
+    pt = base.permutation_test
+    if horizon is not None:
+        pt = dc_replace(pt, forward_horizon_days=horizon)
+    pt = dc_replace(pt, forward_return_mode=mode)
+    hierarchy = SeedHierarchy(seed_root)
+    return FilterContext(
+        registry=minimal_registry_snapshot(),
+        feature_cache=cache,  # type: ignore[arg-type]
+        prior_config_hashes=frozenset(),
+        prior_firing_dates={},
+        calibration=dc_replace(base, permutation_test=pt),
+        rng_factory=hierarchy.rng,
+    )
+
+
+# ---------------------------------------------------------------------------
+# P1-1 (strategy-audit) — cumulative_trading forward-return mode
+# ---------------------------------------------------------------------------
+
+
+def test_default_calibration_mode_is_single_day() -> None:
+    # The shipped prefilter.yaml carries no forward_return_mode → legacy default → an
+    # un-flipped tree is byte-identical (the existing informative/noise tests still pass).
+    cal = load_calibration(_PREFILTER_YAML)
+    assert cal.permutation_test.forward_return_mode == "single_day"
+
+
+def test_validate_forward_return_mode_rejects_unknown() -> None:
+    assert _validate_forward_return_mode("cumulative_trading") == "cumulative_trading"
+    with pytest.raises(ValueError, match="forward_return_mode"):
+        _validate_forward_return_mode("bogus")
+
+
+def test_cumulative_trading_sums_forward_trading_days() -> None:
+    # 10 consecutive trading days, returns 0..9. Activate on day 2, horizon 2 → cumulative over
+    # the next TWO trading days (T+1, T+2) = returns[3] + returns[4] = 7.0, NOT a single day.
+    f = PermutationTestFilter()
+    cfg = minimal_strategy_config()
+    window = _trading_window(10)
+    returns_map = {d: float(i) for i, d in enumerate(window)}
+    cache = _ReturnsCache(frozenset({window[2]}), returns_map)
+    result = f.apply(cfg, _ctx_mode(cache, "cumulative_trading", horizon=2))
+    assert result.details["forward_return_mode"] == "cumulative_trading"
+    assert result.details["effective_n"] == 1
+    assert result.details["real_notional"] == pytest.approx(7.0)
+
+
+def test_cumulative_trading_reads_next_trading_day_not_weekend() -> None:
+    # BUG (b): a Friday activation with the CALENDAR shift lands on Saturday (dropped). The
+    # trading-day shift reads the next TRADING day (Monday) instead — no weekend sample loss.
+    f = PermutationTestFilter()
+    cfg = minimal_strategy_config()
+    trading: list[date] = []
+    d = date(2022, 1, 3)  # a Monday
+    while len(trading) < 15:
+        if d.weekday() < 5:  # Mon-Fri only; weekends are non-trading (absent from the map)
+            trading.append(d)
+        d += timedelta(days=1)
+    returns_map = {dd: 1.0 for dd in trading}
+    friday = trading[4]
+    assert friday.weekday() == 4
+    cache = _ReturnsCache(frozenset({friday}), returns_map)
+
+    legacy = f.apply(cfg, _ctx_mode(cache, "single_day", horizon=1))
+    assert legacy.details["effective_n"] == 0  # Friday+1cal = Saturday, dropped
+
+    cumulative = f.apply(cfg, _ctx_mode(cache, "cumulative_trading", horizon=1))
+    assert cumulative.details["effective_n"] == 1  # Friday → next trading day (Monday)
+    assert cumulative.details["real_notional"] == pytest.approx(1.0)
+
+
+def test_cumulative_informative_signal_passes() -> None:
+    # Signal fires the trading day BEFORE each high-return day; T+1 cumulative lands on the
+    # +1.0 days → real notional tops the null → passes.
+    f = PermutationTestFilter()
+    cfg = minimal_strategy_config()
+    window = _trading_window(200)
+    returns_map = {d: (1.0 if 1 <= i <= 50 else 0.0) for i, d in enumerate(window)}
+    cache = _ReturnsCache(frozenset(window[:49]), returns_map)
+    result = f.apply(cfg, _ctx_mode(cache, "cumulative_trading", horizon=1))
+    assert result.passed
+
+
+def test_cumulative_determinism_same_seed() -> None:
+    f = PermutationTestFilter()
+    cfg = minimal_strategy_config()
+    window = _trading_window(200)
+    returns_map = {d: 0.5 if i % 2 == 0 else -0.4 for i, d in enumerate(window)}
+    cache = _ReturnsCache(frozenset(window[::3]), returns_map)
+    a = f.apply(cfg, _ctx_mode(cache, "cumulative_trading", seed_root=7, horizon=3))
+    b = f.apply(cfg, _ctx_mode(cache, "cumulative_trading", seed_root=7, horizon=3))
+    assert a.details["p_value"] == b.details["p_value"]
 
 
 def test_satisfies_filter_protocol() -> None:

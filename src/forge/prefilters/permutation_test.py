@@ -25,6 +25,7 @@ efficiency.
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from datetime import date, timedelta
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -33,6 +34,8 @@ from forge.prefilters.signal_density import _directional_signal
 from forge.prefilters.types import FilterResult
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+
     from crucible_contracts import StrategyConfig
 
     from forge.prefilters.types import FilterContext
@@ -51,6 +54,46 @@ def _full_window(start: date, n_trading_days: int) -> list[date]:
     """Calendar dates spanning `n_trading_days` trading sessions from `start`."""
     n_calendar = math.ceil(n_trading_days * _CALENDAR_DAYS_PER_TRADING_DAY)
     return [start + timedelta(days=i) for i in range(n_calendar)]
+
+
+def _forward_cumulative_pool(
+    ordered_days: list[date], returns_map: Mapping[date, float], horizon: int
+) -> dict[date, float]:
+    """P1-1: cumulative forward return over the next ``horizon`` TRADING days for every
+    trading day that has ``horizon`` successors — the null pool for ``cumulative_trading``.
+
+    ``ordered_days`` ARE the trading days (the returns-index keys, sorted), so walking them
+    is a trading-day shift by construction — no CALENDAR arithmetic, no weekend loss. The
+    map value at day ``ordered_days[i]`` is ``sum(returns[i+1 .. i+horizon])`` (T+1..T+k)."""
+    out: dict[date, float] = {}
+    n = len(ordered_days)
+    for i in range(n - horizon):
+        out[ordered_days[i]] = sum(
+            returns_map[ordered_days[j]] for j in range(i + 1, i + 1 + horizon)
+        )
+    return out
+
+
+def _real_forward_cumulative(
+    activations: Iterable[date],
+    ordered_days: list[date],
+    returns_map: Mapping[date, float],
+    horizon: int,
+) -> tuple[float, int]:
+    """Real notional under ``cumulative_trading``: for each activation, the cumulative return
+    over the first ``horizon`` TRADING days STRICTLY after it (via the returns index, so a
+    Friday activation reads Mon.. not the dropped weekend). Activations without ``horizon``
+    trading days left in the window are dropped, mirroring the legacy out-of-window drop; the
+    returned count is the effective sample size the null must match."""
+    total = 0.0
+    effective_n = 0
+    n = len(ordered_days)
+    for d in activations:
+        pos = bisect_right(ordered_days, d)  # first trading day strictly after d
+        if pos + horizon <= n:
+            total += sum(returns_map[ordered_days[j]] for j in range(pos, pos + horizon))
+            effective_n += 1
+    return total, effective_n
 
 
 def _significance_score(p_value: float, p_threshold: float) -> float:
@@ -86,39 +129,49 @@ class PermutationTestFilter:
         n_permutations = ctx.calibration.permutation_test.n_permutations
         p_threshold = ctx.calibration.permutation_test.p_value_threshold
         horizon = ctx.calibration.permutation_test.forward_horizon_days
+        mode = ctx.calibration.permutation_test.forward_return_mode
 
-        # D075: shift activation dates by `horizon` days before reading
-        # returns. Dates that land past the data window's end are silently
-        # dropped by `feature_cache.returns()`; `effective_n` reflects the
-        # in-window count so the permutation sample size matches.
-        if horizon == 0:
-            target_dates: list[date] = list(activations)
-        else:
-            target_dates = [d + timedelta(days=horizon) for d in activations]
-
-        if target_dates:
-            real_returns = ctx.feature_cache.returns(target_dates)
-            real_notional = sum(real_returns.values())
-            effective_n = len(real_returns)
-        else:
-            real_notional = 0.0
-            effective_n = 0
-
-        # Permuted distribution: random subsets of size `effective_n`
-        # drawn from the full window's returns. The window is anchored at
-        # `registry.data_start_date` (contracts v1.6.0) so the calendar
-        # axis stays consistent with whatever cache implementation answers
-        # `returns(dates)`.
+        # Permuted-null pool: returns over the full data window. Anchored at
+        # `registry.data_start_date` (contracts v1.6.0) so the calendar axis stays
+        # consistent with whatever cache implementation answers `returns(dates)`.
+        # Computed up front (no RNG here) so both modes share the trading-day index;
+        # RNG is only drawn in the permutation loop below → the legacy branch stays
+        # byte-identical to pre-P1-1.
         history = ctx.feature_cache.data_history_days
         window = _full_window(ctx.registry.data_start_date, history)
         all_returns_map = ctx.feature_cache.returns(window)
-        all_returns = list(all_returns_map.values())
+
+        if mode == "cumulative_trading" and horizon > 0:
+            # P1-1: cumulative return over the next `horizon` TRADING days (T+1..T+k), null
+            # built on the SAME statistic (else a k-day real sum vs 1-day null sums is a
+            # scale mismatch). ordered_days == the trading-day index (returns-map keys).
+            ordered_days = sorted(all_returns_map)
+            pool = list(_forward_cumulative_pool(ordered_days, all_returns_map, horizon).values())
+            real_notional, effective_n = _real_forward_cumulative(
+                activations, ordered_days, all_returns_map, horizon
+            )
+        else:
+            # Legacy single_day: the return on the single CALENDAR day at T+horizon (buggy —
+            # kept as the default so an un-flipped tree is byte-identical). Dates past the
+            # window end are dropped by `returns()`; `effective_n` reflects the in-window count.
+            if horizon == 0:
+                target_dates: list[date] = list(activations)
+            else:
+                target_dates = [d + timedelta(days=horizon) for d in activations]
+            if target_dates:
+                real_returns = ctx.feature_cache.returns(target_dates)
+                real_notional = sum(real_returns.values())
+                effective_n = len(real_returns)
+            else:
+                real_notional = 0.0
+                effective_n = 0
+            pool = list(all_returns_map.values())
 
         rng = ctx.rng_factory("permutation_test")
         ge_real = 0
-        if effective_n > 0 and len(all_returns) >= effective_n:
+        if effective_n > 0 and len(pool) >= effective_n:
             for _ in range(n_permutations):
-                sampled = rng.sample(all_returns, effective_n)
+                sampled = rng.sample(pool, effective_n)
                 if sum(sampled) >= real_notional:
                     ge_real += 1
             p_value = ge_real / n_permutations
@@ -141,6 +194,7 @@ class PermutationTestFilter:
                     "n_activations": len(activations),
                     "effective_n": effective_n,
                     "forward_horizon_days": horizon,
+                    "forward_return_mode": mode,
                     "p_value_threshold": p_threshold,
                 }
             ),
