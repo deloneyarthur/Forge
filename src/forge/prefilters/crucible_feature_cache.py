@@ -315,14 +315,21 @@ class CrucibleFeatureCache:
         # that a batch ran against thin/partial data used to be the downstream
         # `prefilter_rejections` histogram, which is indistinguishable from
         # genuine signal-quality rejections — the blindness that let D080 persist
-        # for 7 iterations. Emit per-underlying coverage + which degraded.
+        # for 7 iterations. P3-3 (F19): emit AGGREGATES, not the two full
+        # ~124-ticker coverage dicts + the ticker list (~70% of journal volume).
+        # `below_full` names only the underlyings under the max returns-window (the
+        # thin-data signal); full-coverage tickers need no per-ticker line. Event
+        # name + `data_unavailable` kept verbatim (grepped by operators; M-5 intent).
+        returns_coverage = {u: len(self._returns[u]) for u in configs_by_underlying}
+        max_coverage = max(returns_coverage.values()) if returns_coverage else 0
+        below_full = {u: n for u, n in sorted(returns_coverage.items()) if n < max_coverage}
         _logger.info(
             "feature_cache_prefetch_batch",
             n_configs=len(configs_list),
             n_underlyings=len(configs_by_underlying),
-            underlyings=sorted(configs_by_underlying),
-            returns_coverage={u: len(self._returns[u]) for u in configs_by_underlying},
-            regime_coverage={u: len(self._regimes[u]) for u in configs_by_underlying},
+            max_coverage=max_coverage,
+            n_full_coverage=sum(1 for n in returns_coverage.values() if n == max_coverage),
+            below_full=below_full,
             data_unavailable=sorted(
                 u for u in configs_by_underlying if u in self._data_unavailable_for
             ),
