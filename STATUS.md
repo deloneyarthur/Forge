@@ -1,6 +1,11 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Pipeline-perf audit STARTED (learned-systems audit complete): P3-1 (phase_timings `weights` bucket) + P3-3 (compact prefetch log) + P3-4 (single-txn shadow-scores write). All byte-identical, safe under the D220 hold. [[D234]]
+## 2026-07-02 — Track A (estimand re-aim) contracts gap CLOSED + VERIFIED: `component_contributions` reader in contracts 1.22.0 loads cleanly; export still EMPTY (n=0) → build stays HELD until first promotion.
+
+**Operator: "PROMPT_CRUCIBLE_MARGINAL_CONTRIBUTION_EXPORT.md — Verification completed."** Verified Crucible's side: `crucible_contracts.load_component_contributions_from_export(exports_dir) → {config_hash: ComponentContribution}` (1.22.0, installed) loads the live export cleanly and returns `{}` (cold-start contract, never raises). Its docstring gives the exact usage: **re-aim `compute_hypothesis_component_weights` off it — reward LOW `correlation_to_incumbent` × POSITIVE `marginal_sharpe`**. The prompt was already ✅ RESOLVED (export `component_contributions_*.json` = `a7228f9`, reader = `afbe737`, adopted at D216 cont. 2/3); this confirms it end-to-end.
+- **But the export is EMPTY** (`contributions: {}`, n=0, 147 bytes) — no book has promoted yet, so there's no per-component marginal-contribution data to consume. **Track A (P2.2 / D216 Layer-1 estimand re-aim) is now DATA-blocked, NOT contracts-blocked.** Build stays HELD — re-aiming the learned family-weight against `{}` validates nothing (the plan's explicit warning). **Trigger to build = the first promotion populates the export** (then: build flag-OFF, shadow the re-aimed weights vs the component-rate weights ≥2 weeks before proposing a flip). No Forge action needed now.
+
+## 2026-07-02 — Pipeline-perf audit STARTED (learned-systems audit complete): P3-1 (phase_timings `weights` bucket) + P3-3 (compact prefetch log) + P3-4 (single-txn shadow-scores write). All byte-identical, safe under the D220 hold. [[D234]]
 
 **Operator: "continue." Learned audit done (D228–D233) → opened the pipeline-performance tier (the daemon burns ~11 avoidable CPU-h/day, taxing shared Crucible compute).**
 - **Started with the two byte-identical observability items** (safe under D220 + D104 — no persistence/submission/cadence change; a reboot just adds/changes a journal field):
