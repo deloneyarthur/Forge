@@ -475,6 +475,7 @@ def test_d065_phase_timings_line_renders_in_pipeline_order() -> None:
         "reconcile": 3.0,
         "prefetch": 12345.0,
         "rank": 0.20,
+        "weights": 28.0,  # P3-1/F6 — the learned-weight loaders, between reconcile and enum
         "enumeration": 8.0,
     }
     line = _format_phase_timings_line(out_of_order)
@@ -483,6 +484,7 @@ def test_d065_phase_timings_line_renders_in_pipeline_order() -> None:
     names = [seg.split("=")[0] for seg in body.split(", ")]
     assert names == [
         "reconcile",
+        "weights",
         "enumeration",
         "prefetch",
         "battery",

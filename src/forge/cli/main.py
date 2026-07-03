@@ -361,12 +361,15 @@ def _format_phase_timings_line(timings: Mapping[str, float]) -> str:
     """D065: render per-phase elapsed seconds for the iteration.
 
     Single-line, fixed key order so the line is greppable and the order
-    matches the actual pipeline flow (reconcile → enumeration → prefetch
-    → battery → rank → submit). Missing keys are skipped (an iteration
-    that short-circuits early won't have all phases populated).
+    matches the actual pipeline flow (reconcile → weights → enumeration →
+    prefetch → battery → rank → submit). Missing keys are skipped (an
+    iteration that short-circuits early won't have all phases populated).
+    `weights` (P3-1/F6) is the learned-weight loaders between reconcile and
+    the battery — previously untimed.
     """
     order = (
         "reconcile",
+        "weights",
         "enumeration",
         "prefetch",
         "battery",
@@ -1889,6 +1892,10 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                 )
             return "blocked"
 
+    # P3-1 (F6): time the learned-weight loaders (promoted fetch + all the enumeration
+    # weight families below) — a ~28s stanza that sat in NO phase_timings bucket, invisible
+    # between `reconcile` and the battery's `enumeration`. Observability only.
+    _t_weights = _time.monotonic()
     promoted = _fetch_promoted_configs(forge_db_path, crucible_db)
     # D105 — both weight families are component-rate and version-scoped: the
     # gated export's tail reaches into stale re-gated cohorts and carries no
@@ -2020,6 +2027,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             f"min_pass_p={calibration.expected_trade_count.min_pass_probability} "
             f"min_samples={calibration.expected_trade_count.min_bucket_samples}"
         )
+    timings["weights"] = _time.monotonic() - _t_weights
     try:
         reports = _run_battery_for_seed(
             grammar,
