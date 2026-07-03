@@ -14,6 +14,7 @@ from pathlib import Path
 
 import duckdb
 import polars as pl
+import pytest
 
 from forge.persistence.db import db_connection
 from forge.prefilters.types import PreFilterReport
@@ -164,6 +165,41 @@ def test_records_scores_for_submitted_candidates(tmp_path: Path) -> None:
     assert len(model_id) == 16
     assert 0.0 <= model_score <= 1.0
     assert composite_score == 0.7
+
+
+def test_shadow_scoring_rolls_back_and_never_raises_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # P3-4: the write is one transaction. A mid-batch failure must (a) never raise (telemetry
+    # posture), (b) roll back so no partial rows land, and (c) leave the SHARED connection
+    # usable — not stuck mid-transaction.
+    models_dir = _toy_model_dir(tmp_path)
+    candidate = _candidate()
+    batch_id = str(uuid.uuid4())
+
+    def _boom(*_args: object, **_kwargs: object) -> float:
+        raise RuntimeError("scoring blew up mid-batch")
+
+    monkeypatch.setattr("forge.ranking.shadow.score_features", _boom)
+    with db_connection() as conn:
+        _insert_submission(conn, batch_id=batch_id, config_hash=candidate.report.config.config_hash)
+        recorded = run_shadow_scoring(
+            conn,
+            models_dir=models_dir,
+            candidates=[candidate],
+            registry=_REGISTRY,
+            batch_id=batch_id,
+            scored_at=_SCORED_AT,
+        )
+        assert recorded == 0  # never raised — returned the failure sentinel
+        assert conn.execute("SELECT COUNT(*) FROM shadow_scores").fetchone()[0] == 0  # rolled back
+        # The connection is not wedged in an open transaction: a follow-up write succeeds.
+        conn.execute(
+            "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+            "composite_score, scored_at) VALUES (?, ?, ?, ?, ?)",
+            [str(uuid.uuid4()), "m" * 16, 0.5, 0.5, _SCORED_AT],
+        )
+        assert conn.execute("SELECT COUNT(*) FROM shadow_scores").fetchone()[0] == 1
 
 
 def test_no_models_dir_is_noop(tmp_path: Path) -> None:

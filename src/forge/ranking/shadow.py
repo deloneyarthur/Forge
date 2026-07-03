@@ -71,28 +71,40 @@ def run_shadow_scoring(
             "SELECT forge_candidate_id, config_hash FROM submissions WHERE forge_batch_id = ?",
             [batch_id],
         ).fetchall()
+        # P3-4 (F9): one transaction for the whole batch instead of per-row autocommit —
+        # DuckDB WAL-fsyncs every autocommitted INSERT (~200 fsyncs/batch). Same rows,
+        # one commit. On any failure ROLLBACK then re-raise into the outer handler so the
+        # never-raises posture holds AND the shared connection isn't left mid-transaction.
         recorded = 0
-        for candidate_id, config_hash in rows:
-            candidate = by_hash.get(config_hash)
-            if candidate is None:
-                continue
-            features = extract_features(candidate.report.config, registry).as_dict()
-            tail_score = score_robustness(robustness, features) if robustness is not None else None
-            conn.execute(
-                "INSERT OR IGNORE INTO shadow_scores (forge_candidate_id, model_id, "
-                "model_score, composite_score, scored_at, tail_score, tail_model_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [
-                    str(candidate_id),
-                    model.model_id,
-                    score_features(model, features),
-                    candidate.composite_score,
-                    scored_at,
-                    tail_score,
-                    tail_model_id,
-                ],
-            )
-            recorded += 1
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            for candidate_id, config_hash in rows:
+                candidate = by_hash.get(config_hash)
+                if candidate is None:
+                    continue
+                features = extract_features(candidate.report.config, registry).as_dict()
+                tail_score = (
+                    score_robustness(robustness, features) if robustness is not None else None
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO shadow_scores (forge_candidate_id, model_id, "
+                    "model_score, composite_score, scored_at, tail_score, tail_model_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        str(candidate_id),
+                        model.model_id,
+                        score_features(model, features),
+                        candidate.composite_score,
+                        scored_at,
+                        tail_score,
+                        tail_model_id,
+                    ],
+                )
+                recorded += 1
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
         _LOG.info(
             "shadow_scores_recorded",
             model_id=model.model_id,
