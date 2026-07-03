@@ -1,11 +1,12 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — Pipeline-perf audit STARTED (learned-systems audit complete): observability items P3-1 (phase_timings `weights` bucket) + P3-3 (compact prefetch log, ~70% journal cut). Byte-identical; safe under the D220 hold. [[D234]]
+## 2026-07-02 (latest) — Pipeline-perf audit STARTED (learned-systems audit complete): P3-1 (phase_timings `weights` bucket) + P3-3 (compact prefetch log) + P3-4 (single-txn shadow-scores write). All byte-identical, safe under the D220 hold. [[D234]]
 
 **Operator: "continue." Learned audit done (D228–D233) → opened the pipeline-performance tier (the daemon burns ~11 avoidable CPU-h/day, taxing shared Crucible compute).**
 - **Started with the two byte-identical observability items** (safe under D220 + D104 — no persistence/submission/cadence change; a reboot just adds/changes a journal field):
   - **P3-1 (`3acc66b`):** the ~28s learned-weight loader stanza between `reconcile` and the battery now has a `weights=` phase_timings bucket (was invisible). The audit's DO-FIRST — makes later fixes journal-verifiable.
   - **P3-3 (`0068f44`):** `feature_cache_prefetch_batch` no longer dumps two full ~124-ticker dicts + the ticker list every iteration — replaced with `max_coverage`/`n_full_coverage`/`below_full` aggregates (~70% journal-volume cut). `data_unavailable` + event name kept verbatim.
+  - **P3-4 (`af4b1a7`):** `run_shadow_scoring` (telemetry-only shadow write, never touches submissions) now writes the whole batch in ONE transaction instead of per-row autocommit (~200 fsyncs/batch → 1). Never-raises + rollback posture preserved + tested; output byte-identical.
 - **The BIG wins are deferred + deploy-gated:** P0-1/2/3 (the DuckDB `executemany` autocommit/fsync rewrite; ~190s→6s submit, ~11 CPU-h/day) change persistence timing → feedback cadence, so their DEPLOY waits for post-D220 (07-04) to keep the resolved prereg's attribution clean. Each needs the deploy ritual + equivalence tests.
 - **POSTURE: byte-identical; daemon untouched behaviorally.** NEXT: more safe-now hygiene (P3-4 single-txn shadow scores, P3-5 rate-limiter conn reuse, P3-2 adaptive blocked sleep) OR hold for the 07-04 window to deploy the P0 perf wins + flip the teed-up levers. Live-stream changes still held until D220 `b7ecc2d2` (≥07-04).
 
