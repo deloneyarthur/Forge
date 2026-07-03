@@ -1,5 +1,7 @@
 # Forge → Crucible: does `|move|`-selected single-name `volatility_event` contribute more to the PBO-0.107 long-vol book than directional-selected ve?
 
+> **✅ RESOLVED 2026-07-02 — Crucible ANSWERED (`../Crucible/docs/handoffs/FORGE_ve_move_null_selection_quality_RESULT_2026-07-02.md`) → Forge DROPPED `e1a43ba8` (D235).** The necessary-condition screen (622 honest ve comps, ALL classifiable → blocker = proxy dispersion not power) found NO support for magnitude-selected ve as higher-quality/more-decorrelated: the realized proxy can't isolate the signal-level partition (structure confound; 0/622 reach magnitude 0.5) AND the within-band gradient INVERTS the thesis (more-magnitude ve = MORE correlated + HIGHER PC1). Combined with D226's survival refutation (ve 55→21, −62%) + redundancy (flip-1 `848a1f67` + D216 floor already supply ve), the lever is dropped; prereg `e1a43ba8ee14` → refuted. **Baseline correction:** the book CSCV PBO is **0.178** (10-group/45-path confirm), not 0.107 (the title + body below predate the correction). Airtight route (Forge hands over the exact `config_hash→ve_null_profile` tag for a Crucible re-score) stays available on request, low-EV. Original draft below.
+>
 > **DRAFT (2026-07-02) — operator to review before sending.** Raised by the Forge
 > strategy-audit P1-2 shadow-count (D226) run 2026-07-02. Relates to the single-name
 > ve second-factor result (`FORGE_volsurface_second_factor_RESULT_2026-06-29.md`, real
