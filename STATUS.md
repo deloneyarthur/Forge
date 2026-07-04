@@ -1,6 +1,19 @@
 # Forge — Status
 
-## 2026-07-04 (latest) — FLIP #1 DEPLOYED: permutation_test `cumulative_trading` is LIVE (D238). First post-D220 flip; restart also deployed 57 committed flag-OFF session commits. Daemon healthy. [[D238]]
+## 2026-07-04 (latest) — FLIP #2 DEPLOYED: signal_correlation `exclude_regime_filter` is LIVE (D239). Two post-D220 flips live; daemon healthy. [[D239]]
+
+**Operator: "sounds good lets deploy" → deployed `5082d332` (signal_correlation regime-gate exclusion), ~30 min after flip #1.**
+- **Deployed 2026-07-04 18:45:42 UTC** (11:45:42 PDT; daemon PID 1800092). Verify: active, NRestarts=0, clean startup (registry_loaded, grammar_version=v22, no traceback), `forge healthcheck` **OVERALL=OK (10 ok, 0 warn, 0 crit)**.
+- **The flip:** `prefilter.yaml signal_correlation.exclude_regime_filter: true` (D227: 94% of ve signal_correlation kills were the regime gate co-firing, median Jaccard 0.949 — structural, not content redundancy). Ritual **stopped the daemon FIRST** (it hot-reads prefilter.yaml + now has the D227 code, so a live edit would activate ungated), suite uncontended (1843 green), commit `ca44dcd`, restart.
+- **Test prep:** `c543120` decoupled the base-mechanism tests (pinned `_ctx` to `exclude_regime_filter=False`); the flip added `test_shipped_calibration_excludes_regime_filter`.
+
+**RESUME POINTER (post-compaction):** Two flips are LIVE and accruing cohorts. **NEXT:**
+1. **Resolve the two flip preregs on their POST-FLIP cohorts** (needs ~1-2 days of decided verdicts): `848a1f671392` (cumulative_trading, deployed 2026-07-04T18:19:53Z — per-family permutation survival ↑, component-rate not down) and `5082d332b26e` (exclude_regime_filter, deployed 2026-07-04T18:45:42Z — per-family signal_correlation reject-fraction ve ~0.20→~0.01, ve survivors ↑, book-PBO ≤0.178 hold). Resolve on data AFTER each deploy timestamp.
+2. **Remaining teed-up levers to flip (one at a time):** `9063b405` (gate-tail; flip gate MET — but needs the FORGE_QUALITY_RANK_MODE=gate-tail env on the UNIT file → `daemon-reload` required, D-flip pending) and `FORGE_EXPLORATION_HOLDOUT_FRAC` (set the frac). `e1a43ba8` DROPPED (D235).
+3. Also unblocked-for-deploy: pipeline-perf **P0 fsync rewrite** (separate ritual).
+Daemon: healthy, on HEAD (all 59 session commits now live). D220 confirmed (D237); hold lifted.
+
+## 2026-07-04 — FLIP #1 DEPLOYED: permutation_test `cumulative_trading` is LIVE (D238). First post-D220 flip; restart also deployed 57 committed flag-OFF session commits. Daemon healthy. [[D238]]
 
 **Operator: "yes lets flip" → deployed `848a1f67` (cumulative_trading) via the full feedback-change/deploy.md ritual.**
 - **Deployed 2026-07-04 18:19:53 UTC** (11:19:53 PDT; new daemon PID 1598585). The restart was mandatory (running daemon was on 07-02 01:11 code, lacked the D224 loader) and deployed **all 57 committed session commits** (D221–D237, all flag-OFF/byte-identical) + the flip. Preflight GO (full suite 1842 green, deploy-surface clean, contracts pin 1.22.0).
