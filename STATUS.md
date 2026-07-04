@@ -1,6 +1,20 @@
 # Forge — Status
 
-## 2026-07-02 (latest) — ve `|move|` null (e1a43ba8) DROPPED: Crucible quality read finds NO support + INVERTS the thesis (more-magnitude ve = MORE correlated). Prereg → refuted. Book-PBO baseline corrected 0.107 → 0.178. [[D235]]
+## 2026-07-04 (latest) — D220 prior-weight prereg CONFIRMED (post-cut component-rate 0.1229 vs ≥0.06, durable) → the HOLD IS LIFTED. Teed-up flip levers ready; gate-tail flip gate now MET. [[D237]]
+
+**Operator: "are we ready for the d220 resolution" → checked the clock: it's actually 2026-07-04T17:09Z (the session had carried a stale 07-02 date from the compaction summary). D220's window (≥07-04T08:02Z) has PASSED — so we resolved it.**
+- **D220 CONFIRMED (`b7ecc2d2e96f`):** post-cut component-rate **0.1229** (6732/54756 decided, submitted ≥ cut) vs prereg **≥0.06** / ~0.048 baseline. DURABLE by day (07-02 0.117 / 07-03 0.122 / 07-04 0.128, rising); +62% over the immediate pre-cut 0.0757. Nothing else deployed in the window (all flag-OFF/byte-identical) → attributable to the 0.10→0.50 prior-weight raise. Resolved confirmed.
+- **THE D220 HOLD IS LIFTED.** The teed-up flag-OFF levers (all at OFF defaults, prereg'd) are now deployable:
+  - **`848a1f67`** cumulative_trading (validated win, D224/D226) — **flip first**.
+  - **`5082d332`** signal_correlation regime-gate exclusion (D227).
+  - **`9063b405`** gate-tail (D222/D228) — **flip gate now MET** (SPRT promote, logLR +41.66, fresh-PASS 4/3).
+  - **`FORGE_EXPLORATION_HOLDOUT_FRAC`** exploration holdout (D232) — operator sets frac.
+  - **`5c4ba16f`** D216 ve-supply floor (separate prereg, open).
+  - `e1a43ba8` DROPPED (D235).
+- **SEQUENCING (operator-owned):** flip ONE at a time, each with its own cohort cut, so each prereg resolves cleanly (deploying several at once re-confounds attribution). Each flip = `prefilter.yaml`/env change → feedback-change ritual + `deploy.md` (stop→suite→commit→restart→verify) — **operator-gated** (I can't restart the live service). Also unblocked: the pipeline-perf **P0 fsync rewrite** (separate ritual, ~11 CPU-h/day).
+- **NEXT: operator runs the `848a1f67` deploy first** — I can prepare the exact edit + ritual checklist on request. Daemon healthy (component-rate 0.123, submitting).
+
+## 2026-07-02 — ve `|move|` null (e1a43ba8) DROPPED: Crucible quality read finds NO support + INVERTS the thesis (more-magnitude ve = MORE correlated). Prereg → refuted. Book-PBO baseline corrected 0.107 → 0.178. [[D235]]
 
 **Operator forwarded `FORGE_ve_move_null_selection_quality_RESULT_2026-07-02.md` (Crucible's answer to my quality prompt).** The only thing keeping `e1a43ba8` shelved-not-dropped was: is the |move| cut a quality tightening or a supply throttle?
 - **Crucible's read (622 honest single-name ve comps, all classifiable):** (1) the cheap realized-P&L proxy CAN'T isolate the signal-level |move| partition — 100% realize as directional (0/622 reach magnitude 0.5) because a |move|-signal through a directional OTM structure → delta-$ P&L (structure confound; **blocker is proxy dispersion, NOT sample size**). (2) the weak within-band gradient **INVERTS the thesis**: more-magnitude ve (Q5) is MORE correlated (|corr| 0.070→0.118) + loads HIGHER on PC1 (0.066→0.104) = LESS decorrelated; marginal_sharpe only mildly favors Q5. → **no support for "magnitude-selected ve is higher-quality."**

@@ -5620,3 +5620,21 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Baseline correction (propagate).** The promotable book's CSCV PBO the 06-29 result reported as **0.107** was the 8-group / 28-path estimate; the clean **10-group / 45-path** confirm landed at **0.178** (`../Crucible/.../probe_results/mixed_book_pbo.json`; degradation slope −0.598; ve-heavy `tm4_ve8` won 36/45 paths). **Still clears the 0.40 gate and sits below the 0.50 noise floor — the book is still promotable**, less dramatically. Any future "book-PBO with/without a ve subset" anchors on 0.178, not 0.107. Corrected in STATUS + memory.
 
 **STATUS: e1a43ba8 DROPPED (prereg `e1a43ba8ee14` → refuted). No code change — the flag was already OFF/byte-identical (D225); it stays in the tree as dead-but-inert, or can be removed in a later cleanup. Teed-up 07-04 levers now: `848a1f67` (flip), `5082d332` (flip), `9063b405` (flip, SPRT-gated), `FORGE_EXPLORATION_HOLDOUT_FRAC` (activate). Book baseline is 0.178 everywhere.**
+
+## D237 — 2026-07-04 — D220 prior-weight prereg CONFIRMED (post-cut component-rate 0.1229 vs ≥0.06); the hold is LIFTED (D236 is the v23 worktree's)
+
+**Date note:** the actual clock is 2026-07-04T17:09Z — the post-compaction session had been carrying a stale "2026-07-02" date from the summary; earlier entries D226–D235 are labelled 07-02 but the later ones landed 07-03/07-04 (content valid, date labels approximate). D236 is reserved by `../Forge-build-v23` (v23-trend-grammar, `ade3344`), so this is D237.
+
+**Resolution.** D220's prereg `b7ecc2d2e96f` (cut 2026-07-02T08:02Z, ≥48h formal window) is now past its ≥2026-07-04T08:02Z resolution point. Measured the post-cut component-rate on a fresh snapshot (`scratchpad/forge_d220.db`): **0.1229** (6732 components / 54756 decided, submitted ≥ cut) vs the prereg's **≥0.06** threshold and the ~0.048 baseline anchor. **Durable across the full window** — by submit-day 07-02 0.117 / 07-03 0.122 / 07-04 0.128 (rising, not an early spike); +62% over the immediate pre-cut window (06-28..cut = 0.0757). Nothing else deployed in the window (all session work flag-OFF/byte-identical), so the lift is attributable to the 0.10→0.50 `prior_promotion_proximity` raise (the D149 F3 wiring); the early-read Kitagawa decomposition (72% within-family ranker skill, ve confounder ruled out) holds full-window. **Resolved CONFIRMED.**
+
+**The D220 hold is LIFTED.** The self-imposed "no submitted-stream ranking/population change until D220 resolves" is satisfied. The teed-up flag-OFF levers are ready — all at OFF defaults, prereg'd, byte-identical when unset:
+- `848a1f67` — permutation_test `cumulative_trading` (D224; shadow-validated D226: trend/em/ve survival ↑). The highest-value flip.
+- `5082d332` — signal_correlation `exclude_regime_filter` (D227; 94% of ve kills are the regime gate co-firing).
+- `9063b405` — gate-tail mode (D222/D228). **Flip gate now MET** (`forge status`: SPRT promote, logLR +41.66/2.77, fresh-PASS 4/3, mean Δ +0.299).
+- `FORGE_EXPLORATION_HOLDOUT_FRAC` — exploration holdout (D232; operator sets the frac).
+- `5c4ba16f` — D216 orthogonal-family floor (ve supply; separate prereg, still open).
+- `e1a43ba8` — DROPPED (D235).
+
+**Sequencing (recommendation, operator-owned).** Flip **one at a time**, each with its own cohort cut, so each prereg resolves cleanly — deploying several at once re-confounds attribution (the exact thing the hold avoided). Highest-value first: `848a1f67`. Each flip is a `prefilter.yaml`/env change → **feedback-change ritual + `docs/tasks/deploy.md`** (stop service → full uncontended suite → commit → restart → verify journal) — **operator-gated** (the daemon can't be restarted autonomously). The flip preregs resolve ONLY on their own post-flip cohorts.
+
+**STATUS: D220 CONFIRMED (`b7ecc2d2e96f`); hold LIFTED. Levers ready + gate-tail gate MET. NEXT: operator runs the feedback-change deploy for `848a1f67` first (I can prepare the exact edit + ritual checklist), then the others one at a time. Also unblocked-for-deploy: the pipeline-perf P0 fsync rewrite (separate ritual). Daemon healthy (component-rate 0.123, submitting).**
