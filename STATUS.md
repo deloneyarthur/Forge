@@ -1,6 +1,14 @@
 # Forge — Status
 
-## 2026-07-04 (latest) — D220 prior-weight prereg CONFIRMED (post-cut component-rate 0.1229 vs ≥0.06, durable) → the HOLD IS LIFTED. Teed-up flip levers ready; gate-tail flip gate now MET. [[D237]]
+## 2026-07-04 (latest) — FLIP #1 DEPLOYED: permutation_test `cumulative_trading` is LIVE (D238). First post-D220 flip; restart also deployed 57 committed flag-OFF session commits. Daemon healthy. [[D238]]
+
+**Operator: "yes lets flip" → deployed `848a1f67` (cumulative_trading) via the full feedback-change/deploy.md ritual.**
+- **Deployed 2026-07-04 18:19:53 UTC** (11:19:53 PDT; new daemon PID 1598585). The restart was mandatory (running daemon was on 07-02 01:11 code, lacked the D224 loader) and deployed **all 57 committed session commits** (D221–D237, all flag-OFF/byte-identical) + the flip. Preflight GO (full suite 1842 green, deploy-surface clean, contracts pin 1.22.0).
+- **The flip itself:** `prefilter.yaml permutation_test.forward_return_mode: cumulative_trading` (was the buggy single_day default). 4 deploy-state tests updated (assert cumulative_trading / back-compat keyless default / decoupled shadow-null base / true-determinism idempotency rewrite).
+- **Verify (deploy.md):** ActiveState=active, NRestarts=0, clean startup (registry_loaded, grammar_version=v22, no traceback/SchemaVersionMismatch); loop iterating + reconciling; `blocked: in-flight depth 726 > cap 600` = normal §7.3 backpressure; `forge healthcheck` **OVERALL=OK (10 ok, 0 warn, 0 crit)** — the prior transient wf_p25-drift WARN cleared.
+- **NEXT:** resolve prereg `848a1f671392` on the POST-FLIP cohort (data after 2026-07-04 18:19:53 UTC — NOT the 07-02 registration cut); watch the per-family submission mix + component-rate. Then flip the next levers ONE at a time: `5082d332` (signal_correlation regime-gate), `9063b405` (gate-tail, gate MET), `FORGE_EXPLORATION_HOLDOUT_FRAC`.
+
+## 2026-07-04 — D220 prior-weight prereg CONFIRMED (post-cut component-rate 0.1229 vs ≥0.06, durable) → the HOLD IS LIFTED. Teed-up flip levers ready; gate-tail flip gate now MET. [[D237]]
 
 **Operator: "are we ready for the d220 resolution" → checked the clock: it's actually 2026-07-04T17:09Z (the session had carried a stale 07-02 date from the compaction summary). D220's window (≥07-04T08:02Z) has PASSED — so we resolved it.**
 - **D220 CONFIRMED (`b7ecc2d2e96f`):** post-cut component-rate **0.1229** (6732/54756 decided, submitted ≥ cut) vs prereg **≥0.06** / ~0.048 baseline. DURABLE by day (07-02 0.117 / 07-03 0.122 / 07-04 0.128, rising); +62% over the immediate pre-cut 0.0757. Nothing else deployed in the window (all flag-OFF/byte-identical) → attributable to the 0.10→0.50 prior-weight raise. Resolved confirmed.
