@@ -35,8 +35,12 @@ def test_shadow_null_runs_and_writes_jsonl(tmp_path: Path) -> None:
     assert out.exists()
     record = json.loads(out.read_text(encoding="utf-8").strip())
     assert record["cache_kind"] == "synthetic"
-    # Production null recorded as the un-flipped default.
-    assert record["prod_null"]["forward_return_mode"] == "single_day"
+    # prod_null mirrors the LIVE prefilter.yaml (cumulative_trading since the D237 flip) — assert
+    # it matches whatever is shipped rather than pinning a mode, so the smoke survives the flip.
+    from forge.prefilters.calibration import load_calibration
+
+    live = load_calibration(Path(__file__).resolve().parents[3] / "config" / "prefilter.yaml")
+    assert record["prod_null"]["forward_return_mode"] == live.permutation_test.forward_return_mode
     # Both flips are recorded with per_family + totals.
     for flip in ("flip1_cumulative_trading", "flip2_ve_absolute_move"):
         t = record[flip]["totals"]

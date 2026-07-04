@@ -45,6 +45,12 @@ prefilter:
     # returns but DO correlate with k-day-forward returns (one trading week
     # typical for swing strategies). 0 preserves legacy same-day behavior.
     forward_horizon_days: 5
+    # D224/D226 FLIPPED 2026-07-04 (prereg 848a1f671392, after D220 confirmed): the
+    # forward return is the CUMULATIVE T+1..T+k TRADING-day return (was the single
+    # calendar day at T+k — two bugs: point-in-time not cumulative, and calendar-day
+    # shift dropped ~40% of Mon/Tue samples to weekends). Shadow-count D226 validated:
+    # trend/event_momentum/ve survival up. Resolve the prereg on the POST-FLIP cohort.
+    forward_return_mode: cumulative_trading
   auto_tune:
     # DISARMED 2026-07-02 (D218, strategy-audit P0-1): the §5.5 self-apply is keyed on
     # a per-config verdict-level promotion rate — a dead estimand under book-level

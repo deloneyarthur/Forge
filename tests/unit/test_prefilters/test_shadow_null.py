@@ -128,7 +128,20 @@ def test_family_delta_rejects_negative_flip_counts() -> None:
 
 
 def test_corrected_null_flips_only_the_two_null_knobs() -> None:
-    prod = load_calibration(_REPO_ROOT / "config" / "prefilter.yaml")
+    from dataclasses import replace
+
+    # Test the builders on a KNOWN single_day base — decoupled from the live config, which
+    # ships `cumulative_trading` since the D237 flip. The builder's contract (flip ONLY the two
+    # null knobs, leave every other section identity) is what this guards.
+    base = load_calibration(_REPO_ROOT / "config" / "prefilter.yaml")
+    prod = replace(
+        base,
+        permutation_test=replace(
+            base.permutation_test,
+            forward_return_mode="single_day",
+            volatility_event_absolute_move=False,
+        ),
+    )
     corrected = corrected_null_calibration(prod)
     # The two teed-up corrections are ON.
     assert corrected.permutation_test.forward_return_mode == "cumulative_trading"
@@ -149,7 +162,8 @@ def test_corrected_null_flips_only_the_two_null_knobs() -> None:
     assert corrected.signal_correlation == prod.signal_correlation
     assert corrected.regime_exposure == prod.regime_exposure
     assert corrected.auto_tune == prod.auto_tune
-    # Production default is the buggy single_day null (so the daemon is unaffected).
+    # The constructed base is single_day + ve-absolute-off (the pre-flip null the builders
+    # correct from); the live config now ships cumulative_trading (D237).
     assert prod.permutation_test.forward_return_mode == "single_day"
     assert prod.permutation_test.volatility_event_absolute_move is False
 
