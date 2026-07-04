@@ -69,6 +69,12 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     "macd": 26,  # slow-EMA leg of MACD(12,26,9)
     "momentum_252": 252,  # 12-month momentum
     "returns_12m_skip1": 252,
+    # v23 (Crucible signal-quality handoff §2.1/§2.5): the SMA-200 slope is a
+    # slow trend read — long_lookback, the SAME DTE-bucket class as the
+    # momentum_252 it is meant to out-rank (a clean signal swap, not a bucket
+    # move). ad_slope (A/D-line slope) is a faster volume-trend read → medium.
+    "sma_slope": 200,  # SMA-200 slope
+    "ad_slope": 60,  # accumulation/distribution-line slope (~quarter)
     "ema_cross": 50,  # slow leg of the cross
     "ema_50": 50,
     "ema": 20,

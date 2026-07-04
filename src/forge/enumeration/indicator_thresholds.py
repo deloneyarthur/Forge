@@ -158,23 +158,59 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         op_directional=">",
         op_regime=">",
     ),
-    "returns_12m_skip1": IndicatorThresholdSpec(
-        directional_range=(0.0, 0.15),
-        regime_range=(-0.05, 0.30),
+    # v23 (Crucible signal-quality handoff §2.1, D236): sma_slope (SMA-200
+    # slope) is the best cross-sectional trend signal — rank-IC 0.078 @63d,
+    # DOMINATES momentum_252 (0.059; momentum_252 adds -0.012 incremental once
+    # sma_slope is held). Brand-new registry id (family=trend) with NO
+    # Forge-side value distribution → PERCENTILE-ONLY directional (the
+    # option_momentum / D138 precedent): fire when the slope ranks in the top
+    # decile of its trailing window = strong, established uptrend. op ">"
+    # high-side, distribution-free (no absolute range to mis-calibrate). The
+    # swap sharpens SELECTION quality (WF), NOT the CPCV-p25 wall (handoff §0);
+    # momentum_252 is RETAINED so the learned D106 directional weight ranks
+    # sma_slope against it on live evidence rather than a hard swap.
+    "sma_slope": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=None,
         op_directional=">",
+        directional_percentile_range=(0.80, 0.90),
+    ),
+    # v23 (§2.5): ad_slope (accumulation/distribution-line slope), the volume-
+    # family champion (registry family=trend). Weak standalone IC (0.016) but a
+    # distinct volume-based read; added for sampling-space coverage per the
+    # handoff. Same percentile-only pattern.
+    "ad_slope": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=None,
+        op_directional=">",
+        directional_percentile_range=(0.80, 0.90),
+    ),
+    # v23 (§2.2, D236): returns_12m_skip1 is rank-corr 1.0 with momentum_252
+    # (identical 12-1 computation) — PRUNED from the directional pool so the
+    # same signal is not double-sampled (eff-N / alpha-budget hygiene). The
+    # directional role is nulled → is_threshold_skippable('directional')=True;
+    # the (unused) regime fields are kept dormant so the id stays documented.
+    "returns_12m_skip1": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=(-0.05, 0.30),
         op_regime=">",
     ),
+    # v23 (§2.3, D236): macd is anti-momentum at 3-6m (negative IC) — PRUNED as
+    # a trend directional (directional role nulled). Kept documented.
     "macd": IndicatorThresholdSpec(
-        directional_range=(-1.0, 0.0),  # bearish cross
+        directional_range=None,
         regime_range=(-2.0, 2.0),
     ),
     # ----- Binary / categorical -----
+    # v23 (§2.3, D236): ema_cross(12/26) + supertrend are anti-momentum or
+    # redundant with sma_slope (golden-cross ema_cross_50_200 is a separate,
+    # unregistered id) — PRUNED as trend directionals (directional role nulled).
     "ema_cross": IndicatorThresholdSpec(
-        directional_range=(0.0, 0.0),  # threshold 0 — fires on sign change to negative
+        directional_range=None,
         regime_range=(-1.0, 1.0),
     ),
     "supertrend": IndicatorThresholdSpec(
-        directional_range=(0.0, 0.0),
+        directional_range=None,
         regime_range=(-1.0, 1.0),
     ),
     "vol_regime": IndicatorThresholdSpec(

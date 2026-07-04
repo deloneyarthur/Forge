@@ -136,7 +136,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # dominant over hurst; (B) event_passed_exit.n_bars_after_entry samples the loosening
     # ladder {3,5,8,13,21}, the D168 time-cut fair test. The 21 `rules:` textually
     # unchanged — R1's accepted-gate set widens in custom_predicates, not the rule text).
-    assert grammar.grammar_version == "v22"  # type: ignore[attr-defined]
+    # D236 bumped v22 -> v23 (trend_continuation directional-pool hygiene, Crucible
+    # signal-quality handoff: +sma_slope/+ad_slope (percentile-only), prune
+    # returns_12m_skip1/macd/ema_cross/supertrend. Threshold+horizon tables only;
+    # the 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v23"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
