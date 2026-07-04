@@ -5650,3 +5650,15 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Ritual.** feedback-change + `deploy.md`: full suite green (1842) → commit → stop → restart → verify journal. Resolve prereg `848a1f671392` on the POST-FLIP cohort (data after the actual restart timestamp, NOT the prereg's 07-02 registration cut — the flip is 07-04). Watch the per-family submission mix + component-rate.
 
 **STATUS: flip committed + suite-green; restart pending (operator-gated). Post-restart: verify journal (contracts line, grammar_version, reconcile, no traceback), record the deploy timestamp in STATUS, then resolve 848a1f67 on the post-flip cohort. Next flips (5082d332, 9063b405, holdout) follow one at a time.**
+
+## D239 — 2026-07-04 — FLIP #2: signal_correlation `exclude_regime_filter` deployed (prereg 5082d332)
+
+**Spec section:** §5.3.6; the second post-D220 flip. `prefilter.yaml` `signal_correlation.exclude_regime_filter: true` — exclude the `regime_filter` context gate from the pairwise Jaccard overlap (D227: 94% of vol_event signal_correlation kills were the gate co-firing with the alpha signals it gates, median Jaccard 0.949 — structural, not the content redundancy the filter targets).
+
+**Deploy nuance vs flip #1.** The daemon (restarted at flip #1) now HAS the D227 code and hot-reads `prefilter.yaml`, so editing the live config would activate the flip immediately, ungated. So the ritual STOPPED the daemon first (before the config edit), ran the full suite uncontended, committed, then restarted — the edit never reached a running daemon un-gated.
+
+**Test prep (two commits).** (1) `c543120` — decoupled the base-mechanism signal_correlation tests from the live config by pinning the shared `_ctx` fixture to `exclude_regime_filter=False` (so "gate co-firing → rejected" still verifies the gate-included behaviour once the live config ships ON); the ON behaviour keeps `_ctx_exclude_regime`. (2) this flip — added `test_shipped_calibration_excludes_regime_filter` (asserts the live config is now ON). Full suite green (1843).
+
+**Sequencing note.** Flipped ~30 min after flip #1 (`848a1f67`). Defensible because the two hit DIFFERENT filters (permutation_test vs signal_correlation) with SEPARABLE prereg primary metrics (permutation survival vs signal_correlation reject-fraction); only the shared component-rate guard is jointly attributed. Resolve prereg `5082d332b26e` on the POST-FLIP cohort (per-family signal_correlation reject fraction: ve ~0.20 → ~0.01-0.02; ve survivors up; no book-PBO harm).
+
+**STATUS: flip committed + suite green (1843); restart + verify next. Post-restart record the deploy timestamp. Remaining teed-up levers: `9063b405` (gate-tail, gate MET), `FORGE_EXPLORATION_HOLDOUT_FRAC`.**

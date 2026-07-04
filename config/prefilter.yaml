@@ -29,6 +29,12 @@ prefilter:
     # Catches empirically-redundant signal pairs that pass C1's
     # structural family-disjointness check.
     max_jaccard_overlap: 0.85
+    # D227/D239 FLIPPED 2026-07-04 (prereg 5082d332, after D220 confirmed): exclude the
+    # regime_filter CONTEXT GATE from the pairwise overlap. Measured: 94% of vol_event kills
+    # were the gate co-firing with the alpha signals it gates (median Jaccard 0.949) —
+    # structural, not the content redundancy this filter targets. Compares only alpha-bearing
+    # signals now; content redundancy still rejects.
+    exclude_regime_filter: true
   regime_exposure:
     max_single_regime_concentration: 0.80
   permutation_test:

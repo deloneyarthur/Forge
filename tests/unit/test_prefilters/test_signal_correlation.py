@@ -366,3 +366,11 @@ def test_exclude_regime_trivial_pass_with_one_alpha_signal() -> None:
     result = SignalCorrelationFilter().apply(cfg, _ctx_exclude_regime(cache))
     assert result.passed is True
     assert result.details.get("compared_signals") == 1
+
+
+def test_shipped_calibration_excludes_regime_filter() -> None:
+    # FLIPPED 2026-07-04 (D239, prereg 5082d332, after D220 confirmed): the live
+    # prefilter.yaml now ships exclude_regime_filter=True. (The base-mechanism tests above
+    # pin it False via _ctx so they still verify the gate-included behaviour.)
+    cal = load_calibration(_PREFILTER_YAML)
+    assert cal.signal_correlation.exclude_regime_filter is True
