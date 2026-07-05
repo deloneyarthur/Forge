@@ -19,11 +19,13 @@ from typing import TYPE_CHECKING
 import duckdb
 import pytest
 from crucible_contracts import (
+    FailedRun,
     StrategyConfig,
 )
 
 from forge.feedback.consumer import (
     STRANDED_AFTER,
+    _flush_failed_runs,
     consume_batch_results,
     reconcile_all_pending,
 )
@@ -759,6 +761,110 @@ def test_reconcile_all_pending_aged_out_flush_idempotent(tmp_path: Path) -> None
         ).fetchone()[0]
     assert str(first_run_id) == AGED_OUT_SENTINEL
     assert str(second_run_id) == AGED_OUT_SENTINEL
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-05 incident — reconcile_all_pending: retire runner-failed in-flight
+# rows Crucible reports in failed_runs but that never enter gated_runs.
+# ---------------------------------------------------------------------------
+
+
+def _write_failed_runs_export(
+    exports_dir: Path, config_hashes: list[str], *, category: str = "runner_failure"
+) -> None:
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    (exports_dir / "failed_runs_2026-05-13T140000Z.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "exported_at": "2026-05-13T14:00:00+00:00",
+                "lookback_days": 7,
+                "truncated": False,
+                "failed_runs": [
+                    {
+                        "config_hash": h,
+                        "finished_at": "2026-05-13T13:00:00+00:00",
+                        "error_category": category,
+                    }
+                    for h in config_hashes
+                ],
+            }
+        )
+    )
+
+
+def test_flush_failed_runs_retires_only_failed_submitted(tmp_path: Path) -> None:
+    """Direct unit: `_flush_failed_runs` retires exactly the `submitted` rows whose
+    config_hash is in the failed export (to 'gated'+sentinel), and leaves a pending
+    row (absent from the failed list) untouched. Idempotent on a second pass."""
+    forge_db, _ = _setup_paths(tmp_path)
+    failed_cfg = minimal_strategy_config().model_copy(update={"name": "failed"})
+    pending_cfg = minimal_strategy_config().model_copy(update={"name": "pending"})
+    batch = uuid.uuid4()
+    failed = [
+        FailedRun(
+            config_hash=failed_cfg.config_hash,
+            finished_at=datetime(2026, 5, 13, 13, tzinfo=UTC),
+            error_category="runner_failure",
+        )
+    ]
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch, batch_size=2)
+        _insert_forge_submission(conn, config=failed_cfg, batch_id=batch)
+        _insert_forge_submission(conn, config=pending_cfg, batch_id=batch)
+
+        n = _flush_failed_runs(conn, failed)
+        assert n == 1
+        # Second pass is a no-op (already retired; WHERE status='submitted').
+        assert _flush_failed_runs(conn, failed) == 0
+
+        rows = conn.execute(
+            "SELECT config_hash, status, crucible_run_id FROM submissions"
+        ).fetchall()
+    by_hash = {str(r[0]): (str(r[1]), str(r[2])) for r in rows}
+    assert by_hash[failed_cfg.config_hash] == ("gated", AGED_OUT_SENTINEL)
+    assert by_hash[pending_cfg.config_hash][0] == "submitted"
+    assert by_hash[pending_cfg.config_hash][1] == "None"  # crucible_run_id NULL
+
+
+def test_flush_failed_runs_empty_list_is_noop(tmp_path: Path) -> None:
+    forge_db, _ = _setup_paths(tmp_path)
+    cfg = minimal_strategy_config()
+    batch = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch, batch_size=1)
+        _insert_forge_submission(conn, config=cfg, batch_id=batch)
+        assert _flush_failed_runs(conn, []) == 0
+        status = conn.execute("SELECT status FROM submissions").fetchone()[0]
+    assert status == "submitted"
+
+
+def test_reconcile_all_pending_retires_failed_runs_from_export(tmp_path: Path) -> None:
+    """End-to-end: a `submitted` row whose run Crucible reports FAILED (present in
+    the failed_runs export, absent from gated_runs) is retired by the reconcile
+    sweep — so it stops counting toward §7.3 in-flight depth — while a genuinely
+    pending row (in neither export) stays `submitted`."""
+    forge_db, crucible_db = _setup_paths(tmp_path)
+    build_synthetic_crucible_db(crucible_db).close()
+    exports_dir = tmp_path / "exports"
+    failed_cfg = minimal_strategy_config().model_copy(update={"name": "failed"})
+    pending_cfg = minimal_strategy_config().model_copy(update={"name": "pending"})
+    _write_failed_runs_export(exports_dir, [failed_cfg.config_hash])
+    batch = uuid.uuid4()
+    # Submit both recent (within STRANDED_AFTER of the synthetic decision clock) so
+    # the aged-out flush leaves them alone — isolating the failed-run retirement.
+    recent = datetime(2026, 5, 13, tzinfo=UTC)
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch, batch_size=2, submitted_at=recent)
+        _insert_forge_submission(conn, config=failed_cfg, batch_id=batch, submitted_at=recent)
+        _insert_forge_submission(conn, config=pending_cfg, batch_id=batch, submitted_at=recent)
+        reconcile_all_pending(conn, crucible_db, exports_dir=exports_dir)
+        rows = conn.execute(
+            "SELECT config_hash, status, crucible_run_id FROM submissions"
+        ).fetchall()
+    by_hash = {str(r[0]): (str(r[1]), str(r[2])) for r in rows}
+    assert by_hash[failed_cfg.config_hash] == ("gated", AGED_OUT_SENTINEL)
+    assert by_hash[pending_cfg.config_hash][0] == "submitted"
 
 
 def test_reconcile_all_pending_no_flush_when_export_empty(tmp_path: Path) -> None:

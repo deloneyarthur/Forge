@@ -1,6 +1,14 @@
 # Forge → Crucible: failed-run feedback channel (durable fix for a §7.3 depth-cap stall)
 
-Status: ready to pass. Read-path / additive contracts asks; no gate change requested.
+Status: **RESOLVED (2026-07-05, D240).** Crucible shipped the `failed_runs_*.json` export
+(config_hash / finished_at / error_category; 7-day lookback). Forge now consumes it via
+`crucible_contracts` 1.23.0 (`FailedRun` + `load_recent_failed_runs_from_export`) in
+`feedback.consumer._flush_failed_runs`, wired into `reconcile_all_pending`. The gap that this
+prompt describes recurred on 2026-07-05 (601 phantom failed-runs pinned the cap for ~15h)
+BECAUSE the export had shipped but had no Forge consumer — now closed. Kept for the incident
+history below.
+
+Status (original): ready to pass. Read-path / additive contracts asks; no gate change requested.
 
 ## Context
 
