@@ -3,6 +3,12 @@
 Evidence lines are as of the `ceeefa4`+D216 tree; grep symbol names if drifted.
 Measured numbers: see `00-BASELINE.md` (benchmark table + method).
 
+> Status 2026-07-05: F1 (fixed by DELETING the write, D219 `18a30eb`), F2 (`2d601a0`),
+> F4 (`bf822c3`), F6 (D234 `3acc66b`), F9 (`af4b1a7`), and F19 (D234 `0068f44`) are
+> RESOLVED-deployed — journal now submit=4.7s / reconcile=2.0s / weights=17s. The remaining
+> findings (F3/F5, F7/F8 compaction half, F10–F18, F20–F23) stand; prefetch (~141s) is now
+> the dominant cost. Per-item status: `WORKPLAN.md`.
+
 ---
 
 ## The submit phase (195–202s measured)

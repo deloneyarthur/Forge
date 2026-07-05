@@ -9,11 +9,17 @@ Conventions for every code item: TDD (failing test first), flag-OFF → byte-ide
 `ruff format` changed files only, D-entry + STATUS.md block per increment, scoped pytest +
 `mypy --strict src` before commit. Flag FLIPS and service restarts are operator-gated.
 
+> Status reconciled 2026-07-05 against D216–D240, the code, and the live journal. All of
+> P0, P1.1–P1.4, P2.1, P3.1–P3.3, P4.1 and P5.5 have landed (per-item annotations inline);
+> P2.2 stays correctly HELD (contributions export still n=0); P3.4 and P5.1–P5.3 remain OPEN.
+
 ---
 
 ## P0 — Hygiene & crash-safety (S total; no operator gate except the commit itself; do first)
 
 **P0.1 — Land the dirty tree (D212–D216) including the untracked invariants test.**
+— DONE (commits `ce83584`/`0ee6b5c`/`63d7bfe`, 2026-07-01; verified 2026-07-05 — invariants
+file tracked, tree clean of audit-owned work).
 - *Why:* this tree IS production; a reboot deploys uncommitted state (D104). The D216 flag-OFF
   code is inert, but `tests/invariants/test_orthogonal_family_floor_invariants.py` is
   **untracked** — one `git clean` from gone — and D212–D216 D-entries exist only in the
@@ -24,6 +30,8 @@ Conventions for every code item: TDD (failing test first), flag-OFF → byte-ide
 - *Acceptance:* `git status` clean of everything you own; invariants file tracked.
 
 **P0.2 — Write the missing gate-then-tail D-entry + STATUS block.**
+— DONE (D217 backfilled, commit `642eac8`, 2026-07-01; verified 2026-07-05 — the "never
+written" D-entry below now EXISTS; acceptance grep hits).
 - *Why:* a 4-commit change to the production scorer (06-26: `edb03e6`,`fdeed29`,`92e9061`,
   `ceeefa4`) is invisible to the decision log ("D-entry deferred", never written). Session
   discipline (CLAUDE.md) and future-agent navigation both depend on it.
@@ -33,6 +41,7 @@ Conventions for every code item: TDD (failing test first), flag-OFF → byte-ide
 - *Acceptance:* `grep gate-then-tail IMPLEMENTATION_DECISIONS.md` hits; STATUS mentions it.
 
 **P0.3 — Guard the `FORGE_REWIRE_P_FLOOR` env parse (crash risk in the production loop).**
+— DONE-deployed (commit `6f44d86`, 2026-07-01; verified 2026-07-05).
 - *Why:* `float(os.environ.get(...))` at `main.py:2000` raises on a malformed value → daemon
   crash-loop on the next restart with a typo'd unit file. §3 defect 3.
 - *How:* failing test first (malformed value → default + one warn log, never raise), then match
@@ -40,13 +49,18 @@ Conventions for every code item: TDD (failing test first), flag-OFF → byte-ide
 - *Acceptance:* test green; behavior identical for valid values.
 
 **P0.4 — Add the two missing wiring tests.**
+— PARTIAL (verified 2026-07-05): (b) DONE — D216 call-site integration test landed
+(`a075147`, 2026-07-01); (a) covered at parse level only — the full
+`FORGE_QUALITY_RANK_MODE` dispatch integration test remains deferred.
 - (a) `FORGE_QUALITY_RANK_MODE` dispatch branch in `main.py` (blend default / gate-tail /
   invalid value → default+warn). (b) D216 call-site integration: env set → lifted weights
   reach the sampler AND the `orthogonal-family floor ACTIVE` journal line prints (the D185
   failure mode was an inert call site that passed unit tests; §4 gap 1).
 - *Acceptance:* both fail before / pass after; note them in the D-entries.
 
-**P0.5 — Two one-line fixes:** the `eval-robustness` realized-label string ("cpcv_p25" printed
+**P0.5 — Two one-line fixes:**
+— DONE (commit `73d6637`, 2026-07-01; verified 2026-07-05).
+The `eval-robustness` realized-label string ("cpcv_p25" printed
 under `--gate wf_sharpe_p25`; §6 nit), and document the D216 floor unit (relative-to-max, NOT
 sampling share; 0.20 ⇒ delivered share floats with the oscillating max — §4 gap 2) in the
 docstring + `docs/MANPAGE.md` env-var entry.
@@ -56,6 +70,8 @@ docstring + `docs/MANPAGE.md` env-var entry.
 ## P1 — The live ranking path (M; highest leverage; builds are ungated, the flip is operator-gated)
 
 **P1.1 — Close the gate-then-tail shadow-vs-production fidelity gap BEFORE any flip decision.**
+— DONE-built-flag-OFF (D222, commit `d159b2d`, 2026-07-02; verified 2026-07-05). Option (A):
+gate-tail mode now hard-gates at queue level, matching the shadow; parity test in place.
 - *Why:* the shadow streak ranks with a hard gate (1e9 demotion); the flag ships a soft gate
   inside the 0.10 composite slot — the evidence validates an intervention the flip does not
   deliver (§3 defect 1). Flipping now = shipping something never measured.
@@ -70,6 +86,8 @@ docstring + `docs/MANPAGE.md` env-var entry.
   (add a parity test: same inputs → shadow ranking == production-mode ranking).
 
 **P1.2 — Restart the rewire streak clean and define the flip gate numerically.**
+— DONE (D223; verified 2026-07-05). Streak restarted clean + flip gate defined numerically;
+the gate has since been MET per D237 — the flip itself remains pending operator.
 - *Why:* the streak's first record is a contaminated full-pool window counted as a look (§6);
   and "3 consecutive" has 12.5% null false-promotion (B5).
 - *How:* fresh-window-only records post-P1.1; flip gate = k≥3 fresh-window PASSes on the
@@ -80,6 +98,7 @@ docstring + `docs/MANPAGE.md` env-var entry.
   `docs/tasks/deploy.md`.
 
 **P1.3 — B3: calibrate P(component) and monitor the floor's eligible fraction.**
+— DONE-telemetry (D221; verified 2026-07-05).
 - *Why:* load-bearing twice — the live blend multiplies P; gate-tail floors on absolute P —
   and live models are 3–5× over-predicted above p≈0.3 with drift across models (§1).
 - *How:* held-out Platt scaling (pure-Python friendly; isotonic only if >~1000 held-out
@@ -93,6 +112,7 @@ docstring + `docs/MANPAGE.md` env-var entry.
   from the calibrated distribution as part of P1.1's parity test.
 
 **P1.4 — B2: shadow-A/B the 0.10 prior weight (0.10 → 0.3 / 0.5 / 0.7).**
+— DONE-deployed (D220; prereg CONFIRMED per D237; verified 2026-07-05).
 - *Why:* 90% of the sort measures AUC 0.45–0.53 vs realized components; even a perfect learned
   prior moves the composite by 0.10 (§5). This caps every other item and interacts with P1.1's
   soft-vs-hard choice.
@@ -111,6 +131,8 @@ docstring + `docs/MANPAGE.md` env-var entry.
 ## P2 — Family-mix / orthogonal supply (S build-side; activation operator-gated; PBO-aligned)
 
 **P2.1 — Activate the D216 vol_event floor per its own protocol.**
+— DONE-deployed (D216 activation, 2026-07-02; verified 2026-07-05). Prereg `5c4ba16f`
+registered and still OPEN (later-cohort confirm pending).
 - *Why:* the only live lever pointed at the binding gate. vol_event is floor-pinned at ~6.5%
   share while the estimand oscillates the trend/mr monoculture (§4). The 06-29 promotable book
   was 0→67% vol_event — supply is the fuel.
@@ -125,6 +147,8 @@ docstring + `docs/MANPAGE.md` env-var entry.
 - *Gate:* operator (feedback-change + service env edit + restart).
 
 **P2.2 — Track A (estimand re-aim to marginal contribution): keep sequenced, do NOT build yet.**
+— Correctly HELD (verified 2026-07-05): still data-blocked — the contributions export
+remains empty (n=0).
 - Blocked correctly on (a) the `crucible_contracts` loader for `component_contributions`
   (relay `PROMPT_CRUCIBLE_CONTRIB_LOADER_IN_CONTRACTS.md`, held) and (b) the export having
   real data (n=0 until a book promotes). Building against a null signal validates nothing.
@@ -136,6 +160,7 @@ docstring + `docs/MANPAGE.md` env-var entry.
 ## P3 — Promotion & feedback discipline (M; parallelizable with P1/P2)
 
 **P3.1 — B5: replace both streak gates with a paired, significance-based rule.**
+— DONE (D228/D229; verified 2026-07-05).
 - *How:* per-checkpoint paired statistic (challenger − incumbent on the SAME rows), fresh
   windows only, no pooling across daily artifacts; promote on a confidence-sequence/e-value or
   simple SPRT with explicit α and a minimum effect size; k≥5 if staying with a streak
@@ -144,6 +169,7 @@ docstring + `docs/MANPAGE.md` env-var entry.
   documented, tested, and no longer "PROVISIONAL".
 
 **P3.2 — B6 completion: feature drift + adoption gating.**
+— DONE-telemetry (D230; verified 2026-07-05).
 - *How:* PSI or Jensen-Shannon on the feature vector per checkpoint (flag >0.1 / >0.25);
   label/prior-shift check; and stop blind newest-wins — at minimum, refuse to rotate to an
   artifact whose fresh-window paired IC is negative (keep training daily; gate *adoption*).
@@ -151,6 +177,7 @@ docstring + `docs/MANPAGE.md` env-var entry.
   WARN ("hypothesis weights: uniform-fallback active").
 
 **P3.3 — B7: a small randomized exploration holdout.**
+— DONE-built-flag-OFF (D232; verified 2026-07-05). Flip remains operator-gated per below.
 - *Why:* every learned component trains on Forge-selected submissions (doubly-selected for the
   tail eval) — a textbook direct feedback loop; floors mitigate, don't correct.
 - *How:* a deterministic (seeded, rule #8) ~2–5% of each batch bypasses ranking (random-among-
@@ -159,6 +186,8 @@ docstring + `docs/MANPAGE.md` env-var entry.
 - *Gate:* changes the submission mix → operator sign-off; flag-OFF build first.
 
 **P3.4 — B8: the effective-N / trial-charging handoff to Crucible.**
+— Still OPEN (verified 2026-07-05): no B8 relay drafted; ritual docs still lack
+`confirm_promotion_claim` adoption.
 - The D207 ledger already brackets the honest count (submitted-floor vs enumerated-ceiling) and
   prints "deflation 0.00". Draft the relay: should `search_n_trials` be set (and to what —
   raw counts over-deflate; effective-N via correlation clustering is the principled middle),
@@ -172,6 +201,7 @@ docstring + `docs/MANPAGE.md` env-var entry.
 ## P4 — Decide the wf_p25 lane's fate on a clock (S decision + S/M execution)
 
 **P4.1 — Set the retire-or-keep rule NOW, before more sunk cost.**
+— DONE (D231 — per-family probe run, KEEP verdict; verified 2026-07-05).
 - *Why:* the lane has been live 11 days with zero proven skill: §8.6 0/3 forever, per-model IC
   decay-at-n has now recurred twice (`c66e56af` then `6b89fa04` — E-2), and the live blend
   form is a measured no-op (§2). The honest current defense is only "not harmful".
@@ -190,18 +220,22 @@ docstring + `docs/MANPAGE.md` env-var entry.
 
 ## P5 — Deferred / opportunistic (L or blocked; revisit after P1–P3)
 
-- **P5.1 — B9 Thompson/UCB allocation:** the Beta posteriors already exist; a seeded Thompson
+- **P5.1 — B9 Thompson/UCB allocation:** — Still OPEN (verified 2026-07-05).
+  The Beta posteriors already exist; a seeded Thompson
   draw (rule #8 compliant) replaces mean+floors with principled exploration. Best done AFTER
   P2 settles so two family-mix interventions aren't confounded. Effort S–M, flag-OFF-able.
-- **P5.2 — B11 elite archive (keep+mutate per-cell champions):** still gated on P3.4/B8
+- **P5.2 — B11 elite archive (keep+mutate per-cell champions):** — Still OPEN, still
+  blocked on P3.4 (verified 2026-07-05). Still gated on P3.4/B8
   (mutation inflates effective N). B10 (diversity as objective) and B12 (ceiling-vs-coverage
   telemetry) queue behind it.
-- **P5.3 — Dead code sweep in `rejection_weights.py`** (`compute_hypothesis_weights`,
+- **P5.3 — Dead code sweep in `rejection_weights.py`** — Still OPEN (verified 2026-07-05).
+  (`compute_hypothesis_weights`,
   `compute_hypothesis_reward_weights`, `_sharpe_reward`, `_run_reward`, legacy Beta(1,10)) —
   coordinate with the parent audit's duplication items; pure chore.
 - **P5.4 — Model-rotation holes** (06-16, 06-27→29): check `forge-ranker-eval.timer` journal
   for skipped firings vs box downtime; a silent-skip should become a healthcheck WARN.
-- **P5.5 — Report OOS R²/IC instead of train-R²** at ridge train time
+- **P5.5 — Report OOS R²/IC instead of train-R²** — DONE (D233; part B — precision@N/NDCG@N —
+  deferred; verified 2026-07-05). At ridge train time
   (`ranker_model_cmd.py:466`), and add precision@N/NDCG@N at the submission cutoff to evals
   (June review §5) — cheap, fold into any P1 touch of that file.
 

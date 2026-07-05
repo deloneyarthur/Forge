@@ -3,6 +3,13 @@
 Snapshot 2026-07-01 (HEAD `ceeefa4` + uncommitted D216). Line numbers verified at audit time;
 re-grep before editing. Raw numbers + reproduction commands: `03-evidence.md`.
 
+> STALE-BY-DESIGN NOTE (2026-07-05): this is the 07-01 snapshot; much of it has since been
+> acted on — D212–D216 landed (`ce83584` et al.), the missing gate-then-tail D-entry was
+> backfilled as D217 (`642eac8`), the §3 fidelity gap was closed (D222) and the env parse
+> guarded (`6f44d86`), calibration telemetry shipped (D221), the D216 floor was ACTIVATED
+> (07-02), and the §6 streak-gate/drift/holdout gaps were addressed (D228–D232). Current
+> per-item status: `02-plan.md` annotations.
+
 ---
 
 ## §1. F3 verdict ranker — `P(component)` logistic prior. VERDICT: HEALTHY; one real defect (calibration).
