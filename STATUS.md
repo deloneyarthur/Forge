@@ -1,6 +1,6 @@
 # Forge — Status
 
-## 2026-07-05 (latest) — INCIDENT + FIX: §7.3 stall cleared (601 phantom failed-runs flushed → prod flowing) + durable failed-run reconciliation built (contracts 1.23.0, D240). [[D240]]
+## 2026-07-05 (latest) — INCIDENT + FIX: §7.3 stall cleared (601 phantom failed-runs flushed) + durable failed-run reconciliation DEPLOYED (contracts 1.23.0, D240). Daemon healthy, submitting. [[D240]]
 
 **Operator: "are we ready to enable the next levers?" → ran the two flip-prereg reads; discovered the daemon had been STALLED for ~15h. Operator: "lets do both" (flush now + durable fix).**
 
@@ -8,11 +8,11 @@
 
 **(A) Flush — DONE, LIVE.** `scratchpad/flush_failed_inflight.py` retired the 601 (all confirmed in the failed export; 0 genuine-pending) to `gated`+aged-out-sentinel — same marker the D052/D110 flush uses (excluded from depth/H-1/M-7). Ritual: stop → dry-run vs live DB → `--apply` (in-flight 601→0) → restart. **Verified: `submitted=200` batch, then healthy per-batch §7.3 wait. Production flowing again (new daemon PID 2466274).**
 
-**(B) Durable fix — BUILT + TESTED, DEPLOY PENDING.** contracts 1.23.0 (additive; 303 tests/100% cov): `FailedRun` + `load_recent_failed_runs_from_export`. Forge: pin→1.23.0; `consumer._flush_failed_runs` wired into `reconcile_all_pending` (retires failed runs every poll, before the aged-out flush). Full Forge suite **1846 green** (contended), mypy-strict clean, ruff-clean. **Inert until a restart deploys it — no urgency (the manual flush bought days; failure rate ~150/day vs cap 600).** Resolves `PROMPT_CRUCIBLE_FAILED_RUN_FEEDBACK.md`.
+**(B) Durable fix — DEPLOYED 2026-07-05 17:05:09 UTC (PID 3010796).** contracts 1.23.0 (`01da53b`; additive; 303 tests/100% cov): `FailedRun` + `load_recent_failed_runs_from_export`. Forge (`651ca6e`): pin→1.23.0; `consumer._flush_failed_runs` wired into `reconcile_all_pending` (retires failed runs every poll, before the aged-out flush). Uncontended gate suite **1846 green**, mypy-strict clean. Verify: active, NRestarts=0, no traceback, `reconciled: batches=1 newly_gated_total=195` (no depth block), `contracts: pin == installed (1.23.0)`, `submission: submitting` (15h-stall WARN cleared), healthcheck **OVERALL=OK**. Resolves `PROMPT_CRUCIBLE_FAILED_RUN_FEEDBACK.md`.
 
 **Prereg reads (the original ask).** **Flip #2 (`5082d332`, exclude_regime_filter): CONFIRMED (supply side)** — ve signal_correlation reject-fraction 58.2%→6.4% (reached denom; 18.8%→1.2% on enumerated), ve survival 5.5%→15.3% (~3×), content redundancy still fires. Book-PBO sub-condition still Crucible-side/pending as always. **Flip #1 (`848a1f67`, cumulative_trading): INSUFFICIENT — read compromised.** Live per-family permutation survival went DOWN (opposite the prereg + D226 shadow-count), but the post-flip cohort is only 11 batches (frozen by the stall) AND confounded by enumeration-mix; the controlled D226 shadow-count said UP. **Not refuted — re-resolve on a clean cohort once prod has run unstalled.** Neither prereg formally resolved yet.
 
-**NEXT:** (1) deploy the durable fix (stop → uncontended suite → commit contracts + Forge → restart → verify) — operator-gated. (2) After a clean cohort accrues, re-resolve both flip preregs. (3) THEN flip the next levers one at a time: `9063b405` (gate-tail, gate MET) then `FORGE_EXPLORATION_HOLDOUT_FRAC`.
+**NEXT:** (1) After a clean post-fix cohort accrues (~1-2 days unstalled), re-resolve both flip preregs — flip #1 needs the controlled read since its live cohort was stall-compromised. (2) THEN flip the next levers one at a time: `9063b405` (gate-tail, gate MET — needs `FORGE_QUALITY_RANK_MODE=gate-tail` on the UNIT file → `daemon-reload`) then `FORGE_EXPLORATION_HOLDOUT_FRAC`. (3) Also unblocked: pipeline-perf P0 fsync rewrite (separate ritual).
 
 ## 2026-07-04 — FLIP #2 DEPLOYED: signal_correlation `exclude_regime_filter` is LIVE (D239). Two post-D220 flips live; daemon healthy. [[D239]]
 
