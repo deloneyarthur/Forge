@@ -25,11 +25,14 @@ Order matters: the DB writer holds the exclusive lock and must come up first.
 ```bash
 # 1. Crucible foundation (writer first, then everything else)
 systemctl --user start crucible-db-writer.service
-systemctl --user start crucible-registry-publisher.service   # oneshot
+systemctl --user start crucible-registry-publisher.service   # timer-driven oneshot (~6h republish, D166)
 systemctl --user start crucible-inbox-watcher.service
-systemctl --user start crucible-runner.service
+systemctl --user start crucible-runner@1.service crucible-runner@2.service   # templated; plain crucible-runner.service is unused
 systemctl --user start crucible-gated-runs-publisher.service
+systemctl --user start crucible-failed-runs-publisher.service    # D240: Forge retires runner-FAILED runs from this export
 systemctl --user start crucible-promoted-strategies-publisher.service
+systemctl --user start crucible-universe-publisher.service      # timer-driven oneshot (universe_tickers)
+systemctl --user start crucible-component-contributions-publisher.service
 systemctl --user start crucible-refit-watcher.service
 
 # 2. Forge (safe to start last; retries if inbox not ready)
@@ -48,8 +51,8 @@ Reverse order — stop readers/publishers first so the writer drains cleanly.
 
 ```bash
 systemctl --user stop forge.service
-systemctl --user stop crucible-runner.service crucible-inbox-watcher.service crucible-refit-watcher.service
-systemctl --user stop crucible-gated-runs-publisher.service crucible-promoted-strategies-publisher.service
+systemctl --user stop crucible-runner@1.service crucible-runner@2.service crucible-inbox-watcher.service crucible-refit-watcher.service
+systemctl --user stop crucible-gated-runs-publisher.service crucible-failed-runs-publisher.service crucible-promoted-strategies-publisher.service crucible-component-contributions-publisher.service
 systemctl --user stop crucible-db-writer.service
 ```
 
@@ -67,8 +70,8 @@ systemctl --user list-units 'crucible*' 'forge*' --state=failed
 # Is Forge submitting / rate-limited?
 journalctl --user -u forge.service -n 20 --no-pager
 
-# Is Crucible processing?
-journalctl --user -u crucible-runner.service -n 10 --no-pager
+# Is Crucible processing? (templated runner instances)
+journalctl --user -u crucible-runner@1.service -n 10 --no-pager
 
 # Are exports fresh? (should be < 2 min old)
 ls -lt ~/optbt_data/exports/gated_runs_*.json | head -1
@@ -103,7 +106,7 @@ Crucible. This is the rate limiter (correct behavior). If it's stuck for hours:
 2. **Check the runner is making progress** — if Crucible has a deep backlog the
    batch may simply not be reached yet.
    ```bash
-   journalctl --user -u crucible-runner.service -n 5 --no-pager
+   journalctl --user -u crucible-runner@1.service -n 5 --no-pager
    ```
 3. **Skip a stale batch** if it predates a code change and you don't need its
    results (stop Forge, mark its rows `skipped`, restart):
@@ -140,6 +143,14 @@ line, it fires even when the oldest batch reads ≥80% (a permanent zombie batch
 it). It means Crucible is draining slower than Forge submits; Forge is correctly waiting so
 the queue stays shallow enough to learn from. It self-clears as Crucible drains below the cap.
 
+Since D240 the feedback consumer also auto-retires runner-FAILED runs each poll (from
+Crucible's `failed_runs_*.json` export), so failures no longer sit `submitted` and pin the
+depth metric for days. A *persistent* depth block therefore points at either the
+`crucible-failed-runs-publisher` being down (failed runs invisible again) or a genuine
+Crucible backlog. To diagnose which, join forge.db's `submitted` rows against Crucible's
+`run.status` / the failed_runs export on `config_hash` (the D205/D240 join —
+`docs/tasks/investigate-live.md`).
+
 What to do: usually nothing — it's the throttle working. If it blocks persistently, Crucible
 is the bottleneck (see the stall guidance above / diagnose the runner), not Forge. To retune,
 raise/lower `submission.max_inflight` in `config/forge.yaml` (0 = disable; the live value is set
@@ -169,7 +180,8 @@ the row to `status='submitted'` manually; if absent, re-run the batch — the
 ### Restore forge.db (or models/) from a backup
 
 Nightly backups land in `~/forge_data/backups/` (the `forge-backup` timer, 04:00): validated
-`forge_db_<UTC>.duckdb` snapshots + `models_<UTC>.tar.gz`, newest 14 kept. To restore:
+`forge_db_<UTC>.duckdb` snapshots + `models_<UTC>.tar.gz`; the newest `FORGE_BACKUP_KEEP` are
+kept (set on the unit, `deploy/systemd/forge-backup.service`; script default 14). To restore:
 
 ```bash
 systemctl --user stop forge.service          # release the writer's lock on forge.db
@@ -222,7 +234,7 @@ Full change procedure (worktree, tests, deploy ritual): `tasks/grammar-change.md
 | `~/optbt_data/refit_inbox/` | QuantIQ's quarterly re-validation requests |
 | `~/optbt_data/runs.duckdb` | Crucible's results DB (writer-locked; never read directly) |
 | `~/forge_data/forge.db` | Forge's own state (submissions, batches, proposals) |
-| `~/forge_data/backups/` | Nightly DR snapshots of `forge.db` + `models/` (keep 14; `forge-backup` timer, 04:00) |
+| `~/forge_data/backups/` | Nightly DR snapshots of `forge.db` + `models/` (`forge-backup` timer, 04:00; retention = `FORGE_BACKUP_KEEP` on the unit) |
 
 ## Manual runs (without the daemon)
 

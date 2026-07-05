@@ -25,7 +25,7 @@ Python 3.12 · uv · Typer · Pydantic v2 · Polars · DuckDB · structlog · py
 
 ```bash
 uv venv && uv pip install -e ".[dev]"     # setup (contracts dep: ../crucible_contracts, editable)
-uv run pytest                             # full suite ~1,400; scope: uv run pytest tests/unit/test_grammar
+uv run pytest                             # full suite ~1,850; scope: uv run pytest tests/unit/test_grammar
 uv run ruff check src tests scripts       # lint (strict select-set in pyproject.toml)
 uv run ruff format <changed files only>   # tree is NOT format-clean — never format tree-wide
 uv run mypy --strict src                  # zero violations required

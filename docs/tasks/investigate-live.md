@@ -106,6 +106,26 @@ feeding the dead gate (the exact waste the guard exists to prevent). Deadlock-im
 construction: if the clock is stale because *Forge* was quiet (our outage/migration), no
 submission postdates it, so the guard stays silent and the next batch flows.
 
+## `blocked: in-flight depth N exceeds cap M` — the §7.3 backpressure block (D196/D200)
+
+The third §7.3 block reason (beside the per-batch completion fraction and the D137 stall
+guard): the *aggregate* genuine in-flight `submitted` depth — rows newer than the flush
+watermark, summed across batches — exceeds `submission.max_inflight`. Normally this is the
+throttle working: Crucible is draining slower than Forge submits, and it self-clears as the
+queue drains below the cap.
+
+Since D240 the feedback consumer also retires runner-FAILED runs **every poll** from
+Crucible's `failed_runs_*.json` export (`feedback/consumer.py` `_flush_failed_runs`), so
+failures can no longer sit `submitted` and pin the depth metric until the 5-day age-out
+(the 2026-06-24 / 2026-07-05 incidents). A *persistent* depth block therefore means either
+the `crucible-failed-runs-publisher` is down (failed runs invisible again) or a genuine
+Crucible backlog. Diagnose with the D205/D240 join: forge.db `submitted` rows vs Crucible's
+`run.status` / the failed_runs export, on `config_hash` — a large `submitted`-but-FAILED
+overlap means the failed-runs read path is broken, not the gate slow.
+
+tz trap while correlating: `journalctl --since` parses timestamps as LOCAL (PDT box config)
+while the exports/DB are UTC — prefer relative forms (`--since -15min`) over absolute ones.
+
 ## When "blocked" IS a wedge (the completion-fraction path)
 
 Hours of consecutive `prev batch N% gated` blocks while exports stay fresh and Crucible's runner is

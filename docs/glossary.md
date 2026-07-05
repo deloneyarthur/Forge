@@ -8,7 +8,8 @@ Scope: Forge/pipeline jargon. Code identifiers are findable by grep; this covers
   most gated runs are rejections. Forge `submissions.status` flips `submitted → gated` on reconcile.
 - **Component** — a gated config Crucible accepts as a portfolio building block (Crucible assembles
   components into portfolios; see `../Crucible/docs/handoffs/PORTFOLIO_PROMOTION_DESIGN.md`).
-  The component rate (~1–2%) is Forge's live currency — promotions are still 0.
+  The component rate is Forge's live currency — the binding gate sits at promotion, not gating
+  (current rates/counts: `STATUS.md` top block, or `forge status`).
 - **Promotion** — full gate pass, exported to QuantIQ. Target 1–3% by month 3–6 (§1.3); >5% is
   suspicious (over-tuning to the gate).
 - **The export / gated export** — `~/optbt_data/exports/gated_runs_*.json`, Crucible's rolling
@@ -73,10 +74,12 @@ Scope: Forge/pipeline jargon. Code identifiers are findable by grep; this covers
   (`submission.max_inflight` in forge.yaml; 0 = off, byte-identical). Journal: "blocked: in-flight
   depth N exceeds cap". Throttles Forge, never Crucible's gate (hard rule #3).
 - **Aged-out flush / sentinel** — the consumer marks dead `submitted` rows as gated with a
-  nil-UUID sentinel once they fall behind the export watermark (`max(decided_at) − 8d`, D110;
-  history: D052 → D061 → D110 wedges).
+  nil-UUID sentinel once they fall behind the export watermark (`max(decided_at) −
+  STRANDED_AFTER`, currently 5 days — `feedback/consumer.py` owns the value; D110 mechanism,
+  history: D052 → D061 → D110 wedges). The D240 failed-run retirement reuses the same sentinel.
 - **Reconcile** — feedback consumer joining the gated export against `submissions` and flipping
-  statuses; runs every loop iteration.
+  statuses; since D240 it also joins Crucible's `failed_runs_*.json` export and retires
+  runner-FAILED rows the same pass. Runs every loop iteration.
 - **Inbox** — `~/optbt_data/inbox/`; Forge writes one JSON per config atomically
   (tmp-then-rename) via `crucible_contracts.submit_candidate`.
 - **Registry / RegistrySnapshot** — Crucible's indicator catalog, read from

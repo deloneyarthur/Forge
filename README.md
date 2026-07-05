@@ -18,7 +18,9 @@ pytest
 ```
 
 In production Forge runs as a systemd user service:
-`forge run --loop --consume-feedback --require-real-cache` (see `deploy/systemd/forge.service`).
+`forge run --loop --consume-feedback --require-real-cache` — plus yield/quality ranking flags
+and env knobs; the authoritative flag set is the unit's `ExecStart` in
+`deploy/systemd/forge.service`.
 
 ## Documentation
 

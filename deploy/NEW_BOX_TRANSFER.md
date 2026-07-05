@@ -23,7 +23,8 @@ The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_
 1. **`crucible_contracts` has no git remote.** Forge installs it as an editable dep via the
    relative path `../crucible_contracts` (`pyproject.toml [tool.uv.sources]`). It must physically
    travel as a sibling of Forge. Forge gates on the version pinned in
-   `forge.core.contracts_check.FORGE_EXPECTED_CONTRACT_VERSION` (currently **1.20.0**); a
+   `forge.core.contracts_check.FORGE_EXPECTED_CONTRACT_VERSION` (read the constant in
+   `src/forge/core/contracts_check.py` — don't trust any literal written here); a
    mismatch hard-halts at startup (§13.5).
 2. **`.venv` is not portable.** uv bakes absolute interpreter paths into it. It is excluded from
    the bundle and rebuilt on the new box with `uv sync`. Same for
@@ -189,11 +190,12 @@ set one on the new box if the host has only one disk.
 ## Post-migration checklist
 
 - [ ] `cd ~/proj/Forge && uv run forge check` → contracts compat (§13.5) + schema OK
-- [ ] `uv run forge version` shows Forge + the contracts version matching the pin (1.20.0)
+- [ ] `uv run forge version` shows Forge + the contracts version matching the pin
+      (`FORGE_EXPECTED_CONTRACT_VERSION` in `src/forge/core/contracts_check.py`)
 - [ ] `du -h ~/forge_data/forge.db` ≈ matches the old box (state came across)
 - [ ] `systemctl --user is-enabled forge.service` → enabled; linger on
 - [ ] `systemctl --user list-timers 'forge-*'` → `forge-ranker-eval`, `forge-backup`,
-      `forge-healthcheck` all scheduled (king arm absent — D190)
+      `forge-healthcheck`, `forge-eod-check` all four scheduled (king arm absent — D190)
 - [ ] `ls ~/proj/Forge/scripts/*.sh` → backup/ranker-eval/preflight scripts present + executable
 - [ ] Crucible up + `~/optbt_data/exports/` populated → start Forge
 - [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version: v22`) without
