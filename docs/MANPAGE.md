@@ -672,10 +672,9 @@ bumps `grammar_version` and archives the prior version. The second keeps
 |---|---|
 | `tail_verified_alignment.py` | Live tracking tool (D155): re-runnable verified-coverage alignment monitor for the tail-aware model — tail_score vs P(component) on the verified slice, run against a `/tmp` DB snapshot. |
 | `forge_eod_check.sh` | **Bash** — source of the vendored `forge-eod-check` timer entrypoint (`~/.local/bin/forge-eod-check.sh`, D203): headless, report-only EOD pipeline read (21:00). |
-| `signal_correlation_regime_pair_audit.py` | Re-runnable §5.3.6 regime-gate co-firing audit (PRE-H3/D227); needs the live Crucible writer socket; read-only. |
-| `decorrelation_proxy_alignment.py` | One-shot historical probe: does cheap structural config distance predict realized PnL correlation? (D186 evidence.) |
-| `wf_quality_probe.py` | One-shot historical probe: do rich config features predict honest WF quality? (D186→D189 re-target evidence.) |
 | `probe_option_momentum_min_months.py` | One-shot historical probe: Q39 `option_momentum` `min_months` × percentile activation sweep against the live feature cache. |
+
+Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
 
 ---
 
