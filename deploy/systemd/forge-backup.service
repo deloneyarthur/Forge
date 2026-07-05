@@ -5,6 +5,10 @@ Documentation=file://%h/proj/Forge/scripts/backup_forge_db.sh
 [Service]
 Type=oneshot
 WorkingDirectory=%h/proj/Forge
+# Same-disk DR (single NVMe): keep 5 dailies, enough to recover a logical fault (fat-finger, bad
+# migration, corruption) which surfaces within a day or two. Script default is 14; overriding here
+# keeps the ~5GB-per-day backups/ dir bounded without editing the script.
+Environment=FORGE_BACKUP_KEEP=5
 ExecStart=%h/proj/Forge/scripts/backup_forge_db.sh
 # A 4.5 GB cp + read-only validation + a tiny models tar. Generous ceiling so a slow
 # snapshot (or a retry on a torn mid-write copy) never wedges the timer.

@@ -94,13 +94,13 @@ from optbt.strategy.exits.base import ExitRule
 
 class ChandelierExit(ExitRule):
     id = "chandelier_exit"
-    
+
     def __init__(self, params: dict, calendar: Calendar) -> None:
         self.atr_period = int(params.get("atr_period", 22))
         self.atr_multiplier = float(params.get("atr_multiplier", 3.0))
         self.use_close = bool(params.get("use_close", False))
         ...
-    
+
     def should_exit(self, position: Position, snap: MarketSnapshot, portfolio: PortfolioState) -> bool:
         # Compute trail from position-entry extreme + ATR, compare to current
         ...
