@@ -1,5 +1,9 @@
 # Prompt — Crucible: v22 is DEPLOYED — run the hypothesis-sliced `funnel --compare v21 v22` (post-drain)
 
+> **🗄️ ARCHIVED 2026-07-05 (D242): NEVER SENT — operator-confirmed outdated.** Overtaken by the
+> v23 trend-grammar handoff (D236), whose relay carries the v22→v23 funnel-compare ask; a v21→v22
+> compare on today's rolling window would be pre-v5-pollution/window-decay noise (D104 cohort traps).
+
 > **✅ REFRESHED 2026-06-16 — MATURITY MET, send-ready** (was: HELD for cohort maturity).
 > v22 now has **4,010 decided** (≥1500 gate cleared) and the v21 drain is complete (last v21 decision
 > 2026-06-16 03:09 UTC; v22 active through 16:41 UTC) — so the maturity caveat in point 2 below is

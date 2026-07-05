@@ -248,8 +248,11 @@ count 72→16). Cadence proposal still pending operator.
 
 ### 16. Ledger rotation convention (HYG-M2) — M one-time; OPERATOR sign-off on the convention
 
-— Still OPEN, now URGENT (verified 2026-07-05): `IMPLEMENTATION_DECISIONS.md` has CROSSED
-its own ~1MB rotation trigger (1,006,649 bytes; was 920KB at audit time).
+— **DONE 2026-07-05 (D242, operator-approved):** D001–D200 → `_archive/IMPLEMENTATION_DECISIONS_D001-D200.md`
+(859KB verbatim; live file keeps preamble + pointer + D201+, ~153KB). Heading formats
+byte-identical so `grep '^## D'` works across both. `check-added-large-files` now excludes
+`_archive/`. Deviations from the sketch below: cut at D200 (not D150); STATUS.md monthly
+rotation NOT adopted (defer until STATUS itself becomes a problem).
 
 - Action: before `IMPLEMENTATION_DECISIONS.md` hits ~1MB (920KB now): split to
   `_archive/IMPLEMENTATION_DECISIONS_D001-D150.md` + keep D151+ live, with a 5-line index
