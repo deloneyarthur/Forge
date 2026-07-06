@@ -84,10 +84,13 @@ _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
     "trend_continuation": {
         "required_always": (),
         # D071-final (v3 bump): 3-way choice among trend-style exits.
+        # D236 (v23, §2.7): parabolic_sar_exit DROPPED — Crucible's real-backtest
+        # exit sweep found chandelier_exit beats it +0.29 CPCV-p25 AND higher WF
+        # (lifts tail AND center; parabolic whipsaws where chandelier trails
+        # cleanly). trailing_atr (not refuted) is kept alongside the winner.
         "required_from_set": (
             "trailing_atr",
             "chandelier_exit",
-            "parabolic_sar_exit",
         ),
         "optional_additions": ("time_stop",),
         "forbidden": ("hard_profit_target",),

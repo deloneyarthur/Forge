@@ -220,7 +220,14 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     # ----- Calendar -----
     "days_to_fomc": IndicatorThresholdSpec(
         directional_range=(5.0, 14.0),  # fires when FOMC imminent
-        regime_range=(7.0, 60.0),
+        # D236 (v23, §2d): event-proximity window tightened 60d → 14d. VE books
+        # fired at a median ~31d (mostly 21-40d) — too wide; the directional
+        # dealer-wall / call-wall edge concentrates ≤~10d pre-FOMC and decays
+        # wider, while ≤5d loses too many trades. op '<' → fires when
+        # days_to_fomc < threshold, so [7, 14] centres firing on the ~10d sweet
+        # spot (median 10.5d). FOMC-only: cpi/nfp/opex keep their ranges pending
+        # their own evidence (handoff ranks FOMC > opex > cpi/nfp).
+        regime_range=(7.0, 14.0),
     ),
     "days_to_earnings": IndicatorThresholdSpec(
         directional_range=(5.0, 30.0),

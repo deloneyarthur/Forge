@@ -1325,11 +1325,21 @@ def _exit_params(exit_id: str, rng: random.Random) -> dict[str, object]:
 
     D169 (v22): ``event_passed_exit`` samples ``n_bars_after_entry`` from the
     loosening ladder so a fresh cohort tests whether widening the early time-cut
-    recovers the tail give-back ([[D168]]). Deterministic via the seed hierarchy
-    (the rng is the per-config exit rng) — hard rules #6/#8 preserved.
+    recovers the tail give-back ([[D168]]). D236 (v23, §2.7):
+    ``chandelier_exit`` samples ``atr_multiplier`` ∈ [2.0, 3.0] (tighter trail =
+    higher CPCV-p25). Deterministic via the seed hierarchy (the rng is the
+    per-config exit rng) — hard rules #6/#8 preserved.
     """
     if exit_id == "trailing_atr":
         return {"activate_after_gain_pct": round(rng.uniform(0.30, 0.50), 2)}
     if exit_id == "event_passed_exit":
         return {"n_bars_after_entry": rng.choice(_EVENT_PASSED_NBARS_LADDER)}
+    if exit_id == "chandelier_exit":
+        # D236 (v23, §2.7): Crucible's chandelier template reads `atr_multiplier`
+        # from the exit params (the D138 option_momentum / D169 event_passed
+        # precedent — a template knob on the per-config exit). A TIGHTER trail
+        # (≈2.0 vs the 3.0 default) adds +0.155 CPCV-p25 (exit_param_sweep.json);
+        # sweep [2.0, 3.0] and let the gates weight tail (2.0) vs center (3.0).
+        # Deterministic via the per-config exit rng (hard rules #6/#8).
+        return {"atr_multiplier": round(rng.uniform(2.0, 3.0), 2)}
     return {}

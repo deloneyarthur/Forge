@@ -1708,6 +1708,10 @@ _COHORT_TREND = "trend_continuation"
 _COHORT_GOLDEN_PRE_REFACTOR = [
     # Rebaselined 2026-06-24 (D206): threshold auto-tightening retired -> D031
     # baseline ranges. Prior values in git history (pre-D206).
+    # Re-pinned 2026-07-06 (D236 v23): the trend exit-pool change (parabolic_sar
+    # dropped, chandelier atr_multiplier sweep) + the days_to_fomc window tighten
+    # shift the cold sequence (here only idx 13-14). none==empty re-verified, so
+    # the flag-OFF byte-identity guarantee still holds; only the snapshot moves.
     "dc125d8f4e014630",
     "4710371b04fac3d0",
     "ab843a6efc8108ca",
@@ -1721,8 +1725,8 @@ _COHORT_GOLDEN_PRE_REFACTOR = [
     "03f034017a2f2a19",
     "81190566b6460088",
     "9c367489d250a1d5",
-    "8ab1942dd0a1591d",
-    "0b1fdb9d7bdd2c5c",
+    "1aac80686660bb64",
+    "180694f03629aef2",
 ]
 
 
@@ -1900,18 +1904,21 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 _REGIME_GOLDEN_PRE = [
     # Rebaselined 2026-06-24 (D206): threshold auto-tightening retired -> D031
     # baseline ranges. Prior values in git history (pre-D206).
+    # Re-pinned 2026-07-06 (D236 v23): trend exit-pool + days_to_fomc window
+    # changes shift the cold sequence from idx 3. none==empty re-verified, so the
+    # flag-OFF byte-identity guarantee holds; only the snapshot moves.
     "1f4d7e099c2af3f4",
     "abf5a8f192fa7e56",
     "5d9a069f03702cf5",
-    "8a544b31ee7454e8",
-    "503c26e1a149ab57",
-    "0e6f61d70f81162c",
-    "5ea3d71824f67c84",
-    "09e33bc848443ddc",
+    "48c1597b04f000a1",
+    "2c6b3f5717967ee1",
+    "bb64e4c87b622978",
+    "ef0333e78106091a",
+    "9ae38cec800f4c23",
     "6132886f1be9c461",
-    "71fef98d23a281d6",
-    "c82d5490f221b353",
-    "851a1342351e096e",
+    "e7e044f5d80304f4",
+    "6f68b2d67fdc8897",
+    "eccffb9cb27f84bf",
     "9b510202bffbd679",
     "2e4054a200aca442",
     "5b0c7bd6a1772e0d",
