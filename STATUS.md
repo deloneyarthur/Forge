@@ -1,6 +1,13 @@
 # Forge — Status
 
-## 2026-07-06 (latest) — INCIDENT RESOLVED: 1.24.0 asymmetric-upgrade inbox stall (100% submissions rejected ~13h) — Crucible inbox-watcher restart + Forge rejected-flush (D245). Production flowing. [[D245]]
+## 2026-07-06 (latest) — Tech-debt sweep (D247): never-read forge.yaml keys + dead `with_overrides` retired; architecture.md module-map completed. Runtime-inert, daemon untouched, NO restart needed. [[D247]]
+
+**Operator-approved cleanup (items 1–3 of a four-lane read-only inventory: entry points / pipeline / config surface / external interfaces). Headline finding: the codebase is essentially dead-code-free — zero orphan modules, CLI↔MANPAGE 1:1 — so the haul was deliberately small.**
+- **Landed:** `afeedb4` retired §10.1 keys `data_root`/`log_root`/`feedback.*` (never read anywhere; `_resolve_run_defaults` consumes only db_path/crucible/enumeration/submission; feedback cadence is really `--consume-feedback` per iteration) + dead `ForgeConfig.with_overrides` (zero production callers) — recorded §10.1 deviation in D247, DESIGN.md untouched; `c1da76f` completed the architecture.md ranking/+feedback/ module-map rows; 2 orphaned `scripts/__pycache__` .pyc (D241-retired sources) deleted, untracked. Full suite **1829 green**, ruff + mypy-strict clean, production forge.yaml parse-verified post-change (batch 200 / max_inflight 600 / seed 42 intact). forge.yaml loads once at boot → running daemon unaffected; next restart is consistent by construction.
+- **Numbering note:** this work initially self-assigned D246, but the healthcheck inbox-rejection check (`d2937a0`) took that slot concurrently → renumbered to D247, commit amended pre-push.
+- **Deferred to operator (Q44 + D247 entry):** (1) write-only tables `pre_filter_logs`/`promoted_patterns` — keep-as-forensics vs retire-writes ruling; (2) `_archive/` the 3 completed one-time scripts (backfill_verdicts D111, migrate_verdicts_decided_at D117, requeue_high_value_configs); (3) unused contracts symbols (validate_config_against_registry, refit/portfolio set) = shared-package territory, handoff note at most. All dormant-by-design flags explicitly untouched (staged levers, not debt).
+
+## 2026-07-06 — INCIDENT RESOLVED: 1.24.0 asymmetric-upgrade inbox stall (100% submissions rejected ~13h) — Crucible inbox-watcher restart + Forge rejected-flush (D245). Production flowing. [[D245]]
 
 **Found while answering "where are we" — the daemon had produced ZERO accepted submissions for ~13h since the D244 restart. Different mechanism than D240/D244: the SUBMIT-direction mirror of the D244 read-path trap.**
 

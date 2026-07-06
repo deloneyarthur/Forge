@@ -934,3 +934,15 @@ grammar bump). `em` kept on the floor (data-sparse, not structural). The grammar
 **Verdict:** the D073 tightener is NOT Goodharting (no edge gradient to miss); the threshold axis is the **third confirmed-flat selection lever** (entry [[D161]] · exit [[D165]]/[[D168]] · threshold). Faint gradients are per-trade **center** effects (rv_rank's per-trade +0.095 → ~+0.06 per-config), not tail. **Nothing to pursue** — the frontier stays magnitude/generation (Path C / learned conditioner), not selection.
 
 **Severity:** LOW (confirms exhaustion from a third angle). **Tag:** `selection-axis`, `threshold`, `AUDITED-flat-on-tail`, `magnitude-wall`, `relates-to-D155/D161/D165/D171`
+
+## 2026-07-06 — Q44 — Two forge.db tables are write-only in code (`pre_filter_logs`, `promoted_patterns`): keep as forensic sinks or stop writing? — **LOW, persistence lane, operator ruling wanted**
+
+**Question:** The D247 tech-debt inventory found two tables that every code path writes and NO code path reads:
+- `pre_filter_logs` (written `submission/pre_filter_logger.py:91` via `record_pre_filter_logs`, called from `submitter.py`) — the D076 schema comment describes an intended per-filter pass-rate use that no query ever implemented.
+- `promoted_patterns` (written `feedback/promoted_patterns.py:43`, called from the daemon feedback chain + `feedback_cmd.py`) — §9.1 pattern rows, zero SELECTs anywhere.
+
+Absence of a code reader does not prove absence of a consumer: ad-hoc DB forensics on `/tmp` snapshots is a documented workflow (`docs/tasks/investigate-live.md`). Do these tables earn their write cost + DB growth as audit trails, or should the writes be retired (schema kept for history)?
+
+**What I did instead:** kept both untouched (removal is the irreversible direction for accumulated rows); logged here per the confirm-with-maintainer rule. If the operator confirms neither is used in investigations, retiring the writes is a small, restart-requiring change (both writers are on the daemon path).
+
+**Severity:** low (storage/complexity only; no correctness impact either way). **Tag:** `persistence`, `write-only-tables`, `D247-followup`
