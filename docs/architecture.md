@@ -17,6 +17,7 @@ flowchart LR
     end
     S -- "inbox/*.json (atomic)" --> C["Crucible: watch → backtest → gate"]
     C -- "exports/gated_runs_*.json" --> F
+    C -- "exports/failed_runs_*.json (D240)" --> F
     C -- "exports/registry_snapshot, universe_tickers" --> E
     C -- "exports/promoted_strategies" --> Q[QuantIQ]
 ```
@@ -40,12 +41,16 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
 | `prefilters/` | `battery.py` runs filters cost-ascending — the live order is in code, not the §5.2 list (it grew past the original 7); `crucible_feature_cache.py` = real cache (via db_writer socket), `feature_cache.py` = synthetic fallback | §5 | `test_prefilters/` |
 | `ranking/` | Composite scorer (weights in `config/ranker.yaml`); greedy diversifier (`min_per_hypothesis` floor, D103; per-arm exploration floor, D136 — `arm_floor.py` owns arm extraction + the honest-era mature-arm count, young arms get ≤2 reserved slots / ≤10% batch); learned verdict model (`features.py` extraction, `dataset.py` honest-era frame, `model.py` pure-Python IRLS + artifacts, `shadow.py` post-submit telemetry recorder, `evaluation.py` shadow-vs-incumbent readout; born as the D132 shadow-track, now WIRED into the §6.2 prior slot — F3 sets `prior_promotion_proximity := P(component)` instead of Jaccard (D149, live; env kill-switch `FORGE_F3_RANKER=off`), and the wf_p25 quality lane multiplies that by a monotone `tail_norm` of a `target_wf_p25` robustness prediction — `prior := P(component) × tail_norm` (`--quality-rank`, D193 live; kill-switch `FORGE_QUALITY_RANKER=off`); both fill only the prior term, §6.2 weights untouched); `regime_supply.py` per-batch regime-complement supply telemetry (T2 shadow, D144 — the `regime_supply:` journal line; classifies ranked survivors' regime-bets into trending-dominant / ranging / bear / other, never reshapes a batch) | §6 | `test_ranking/` |
 | `submission/` | Batch orchestration; atomic submit via contracts; §7.3 rate limiter; per-filter logging | §7 | `test_submission/` |
-| `feedback/` | `consumer.py` (reconcile + aged-out flush, D052/D110); `analyzer.py`; `proposer.py`; `rejection_weights.py` (learned sampler weights — the D094→D108 lineage); `trade_rate_priors.py` (expected-trades prior + cold-start); `auto_tune.py` (prefilter calibration, tighten-only) | §8 | `test_feedback/` |
+| `feedback/` | `consumer.py` (reconcile + aged-out flush, D052/D110; also reads `failed_runs_*.json` every poll and retires runner-FAILED submissions with the aged-out sentinel, D240); `analyzer.py`; `proposer.py`; `rejection_weights.py` (learned sampler weights — the D094→D108 lineage); `trade_rate_priors.py` (expected-trades prior + cold-start); `auto_tune.py` (prefilter calibration, tighten-only) | §8 | `test_feedback/` |
 | `funnel/` | Per-batch funnel + join-map exports consumed by Crucible's instrumentation (D096) | D096 | `test_funnel/` |
-| `persistence/` | `db.py` (the blessed DB open), `schemas.py` (forge.db DDL — table summaries in `docs/MANPAGE.md`), `registry_loader.py` | §9 | `test_persistence.py` |
+| `persistence/` | `db.py` (the blessed DB open), `schemas.py` (forge.db DDL — table summaries in `docs/MANPAGE.md`), `verdicts.py` (durable per-candidate verdict recording, D111), `registry_loader.py` | §9 | `test_persistence.py` |
 | `core/` | `clock.py` + `seed.py` (the ONLY time/RNG sources, hard rule #8); `contracts_check.py` (holds the `FORGE_EXPECTED_CONTRACT_VERSION` pin, §13.5); `logging.py` | §13 | `test_phase0_smoke.py` |
 | `config/` | `forge_config.py` — precedence: CLI flag > `config/forge.yaml` > hardcoded (`--no-config`) | §10 | `test_config/` |
-| `cli/` | `main.py` (`forge` entry point + run loop), `grammar_cmd.py` (`grammar` sub-app), `feedback_cmd.py`, `ranker_model_cmd.py` (`ranker-model` sub-app: dataset/train/eval + the wf_p25 robustness variants, D132/D191), `healthcheck_cmd.py` (`forge healthcheck` — alive-AND-productive read, D197), `status_cmd.py` (`forge status` — learning-signal clocks, D198) | — | `test_cli/` |
+| `cli/` | `main.py` (`forge` entry point + run loop), `grammar_cmd.py` (`grammar` sub-app), `feedback_cmd.py`, `ranker_model_cmd.py` (`ranker-model` sub-app: dataset/train/eval + the wf_p25 robustness variants, D132/D191), `healthcheck_cmd.py` (`forge healthcheck` — alive-AND-productive read, D197), `status_cmd.py` (`forge status` — learning-signal clocks, D198), `alpha_budget_cmd.py` (`forge alpha-budget` — search-spend honesty ledger, D207), `prereg_cmd.py` (`forge prereg` — preregistered prune ledger, D208), `shadow_null_cmd.py` (`forge shadow-null run` — null-stream calibration) | — | `test_cli/` |
+
+A `king/` package (the meta-king generator arm) was retired at D190 and **removed from
+the tree** in the same commit (`f79394a`) — role subsumed by the standard-path quality lane;
+git history holds the code (a stale local `__pycache__` may linger).
 
 ## Change taxonomy — how a change is classified and attributed
 
@@ -98,18 +103,19 @@ Determinism identity: `(grammar_version, registry_hash, seed)` → same enumerat
 
 ## Root-file taxonomy
 
-The repo root holds many `*.md` files that are **records, not documentation**. Read them only when
-a specific exchange or decision cites them.
+The repo root holds a small curated set of `*.md` files; beyond `CLAUDE.md`/`README.md`
+(documentation proper) they are **records, not documentation**. Read them only when a specific
+exchange or decision cites them. Resolved records are periodically swept to `_archive/` (D202),
+so every root file should match a row below.
 
 | Pattern | What it is |
 |---|---|
 | `STATUS.md` | Live state; newest block on top, marked SUPERSEDES. Read first, every session |
-| `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger (D001–D200+); referenced everywhere as "D###" |
+| `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger; referenced everywhere as "D###" |
 | `OPEN_QUESTIONS.md` | Append-only logged uncertainties (Q##) with severity |
 | `OPEN_PROPOSALS.md` | Grammar loosening proposals awaiting operator sign-off (hard rule #4) |
-| `PHASE_N_HANDOFF.md` | Phase-boundary artifacts; phases 0–6 all complete — historical (archived to `_archive/`, D202) |
-| `PROMPT_CRUCIBLE_*.md`, `*_AGENT_PROMPT.md`, `CRUCIBLE_*_HANDOFF.md`, `CONTRACTS_*` | **Outgoing** cross-repo messages the operator carries to the Crucible/contracts agent (`docs/tasks/crucible-handoff.md`) |
+| `GRAMMAR_REVIEW_AND_EXPANSION.md`, `LEARNED_SYSTEMS_AND_GENERATION_REVIEW.md` | **Live roadmap/reference reviews** (grammar expansion paths; learned-systems best-practice gaps) — current working documents, deliberately kept in root, not archived |
+| `PROMPT_CRUCIBLE_*.md` (also the swept patterns `*_AGENT_PROMPT.md`, `CRUCIBLE_*_HANDOFF.md`, `CONTRACTS_*`) | **Outgoing** cross-repo messages the operator carries to the Crucible/contracts agent (`docs/tasks/crucible-handoff.md`). Only pending/held/current relays stay in root; answered ones move to `_archive/` |
 | `../Crucible/docs/handoffs/FORGE_*.md` | **Incoming** responses/handoffs from Crucible |
-| `*_PLAN.md`, `*_SPEC.md`, `*_DRAFT.md`, `OPTION_*.md`, `PROMPT_5_*` | Scoping/planning artifacts for specific workstreams |
-| `_archive/` | Completed/landed records: prompt↔response pairs, answered `PROMPT_CRUCIBLE_*` relays, and the phase handoffs (periodically swept from root once their D-entry lands — D202) |
+| `_archive/` | Completed/landed records: prompt↔response pairs, answered `PROMPT_CRUCIBLE_*` relays, phase handoffs, and finished scoping/planning artifacts (`*_PLAN.md`/`*_SPEC.md`/`*_DRAFT.md`/…) — swept from root once their D-entry lands (D202) |
 | `AUDIT.md`, `docs/STRATEGY_GENERATION_STATE.md` | Point-in-time deep reviews — stale-bannered; historical context only |

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Iterable, Mapping
+from dataclasses import replace as _dc_replace
 from datetime import date
 from pathlib import Path
 
@@ -58,12 +59,19 @@ class _StubCache:
 
 
 def _ctx(cache: object) -> FilterContext:
+    # Pin exclude_regime_filter=False so the base-mechanism tests (regime GATE included →
+    # co-firing rejected) stay valid regardless of the live config, which ships the flag ON
+    # once 5082d332 is flipped. The ON behaviour has its own fixture (_ctx_exclude_regime).
+    base = load_calibration(_PREFILTER_YAML)
+    calibration = _dc_replace(
+        base, signal_correlation=_dc_replace(base.signal_correlation, exclude_regime_filter=False)
+    )
     return FilterContext(
         registry=minimal_registry_snapshot(),
         feature_cache=cache,  # type: ignore[arg-type]
         prior_config_hashes=frozenset(),
         prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
+        calibration=calibration,
         rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
     )
 
@@ -254,8 +262,6 @@ def test_empty_activation_sets_are_treated_as_uncorrelated() -> None:
 # Flag default False → byte-identical.
 # ---------------------------------------------------------------------------
 
-from dataclasses import replace as _dc_replace  # noqa: E402
-
 
 def _config_dir_regime_confluence(
     *,
@@ -360,3 +366,11 @@ def test_exclude_regime_trivial_pass_with_one_alpha_signal() -> None:
     result = SignalCorrelationFilter().apply(cfg, _ctx_exclude_regime(cache))
     assert result.passed is True
     assert result.details.get("compared_signals") == 1
+
+
+def test_shipped_calibration_excludes_regime_filter() -> None:
+    # FLIPPED 2026-07-04 (D239, prereg 5082d332, after D220 confirmed): the live
+    # prefilter.yaml now ships exclude_regime_filter=True. (The base-mechanism tests above
+    # pin it False via _ctx so they still verify the gate-included behaviour.)
+    cal = load_calibration(_PREFILTER_YAML)
+    assert cal.signal_correlation.exclude_regime_filter is True

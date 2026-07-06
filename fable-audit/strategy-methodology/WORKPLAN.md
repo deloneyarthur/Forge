@@ -14,11 +14,20 @@ disarms the one unattended write path; P1 removes the real throttle on the valid
 family; P2 stops paying for dead strategy space; P3 hardens the evidence machinery; P4
 is docs/backlog.**
 
+> Status reconciled 2026-07-05 against D218–D240, the code, and the live journal. P0 is
+> largely landed (annotations inline), P1-1/P1-2 are FLIPPED LIVE 2026-07-04 with the
+> supply-side effect CONFIRMED 07-05 (ve battery survival 5.5%→15.3%); P1-3..P1-5, P2, P3,
+> P4 remain OPEN except as annotated.
+
 ---
 
 ## P0 — Before the D216 floor activation (days; mostly S; blocks the flip)
 
 ### P0-1. Disarm or leash §5.5 auto-tune before first promotions (MET-H3 + PRE-M4) — S; OPERATOR
+
+— PARTIAL (verified 2026-07-05): mode (a) chosen — `auto_tune.enabled: false` live via D218
+(`6c083b4`, 2026-07-02). Still OPEN: the free-text bookkeeping move and the estimand re-key
+follow-up.
 
 The only unattended tracked-file write path in the system, keyed on a dead estimand
 (per-config verdict-level promotion rate), reachable for the first time the day real
@@ -34,6 +43,10 @@ promotions land — likely at tiny denominators.
 
 ### P0-2. Instrument vol_event by regime-gate class + per-family funnel telemetry (ENU-H1 + PRE-M5) — S–M; no gate
 
+— PARTIAL (verified 2026-07-05): the `battery_survival_by_hypothesis` journal line is done
+(`c365d14`, 2026-07-01) — it is what confirmed the D239 supply-side effect. Still OPEN:
+gate-class tagging of ve rows and the `forge status`/funnel-export surface.
+
 The activation prereg is unreadable without this: the floor lifts the WHOLE ve family,
 but only the earnings-gated subset is the validated orthogonal content, and the battery
 kill table was invisible until this audit.
@@ -46,6 +59,9 @@ kill table was invisible until this audit.
 
 ### P0-3. One evidence question to Crucible (ENU-H1) — S; CRUCIBLE (operator carries)
 
+— DONE Forge-side (`f622f29`, 2026-07-02; verified 2026-07-05):
+`PROMPT_CRUCIBLE_VOLEVENT_GATE_CLASS_EVIDENCE.md` drafted — awaits Crucible's answer.
+
 - Ask: did the PC1-load-0.10 / book-PBO-0.107 result hold for macro-calendar-gated
   vol_event comps, or only earnings-gated ones? (n=611 honest ve comps exist
   Crucible-side; zero Forge work.)
@@ -53,6 +69,9 @@ kill table was invisible until this audit.
   earnings-gated subset, not the family — a different floor key and a different prereg.
 
 ### P0-4. Make the activation ritual honest (MET-H1 + MET-M2 + MET-M1a) — S; operator for wording
+
+— PARTIAL (verified 2026-07-05): (b) done — `config/preregistrations.jsonl` is tracked;
+(a) the budget-step wording/ledger and (c) the two prereg-tooling one-liners remain OPEN.
 
 - Action: (a) fix the "charge the alpha budget" step — either rename to "re-read"
   in deploy/feedback docs or build the minimal charge ledger (M, can trail);
@@ -65,6 +84,10 @@ kill table was invisible until this audit.
 
 ### P0-5. Read the D216 activation decision against PRE-H1 — S; OPERATOR (framing, not code)
 
+— OBE (verified 2026-07-05): the activation proceeded 2026-07-02 on a book-PBO prereg
+(`5c4ba16f`) rather than this framing; the P0-2 telemetry now provides the
+reached-denominator read this item asked for.
+
 The sampling floor alone delivers ~1.2k ve survivors/week because the battery kills
 94.2% downstream. Present the operator both levers together: activate the floor AND
 schedule P1-1/P1-2 (battery-side), with the prereg prediction written on the
@@ -76,6 +99,10 @@ schedule P1-1/P1-2 (battery-side), with the prereg prediction written on the
 ## P1 — Un-throttle the validated family (1–2 weeks; the core producer work)
 
 ### P1-1. Fix permutation_test's two outright bugs (PRE-H2 a+b) — S code + prereg ritual; OPERATOR flip
+
+— DONE-deployed-FLIPPED (built D224, shadow-validated D226, FLIPPED live D238
+2026-07-04T18:19:53Z; verified 2026-07-05). Prereg `848a1f67` re-resolve pending on a
+post-D240 clean cohort.
 
 The dominant filter for the entire pipeline (51.4% of all enumerated) reads a
 single-day return at T+k instead of cumulative T+1..T+k, and shifts by CALENDAR days so
@@ -91,6 +118,12 @@ Mon/Tue activations silently lose ~40% of their sample to weekends.
 
 ### P1-2. Preregistered per-family battery A/B for vol_event (PRE-H1 + PRE-H2c + PRE-H3) — M; OPERATOR
 
+— DONE (verified 2026-07-05): (a) the vol-appropriate permutation null was built (D225) and
+then DROPPED — its prereg was REFUTED (D235); recorded here explicitly so the drop is not
+mistaken for an omission. (b) the signal_correlation change was built (D227) and FLIPPED
+live D239 2026-07-04T18:45:42Z; supply-side CONFIRMED 2026-07-05 — ve battery survival
+5.5%→15.3%. (c) predicted_activations control unchanged, as designed.
+
 - Action: shadow-count (no live change) what would newly survive under: (a) a
   vol-appropriate permutation null for ve (|move| / straddle-payoff proxy instead of
   signed drift), (b) family-aware signal_correlation threshold or event-pair exemption
@@ -103,6 +136,8 @@ Mon/Tue activations silently lose ~40% of their sample to weekends.
 
 ### P1-3. Activate the 4 idle iv_structure directionals for vol_event (GRM-H1) — M; OPERATOR grammar bump + Crucible data
 
+— Still OPEN (verified 2026-07-05: grammar still v22; no grammar-side work).
+
 - Action: re-rate Q41 for the ve slice; D131-style activation audit (live feature-cache
   threshold audit + `signal_horizon` classing) for `iv_vs_index`, `skew_25d`,
   `butterfly_25d`, `vol_of_vol` as single-name ve directionals; grammar bump + archive +
@@ -113,6 +148,8 @@ Mon/Tue activations silently lose ~40% of their sample to weekends.
 
 ### P1-4. Percentile emission for ve's absolute-range directionals (ENU-M4) — M; OPERATOR grammar bump
 
+— Still OPEN (verified 2026-07-05: grammar still v22).
+
 - Action: migrate dealer-wall distances and `iv_minus_rv`/`iv_term_slope` from
   SPY-calibrated absolute ranges to the D099 percentile pattern (or re-audit ranges per
   underlying class). Can ride the same grammar bump as P1-3.
@@ -120,6 +157,9 @@ Mon/Tue activations silently lose ~40% of their sample to weekends.
   underlyings.
 
 ### P1-5. Premium-R exits for vol_event (GRM-M2) — M; OPERATOR + cheap Crucible read first
+
+— Still OPEN (verified 2026-07-05): the contracts prerequisite landed via D211, but no
+grammar-side work has been done (grammar still v22).
 
 - Action: ask Crucible for a cheap read on exit-shape → tail/PBO from existing gated
   data; if supportive, S5 amendment adding `delta_floor_stop` / `premium_r_target` /
@@ -132,6 +172,10 @@ Mon/Tue activations silently lose ~40% of their sample to weekends.
 ## P2 — Stop paying for dead strategy space (days; mostly S)
 
 ### P2-1. Retire event_momentum from enumeration, or justify it (GRM-M3 + PRE-M1 + ENU-M1) — S; OPERATOR
+
+— Still OPEN, and the premise has WEAKENED (noted 2026-07-05): D226 measured the P1-1
+permutation flip lifting event_momentum battery survival 4.4× — re-read the "99.8%
+battery-killed" figure on post-D238 data before proposing retirement.
 
 - 12.5% of the enumeration budget, 99.8% battery-killed, structurally never-ranks, v12
   rationale explicitly refuted by v15. Action: operator memo → `DISABLED_HYPOTHESES`
@@ -201,6 +245,10 @@ Mon/Tue activations silently lose ~40% of their sample to weekends.
   evidence to the operator for that call.
 
 ### P3-6. §7.4 errors-directory watcher (PRE-M6) — S/M; no gate
+
+— Still OPEN (verified 2026-07-05). Note: the ADJACENT failed-runs gap was fixed separately
+(D240 — Crucible `failed_runs_*.json` now consumed per-poll), but the §7.4 errors-directory
+watcher itself remains unbuilt.
 
 - Measure actual Crucible-rejection volume first; implement the watcher
   (`status='rejected_by_crucible'`) or spec-amend §7.4 out.

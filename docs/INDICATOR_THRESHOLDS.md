@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-05-14
 **Source data:** `~/optbt_data/bars_underlying/symbol=SPY/` — 1508 trading days, 2020-01-02 → 2025-12-31.
-**Compute path:** `optbt.features.base.build(id).compute(bars.lazy())` for each of the 33 indicators advertised in Crucible's `RegistrySnapshot` *at the time of the audit* (commit `b447597` writer-side feature_cache). **NB:** the registry has grown since — the current snapshot (`2026-06-24T070003Z.json`) advertises **58** indicators. The audit covered only the 33 then-present; the addenda at the bottom (v6/v18) and `_INDICATOR_THRESHOLD_TABLE` track the later ones. For the authoritative live count, read the registry, not this line.
+**Compute path:** `optbt.features.base.build(id).compute(bars.lazy())` for each of the 33 indicators advertised in Crucible's `RegistrySnapshot` *at the time of the audit* (commit `b447597` writer-side feature_cache). **NB:** the registry has grown substantially since — the audit covered only the 33 then-present; the addenda at the bottom (v6/v18) and `_INDICATOR_THRESHOLD_TABLE` track the later ones. For the authoritative live set and count, read the newest `registry_snapshot_*.json` (by mtime), not this doc — any snapshot filename/count quoted in this doc is a historical example.
 
 **Why this exists:** Forge's enumerator (`sampler.py:132`) sets `params={"threshold": 30.0}` as a generic default for every threshold-style `SignalSpec`. Real-data audit shows this default is **meaningful for only ~1 in 4 indicators**. The rest produce 0 activations (signal never fires), making `signal_density` filter reject 100% of candidates under the real Crucible cache.
 
@@ -161,7 +161,7 @@ indicators (`ema`, `ema_50`, `sma`) and raw $-scale (`gex`/`vex`/`cex`/`atr`), p
 **Skip from directional** but allow as passthrough/comparison **(3 indicators)** — price-scale:
 - `ema`, `ema_50`, `sma`
 
-**Conditional skip** — `days_to_earnings` only enumerable for non-SPY (single-name) underlyings; v1 SPY-only so skip.
+**~~Conditional skip~~ — OBSOLETE:** ~~`days_to_earnings` only enumerable for non-SPY (single-name) underlyings; v1 SPY-only so skip~~. The universe has been multi-name for months and `days_to_earnings` is **live** — it serves as a `volatility_event` R3 regime gate. The part that remains true: it is only meaningful for single-name underlyings (no earnings date for SPY/index).
 
 **Registry vs. Forge table gap (current, derive-from-source).** The live registry advertises more
 indicators than `_INDICATOR_THRESHOLD_TABLE` carries. Any registry id absent from the table returns
@@ -208,7 +208,7 @@ Q13 in `OPEN_QUESTIONS.md` documented "100% rejection at permutation_test under 
 
 **Left absolute (out of scope):** `dealer_positioning` directional (call/put-wall, gamma-flip — the only `mean_reversion`-directional overlap with `volatility_event`); already-rank `iv_rank` / `rv_rank` (percentile-by-construction); and the entire `volatility_event` indicator set (`days_to_*`, vol indicators) — it fires in ~every fold, so D099 deliberately does not touch it. Because `mean_reversion`-family directional indicators are sampled only by `mean_reversion`, and `adx`/`hurst` are `trend_strength` (regime-only, not in `volatility_event`'s R3 gate), this `(indicator, role)` allowlist provably cannot leak into `volatility_event`.
 
-**Coordination:** percentile mode is interpreted on Crucible's side in **two** paths — the strategy/backtest path (`494cf96`) and the feature-cache writer that answers Forge's pre-filter `activation_dates` queries (`PROMPT_CRUCIBLE_PERCENTILE_FEATURE_CACHE.md`). Forge holds v6 emission undeployed until both are live. The percentile ranges here are calibrated to *intent* (loosen the diagnosed-too-tight constraints), not to SPY data — they are tunable as the `crucible funnel --compare v5 v6` signal comes in.
+**Coordination:** percentile mode is interpreted on Crucible's side in **two** paths — the strategy/backtest path (`494cf96`) and the feature-cache writer that answers Forge's pre-filter `activation_dates` queries (`PROMPT_CRUCIBLE_PERCENTILE_FEATURE_CACHE.md`). ~~Forge holds v6 emission undeployed until both are live.~~ *(Historical: both paths went live and v6 deployed 2026-06-02; the grammar has moved many versions past v6 since — `config/grammar.yaml` for the current version.)* The percentile ranges here are calibrated to *intent* (loosen the diagnosed-too-tight constraints), not to SPY data — they are tunable as the `crucible funnel --compare v5 v6` signal comes in.
 
 ---
 

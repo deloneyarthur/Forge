@@ -5,7 +5,7 @@ Scope: the gates every change passes before commit, and the commit conventions.
 ## Commands
 
 ```bash
-uv run pytest                                  # full suite (~1,400). Deploy gate = service stopped
+uv run pytest                                  # full suite (count grows — latest in STATUS.md/D-entries). Deploy gate = service stopped
 uv run pytest tests/unit/test_grammar          # scope while iterating
 uv run pytest -m "not slow"                    # markers: unit/integration/invariants/slow
 uv run ruff check src tests scripts            # strict select-set in pyproject.toml

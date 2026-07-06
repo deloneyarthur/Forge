@@ -112,11 +112,24 @@ def _ctx_mode(
 # ---------------------------------------------------------------------------
 
 
-def test_default_calibration_mode_is_single_day() -> None:
-    # The shipped prefilter.yaml carries no forward_return_mode → legacy default → an
-    # un-flipped tree is byte-identical (the existing informative/noise tests still pass).
+def test_shipped_calibration_mode_is_cumulative_trading() -> None:
+    # FLIPPED 2026-07-04 (D237, prereg 848a1f67, after D220 confirmed): the live
+    # prefilter.yaml now ships cumulative_trading. (An OLD config without the key still
+    # defaults to single_day — see the back-compat test below.)
     cal = load_calibration(_PREFILTER_YAML)
-    assert cal.permutation_test.forward_return_mode == "single_day"
+    assert cal.permutation_test.forward_return_mode == "cumulative_trading"
+
+
+def test_absent_forward_return_mode_defaults_single_day(tmp_path: Path) -> None:
+    # Back-compat: a prefilter.yaml WITHOUT the key parses to the legacy single_day default
+    # (the loader's `.get(..., "single_day")`). Derived from the real config to stay valid.
+    import yaml
+
+    raw = yaml.safe_load(_PREFILTER_YAML.read_text(encoding="utf-8"))
+    raw["prefilter"]["permutation_test"].pop("forward_return_mode", None)
+    keyless = tmp_path / "pf.yaml"
+    keyless.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    assert load_calibration(keyless).permutation_test.forward_return_mode == "single_day"
 
 
 def test_validate_forward_return_mode_rejects_unknown() -> None:

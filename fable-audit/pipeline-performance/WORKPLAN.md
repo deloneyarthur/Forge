@@ -6,9 +6,19 @@ Findings references (F#) → `FINDINGS.md`; measured numbers → `00-BASELINE.md
 None of these items change enumeration output, §7.3 blocking semantics, grammar, or the
 gate. Status boxes are for the executing agent to tick.
 
+> Status reconciled 2026-07-05 against IMPLEMENTATION_DECISIONS.md D219–D240, the code, and
+> the live journal. P0-1..P0-3 and P3-1/P3-3/P3-4 are DONE-deployed (annotations inline).
+> Journal now: submit=4.7s, reconcile=2.0s, weights=17s (P1-1 open), prefetch=141s —
+> prefetch is now the dominant per-batch cost (P2-1).
+
 ---
 
-## P0-1 — Bulk-stage the rejected-rows write (F1) `[ ]`
+## P0-1 — Bulk-stage the rejected-rows write (F1) `[x]`
+
+— DONE-deployed (D219, commit `18a30eb`, 2026-07-02; verified 2026-07-05). Shipped via the
+workplan's sanctioned alternative below: the per-row rejected-rows write was DELETED (zero
+readers; aggregates stay in `batch_summaries`), not CSV-staged. Journal now submit=4.7s
+(was 195–202s). P1-2's retention decision covers the existing rows.
 
 **Goal:** submit phase 195–202s → single-digit seconds; −~3.4M fsyncs/day.
 **Module:** `src/forge/submission/pre_filter_logger.py` (`record_pre_filter_logs_for_rejected`).
@@ -44,7 +54,10 @@ Effort S–M. Risk: CSV quoting subtleties — the round-trip test is the guard.
 
 ---
 
-## P0-2 — Delta-first verdict insert (F2) `[ ]`
+## P0-2 — Delta-first verdict insert (F2) `[x]`
+
+— DONE-deployed (commit `2d601a0`, 2026-07-02; verified 2026-07-05). `persistence/verdicts.py`
+delta-first insert as specced; journal now reconcile=2.0s (was 30–37s).
 
 **Goal:** reconcile −17–20s/pass (paid by ALL ~467 iterations/day).
 **Module:** `src/forge/persistence/verdicts.py` (`record_verdicts`).
@@ -67,7 +80,10 @@ Effort S.
 
 ---
 
-## P0-3 — Skip the no-op UPDATE sweep in reconcile (F4) `[ ]`
+## P0-3 — Skip the no-op UPDATE sweep in reconcile (F4) `[x]`
+
+— DONE-deployed (commit `bf822c3`, 2026-07-02; verified 2026-07-05). `consumer.py` now skips
+non-submitted rows in the matched loop.
 
 **Goal:** reconcile −3–6s/pass.
 **Module:** `src/forge/feedback/consumer.py` (`consume_batch_results` matched loop).
@@ -90,6 +106,9 @@ Effort S.
 ---
 
 ## P1-1 — Parse the gated export once per iteration (F3, F14, F15) `[ ]`
+
+— Still OPEN (verified 2026-07-05: no code trace). The D234 `weights=` bucket now makes the
+cost visible — journal weights=17s — so this is the next-biggest in-process win after P0.
 
 **Goal:** −~10s/full iteration + snapshot-consistent weights; −~1.7s/blocked iteration.
 **Modules:** `src/forge/cli/main.py` (loaders + iteration wiring),
@@ -126,6 +145,11 @@ Effort S–M.
 
 ## P1-2 — `pre_filter_logs` growth policy (F7, F8) — OPERATOR DECISION `[ ]`
 
+— PARTIAL (verified 2026-07-05): the retention DECISION is made — option (a), stop per-row
+rejected writes, chosen and shipped with D219 (`18a30eb`, 2026-07-02), so daily growth is
+stopped. Still OPEN: one-time compaction of the existing GBs, confirm+delete the stray 4.5GB
+`~/forge_data/forge.db.bak-pre-flush-20260624`, and optional zstd backup compression.
+
 **Goal:** stop ~200MB/day DB growth; shrink backups (46GB → bounded).
 
 Present these options to the operator (do not pick unilaterally — data-lifecycle):
@@ -149,6 +173,10 @@ Effort M (mostly coordination). Gate: operator + D-entry.
 ---
 
 ## P2-1 — Crucible relay: lazy chain-load in the feature writer (F10, F18) `[ ]`
+
+— Still OPEN (verified 2026-07-05: no code trace — neither the Forge-side hit/miss telemetry
+nor the relay prompt exists). With P0 done, prefetch=141s is now the DOMINANT per-batch cost;
+this item's priority has risen accordingly.
 
 **Goal:** prefetch −90–160s/batch. **This is Crucible's code — Forge relays (rule #2).**
 
@@ -215,6 +243,10 @@ Effort M.
 
 ## P2-3 — Memoize `permutation_test` per batch (F12) `[ ]`
 
+— Still OPEN, but its stated blocker is CLEARED (noted 2026-07-05): the permutation-semantics
+fix this memo had to wait for (strategy-audit P1-1) is built (D224) and FLIPPED live
+2026-07-04 (D238) — the memo can now pin the correct computation and is buildable.
+
 **Goal:** battery 36–50s → ~5–10s.
 **Module:** `src/forge/prefilters/permutation_test.py` (+ `FilterContext` if chosen).
 
@@ -271,7 +303,8 @@ Effort S–M.
 
 ## P3 — hygiene bundle (each its own small commit)
 
-- **P3-1 `[ ]` `weights=` timings bucket (F6) — DO FIRST.** Wrap main.py:1758-1878 (and
+- **P3-1 `[x]` `weights=` timings bucket (F6) — DO FIRST.** — DONE-deployed (D234, commit
+  `3acc66b`, 2026-07-02; `weights=` bucket live in the journal, verified 2026-07-05). Wrap main.py:1758-1878 (and
   ideally the :1226-1330 fingerprints/cache-build stanza as e.g. `prep=`) with timer
   entries; extend the fixed key order at main.py:365-374. Journal-format change → update
   `docs/MANPAGE.md`'s phase_timings description in the same commit (docs routing rule).
@@ -281,14 +314,17 @@ Effort S–M.
   on any other status. §7.3 semantics untouched (only poll frequency); worst case adds
   ≤10 min latency to noticing "unblocked" — negligible vs the 8-min batch. Do NOT
   instead raise `poll_interval_seconds` globally (would slow unblocked cadence 30–40%).
-- **P3-3 `[ ]` Shrink the prefetch coverage log (F19).** crucible_feature_cache.py:
+- **P3-3 `[x]` Shrink the prefetch coverage log (F19).** — DONE-deployed (D234, commit
+  `0068f44`, 2026-07-02; verified 2026-07-05). crucible_feature_cache.py:
   317-330 — replace the two full 124-ticker dicts + ticker list with aggregates:
   `n_underlyings`, `n_full_coverage`, `below_full=[TICKER:rows,...]` (only tickers below
   max), keep `data_unavailable` verbatim (M-5 intent) and the event name (grepped by
   operators/tools). ~70% of journal volume.
-- **P3-4 `[ ]` Single-txn shadow scores (F9).** shadow.py:75-95 — wrap the loop in one
+- **P3-4 `[x]` Single-txn shadow scores (F9).** — DONE-deployed (commit `af4b1a7`,
+  2026-07-02; verified 2026-07-05). shadow.py:75-95 — wrap the loop in one
   transaction (or executemany + txn); MUST keep the never-raises posture (:104-106).
-- **P3-5 `[ ]` Rate-limiter connection reuse (F14).** Collapse the three
+- **P3-5 `[ ]` Rate-limiter connection reuse (F14).** — Deliberately DEFERRED by D234
+  (2026-07-02): "do it with P1-1" so §7.3 block decisions stay byte-identical. Collapse the three
   `db_connection` opens to one (pass a connection in, optional param); combine with
   P1-1's `gated_runs=` kwarg. Keep the three block-reason evaluations and their journal
   lines byte-identical.

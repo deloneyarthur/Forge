@@ -42,8 +42,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from crucible_contracts import (
+    FailedRun,
     StrategyConfig,
     get_recent_gated_runs,
+    load_recent_failed_runs_from_export,
     load_recent_gated_runs_from_export,
 )
 
@@ -417,6 +419,65 @@ def _flush_aged_out_submissions(
     return len(aged_out)
 
 
+def _fetch_failed_runs(exports_dir: Path) -> list[FailedRun]:
+    """Load Crucible's failed-run export. Empty list when absent — no DB fallback.
+
+    Failed runs live ONLY in `failed_runs_*.json`; they never reach the gated
+    tables the direct-DuckDB path reads, so (unlike `_fetch_crucible_runs`) there
+    is nothing to fall back to.
+    """
+    return load_recent_failed_runs_from_export(exports_dir, limit=_DEFAULT_CRUCIBLE_LIMIT)
+
+
+def _flush_failed_runs(
+    forge_db: duckdb.DuckDBPyConnection,
+    failed_runs: list[FailedRun],
+) -> int:
+    """Retire `submitted` rows Crucible reported FAILED (2026-07-05 incident fix).
+
+    A run that failed in Crucible's runner (`runner_failure`) or lost its worker
+    pool (`pool_break`) never produces a `PromotionDecision`, so it never enters the
+    gated-runs export and `consume_batch_results`' config_hash join can never match
+    it. Without this the row sits `submitted` until `_flush_aged_out_submissions`
+    retires it 5 days (`STRANDED_AFTER`) later — and in the interim it counts toward
+    §7.3 in-flight depth, so a steady failure rate pins the depth cap and stalls ALL
+    submission. That is the incident this fixes: ~150 failed/day accumulated to 601
+    in-flight against a cap of 600, blocking Forge for ~15h with the failures
+    invisible because Crucible's `failed_runs` feedback export had no Forge consumer.
+
+    Retires matching rows with the SAME terminal marker as the aged-out flush:
+    `status='gated'` + `_AGED_OUT_SENTINEL_RUN_ID`. That sentinel is already excluded
+    from the §7.3 depth count (`rate_limiter._evaluate_inflight_depth`), the
+    rate-limiter H-1 completion count, and the M-7 promotion_basis denominator, so a
+    failed run correctly contributes to none of them. Reuses the marker rather than
+    minting a second one so the "not a real gate decision" exclusion stays
+    single-sourced across those call sites.
+
+    Only `config_hash`es in `failed_runs` are touched, so a genuinely-pending
+    submission (absent from the failed export) is never retired. Empty `failed_runs`
+    is a no-op (Crucible-offline / no-export condition — leave rows alone). Returns
+    the number of rows transitioned; idempotent (`WHERE status='submitted'`).
+    """
+    if not failed_runs:
+        return 0
+    failed_hashes = {fr.config_hash for fr in failed_runs}
+    candidates = forge_db.execute(
+        "SELECT forge_candidate_id, config_hash FROM submissions WHERE status = 'submitted'",
+    ).fetchall()
+    to_retire = [str(cid) for cid, h in candidates if str(h) in failed_hashes]
+    if not to_retire:
+        return 0
+    forge_db.executemany(
+        """
+        UPDATE submissions
+        SET status = 'gated', crucible_run_id = ?
+        WHERE forge_candidate_id = ? AND status = 'submitted'
+        """,
+        [(_AGED_OUT_SENTINEL_RUN_ID, cid) for cid in to_retire],
+    )
+    return len(to_retire)
+
+
 def reconcile_all_pending(
     forge_db: duckdb.DuckDBPyConnection,
     crucible_db: Path,
@@ -454,12 +515,20 @@ def reconcile_all_pending(
     if exports_dir is None:
         exports_dir = Path.home() / "optbt_data" / "exports"
     runs = _fetch_crucible_runs(crucible_db, exports_dir)
+    failed = _fetch_failed_runs(exports_dir)
 
     # D111 — persist per-candidate verdicts for EVERY export row Forge ever
     # submitted (not just pending batches), so re-gates of completed batches
     # are captured and verdicts survive the rolling window. Idempotent on
     # `crucible_run_id`, so sweeping the same window every poll is a no-op.
     record_verdicts(forge_db, runs)
+
+    # 2026-07-05 incident: retire runner-failed / pool-broken runs Crucible reports
+    # in `failed_runs` but that never enter `gated_runs`. Without this they sit
+    # `submitted` and pin §7.3 in-flight depth until the 5-day age-out flush below
+    # catches them — a steady failure rate stalls ALL submission (601 > cap 600 for
+    # ~15h). Runs BEFORE the per-batch loop so the batch query skips retired rows.
+    _flush_failed_runs(forge_db, failed)
 
     # D052 — flush aged-out rows BEFORE the per-batch loop so the batch
     # query only enumerates batches still reachable via the export window.

@@ -1,5 +1,9 @@
 # Crucible relay — the options arm is the PRIMARY, STANDALONE vehicle (NOT the WORLD_A §6.1 overlay)
 
+> **🗄️ ARCHIVED 2026-07-05 (D242): NEVER SENT — operator-confirmed outdated.** The
+> exhaustion/standalone-vs-overlay thread moved on empirically (D216 single-name vol_event supply
+> strategy; D235 book-PBO 0.178 baseline); the framing here predates both.
+
 **Status: DRAFT for operator review — not sent.** Informational/coordination only: no gate change (hard rule 3), no grammar change in this relay (Path C = grammar v2 = operator+grammar-gated, rule 1), no build commitment.
 
 ## 0. The operator's position (explicit — this corrects a framing)

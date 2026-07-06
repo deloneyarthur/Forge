@@ -209,29 +209,32 @@ def test_summary_line_shows_counts(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rerun_same_seed_is_idempotent(tmp_path: Path) -> None:
-    forge_db = tmp_path / "forge.db"
-    inbox = tmp_path / "inbox"
-    args = [
-        "run",
-        "--no-config",
-        "--seed",
-        "0",
-        "--batch-size",
-        "2",
-        "--max",
-        "200",
-        "--forge-db",
-        str(forge_db),
-        "--inbox",
-        str(inbox),
-    ]
-    first = runner.invoke(app, args)
-    second = runner.invoke(app, args)
-    assert first.exit_code == 0
-    assert second.exit_code == 0
-    # First run: at least one submitted. Second: all skipped.
-    # We don't pin exact counts (depends on prefilter pass-rate)
-    # but the second invocation should report submitted=0.
-    second_lines = [line for line in second.stdout.splitlines() if "submitted=" in line]
-    assert any("submitted=0" in line for line in second_lines)
+def test_same_seed_is_deterministic(tmp_path: Path) -> None:
+    # Hard rule #6: same (seed, grammar, registry) → byte-identical enumeration/submission.
+    # Two INDEPENDENT fresh-DB runs at the same seed must submit the identical config set
+    # (compared via inbox filenames = config_hash.json). Flip-agnostic — the property holds
+    # under any prefilter mode; the earlier "second run all-dupes" form only passed when the
+    # pre-flip null happened to reject every synthetic-noise config (D237 flip exposed that).
+    def run(tag: str) -> list[str]:
+        inbox = tmp_path / f"{tag}_inbox"
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--no-config",
+                "--seed",
+                "0",
+                "--batch-size",
+                "2",
+                "--max",
+                "200",
+                "--forge-db",
+                str(tmp_path / f"{tag}.db"),
+                "--inbox",
+                str(inbox),
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        return sorted(p.name for p in inbox.glob("*.json")) if inbox.exists() else []
+
+    assert run("a") == run("b")

@@ -311,6 +311,9 @@ Note: `scripts/` holds 14 files (10 Python = 2,546 lines, 4 bash ≈ 1,100 lines
 
 ### OPS-H1 (HIGH, → items 3 & 5): quality gate is local-only and demonstrably bypassed — no CI; the tree fails its own ruff-format hook
 
+— Status 2026-07-05: format half RESOLVED (item 3 DONE, `038cb46` 2026-07-02 — hook set now
+satisfiable). CI half (item 5) still OPEN.
+
 - No `.github/`, `.gitlab-ci.yml`, `.circleci/` or any CI file (`git ls-files` shows none);
   `.pre-commit-config.yaml:17` even says "CI must run mypy via `uv run` for the same
   reason" — a CI that does not exist.
@@ -349,6 +352,9 @@ Note: `scripts/` holds 14 files (10 Python = 2,546 lines, 4 bash ≈ 1,100 lines
   (D048, executed 2026-05-18). Fix: RETIRED banner in header + MANPAGE (or a batch cap).
 
 ### OPS-M4 (MEDIUM, → item 4): `scratchpad/` untracked, unignored, holds referenced evidence
+
+— Status 2026-07-05: PARTIAL — gitignored (`0b2018c`) but the cited probes were never
+committed; the provenance half remains OPEN (see item 4's deviation note).
 
 - 7 .py + 1 .txt. `release_relval_sample.py` / `release_volevent_sample.py` submit to
   Crucible's gate (dry-run default — good); `relval_experiment_submitted.txt` is the
@@ -438,6 +444,8 @@ Note: `scripts/` holds 14 files (10 Python = 2,546 lines, 4 bash ≈ 1,100 lines
 
 ### HYG-H1 (HIGH, → item 1): dirty production tree, dirt aged up to 15 days (D104 violation)
 
+— Status 2026-07-05: RESOLVED (item 1 DONE — `63d7bfe`/`0ee6b5c`/`ce83584`, 2026-07-01).
+
 - 12 modified tracked + 18 untracked paths; a reboot auto-starts the daemon on uncommitted code.
 - Code dirt (D216 work, mtimes 2026-07-01): `src/forge/cli/main.py` (+51),
   `src/forge/feedback/rejection_weights.py` (+39), `src/forge/cli/healthcheck_cmd.py` (+32),
@@ -451,6 +459,9 @@ Note: `scripts/` holds 14 files (10 Python = 2,546 lines, 4 bash ≈ 1,100 lines
   `PROMPT_CRUCIBLE_REFIT_PRIORITY_AND_WORSTQ_REGIME.md` date to Jun 16 (~15 days untracked).
 
 ### HYG-M1 (MEDIUM, → item 15): root sprawl outgrew the sweep cadence (68 root .md; the taxonomy itself is good)
+
+— Status 2026-07-05: RESOLVED for this cycle (second sweep today: 56 records → `_archive/`,
+root .md 72→16). Cadence convention still to be agreed with the operator.
 
 - 68 root .md: 44 `PROMPT_CRUCIBLE_*`, 8 other cross-repo/agent prompts, 9
   plans/specs/drafts/research, 1 stale audit (`AUDIT.md`, 68KB, stale-BANNERED and
@@ -468,6 +479,9 @@ Note: `scripts/` holds 14 files (10 Python = 2,546 lines, 4 bash ≈ 1,100 lines
 
 ### HYG-M2 (MEDIUM, → item 16): giant living documents approaching rotation thresholds
 
+— Status 2026-07-05: still OPEN and now PAST threshold — `IMPLEMENTATION_DECISIONS.md` is
+1,006,649 bytes, over the ~1MB rotation trigger this finding set.
+
 - `IMPLEMENTATION_DECISIONS.md` 920KB / 216 D-entries (~4.3KB avg); `STATUS.md` 438KB /
   156 blocks; `OPEN_QUESTIONS.md` 129KB / 37 Q-entries; `OPEN_PROPOSALS.md` 30KB.
 - Discipline itself is strong: STATUS newest-on-top verified programmatically across all
@@ -479,6 +493,8 @@ Note: `scripts/` holds 14 files (10 Python = 2,546 lines, 4 bash ≈ 1,100 lines
   mid-file edits.
 
 ### HYG-M3 (MEDIUM, → item 2): two committed features missing from MANPAGE
+
+— Status 2026-07-05: RESOLVED (item 2 DONE — MANPAGE-sync test green; suite 1846 at D240).
 
 - `ranker-model eval-rewire` (`@ranker_model_app.command("eval-rewire")` in
   `src/forge/cli/ranker_model_cmd.py`, commits `edb03e6`/`fdeed29`) — 0 occurrences in

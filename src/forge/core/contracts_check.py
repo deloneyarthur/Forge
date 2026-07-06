@@ -68,7 +68,25 @@ from crucible_contracts import (
 # trips); nothing in Forge imports the loader yet (the estimand re-aim that consumes it
 # is HELD until the export carries real promoted-book data, currently empty). Cold-start
 # {} on absent/empty/unknown-schema. Pin-only.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.22.0"
+# 1.23.0 (2026-07-05 incident): failed-run feedback reader — FailedRun (frozen:
+# config_hash, finished_at, error_category; error_category an OPEN string so new
+# Crucible failure taxonomies don't break the contract) + load_recent_failed_runs_from_export,
+# mirroring the gated-run loader. Consumed by feedback.consumer._flush_failed_runs so
+# runner_failure / pool_break runs (which never enter gated_runs) are retired from the
+# `submitted` set instead of pinning §7.3 in-flight backpressure until the 5-day age-out.
+# Purely ADDITIVE (no existing model/hash changed → no major-guard trips). Forge DOES import
+# the loader (unlike the D216 pin-only add): the reconcile wiring lands in the same commit.
+# 1.24.0 (D243 coordinated F1/F3/F4 bump): GatedRun.failure_buckets (auto-computed coarse
+# failure labels) + FAILURE_BUCKET_SEVERITY_ORDER + failure_bucket_for_gate/…_from_gate_results
+# helpers + StrategyConfig.mechanism/regime (free-str, None-default, hash-excluded) +
+# FORGE_VOCABULARY_FILENAME_TEMPLATE. All ADDITIVE (no existing model/hash changed → no major
+# trip). Forge does NOT yet consume any of it — feature adoption (bucket-only training, mechanism/
+# regime stamping, vocab artifact, freeze ledger) stays DEFERRED behind ve-supply per D243; this
+# pin is version-adoption ONLY. NOT deferrable like prior additive pins (D124 trap): failure_buckets
+# lands on GatedRun, a PARSED gated-runs-export model with extra="forbid" — the running daemon holds
+# its boot-time model in memory, so it MUST be restarted onto 1.24.0 BEFORE Crucible's exporter
+# republishes with the field, else every reconcile fail-loops on extra_forbidden → §7.3 stall.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.24.0"
 
 
 def check_contracts_version() -> str:

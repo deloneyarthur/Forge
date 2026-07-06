@@ -2,7 +2,7 @@
 
 `run_battery(config, ctx, filters) -> PreFilterReport` iterates filters
 in cost_tier order with short-circuit on the first `passed=False`.
-`default_filters()` returns the seven canonical filters from §5 in cost
+`default_filters()` returns the nine canonical filters from §5 in cost
 order — what production code uses.
 
 `PreFilterReport.composite_score` stays `None` (D021/D2); the Phase 4

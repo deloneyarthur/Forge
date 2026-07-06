@@ -11,11 +11,18 @@ src tests scripts` → `uv run ruff format <changed files only>` → `uv run myp
 → scoped pytest → small commit (one module + tests) → D-entry + STATUS.md block if the
 change is an increment of record.
 
+> Status reconciled 2026-07-05 against D-entries through D240, the code, and the live
+> journal. P0 items 1–3 DONE, item 4 PARTIAL-with-deviation, item 15 swept 2026-07-05,
+> item 16 now URGENT (the ledger has crossed its own 1MB trigger); items 5–14, 17, 18
+> remain OPEN (no code traces). Annotations inline.
+
 ---
 
 ## P0 — do first (small, high stakes; the tree is red/exposed at audit time)
 
 ### 1. Clean the dirty production tree (HYG-H1) — S; code portion OPERATOR-GATED
+
+— DONE (commits `63d7bfe`/`0ee6b5c`/`ce83584`, 2026-07-01; verified 2026-07-05).
 
 - Why: reboot deploys the working tree (D104). ~6 days of ledger records
   (`STATUS.md` +117, `IMPLEMENTATION_DECISIONS.md` +108) exist only uncommitted; untracked
@@ -35,6 +42,9 @@ change is an increment of record.
 
 ### 2. Fix the failing MANPAGE-sync test (HYG-M3) — S; safe now
 
+— DONE (verified 2026-07-05): the MANPAGE-sync test is GREEN; full suite 1846 passing at
+D240. The "is red" below described the 2026-07-01 audit-time state.
+
 - Why: the suite is a deploy precondition and is red:
   `tests/integration/test_cli_help.py::test_every_command_is_mentioned_in_manpage`.
 - Action: add to `docs/MANPAGE.md`: (a) `forge ranker-model eval-rewire` (see
@@ -44,6 +54,9 @@ change is an increment of record.
 - Verify: `uv run pytest tests/integration/test_cli_help.py -q` green.
 
 ### 3. Make the pre-commit hook set satisfiable (OPS-H1, format half) — S; OPERATOR DECISION
+
+— DONE (commit `038cb46`, 2026-07-02 — one-time tree-wide format normalization as specced;
+verified 2026-07-05).
 
 - Why: 28 files fail the repo's own `ruff-format` hook, so commits land with `--no-verify`,
   which ALSO skips the grammar-version-bump hook (hard rule #10's pre-commit half).
@@ -58,6 +71,12 @@ change is an increment of record.
 - Pitfall: do it in a moment with no other dirty code (after item 1) so the diff is pure.
 
 ### 4. Resolve `scratchpad/` (OPS-M4 / HYG-L1) — S
+
+— PARTIAL-with-DEVIATION (verified 2026-07-05): `scratchpad/` was gitignored (`0b2018c`,
+2026-07-01) but the three cited probe scripts (`release_relval_sample.py`,
+`release_volevent_sample.py`, `diag_volsurface_feasibility.py`) were NEVER committed — the
+gitignore landed BEFORE the provenance half, exactly the pitfall below warned about. The
+provenance half is still OPEN.
 
 - Why: untracked+unignored, but `STATUS.md` and prereg `9b88966c446a` cite its contents as
   evidence (`release_relval_sample.py`, `release_volevent_sample.py`,
@@ -214,6 +233,9 @@ change is an increment of record.
 
 ### 15. Root-file archive sweep + cadence (HYG-M1) — S per sweep
 
+— DONE (2026-07-05 second sweep, in progress today: 56 records → `_archive/`, root .md
+count 72→16). Cadence proposal still pending operator.
+
 - Action: move answered `PROMPT_CRUCIBLE_*` relays and landed plans to `_archive/`
   (convention already exists, D202; last sweep `b1d3b79` 06-24). Candidates: the ≥10
   answered relays (relval, GICS-relval, volsurface, xsect-volevent, gen-levers) + the 12
@@ -225,6 +247,12 @@ change is an increment of record.
 - Optional: `_archive/` month subfolders once it passes ~100 files.
 
 ### 16. Ledger rotation convention (HYG-M2) — M one-time; OPERATOR sign-off on the convention
+
+— **DONE 2026-07-05 (D242, operator-approved):** D001–D200 → `_archive/IMPLEMENTATION_DECISIONS_D001-D200.md`
+(859KB verbatim; live file keeps preamble + pointer + D201+, ~153KB). Heading formats
+byte-identical so `grep '^## D'` works across both. `check-added-large-files` now excludes
+`_archive/`. Deviations from the sketch below: cut at D200 (not D150); STATUS.md monthly
+rotation NOT adopted (defer until STATUS itself becomes a problem).
 
 - Action: before `IMPLEMENTATION_DECISIONS.md` hits ~1MB (920KB now): split to
   `_archive/IMPLEMENTATION_DECISIONS_D001-D150.md` + keep D151+ live, with a 5-line index

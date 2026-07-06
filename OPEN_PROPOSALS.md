@@ -196,7 +196,7 @@ decided_by: operator-directed decline, 2026-06-24 -- degenerate pre-D034 gate_fa
 decision_marker: null
 ---
 proposal_id: 4b155abd-67f2-47a7-9d49-9996a70365cd
-status: PENDING
+status: REJECTED
 proposed_at: '2026-05-15T05:17:37.942916+00:00'
 proposal_type: loosen
 target: prefilter_calibration
@@ -207,6 +207,9 @@ evidence:
 proposal_yaml: |
   # Proposed pre-filter loosening — rolling promotion rate below min threshold
   # step_pct: 0.1000
+decided_at: '2026-07-05T23:09:40+00:00'
+decided_by: 'operator-directed decline, 2026-07-05 -- 0-promotion-era loosen trigger, moot since D206 retired auto-tightened thresholds and D218 disarmed auto_tune (enabled: false); declining per the D206 fossil-decline precedent; hard-rule-4 conservative direction (declining a loosen requires no approval)'
+decision_marker: null
 ---
 proposal_id: ecad3240-087a-4307-b7d7-e9dfe1a934b4
 status: REJECTED

@@ -263,7 +263,8 @@ Train the tail-aware T1 model (D140) — a deterministic ridge fit predicting a
 continuous worst-quartile gate value (default `cpcv_sharpe_p25`) instead of
 P(component). Same honest-era dataset, manual at the daily checkpoints; refuses
 when under 50 rows carry the target. Saves an append-only `robustness_model_*.json`
-artifact. The daily timer trains the **`target_wf_p25`** model (D191/D192) — the
+artifact; the summary line reports `oos_r2=` (out-of-sample R², D233) and `rmse=`
+alongside the artifact path. The daily timer trains the **`target_wf_p25`** model (D191/D192) — the
 quality lane's; that artifact is shadow-scored in the daemon and (when `--quality-rank`
 is on) blended into the §6.2 prior. Design: §8.3 / §1.2 (Forge consumes Crucible's
 `gate_results` values, computes none).
@@ -276,6 +277,8 @@ is on) blended into the §6.2 prior. Design: §8.3 / §1.2 (Forge consumes Cruci
 | `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override. |
 | `--lambda` | float | 1.0 | L2 regularization strength. |
 | `--target` | str | `target_cpcv_p25` | Continuous gate value to predict (`target_wf_p25` — the lane's, `target_wf_p10`, `target_wf_median`, `target_regime_stress`). |
+| `--label` | path | none | Per-component label JSON sourcing the target column. |
+| `--label-col` | str | `wf_sharpe_p25` | Label column to use as the target (requires `--label`). |
 | `--models-dir` | path | `<config db_path parent>/models` | Artifact dir (NOT derived from `--forge-db`). |
 
 ### forge ranker-model eval
@@ -379,15 +382,26 @@ shadow lane before any `ranker.yaml` change. fable-audit learned-systems P1.4/B2
 ### forge healthcheck
 
 Reports whether the daemon is alive AND productive, then exits 0 (OK) / 1 (WARN) / 2
-(CRITICAL). Eight checks: **service** (`systemctl is-active forge.service`), **loop** (newest
+(CRITICAL). Eleven checks: **service** (`systemctl is-active forge.service`), **loop** (newest
 `--- loop iteration` journal line — catches a wedged-but-active process), **submission**
 (newest `submitted=N` line + the latest `blocked:` reason — catches a chronically-stalled
 pipeline, e.g. a Crucible stall, and points upstream), **backup**/**model** freshness (a
-silently-broken daily timer), and **contracts** (installed vs `FORGE_EXPECTED_CONTRACT_VERSION`:
-minor drift WARN, major CRITICAL), and **learning drift** (the F3 + wf_p25 `forge status` clocks —
-CRITICAL if a learned lane has gone anti-predictive, WARN if it has lost its edge over the §6.2
-composite or dropped sharply from its trailing median; catches a bad daily model rotation that
-newest-wins adoption would otherwise put live silently, D209). Reads the journal + filesystem +
+silently-broken daily timer), **contracts** (installed vs `FORGE_EXPECTED_CONTRACT_VERSION`:
+minor drift WARN, major CRITICAL), **component_contributions** (D216: soft presence check on
+Crucible's `component_contributions_*.json` export — the export is per-promoted-portfolio, so
+absent-until-the-first-promotion is OK, never a WARN), two **learning drift** checks (the F3 +
+wf_p25 `forge status` clocks — CRITICAL if a learned lane has gone anti-predictive, WARN if it
+has lost its edge over the §6.2 composite or dropped sharply from its trailing median; catches
+a bad daily model rotation that newest-wins adoption would otherwise put live silently, D209),
+and **hypothesis_weights** (P3.2/B6: WARN when the journal shows the sampler degraded to
+UNIFORM hypothesis sampling because the learned yield/cohort weights failed to load — the
+feedback loop silently muted), and **inbox_rejections** (D245: count of recently-mtimed
+`~/optbt_data/inbox/errors/*.json` — rejected submissions — WARN on a chunk, CRITICAL on a
+batch-sized burst; catches the 'submitting-but-rejected' wedge an asymmetric contracts
+upgrade causes, which otherwise reads identically to ordinary §7.3 backpressure; window/
+thresholds tunable via `--inbox-reject-window-hours`/`--inbox-reject-warn`/`--inbox-reject-critical`).
+Authoritative list: the `check_*` calls in
+`src/forge/cli/healthcheck_cmd.py`. Reads the journal + filesystem +
 version + the ranker-eval clocks — no DB snapshot.
 Run by hand or via the `forge-healthcheck` timer (hourly); the timer's unit sets
 `SuccessExitStatus=1` so only CRITICAL marks it failed (visible in `systemctl --user
@@ -408,9 +422,12 @@ trailing consecutive-PASS streak (N/3), the latest metric, and an N-checkpoint t
 **`P calibration/floor`** line (P1.3) adds the drift guard: the latest floor-relevant
 calibration verdict + `max_ce` (from the F3 streak) and the gate-tail floor keep-rate
 (`eligible_fraction`, from the rewire clock) — tolerant of pre-P1.3 records (`n/a`). A
-**`gate-tail flip gate`** line (P1.2) shows whether gate-tail is safe to flip: `MET` only
-when the fresh-window PASS streak ≥ 3 AND the pooled fresh-window Δ's 95% CI excludes 0
-(full-pool "look" records excluded). Distinct from `forge healthcheck` (is the daemon
+**`gate-tail flip gate`** line (P1.2, criterion re-based P3.1/B5) shows whether gate-tail is
+safe to flip: `MET` only when a **Wald SPRT over the fresh-window paired deltas** decides
+"promote" (log-likelihood-ratio crosses the upper Wald boundary — controls the false-promote
+rate at ~alpha under daily peeking; full-pool "look" records excluded). The fresh PASS streak
+shown alongside is a display-only diagnostic — the SPRT weighs delta magnitudes, not the
+binary PASS (`src/forge/cli/status_cmd.py`). Distinct from `forge healthcheck` (is the daemon
 *alive/producing?*); this is *is the learning improving?*. For the authoritative recompute
 use `forge ranker-model eval` / `eval-robustness`.
 
@@ -654,6 +671,16 @@ Pre-commit hooks (no CLI args). The first enforces that a changed `grammar.yaml`
 bumps `grammar_version` and archives the prior version. The second keeps
 `grammar.yaml` rule IDs and `docs/GRAMMAR.md` headings in sync.
 
+### Monitoring, audit + probe scripts (one-liners)
+
+| Script | What it is |
+|---|---|
+| `tail_verified_alignment.py` | Live tracking tool (D155): re-runnable verified-coverage alignment monitor for the tail-aware model — tail_score vs P(component) on the verified slice, run against a `/tmp` DB snapshot. |
+| `forge_eod_check.sh` | **Bash** — source of the vendored `forge-eod-check` timer entrypoint (`~/.local/bin/forge-eod-check.sh`, D203): headless, report-only EOD pipeline read (21:00). |
+| `probe_option_momentum_min_months.py` | One-shot historical probe: Q39 `option_momentum` `min_months` × percentile activation sweep against the live feature cache. |
+
+Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
+
 ---
 
 ## CONFIG FILES
@@ -677,7 +704,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | Table | Holds |
 |---|---|
-| `submissions` | One row per submitted config. `config_hash` is unique-indexed (idempotency, hard rule #9). `status` lifecycle: `pending` (insert) → `submitted` \| `skipped_duplicate` \| `submission_failed`, then `gated` once Crucible decides (set on reconcile/age-out). |
+| `submissions` | One row per submitted config. `config_hash` is unique-indexed (idempotency, hard rule #9). `status` lifecycle: `pending` (insert) → `submitted` \| `skipped_duplicate` \| `submission_failed`, then `gated` once Crucible decides — set on reconcile, on age-out, or on the D240 failed-run retirement (runner-FAILED runs from `failed_runs_*.json` are retired each poll with the aged-out sentinel `crucible_run_id`; `feedback/consumer.py`). `selection_mode` (P3.3/B7) tags each row `ranked` vs `holdout` so evals can split biased-vs-unbiased labels. |
 | `batch_summaries` | Per-batch stats: size, grammar/registry version, promotion rate, prefilter rejections. |
 | `pre_filter_logs` | Per-(candidate, filter) pass/score/details. |
 | `verdicts` | Durable per-candidate Crucible decisions (D111): decision, decided_at, trade_count, grammar_version, full gate_results JSON. PK `crucible_run_id`, so re-gates append. Populated on every reconcile pass; survives the rolling export window. |
@@ -691,19 +718,24 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 ## PIPELINE SERVICES
 
 systemd **user** services (`systemctl --user ...`). Start the writer first; stop it last.
+The Crucible rows below are the **Forge-relevant subset**, not Crucible's full unit inventory —
+`systemctl --user list-unit-files 'crucible-*'` for the whole set.
 
 | Service | Runs | Role |
 |---|---|---|
 | `crucible-db-writer` | `start_db_writer.py` | Single-writer DuckDB process; holds the exclusive lock. All others depend on it. |
 | `crucible-inbox-watcher` | `start_inbox_watcher.py` | Polls `inbox/`, validates configs, queues runs. |
-| `crucible-runner` | `start_runner.py` | Backtests queued runs through the full gate; writes promotion decisions. |
+| `crucible-runner@1` / `crucible-runner@2` | `start_runner.py` (templated instances) | Backtest queued runs through the full gate; write promotion decisions. Production runs the templated instances; the plain `crucible-runner.service` is inactive. |
 | `crucible-gated-runs-publisher` | `export_gated_runs.py --poll-interval 60` | Exports gated-run snapshots every 60s (Forge's read path). |
+| `crucible-failed-runs-publisher` | `export_failed_runs.py --poll-interval 300` | Exports `failed_runs_*.json` — runner-FAILED runs that never reach the gated export. Forge's D240 read path: the feedback consumer retires matching `submitted` rows each poll (`feedback/consumer.py` `_flush_failed_runs`) so failures stop pinning §7.3 in-flight depth. |
 | `crucible-promoted-strategies-publisher` | `export_promoted_strategies.py --poll-interval 60` | Exports promoted strategies every 60s (QuantIQ's read path). |
-| `crucible-registry-publisher` | `export_registry.py` | Publishes the indicator registry snapshot every ~6h (D166; was oneshot-at-startup pre-2026-06-15). Forge re-reads the newest snapshot by mtime. |
+| `crucible-component-contributions-publisher` | `export_component_contributions.py --poll-interval 60` | Exports per-promoted-portfolio contribution scores (D216); consumed by `forge healthcheck`'s soft presence check — empty until the first promotion. |
+| `crucible-registry-publisher` | `export_registry.py` | Publishes the indicator registry snapshot every ~6h (timer-driven oneshot, D166; was oneshot-at-startup pre-2026-06-15). Forge re-reads the newest snapshot by mtime. |
+| `crucible-universe-publisher` | `export_universe.py` | Timer-driven oneshot publishing `universe_tickers` (the underlying set enumeration draws from). |
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-prune-feature-cache` (03:00), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`, keep 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

@@ -255,6 +255,45 @@ def check_contracts_pin(pinned: str, installed: str) -> HealthResult:
     )
 
 
+def check_inbox_rejections(
+    recent_reject_count: int,
+    *,
+    warn: int,
+    critical: int,
+) -> HealthResult:
+    """Catch the 'submitting-but-rejected' wedge the submission check can't distinguish (D245).
+
+    When Crucible's inbox watcher rejects Forge's submissions — e.g. an ASYMMETRIC
+    `crucible_contracts` upgrade where Forge emits a field Crucible's inbox validator
+    (holding a stale in-memory model) forbids — every config lands in
+    `~/optbt_data/inbox/errors/` instead of running. The daemon then wedges on the §7.3
+    per-batch limiter at `0/N gated`, which reads IDENTICALLY to ordinary backpressure,
+    so `check_submission_progress` alone reports a generic "no submission in Nh" and the
+    real cause (100% rejection) stays invisible — the D245 incident sat silent ~13h.
+
+    `recent_reject_count` = rejected-config files in `inbox/errors/` with a recent mtime.
+    Steady state is ~0 (Forge's output always validates against the shared contract), so a
+    batch-sized burst is a skew. CRITICAL points at the fix: a contracts bump must restart
+    BOTH directions' processes (Forge's submitter AND Crucible's inbox watcher), D245.
+    """
+    label = "inbox_rejections"
+    if recent_reject_count >= critical:
+        return HealthResult(
+            label,
+            Level.CRITICAL,
+            f"{recent_reject_count} recent inbox rejections — likely a contracts skew "
+            f"(read inbox/errors/*.reason.txt; a contracts bump must restart Crucible's "
+            f"inbox watcher, not just Forge — D245)",
+        )
+    if recent_reject_count >= warn:
+        return HealthResult(
+            label,
+            Level.WARN,
+            f"{recent_reject_count} recent inbox rejections — check inbox/errors/*.reason.txt",
+        )
+    return HealthResult(label, Level.OK, "no recent inbox rejections")
+
+
 # Drift floors for the learned lanes surfaced by `forge status`. CRITICAL = the lane
 # is clearly anti-predictive (worse than no model); the WARN floor = it has lost its
 # edge over the §6.2 composite. Conservative, to avoid crying wolf on a noisy small-n
@@ -335,6 +374,18 @@ def _newest_mtime(directory: Path, pattern: str) -> datetime | None:
     if newest is None:
         return None
     return datetime.fromtimestamp(newest, tz=utc_now().tzinfo)
+
+
+def _count_recent_files(directory: Path, pattern: str, now: datetime, window_hours: float) -> int:
+    """Count files matching `pattern` in `directory` whose mtime is within `window_hours`.
+
+    Filesystem-only (no DB), matching this module's design. Used for the inbox-rejection
+    check: `inbox/errors/*.json` are rejected submissions; a recent-mtime burst is a live
+    skew. A wide backlog of old rejections is excluded by the window."""
+    if not directory.is_dir():
+        return 0
+    cutoff = now.timestamp() - window_hours * 3600.0
+    return sum(1 for p in directory.glob(pattern) if p.stat().st_mtime >= cutoff)
 
 
 def _read_metric_series(path: Path, metric_key: str) -> list[float]:
@@ -423,6 +474,15 @@ def cmd_healthcheck(
     drift_regression_delta: float = typer.Option(
         0.25, help="WARN if a learned lane's metric drops this far below its trailing median"
     ),
+    inbox_reject_window_hours: float = typer.Option(
+        6.0, help="Window for counting recent inbox rejections"
+    ),
+    inbox_reject_warn: int = typer.Option(
+        25, help="WARN if this many submissions were rejected at the inbox in the window"
+    ),
+    inbox_reject_critical: int = typer.Option(
+        100, help="CRITICAL (skew) if this many were rejected in the window"
+    ),
 ) -> None:
     """Report daemon health (alive AND productive); exit 0/1/2 = OK/WARN/CRITICAL."""
     from crucible_contracts import CONTRACT_VERSION
@@ -475,6 +535,20 @@ def cmd_healthcheck(
         )
     )
     results.append(check_contracts_pin(FORGE_EXPECTED_CONTRACT_VERSION, CONTRACT_VERSION))
+    # D245: recent inbox rejections — the 'submitting-but-rejected' wedge that reads like
+    # ordinary backpressure. Filesystem-only (no DB); errors/*.json are rejected submissions.
+    results.append(
+        check_inbox_rejections(
+            _count_recent_files(
+                Path.home() / "optbt_data" / "inbox" / "errors",
+                "*.json",
+                now,
+                inbox_reject_window_hours,
+            ),
+            warn=inbox_reject_warn,
+            critical=inbox_reject_critical,
+        )
+    )
     # Crucible's component_contributions export (D216): the Layer-1 decorrelated-
     # supply signal. Soft — absent is expected until the first promotion.
     results.append(
@@ -530,6 +604,7 @@ __all__ = [
     "check_contracts_pin",
     "check_file_freshness",
     "check_hypothesis_weights_fallback",
+    "check_inbox_rejections",
     "check_learning_drift",
     "check_loop_liveness",
     "check_service_active",

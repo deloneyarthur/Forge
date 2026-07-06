@@ -35,6 +35,9 @@ repos:
       - id: check-toml
       - id: check-added-large-files
         args: [--maxkb=200]
+        # The cap catches accidental binaries/data; deliberate text archives are
+        # exempt (ledger rotations move ~800KB slices into _archive/, D242).
+        exclude: ^_archive/
       - id: check-merge-conflict
 
   - repo: local
