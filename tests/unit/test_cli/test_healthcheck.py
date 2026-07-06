@@ -12,6 +12,7 @@ from forge.cli.healthcheck_cmd import (
     Level,
     check_contracts_pin,
     check_file_freshness,
+    check_inbox_rejections,
     check_learning_drift,
     check_loop_liveness,
     check_service_active,
@@ -143,6 +144,22 @@ def test_contracts_pin_levels() -> None:
     assert check_contracts_pin("1.19.0", "1.20.0").level is Level.WARN
     # major drift -> CRITICAL (the daemon would hard-halt at startup).
     assert check_contracts_pin("1.19.0", "2.0.0").level is Level.CRITICAL
+
+
+def test_inbox_rejections_levels() -> None:
+    kw = {"warn": 25, "critical": 100}
+    # Steady state: Forge's output always validates -> ~0 rejections -> OK.
+    assert check_inbox_rejections(0, **kw).level is Level.OK
+    assert check_inbox_rejections(24, **kw).level is Level.OK
+    # A chunk of recent rejections -> WARN (something is emitting invalid configs).
+    assert check_inbox_rejections(25, **kw).level is Level.WARN
+    assert check_inbox_rejections(99, **kw).level is Level.WARN
+    # A batch-sized burst -> CRITICAL (systematic skew, e.g. an asymmetric contracts bump).
+    assert check_inbox_rejections(100, **kw).level is Level.CRITICAL
+    assert check_inbox_rejections(200, **kw).level is Level.CRITICAL
+    # The CRITICAL message must point at the D245 diagnosis (reason files + both-directions).
+    crit = check_inbox_rejections(200, **kw)
+    assert "errors" in crit.message.lower()
 
 
 def test_learning_drift_levels() -> None:

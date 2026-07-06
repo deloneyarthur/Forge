@@ -764,3 +764,17 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Files:** `PROMPT_CRUCIBLE_INBOX_1_24_REJECTING_SUBMISSIONS.md` (relay + RESOLVED banner), `STATUS.md`, this entry. No src change (the fix was cross-system + a one-off flush). Related: D244 (1.24.0 adopt), D240 (failed-run flush), D124 (stale-in-memory-model class).
 
 **STATUS: RESOLVED + VERIFIED 2026-07-06. Production flowing (fresh batch accepted). Priority returns to the two flip preregs on a now-genuinely-clean cohort (submissions after 15:54:09Z — the earlier post-D244 "clean cohort" was 100%-rejected, so the flip-prereg reminder's cohort-start moves to this restart), then the teed-up levers.**
+
+---
+
+## D246 — 2026-07-06 — `forge healthcheck` gains an inbox-rejection check (D245 follow-up (b))
+
+**Spec section:** ops instrumentation (`cli/healthcheck_cmd.py`, D197 lineage). Implements the D245 follow-up (b): the 'submitting-but-rejected' wedge was invisible for ~13h because a 100%-rejected batch reads identically to ordinary §7.3 backpressure (`check_submission_progress` → generic "no submission in Nh").
+
+**Change.** New pure check `check_inbox_rejections(recent_reject_count, *, warn, critical)` + gather helper `_count_recent_files(dir, pattern, now, window_hours)`, wired into `cmd_healthcheck`: counts `~/optbt_data/inbox/errors/*.json` (rejected submissions) with mtime within `--inbox-reject-window-hours` (default 6.0); WARN at `--inbox-reject-warn` (25), CRITICAL at `--inbox-reject-critical` (100 — a batch-sized burst = a skew). CRITICAL message points at the D245 fix (read `errors/*.reason.txt`; a contracts bump must restart BOTH directions' processes). Filesystem-only, no DB — consistent with the module's design (the live DB's RW lock makes it unreliable for a health probe).
+
+**Design note.** The wedge produces a ONE-TIME rejection burst then goes quiet (the daemon wedges on the limiter), so a recent-mtime *window* (not an instantaneous state) is what catches it; 6h surfaces it well within the 24h submission-CRITICAL horizon while the burst is still in-window. Not the DB join (in-flight ∩ errors) — that's the most direct signal but needs the lock-contended live DB. No daemon restart required (the `forge-healthcheck` timer / manual runs pick up the CLI fresh); committed = reboot-safe.
+
+**Verify.** New unit test `test_inbox_rejections_levels` (threshold ladder + message); `tests/unit/test_cli` 115 green; ruff + mypy-strict clean. Live `forge healthcheck` → `[OK] inbox_rejections: no recent inbox rejections` (correct: the b381a83d burst is ~18h ago, outside the 6h window), OVERALL=OK (11 ok). Follow-up (a) (contract-bump deploy discipline) folded into `docs/tasks/crucible-handoff.md` next; (c) declined (would mask skew).
+
+**Files:** `src/forge/cli/healthcheck_cmd.py`, `tests/unit/test_cli/test_healthcheck.py`, `docs/MANPAGE.md`, this entry. Related: D245, D197.

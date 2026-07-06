@@ -382,7 +382,7 @@ shadow lane before any `ranker.yaml` change. fable-audit learned-systems P1.4/B2
 ### forge healthcheck
 
 Reports whether the daemon is alive AND productive, then exits 0 (OK) / 1 (WARN) / 2
-(CRITICAL). Ten checks: **service** (`systemctl is-active forge.service`), **loop** (newest
+(CRITICAL). Eleven checks: **service** (`systemctl is-active forge.service`), **loop** (newest
 `--- loop iteration` journal line — catches a wedged-but-active process), **submission**
 (newest `submitted=N` line + the latest `blocked:` reason — catches a chronically-stalled
 pipeline, e.g. a Crucible stall, and points upstream), **backup**/**model** freshness (a
@@ -395,7 +395,12 @@ has lost its edge over the §6.2 composite or dropped sharply from its trailing 
 a bad daily model rotation that newest-wins adoption would otherwise put live silently, D209),
 and **hypothesis_weights** (P3.2/B6: WARN when the journal shows the sampler degraded to
 UNIFORM hypothesis sampling because the learned yield/cohort weights failed to load — the
-feedback loop silently muted). Authoritative list: the `check_*` calls in
+feedback loop silently muted), and **inbox_rejections** (D245: count of recently-mtimed
+`~/optbt_data/inbox/errors/*.json` — rejected submissions — WARN on a chunk, CRITICAL on a
+batch-sized burst; catches the 'submitting-but-rejected' wedge an asymmetric contracts
+upgrade causes, which otherwise reads identically to ordinary §7.3 backpressure; window/
+thresholds tunable via `--inbox-reject-window-hours`/`--inbox-reject-warn`/`--inbox-reject-critical`).
+Authoritative list: the `check_*` calls in
 `src/forge/cli/healthcheck_cmd.py`. Reads the journal + filesystem +
 version + the ranker-eval clocks — no DB snapshot.
 Run by hand or via the `forge-healthcheck` timer (hourly); the timer's unit sets
