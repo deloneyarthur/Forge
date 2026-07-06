@@ -721,3 +721,22 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Files:** `STATUS.md`, this entry, `PROMPT_CRUCIBLE_GENERATION_DISCIPLINE_F1_F3{,_CONFIRM,_ACK}.md` (the three Forge relays, tracked; stay LIVE at repo root until the bump ships, then archive per the `crucible-handoff.md` lifecycle). No `src/`/grammar/config/contract change — design-only; reboot-safe.
 
 **STATUS: design loop closed both sides; nothing built/deployed; daemon untouched (healthy, submitting). The contract bump + 3 Forge builds await the operator-ratified coordinated bump, sequenced behind ve-supply. Priority unchanged: the two flip preregs on a clean post-stall cohort, then the teed-up levers.**
+
+---
+
+## D244 — 2026-07-05 — Adopt `crucible_contracts` 1.24.0 (version-pin ONLY; feature consumption stays deferred per D243). RESTART-PENDING: latent D124 `extra_forbidden` stall until the daemon reboots onto 1.24.0.
+
+**Spec section:** §13.5 contracts version pin (`core/contracts_check.py`); cross-system (`docs/tasks/crucible-handoff.md`).
+
+**Crucible landed the D243 coordinated F1/F3/F4 bump (`crucible_contracts` 1.24.0, `0a0cd1c`; Crucible adoption `2f53029`) and notified via `FORGE_contracts_1.24.0_landed_2026-07-05.md` ("adopt on your own schedule"). Adopted the version pin; verified a live-safety implication that handoff understated.**
+
+- **Pin bumped** `FORGE_EXPECTED_CONTRACT_VERSION` 1.23.0 → 1.24.0 (`contracts_check.py:79`); `uv.lock` refreshed to 1.24.0 (editable path dep). `forge check` green (`crucible_contracts: 1.24.0 OK`); 12 version-adoption tests + 49 consumer/reconcile tests + ruff green; no fixture pinned the literal. **VERSION-ADOPTION ONLY** — Forge imports/consumes NONE of the new surface (`GatedRun.failure_buckets`, `FAILURE_BUCKET_SEVERITY_ORDER`, `StrategyConfig.mechanism`/`regime`, `FORGE_VOCABULARY_FILENAME_TEMPLATE`); the F1/F3 feature builds stay DEFERRED behind ve-supply per [[D243]].
+- **Live-safety finding (corrects Crucible's "daemon unaffected"):** true only for the runtime version check (`validate_schema_version` is major-only). FALSE for the parse path — `GatedRun.failure_buckets` is a new field on a PARSED gated-runs-export model with `extra="forbid"`. The running daemon (booted 17:05Z on 1.23.0, `NRestarts=0`) holds 1.23.0 models in memory → the moment Crucible's exporter republishes carrying the `failure_buckets` key, every reconcile fail-loops on `extra_forbidden` → §7.3 depth stall (the D124 trap; same class as the ~15h stall earlier today, D240). **Latent, not firing:** verified the newest export (`gated_runs_2026-07-06T010136Z.json`) still lacks the key → Crucible's exporter is pre-1.24.0 → live daemon currently healthy.
+- **Fix = restart the daemon onto 1.24.0 (operator-gated). CONFIRMED SAFE any time, no ordering race:** 1.24.0 `GatedRun` parses BOTH the current no-field exports AND future with-field exports — `failure_buckets` is `default_factory=list` + auto-computed from `gate_results` (verified: `model_validate` on a current no-field export row yields the computed buckets). So Forge restarts proactively; no need to synchronize with Crucible's republish.
+- **Deploy status:** pin COMMITTED (reboot-safe: tree pin 1.24.0 == installed 1.24.0). The RESTART is operator-gated + TIME-SENSITIVE vs Crucible's exporter republish — this is stall-prevention, NOT deferrable behind ve-supply like the feature builds. Relay `PROMPT_CRUCIBLE_CONTRACTS_1_24_ADOPTED.md` flags the `extra_forbidden` gap back to Crucible + offers an optional hold-the-republish courtesy.
+
+**Alternatives considered:** defer adoption entirely behind ve-supply (per D243) — REJECTED for the version pin: the `extra_forbidden` trap makes the restart a stall-prevention, not a feature. Feature consumption itself stays deferred.
+
+**Files:** `src/forge/core/contracts_check.py` (pin + D124 comment), `uv.lock`, `STATUS.md`, this entry, `PROMPT_CRUCIBLE_CONTRACTS_1_24_ADOPTED.md`. RESTART PENDING (operator).
+
+**STATUS: pin adopted + committed; daemon still 1.23.0-in-memory (healthy — current export lacks the field); restart onto 1.24.0 needed SOON to pre-empt the latent `extra_forbidden` stall when Crucible's exporter republishes.**

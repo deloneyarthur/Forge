@@ -76,7 +76,17 @@ from crucible_contracts import (
 # `submitted` set instead of pinning §7.3 in-flight backpressure until the 5-day age-out.
 # Purely ADDITIVE (no existing model/hash changed → no major-guard trips). Forge DOES import
 # the loader (unlike the D216 pin-only add): the reconcile wiring lands in the same commit.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.23.0"
+# 1.24.0 (D243 coordinated F1/F3/F4 bump): GatedRun.failure_buckets (auto-computed coarse
+# failure labels) + FAILURE_BUCKET_SEVERITY_ORDER + failure_bucket_for_gate/…_from_gate_results
+# helpers + StrategyConfig.mechanism/regime (free-str, None-default, hash-excluded) +
+# FORGE_VOCABULARY_FILENAME_TEMPLATE. All ADDITIVE (no existing model/hash changed → no major
+# trip). Forge does NOT yet consume any of it — feature adoption (bucket-only training, mechanism/
+# regime stamping, vocab artifact, freeze ledger) stays DEFERRED behind ve-supply per D243; this
+# pin is version-adoption ONLY. NOT deferrable like prior additive pins (D124 trap): failure_buckets
+# lands on GatedRun, a PARSED gated-runs-export model with extra="forbid" — the running daemon holds
+# its boot-time model in memory, so it MUST be restarted onto 1.24.0 BEFORE Crucible's exporter
+# republishes with the field, else every reconcile fail-loops on extra_forbidden → §7.3 stall.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.24.0"
 
 
 def check_contracts_version() -> str:
