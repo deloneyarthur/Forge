@@ -1,14 +1,20 @@
 """Loader + Pydantic models for `config/forge.yaml` (DESIGN.md §10.1).
 
-D024/D8: full §10.1 coverage. CLI flags become overrides on top of the
-yaml via `ForgeConfig.with_overrides(**kwargs)`. Closes Phase 4 OQ-3 and
-OQ-5 (default forge-db location now comes from yaml).
+D024/D8: original full §10.1 coverage; closes Phase 4 OQ-3 and OQ-5
+(default forge-db location comes from yaml). CLI flags are merged on top
+by the consumers (`forge.cli.main._resolve_run_defaults`), not here.
+
+D247 deviation from §10.1 (operator-approved): `data_root`, `log_root`,
+and the `feedback.*` cadence keys were never read at runtime and were
+retired from both the schema and `config/forge.yaml` — the feedback
+cadence is actually driven by `--consume-feedback` each loop iteration,
+and the CLI commands take `--data-root` as their own option. The unused
+`with_overrides` helper went with them.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -56,72 +62,20 @@ class SubmissionConfig(BaseModel):
     max_inflight: int = Field(default=0, ge=0)
 
 
-class FeedbackConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    light_consumption_after_every: int = Field(ge=1)
-    full_analysis_after_every: int = Field(ge=1)
-    deep_review_after_every: int = Field(ge=1)
-
-
 class ForgeConfig(BaseModel):
     """All-in-one §10.1 forge config — every CLI surface reads through this."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    data_root: Path
     db_path: Path
-    log_root: Path
     crucible: CrucibleConfig
     enumeration: EnumerationConfig
     submission: SubmissionConfig
-    feedback: FeedbackConfig
 
-    @field_validator("data_root", "db_path", "log_root", mode="after")
+    @field_validator("db_path", mode="after")
     @classmethod
     def _expand_paths(cls, v: Path) -> Path:
         return _expand(v)
-
-    def with_overrides(self, **overrides: Any) -> ForgeConfig:
-        """Return a new ForgeConfig with selected fields replaced.
-
-        Accepts flat kwargs that map to nested fields:
-          - `db_path`, `data_root`, `log_root`     (top-level)
-          - `batch_size`, `inflight_threshold`, `poll_interval_seconds`,
-            `stall_after_seconds`, `max_inflight`  (submission.*)
-          - `seed`, `max_candidates_per_batch`     (enumeration.*)
-        Unknown keys raise `ValueError`.
-        """
-        top: dict[str, Any] = {}
-        submission_updates: dict[str, Any] = {}
-        enumeration_updates: dict[str, Any] = {}
-        known_top = {"db_path", "data_root", "log_root"}
-        known_submission = {
-            "batch_size",
-            "inflight_threshold",
-            "poll_interval_seconds",
-            "stall_after_seconds",
-            "max_inflight",
-        }
-        known_enumeration = {"max_candidates_per_batch", "seed"}
-        for key, value in overrides.items():
-            if value is None:
-                continue
-            if key in known_top:
-                top[key] = value
-            elif key in known_submission:
-                submission_updates[key] = value
-            elif key in known_enumeration:
-                enumeration_updates[key] = value
-            else:
-                msg = f"with_overrides: unknown override {key!r}"
-                raise ValueError(msg)
-        update: dict[str, Any] = dict(top)
-        if submission_updates:
-            update["submission"] = self.submission.model_copy(update=submission_updates)
-        if enumeration_updates:
-            update["enumeration"] = self.enumeration.model_copy(update=enumeration_updates)
-        return self.model_copy(update=update)
 
 
 def load_forge_config(path: Path) -> ForgeConfig:
@@ -136,7 +90,6 @@ def load_forge_config(path: Path) -> ForgeConfig:
 __all__ = [
     "CrucibleConfig",
     "EnumerationConfig",
-    "FeedbackConfig",
     "ForgeConfig",
     "SubmissionConfig",
     "load_forge_config",

@@ -9,7 +9,6 @@ from __future__ import annotations
 from forge.config.forge_config import (
     CrucibleConfig,
     EnumerationConfig,
-    FeedbackConfig,
     ForgeConfig,
     SubmissionConfig,
     load_forge_config,
@@ -18,7 +17,6 @@ from forge.config.forge_config import (
 __all__ = [
     "CrucibleConfig",
     "EnumerationConfig",
-    "FeedbackConfig",
     "ForgeConfig",
     "SubmissionConfig",
     "load_forge_config",

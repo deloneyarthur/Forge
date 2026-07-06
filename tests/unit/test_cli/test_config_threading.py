@@ -31,9 +31,7 @@ def _write_yaml(path: Path, *, data_dir: Path) -> tuple[Path, Path, Path]:
     path.write_text(
         f"""
 forge:
-  data_root: {data_dir}
   db_path: {db_path}
-  log_root: {data_dir / "logs"}
   crucible:
     inbox_path: {inbox_path}
     db_path: {crucible_db_path}
@@ -46,10 +44,6 @@ forge:
     poll_interval_seconds: 777
     stall_after_seconds: 7200
     max_inflight: 600
-  feedback:
-    light_consumption_after_every: 1
-    full_analysis_after_every: 10
-    deep_review_after_every: 50
 """.strip(),
         encoding="utf-8",
     )
