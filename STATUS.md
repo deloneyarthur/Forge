@@ -1,6 +1,6 @@
 # Forge — Status
 
-## 2026-07-07 (latest) — FLIP: exploration holdout MVP (FORGE_EXPLORATION_HOLDOUT_FRAC=0.05, D256, prereg 61837dd2). Last teed-up lever; the partner to gate-tail. Deploying. [[D256]]
+## 2026-07-07 (latest) — FLIP DEPLOYED+VERIFIED: exploration holdout MVP (FORGE_EXPLORATION_HOLDOUT_FRAC=0.05, D256, prereg 61837dd2). Last teed-up lever — program COMPLETE. Also fixed 2 pre-existing v24 stale goldens. [[D256]]
 
 **Operator: "keep it at MVP, go ahead." The plain random holdout (not decorrelation-targeted — that would re-introduce bias; targeting decorrelation is an enumeration-floor job).**
 
