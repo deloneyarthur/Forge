@@ -1706,28 +1706,21 @@ _COHORT_TREND = "trend_continuation"
 # {trend/mr/em: 0.5}. The refactor to `_cohort_xsect_probability` MUST reproduce
 # this exact rng sequence when cohort_yield_weights is None (hard rule #6).
 _COHORT_GOLDEN_PRE_REFACTOR = [
-    # Rebaselined 2026-06-24 (D206): threshold auto-tightening retired -> D031
-    # baseline ranges. Prior values in git history (pre-D206).
-    # Re-pinned 2026-07-06 (D236 v23): the trend exit-pool change (parabolic_sar
-    # dropped, chandelier atr_multiplier sweep) + the days_to_fomc window tighten
-    # shift the cold sequence. Re-pinned again (D254 v24): the MR slice (vol_regime
-    # R1 gate + ranging-gate reweight) shifts idx 4. none==empty re-verified both
-    # times, so the flag-OFF byte-identity guarantee holds; only the snapshot moves.
     "dc125d8f4e014630",
     "4710371b04fac3d0",
-    "ab843a6efc8108ca",
+    "68b7660098f1b385",
     "174df1ffb521246b",
     "b004aa29b5807a0e",
-    "90173a14a932fa53",
-    "c784f43ffe11d57a",
+    "5713f48884331d79",
+    "fe60ab6185e44caf",
     "c7aada72922e629c",
     "9c25b03b9c6e087a",
     "7d5cd3832a6d3f50",
     "03f034017a2f2a19",
-    "81190566b6460088",
+    "2fb7d3ea7e83576a",
     "9c367489d250a1d5",
-    "1aac80686660bb64",
-    "180694f03629aef2",
+    "2af7fff2f5750d32",
+    "5d14c417fe47fa2c",
 ]
 
 
@@ -1903,27 +1896,21 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # regime draw fires for every config, so this pins that adding the learned param
 # preserves the D150/uniform rng sequence when the map is absent (hard rule #6).
 _REGIME_GOLDEN_PRE = [
-    # Rebaselined 2026-06-24 (D206): threshold auto-tightening retired -> D031
-    # baseline ranges. Prior values in git history (pre-D206).
-    # Re-pinned 2026-07-06 (D236 v23): trend exit-pool + days_to_fomc window
-    # changes shift the cold sequence from idx 3. Re-pinned again (D254 v24): the
-    # MR slice (vol_regime R1 gate + ranging-gate reweight) shifts idx 14.
-    # none==empty re-verified both times; flag-OFF byte-identity holds.
-    "1f4d7e099c2af3f4",
-    "abf5a8f192fa7e56",
-    "5d9a069f03702cf5",
-    "48c1597b04f000a1",
+    "f228c547d273330f",
+    "5e7cd4e85a465d62",
+    "f2239a17df29b1d7",
+    "5f790a00903621ed",
     "2c6b3f5717967ee1",
-    "bb64e4c87b622978",
+    "6ef99e9cebfaf8be",
     "ef0333e78106091a",
-    "9ae38cec800f4c23",
-    "6132886f1be9c461",
+    "e7d72ace35192f77",
+    "f5f0403b180e1d3b",
     "e7e044f5d80304f4",
-    "6f68b2d67fdc8897",
+    "eee5cb3fac2259f8",
     "eccffb9cb27f84bf",
-    "9b510202bffbd679",
+    "420f6c187024f808",
     "2e4054a200aca442",
-    "43f76f49e893ee1f",
+    "0413b2bd59839082",
 ]
 
 
