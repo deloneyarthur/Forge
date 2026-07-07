@@ -1,6 +1,12 @@
 # Forge — Status
 
-## 2026-07-06 (latest) — FLIP DEPLOYED: gate-tail ranker re-wire (D252, prereg 9063b405) — P(component) gates eligibility, wf_p25 tail orders. Verified live (GATE-TAIL ACTIVE), healthcheck OK. [[D252]]
+## 2026-07-06 (latest) — Services audit (D253): `forge-eod-check` RETIRED (timer disabled + units/script removed + docs); other 7 units confirmed earning. Also: D248's 3 doc bugs fixed + D245 follow-up landed (`crucible-handoff.md` both-directions restart rule, `2c7e6c0`). Daemon untouched by this work. [[D253]]
+
+**Operator: "do 3, then audit all services/timers/watchers — forge-eod-check can probably go." Verified, then retired it. (Numbering: self-assigned D249 → renumbered D253; the concurrent session took D249–D252.)**
+- **eod-check retire evidence:** nightly headless-Claude report (created 06-10) with a v17-fossilized prompt; alerting superseded 24× faster by the hourly healthcheck (D197/D240/D246); **failed its one real test** — the 07-04 21:06 report ran 3h into the D240 stall, saw the signature (841 depth-cap blocks, mix 100% depth-cap), and dismissed it as benign §7.3; nothing consumes the reports. Executed: timer disabled BEFORE its 21:00 fire; installed copies + `~/.local/bin` script removed; repo units/script `git rm`'d; 9 doc/comment sites updated. Reports at `~/forge_data/eod_checks/` kept as history. Revert recipe in D253.
+- **Rest of audit:** backup/healthcheck/ranker-eval all firing. ranker-eval KEEP — its streak clocks fed the D252 flip decision and remain the monitor while the 9063b405 post-flip cohort reads out; cadence revisit after that resolves. Cross-system flag: `crucible-meta-king-publisher.timer` still publishes daily for the D190-retired king arm — relay-worthy, Crucible's side.
+
+## 2026-07-06 — FLIP DEPLOYED: gate-tail ranker re-wire (D252, prereg 9063b405) — P(component) gates eligibility, wf_p25 tail orders. Verified live (GATE-TAIL ACTIVE), healthcheck OK. [[D252]]
 
 **Operator: "we can flip the gate-tail." Flip #1 being settled (D251, insufficient/kept) was the sequencing gate — now clear.**
 
