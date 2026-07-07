@@ -86,7 +86,22 @@ from crucible_contracts import (
 # lands on GatedRun, a PARSED gated-runs-export model with extra="forbid" — the running daemon holds
 # its boot-time model in memory, so it MUST be restarted onto 1.24.0 BEFORE Crucible's exporter
 # republishes with the field, else every reconcile fail-loops on extra_forbidden → §7.3 stall.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.24.0"
+# 1.25.0 (2026-07-06, forward-compat hardening after the D244/D245 asymmetric-upgrade traps):
+# adds `parse_forward_compatible(model_cls, data)` — a tolerant RE-READ that, when strict
+# validation fails with ONLY extra_forbidden errors, prunes the purely-additive unknown keys,
+# warns once, and retries (so a long-running process holding a pre-bump model tolerates a new
+# minor field instead of failing the run — the exact runner-side `other`-failure cause on 07-06).
+# Changes NO parsed model (validators.py only) → the 1.25.0 pin was deferrable; 1.26.0 (below)
+# is what Forge actually consumes.
+# 1.26.0 (2026-07-06): the gated/failed export LOADERS (load_recent_{gated,failed}_runs_from_export)
+# now parse each row via parse_forward_compatible instead of strict model_validate. Forge's
+# reconcile read path (feedback.consumer) thus SELF-HEALS on a future additive Crucible export
+# field instead of fail-looping on extra_forbidden (the D244 read-side trap) — so this closes the
+# read-side hole the way the runner restart (D249) closed Crucible's re-read side. Byte-identical
+# today (tolerance only fires on extra_forbidden; determinism paths unaffected — no model change).
+# The RUNNING daemon must restart onto 1.26.0 to get the tolerant loaders (this pin's deploy DOES
+# restart, unlike D249's deferral) — safe + byte-identical (models unchanged since 1.24.0).
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.26.0"
 
 
 def check_contracts_version() -> str:

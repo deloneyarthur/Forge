@@ -15,8 +15,8 @@
 #   5. uv sync --extra dev  (rebuilds .venv; uv provisions Python 3.12 if needed)
 #   6. ensure ~/forge_data dirs; place forge.db if --copy-db given
 #   7. forge version + forge check  (contracts compat + DB schema-ensure)
-#   8. install + enable all systemd user units (daemon + timers) + the eod-check
-#      helper script (+ linger); start the daemon only if --start
+#   8. install + enable all systemd user units (daemon + timers) (+ linger);
+#      start the daemon only if --start
 #   9. invariant smoke test (the must-be-green bar)
 #
 # Flags:
@@ -130,7 +130,7 @@ say "forge version + forge check"
 ( cd "$FORGE" && uv run forge check )   # contracts compat (§13.5) + DB schema-ensure
 
 # --- 8. systemd user units (daemon + timers) -----------------------------------
-say "Installing systemd user units (daemon + timers) + eod-check helper"
+say "Installing systemd user units (daemon + timers)"
 UNIT_DIR="$HOME/.config/systemd/user"
 [ -f "$FORGE/deploy/systemd/forge.service" ] || die "missing unit file $FORGE/deploy/systemd/forge.service"
 mkdir -p "$UNIT_DIR"
@@ -139,16 +139,12 @@ for u in "$FORGE"/deploy/systemd/*.service "$FORGE"/deploy/systemd/*.timer; do
   [ -e "$u" ] || continue
   ln -sfn "$u" "$UNIT_DIR/$(basename "$u")"
 done
-# forge-eod-check.service execs ~/.local/bin/forge-eod-check.sh (the unit uses %h,
-# so this path is portable). Install it from the repo's canonical copy.
-mkdir -p "$HOME/.local/bin"
-install -m 0755 "$FORGE/scripts/forge_eod_check.sh" "$HOME/.local/bin/forge-eod-check.sh"
 
 # enable-linger lets the user units run headless across logout/reboot.
 loginctl enable-linger "$USER" 2>/dev/null || warn "enable-linger failed (need: loginctl enable-linger $USER)"
 if systemctl --user daemon-reload 2>/dev/null; then
   # Timers run independently of Crucible — enable + start them now.
-  for t in forge-ranker-eval forge-backup forge-healthcheck forge-eod-check; do
+  for t in forge-ranker-eval forge-backup forge-healthcheck; do
     systemctl --user enable --now "$t.timer" 2>/dev/null || warn "could not enable $t.timer"
   done
   systemctl --user enable forge.service 2>/dev/null || warn "could not enable forge.service"
@@ -161,7 +157,7 @@ if systemctl --user daemon-reload 2>/dev/null; then
 else
   warn "systemctl --user unavailable in this shell (no user D-Bus session)."
   warn "After a real login: systemctl --user daemon-reload && systemctl --user enable --now \\"
-  warn "  forge.service forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer forge-eod-check.timer"
+  warn "  forge.service forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer"
 fi
 
 # --- 9. smoke test -------------------------------------------------------------

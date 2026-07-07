@@ -1,8 +1,8 @@
 # Forge main configuration. See docs/DESIGN.md §10.1.
+# D247: the never-read §10.1 keys (data_root, log_root, feedback.*) are retired;
+# the schema (forge_config.py, extra="forbid") rejects them if re-added.
 forge:
-  data_root: ~/forge_data
   db_path: ~/forge_data/forge.db
-  log_root: ~/forge_data/logs
 
   crucible:
     inbox_path: ~/optbt_data/inbox        # where Forge writes
@@ -21,8 +21,3 @@ forge:
     max_inflight: 600          # D196/D200 §7.3 depth cap: block when the genuine in-flight
                                # queue (submitted rows newer than the D110 flush watermark)
                                # exceeds ~3x batch_size; bounds the learnable queue (0=off)
-
-  feedback:
-    light_consumption_after_every: 1   # every batch
-    full_analysis_after_every: 10      # every 10 batches
-    deep_review_after_every: 50        # every 50 batches

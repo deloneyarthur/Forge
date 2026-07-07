@@ -132,7 +132,7 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 | `--poll-interval-seconds` | int | `60` (`600`) | Sleep between loop iterations. |
 | `--consume-feedback` | flag | off | Run feedback chain (consumer/analyzer/proposer/auto-tune) after submit. |
 | `--orthogonal-yield` | flag | off | H4 A/B: discount over-mined (hypothesis, directional, underlying-class) factor cells in the underlying draw, rewarding orthogonal components. Off is byte-identical to D105/D106. |
-| `--cross-sectional / --no-cross-sectional` | flag | on | H1 (v12) breadth lever: emit `cross_sectional` combiners for the breadth-starved directional archetypes (trend/mean_reversion) at a ~1/3 exploration share, defeating the 100-trade floor. ON by default (the point of v12); `--no-cross-sectional` is the kill switch (revert to confluence). |
+| `--cross-sectional-rank / --no-cross-sectional-rank` | flag | on | H1 (v12) breadth lever: emit `cross_sectional` combiners for the breadth-starved directional archetypes (trend/mean_reversion) at a ~1/3 exploration share, defeating the 100-trade floor. ON by default (the point of v12); `--no-cross-sectional-rank` is the kill switch (revert to confluence). |
 | `--cohort-yield` | flag | off | §3 yield-map refresh (D182): make the cohort draw (cross_sectional vs confluence) yield-driven by the learned (hypothesis, directional, dte_bucket, cohort) component-rate instead of the fixed share. On the service. Off is byte-identical to the H1 draw. |
 | `--regime-gate-yield` | flag | off | §2 yield-map refresh (D183): make the regime-gate draw yield-driven — compose the learned (hypothesis, directional, dte_bucket, regime_gate) rate onto the D150/uniform base, down-weighting sink gates (gamma_flip) and favouring minting ones. `relative_value` excluded (D119). On the service. Off is byte-identical. |
 | `--quality-rank` | flag | off | T1 quality lane (tail-aware ranking, §8.6, D193): BLEND the wf_p25 robustness prediction into the §6.2 prior — `prior := P(component) × tail_norm`. Needs an F3 P(component) base + a `target_wf_p25` robustness model. Env kill-switch `FORGE_QUALITY_RANKER`. On the service. Off is byte-identical (F3 prior unchanged). |
@@ -153,6 +153,12 @@ Only ever RAISES a family (`max` semantics; starves nothing). A/B feedback-chang
 operator-gated deploy, pre-registered (`forge prereg`, D208) + alpha-budget-charged (`forge alpha-budget`,
 D207) + later-cohort-confirmed (§8.4). Revert = drop the env var. Consumed by
 `forge.cli.main._orthogonal_family_floors` → `rejection_weights.apply_orthogonal_family_floor`.
+
+**Env kill-switch — `FORGE_F3_RANKER`** (D149): default `on` — the F3 `P(component)` ranker prior (latest
+trained model under `<forge-db-dir>/models`) feeds the §6.2 slot. Set `off`/`0`/`false`/`no` to skip the
+model load entirely and revert scoring to the pre-F3 Jaccard-novelty baseline. Emergency revert lever, the
+F3 sibling of `FORGE_QUALITY_RANKER` (which kills the D193 quality lane on top of F3). Never set in
+production; consumed by `forge.cli.main` at model-load time.
 
 **Env-only knob — `FORGE_QUALITY_RANK_MODE`** (the `--quality-rank` lane form, D217/P1.1): `blend` (default,
 unset → byte-identical) computes `prior := P(component) × tail_norm` into the §6.2 slot; `gate-tail`
@@ -676,7 +682,6 @@ bumps `grammar_version` and archives the prior version. The second keeps
 | Script | What it is |
 |---|---|
 | `tail_verified_alignment.py` | Live tracking tool (D155): re-runnable verified-coverage alignment monitor for the tail-aware model — tail_score vs P(component) on the verified slice, run against a `/tmp` DB snapshot. |
-| `forge_eod_check.sh` | **Bash** — source of the vendored `forge-eod-check` timer entrypoint (`~/.local/bin/forge-eod-check.sh`, D203): headless, report-only EOD pipeline read (21:00). |
 | `probe_option_momentum_min_months.py` | One-shot historical probe: Q39 `option_momentum` `min_months` × percentile activation sweep against the live feature cache. |
 
 Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
@@ -689,7 +694,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | File | Controls |
 |---|---|
-| `forge.yaml` | Data paths, Crucible wiring, enumeration cap, batch size, rate-limit threshold, stall-guard window (`submission.stall_after_seconds`, D137), in-flight-depth cap (`submission.max_inflight`, D196; 0=off), feedback cadence. |
+| `forge.yaml` | Forge DB path, Crucible wiring, enumeration cap, batch size, rate-limit threshold, stall-guard window (`submission.stall_after_seconds`, D137), in-flight-depth cap (`submission.max_inflight`, D196; 0=off). (`data_root`/`log_root`/`feedback.*` cadence keys retired D247 — never read; feedback runs every iteration via `--consume-feedback`.) |
 | `grammar.yaml` | The 21 grammar rules (S/C/R/X families). Operator-owned; version-bumped + archived on change. |
 | `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation, auto-tune bounds). |
 | `ranker.yaml` | Composite-score weights + diversification method. |
@@ -735,7 +740,7 @@ The Crucible rows below are the **Forge-relevant subset**, not Crucible's full u
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

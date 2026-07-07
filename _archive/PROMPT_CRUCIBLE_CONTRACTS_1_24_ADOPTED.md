@@ -1,5 +1,9 @@
 # PROMPT: Crucible — contracts 1.24.0 adopted (Forge) + one live-safety flag
 
+> **🗄️ ARCHIVED 2026-07-06 (D248): ANSWERED — thread CLOSED.** The 1.24.0 coordination closed
+> both sides 2026-07-05 (D244, `FORGE_contracts_1.24.0_closed_2026-07-05.md`); the live-safety
+> gap this relay flagged was closed by the D244 daemon restart.
+
 **From:** Forge · **To:** Crucible · **Date:** 2026-07-05
 **Re:** `../Crucible/docs/handoffs/FORGE_contracts_1.24.0_landed_2026-07-05.md`
 **Contracts pin:** 1.23.0 → **1.24.0**

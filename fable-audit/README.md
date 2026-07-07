@@ -3,7 +3,8 @@
 Four complementary full-repo audits, performed the same day by concurrent Claude Fable 5
 sessions, written as durable records so a later agent (e.g. Opus) can execute the workplans
 without re-deriving the findings. All were taken against the same snapshot: HEAD `ceeefa4`
-plus the uncommitted D216 working-tree changes.
+plus the uncommitted D216 working-tree changes. (A fifth folder, `code-complete-retirement/`,
+added 2026-07-06, is a conditional plan, not an audit.)
 
 | Folder | Scope | Start at |
 |---|---|---|
@@ -11,6 +12,7 @@ plus the uncommitted D216 working-tree changes.
 | `learned-systems/` | The learned-model systems (F3 ranker, wf_p25 quality lane, gate-then-tail rewire, hypothesis-weight estimand): implementation AND measured live performance, plus promotion/MLOps discipline. Workplan P0–P5. | `learned-systems/README.md` |
 | `pipeline-performance/` | Runtime performance of the production loop: where the daemon's ~12.6 CPU-h/day actually goes (submit/reconcile fsync anti-pattern, prefetch re-fetch, export re-parsing), measured baseline + benchmarks, scaling time-bombs. Workplan P0-1–P4-8. | `pipeline-performance/README.md` |
 | `strategy-methodology/` | The quant domain content: grammar/§3.5 strategy space, indicator reachability & threshold calibration, prefilter/submission statistical methodology, research-hygiene machinery (alpha budget, prereg, feedback rituals). Includes a measured per-family battery kill table. Workplan P0–P4. | `strategy-methodology/README.md` |
+| `code-complete-retirement/` | **CONDITIONAL plan, 2026-07-06 (trigger NOT met):** if the operator ever declares Forge+Crucible code-complete (development freeze, production keeps running), the prioritized retirement list — P0 grammar-change machinery, P1 flip/experiment apparatus, P2 dormant levers, P3 dev surface, plus the explicit steady-state KEEP line. Do not execute; preconditions in its §0. | `code-complete-retirement/REPORT.md` |
 
 Each subfolder README carries the rules of engagement (CLAUDE.md hard rules, operator gates,
 production-tree cautions) — read them before executing anything.

@@ -77,14 +77,6 @@ class ThresholdProposal:
     high_trade_floor: int
     cohort_size: int
 
-    @property
-    def baseline_width(self) -> float:
-        return self.baseline_high - self.baseline_low
-
-    @property
-    def proposed_width(self) -> float:
-        return self.proposed_high - self.proposed_low
-
 
 def _trades_by_config_hash(gated_runs: Iterable[GatedRun]) -> dict[str, int]:
     out: dict[str, int] = {}

@@ -1,6 +1,8 @@
 # Proposal: long straddle/strangle — the v1-compatible non-directional long-vol sleeve
 
-**Status:** SCOPING (reversible design; operator+Crucible-gated build). 2026-06-28.
+**Status:** **DEAD — do NOT build; REFUTED 2026-06-28** by Crucible's pre-check (§0: −27%/−98.6% maxDD at
+zero cost, sign not robust, dies at cost). Both in-v1 orthogonal fronts closed on data. §1–9 retained as the
+scoping record and as the template if a future long-multileg thesis resurfaces. (Was: SCOPING 2026-06-28.)
 **Origin:** operator redirect — after cross-sectional vol_event closed (Crucible `iv_minus_rv` pre-check,
 rank-IC −0.015) and plain relval refuted, the remaining *vol-side* in-v1 orthogonal sleeve. Sibling to the
 GICS-relval sleeve (D215). Gating ask: `PROMPT_CRUCIBLE_LONG_MULTILEG_CAPABILITY.md`.
