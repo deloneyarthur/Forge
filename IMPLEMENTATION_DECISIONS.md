@@ -824,3 +824,17 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Files:** `src/forge/core/contracts_check.py`, `STATUS.md`, this entry. Related: D244, D245, D240, D246, D124.
 
 **STATUS: pin adopted + committed (reboot-safe). Forge daemon restart onto 1.25.0 DEFERRED (safe — no model change). `other` spike resolved (runners on 1.25.0). Pipeline healthy: submitting, accepted, no stall.**
+
+---
+
+## D250 — 2026-07-06 — Wire `parse_forward_compatible` into the export read path (contracts 1.26.0) — Forge reconcile self-heals on future additive fields
+
+**Spec section:** §8.2 feedback consumer read path; §13.5 pin. Completes the D244/D245/D249 forward-compat arc (the operator's ask: "build the parse_forward_compatible").
+
+**The build.** 1.25.0 added the `parse_forward_compatible` helper but nothing called it. 1.26.0 (`crucible_contracts` `86c8515`) wires it into the two export loaders Forge's reconcile re-reads each poll — `load_recent_gated_runs_from_export` + `load_recent_failed_runs_from_export` now parse each row via `parse_forward_compatible(GatedRun/FailedRun, raw)` instead of strict `model_validate`. So when Crucible ships a FUTURE additive export field (e.g. it finally republishes with `failure_buckets`), Forge's long-running daemon — holding its boot-time model — prunes the unknown key + warns once instead of fail-looping on `extra_forbidden`. This is the read-side (Forge-consumer) analogue of the fixes to the other two faces of the D124 stale-in-memory trap: D245 (Crucible inbox ingest) and D249 (Crucible runner re-read). The loaders are the correct seam — `parse_forward_compatible`'s own docstring scopes it to the tolerant RE-READ of already-strictly-validated data (NOT first ingest), and Forge reads exports ONLY through these loaders (hard rule #2). Byte-identical today: tolerance only triggers on `extra_forbidden`, and no parsed model changed since 1.24.0, so enumeration/submission determinism is untouched; genuinely-invalid rows still raise `QueryError`.
+
+**Forge adoption + deploy.** Pin `FORGE_EXPECTED_CONTRACT_VERSION` 1.25.0 → 1.26.0. Unlike D249 (deferred restart), this deploy DOES restart the daemon onto 1.26.0 — the tolerant loaders only take effect in a fresh process, and this also finally moves the daemon off its stale 1.24.0-in-memory state onto current code. Safe + byte-identical (models unchanged 1.24.0→1.26.0). `forge check` OK (1.26.0); contracts suite 328 green (2 new fwd-compat loader tests).
+
+**Files:** `crucible_contracts/queries.py` + `tests/test_queries.py` (1.26.0), `src/forge/core/contracts_check.py`, `STATUS.md`, this entry. Related: D244, D245, D249, D124.
+
+**STATUS: contracts 1.26.0 committed; Forge pin adopted; DEPLOY (restart onto 1.26.0) in progress — verify tolerant loaders live + healthcheck OK.**
