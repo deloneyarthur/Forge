@@ -1082,6 +1082,34 @@ def test_r1_mean_reversion_accepts_rv_rank_gate() -> None:
     assert result.passed
 
 
+def test_r1_mean_reversion_accepts_vol_regime_gate() -> None:
+    """D254 (v24): vol_regime (op '<', threshold 2 — exclude the high-vol tercile)
+    is a fifth accepted R1 regime gate for mean_reversion, alongside iv_rank /
+    gamma_flip / hurst / rv_rank. Crucible's xsect-MR backtest
+    (FORGE_signal_quality_champions §2b.1): vol_regime<2 beats the rv_rank cost gate
+    by +0.244 CPCV-p25 in ALL 6 comps. ADD not replace (R1 stays an OR). RAW discrete
+    tercile — no threshold cap, op set by the sampler (like gamma/hurst/rv_rank)."""
+    cfg = grammar_valid_baseline(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("rsi_2",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("vol_regime",),
+                params={"threshold": 2.0, "op": "<"},
+            ),
+        ),
+    )
+    result = evaluate(_predicate("mean_reversion_requires_iv_rank_gate"), cfg, _registry())
+    assert result.passed
+
+
 def test_r1_mean_reversion_without_iv_rank_or_gamma_fails() -> None:
     """D107: with neither iv_rank nor a gamma gate, R1 still fires and fails."""
     cfg = grammar_valid_baseline(

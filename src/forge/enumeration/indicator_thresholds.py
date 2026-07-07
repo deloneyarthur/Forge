@@ -215,7 +215,11 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     ),
     "vol_regime": IndicatorThresholdSpec(
         directional_range=(1.0, 1.0),  # fires when regime < 1 (low_vol)
-        regime_range=(0.0, 2.0),
+        # D254 (v24): pinned to threshold 2 (op "<" = exclude the HIGH-vol tercile,
+        # trade in low/mid). The xsect-MR gate champion (§2b.1: +0.244 CPCV-p25 vs
+        # rv_rank in 6/6). vol_regime is a DISCRETE Int8 tercile (0/1/2) → RAW
+        # threshold only (no percentile ranges); `<1` (strict calm) starves the book.
+        regime_range=(2.0, 2.0),
     ),
     # ----- Calendar -----
     "days_to_fomc": IndicatorThresholdSpec(

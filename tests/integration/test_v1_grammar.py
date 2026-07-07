@@ -140,7 +140,7 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # signal-quality handoff: +sma_slope/+ad_slope (percentile-only), prune
     # returns_12m_skip1/macd/ema_cross/supertrend. Threshold+horizon tables only;
     # the 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v23"  # type: ignore[attr-defined]
+    assert grammar.grammar_version == "v24"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

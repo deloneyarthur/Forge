@@ -1710,13 +1710,14 @@ _COHORT_GOLDEN_PRE_REFACTOR = [
     # baseline ranges. Prior values in git history (pre-D206).
     # Re-pinned 2026-07-06 (D236 v23): the trend exit-pool change (parabolic_sar
     # dropped, chandelier atr_multiplier sweep) + the days_to_fomc window tighten
-    # shift the cold sequence (here only idx 13-14). none==empty re-verified, so
-    # the flag-OFF byte-identity guarantee still holds; only the snapshot moves.
+    # shift the cold sequence. Re-pinned again (D254 v24): the MR slice (vol_regime
+    # R1 gate + ranging-gate reweight) shifts idx 4. none==empty re-verified both
+    # times, so the flag-OFF byte-identity guarantee holds; only the snapshot moves.
     "dc125d8f4e014630",
     "4710371b04fac3d0",
     "ab843a6efc8108ca",
     "174df1ffb521246b",
-    "d6441978c5b40ea4",
+    "b004aa29b5807a0e",
     "90173a14a932fa53",
     "c784f43ffe11d57a",
     "c7aada72922e629c",
@@ -1905,8 +1906,9 @@ _REGIME_GOLDEN_PRE = [
     # Rebaselined 2026-06-24 (D206): threshold auto-tightening retired -> D031
     # baseline ranges. Prior values in git history (pre-D206).
     # Re-pinned 2026-07-06 (D236 v23): trend exit-pool + days_to_fomc window
-    # changes shift the cold sequence from idx 3. none==empty re-verified, so the
-    # flag-OFF byte-identity guarantee holds; only the snapshot moves.
+    # changes shift the cold sequence from idx 3. Re-pinned again (D254 v24): the
+    # MR slice (vol_regime R1 gate + ranging-gate reweight) shifts idx 14.
+    # none==empty re-verified both times; flag-OFF byte-identity holds.
     "1f4d7e099c2af3f4",
     "abf5a8f192fa7e56",
     "5d9a069f03702cf5",
@@ -1921,7 +1923,7 @@ _REGIME_GOLDEN_PRE = [
     "eccffb9cb27f84bf",
     "9b510202bffbd679",
     "2e4054a200aca442",
-    "5b0c7bd6a1772e0d",
+    "43f76f49e893ee1f",
 ]
 
 
@@ -1945,13 +1947,15 @@ def test_pick_regime_learned_downweights_sink_gate() -> None:
 def test_pick_regime_learned_preserves_d150_on_dead_triple() -> None:
     """A DEAD triple (all regimes ~equal posterior) must leave the D150 mr
     ranging-bias intact — base * posterior stays proportional to base, so the
-    deliberate diversity lever is refined by evidence, never silently discarded."""
+    deliberate diversity lever is refined by evidence, never silently discarded.
+    D254 (v24): the boosted gate here is `vol_regime` (hurst was dropped from the
+    boost set — bias away — but stays R1-accepted at weight 1.0)."""
     from collections import Counter
 
     from forge.enumeration.sampler import _pick_regime
 
-    regimes = ("hurst", "iv_rank")  # hurst is a D150 ranging gate (x3), iv_rank x1
-    flat = {"hurst": 0.002, "iv_rank": 0.002}  # dead triple, equal posteriors
+    regimes = ("vol_regime", "iv_rank")  # vol_regime is a D254 ranging gate (x3), iv_rank x1
+    flat = {"vol_regime": 0.002, "iv_rank": 0.002}  # dead triple, equal posteriors
     rng_l = random.Random(7)
     with_learned = Counter(
         _pick_regime("mean_reversion", regimes, rng_l, None, flat) for _ in range(4000)
@@ -1961,8 +1965,8 @@ def test_pick_regime_learned_preserves_d150_on_dead_triple() -> None:
         _pick_regime("mean_reversion", regimes, rng_b, None, None) for _ in range(4000)
     )
     # D150 favours the ranging gate ~3:1 in BOTH (flat learned doesn't disturb it)
-    assert with_learned["hurst"] > 2.5 * with_learned["iv_rank"]
-    assert base_only["hurst"] > 2.5 * base_only["iv_rank"]
+    assert with_learned["vol_regime"] > 2.5 * with_learned["iv_rank"]
+    assert base_only["vol_regime"] > 2.5 * base_only["iv_rank"]
 
 
 def test_pick_regime_relative_value_never_composed_d119() -> None:

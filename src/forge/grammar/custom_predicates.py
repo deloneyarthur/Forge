@@ -310,6 +310,16 @@ _R1_HURST_REGIME_INDICATOR = "hurst"
 # MR's confluence AND rank genomes). Added per the D107/D150 widening pattern; the
 # sampler biases toward it over the prefilter-sparse iv_rank.
 _R1_RV_RANK_REGIME_INDICATOR = "rv_rank"
+# D254 (v24, MR side): vol_regime (the discrete vol tercile, op_regime "<" =
+# exclude the HIGH-vol tercile → threshold 2 = trade in the low/mid regime) is a
+# fifth accepted R1 regime gate for mean_reversion. Crucible's cross-sectional MR
+# backtest (FORGE_signal_quality_champions §2b.1): vol_regime<2 beats the rv_rank
+# cost gate by +0.244 CPCV-p25 in ALL 6 comps (~2.4x) — the biggest MR lever, and
+# the one place MR wants a REGIME gate over trend's rv_rank COST gate. Added per the
+# D107/D150/D167 widening pattern (ADD not replace; R1 stays an OR). RAW discrete
+# tercile — never use_percentile (degenerate on a 3-value series). hurst stays in
+# the OR but the sampler biases away from it (null-to-negative as an MR gate).
+_R1_VOL_REGIME_INDICATOR = "vol_regime"
 
 # H2 (v12 / D109): event_momentum's post-event TIMING gate. Unlike R1/R2/R3
 # this is NOT a grammar.yaml rule — adding a 22nd operator-owned rule would
@@ -824,7 +834,7 @@ def _e3_trailing_atr_has_activation_threshold(
 # ---------------------------------------------------------------------------
 
 
-def _r1_mean_reversion_requires_iv_rank_gate(
+def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early return per accepted R1 gate (OR over {iv_rank, gamma_flip, hurst, rv_rank, vol_regime}); the per-gate D-lineage comments are the value
     config: StrategyConfig,
     registry: RegistrySnapshot,
 ) -> PredicateResult:
@@ -853,6 +863,11 @@ def _r1_mean_reversion_requires_iv_rank_gate(
         # op-agnostic convention as the gamma/hurst gates (no threshold cap).
         if _R1_RV_RANK_REGIME_INDICATOR in inds:
             return PredicateResult(passed=True)
+        # D254 (v24): a vol_regime gate satisfies R1 on its own — the discrete
+        # vol tercile (op "<", threshold 2 = exclude the high-vol tercile). Same
+        # op-agnostic, no-threshold-cap convention as the gamma/hurst/rv_rank gates.
+        if _R1_VOL_REGIME_INDICATOR in inds:
+            return PredicateResult(passed=True)
         if _R1_IV_RANK_INDICATOR not in inds:
             continue
         threshold = regime.params.get("threshold")  # type: ignore[attr-defined]
@@ -869,7 +884,8 @@ def _r1_mean_reversion_requires_iv_rank_gate(
             f"{_R1_IV_RANK_INDICATOR!r} (params.threshold ≤ {_R1_IV_RANK_MAX_THRESHOLD}), "
             f"{_R1_GAMMA_REGIME_INDICATOR!r} (the D107 dealer-gamma regime gate), "
             f"{_R1_HURST_REGIME_INDICATOR!r} (the D150 mean-reverting regime gate), "
-            f"or {_R1_RV_RANK_REGIME_INDICATOR!r} (the D167 cheap-realized-vol regime gate)"
+            f"{_R1_RV_RANK_REGIME_INDICATOR!r} (the D167 cheap-realized-vol regime gate), "
+            f"or {_R1_VOL_REGIME_INDICATOR!r} (the D254 vol-tercile regime gate)"
         ),
     )
 

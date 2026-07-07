@@ -113,8 +113,13 @@ _REGIME_CURATED_HYPOTHESIS: str = "relative_value"
 # the densest, rank-coherent gate and Crucible-validated as dominating hurst, so the
 # sampler should prefer it over the prefilter-sparse iv_rank (the "prefer rv_rank"
 # economy call — R1 stays an OR, so configs pick one gate; this biases the pick).
+# D254 (v24) — vol_regime (the discrete vol tercile, gated <2) joins the boost set
+# as the xsect-MR backtest CHAMPION (+0.244 CPCV-p25 vs rv_rank in 6/6 comps;
+# FORGE_signal_quality_champions §2b.1). hurst is DROPPED from the boost — it is
+# null-to-negative as an MR gate (-0.27 vs rv_rank, 0/6 folds) — but stays R1-
+# accepted (weight 1.0, still explorable), i.e. bias AWAY, not remove.
 _MR_HYPOTHESIS: str = "mean_reversion"
-_MR_RANGING_GATES: frozenset[str] = frozenset({"gamma_flip_distance_pct", "hurst", "rv_rank"})
+_MR_RANGING_GATES: frozenset[str] = frozenset({"gamma_flip_distance_pct", "rv_rank", "vol_regime"})
 _MR_RANGING_GATE_WEIGHT: float = 3.0
 
 # D105 — hypothesis x dte_bucket weighting. Same component-rate scale and
