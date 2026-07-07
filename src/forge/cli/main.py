@@ -348,6 +348,101 @@ def cmd_prefilter(
                 typer.echo(f"  {name:30s} {count}")
 
 
+@app.command("check-activations")
+def cmd_check_activations(
+    indicators: str = typer.Option(
+        "",
+        "--indicators",
+        help="comma-separated directional ids to check; default = all directional-enumerable",
+    ),
+    names: str = typer.Option(
+        "SPY,AAPL,MSFT,NVDA",
+        "--names",
+        help="comma-separated high-history underlyings to probe",
+    ),
+    seed: int = typer.Option(0, "--seed", help="RNG root seed for the probe enumeration"),
+    min_activations: int = typer.Option(
+        1, "--min-activations", help="a directional must fire >= this on >= 1 probed name"
+    ),
+    max_enumerate: int = typer.Option(
+        8000, "--max-enumerate", help="cap on configs scanned to find a probe config per id"
+    ),
+) -> None:
+    """Layer-3 deploy gate: verify Crucible's writer actually COMPUTES each directional.
+
+    Adopting an indicator clears three gates — (1) in the snapshot, (2) enumerable in
+    Forge, (3) computed by the writer. `sma_slope`/`ad_slope` passed 1+2 but failed 3
+    (the writer returns 0 activations) and zero-traded silently for ~5h post-deploy
+    (D254). This probes gate 3 against the LIVE feature cache: for each target
+    directional, find one enumerated config, run it on the probed names, and count
+    activations. A directional that fires 0 on every name is INERT → exit non-zero.
+    Run for any grammar bump that adopts a new directional (docs/tasks/grammar-change.md).
+    """
+    from pathlib import Path
+
+    from forge.core.contracts_check import check_contracts_version
+    from forge.grammar import load_grammar
+    from forge.persistence.registry_loader import load_registry
+    from forge.prefilters.activation_smoke import (
+        directional_indicators_to_check,
+        has_inert,
+        probe_directional_activations,
+        summarize_activation_checks,
+    )
+
+    check_contracts_version()
+    grammar_path = Path(__file__).resolve().parents[3] / "config" / "grammar.yaml"
+    grammar = load_grammar(grammar_path, archive_dir=grammar_path.parent / "grammar_archive")
+    # Fail-loud registry (no demo fallback): a layer-3 check is meaningless without
+    # the real writer that computes activations.
+    registry = load_registry()
+    cache = _build_feature_cache(registry, seed, require_real=True)
+
+    targets = [s.strip() for s in indicators.split(",") if s.strip()] or list(
+        directional_indicators_to_check(registry)
+    )
+    probe_names = [s.strip() for s in names.split(",") if s.strip()]
+    typer.echo(
+        f"check-activations: grammar={grammar.grammar_version} "
+        f"indicators={len(targets)} names={probe_names} min_activations={min_activations}"
+    )
+
+    raw = probe_directional_activations(
+        cache,  # type: ignore[arg-type]
+        registry,
+        grammar,
+        indicators=targets,
+        names=probe_names,
+        seed=seed,
+        max_enumerate=max_enumerate,
+    )
+    checks = summarize_activation_checks(raw, indicators=targets, min_activations=min_activations)
+
+    for check in sorted(checks, key=lambda c: (c.ok, not c.unchecked, c.indicator)):
+        if check.unchecked:
+            typer.echo(f"  [UNCHK] {check.indicator}: no enumerated config found (not probed)")
+        elif check.ok:
+            typer.echo(
+                f"  [ OK  ] {check.indicator}: max {check.max_activations} "
+                f"activations ({dict(check.per_name)})"
+            )
+        else:
+            typer.echo(
+                f"  [INERT] {check.indicator}: 0 activations on all names "
+                f"{list(check.per_name)} — writer is not computing it"
+            )
+
+    if has_inert(checks):
+        inert = [c.indicator for c in checks if (not c.ok) and (not c.unchecked)]
+        typer.echo(
+            f"\ncheck-activations: NO-GO — inert directionals {inert}: registered + enumerable "
+            f"but the writer produces 0 activations (D254 / handoff §2.1a). Relay to Crucible; "
+            f"do NOT rely on these in a grammar bump."
+        )
+        raise typer.Exit(code=1)
+    typer.echo("\ncheck-activations: GO — every probed directional produces activations")
+
+
 # Per-process "warn once" memos so the QueryError-swallow log lines below
 # don't spam the daemon journal every 60-second poll iteration.
 _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED: bool = False

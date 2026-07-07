@@ -51,6 +51,15 @@ Crucible's registry must advertise it first (contracts gap otherwise). Then Forg
 `docs/INDICATOR_THRESHOLDS.md`), `signal_horizon.py` (horizon table), sampler regime pools
 (`_build_regime_pool`) and R-rule predicate eligibility if it can serve as a regime gate.
 
+**Then verify layer 3 — the writer actually COMPUTES it (mandatory for a new DIRECTIONAL):**
+```bash
+uv run forge check-activations --indicators <new-id>   # must print [ OK ]; exit 0
+```
+Registered + enumerable is NOT sufficient. `sma_slope`/`ad_slope` cleared both but Crucible's
+feature-cache writer returned 0 activations for every name, so they zero-traded silently — 0/2800
+submitted for ~5h post-deploy (D254). `check-activations` probes the live writer per directional; a
+`[INERT]` verdict (0 activations everywhere) is a **NO-GO** — relay to Crucible, don't ship it.
+
 ## Emission proof (recipe)
 
 `load_registry()` reads the newest live export when one exists (demo fallback otherwise; the
@@ -93,4 +102,6 @@ uv run pytest tests/unit/test_grammar tests/unit/test_enumeration tests/invarian
 # pre-commit takes ONE hook id per run (two ids in one call is a usage error):
 uv run pre-commit run grammar-version-bump --all-files
 uv run pre-commit run grammar-doc-sync --all-files
+# layer-3: any newly-adopted directional must actually fire on the live writer (D254)
+uv run forge check-activations --indicators <new-directional-ids>   # exit 0 = every one produces activations
 ```

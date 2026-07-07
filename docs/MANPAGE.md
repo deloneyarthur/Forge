@@ -79,6 +79,27 @@ pass/fail counts. Phase 3 diagnostic.
 forge prefilter --max 500 --summary --synthetic-cache
 ```
 
+### forge check-activations
+
+Layer-3 deploy gate (D254): verify Crucible's feature-cache writer actually **computes** each
+directional. For every target directional it finds one enumerated config, runs it on the probed
+names against the LIVE cache, and counts activations. A directional that fires 0 on every name is
+`[INERT]` (registered + enumerable but the writer produces nothing — the `sma_slope`/`ad_slope`
+case) → **exit 1 (NO-GO)**. Run for any grammar bump adopting a new directional (see
+`docs/tasks/grammar-change.md`).
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--indicators` | str | all directional-enumerable | Comma-separated directional ids to check. |
+| `--names` | str | `SPY,AAPL,MSFT,NVDA` | Comma-separated high-history underlyings to probe. |
+| `--seed` | int | `0` | RNG root seed for the probe enumeration. |
+| `--min-activations` | int | `1` | A directional must fire ≥ this on ≥ 1 probed name. |
+| `--max-enumerate` | int | `8000` | Cap on configs scanned to find a probe config per id. |
+
+```
+forge check-activations --indicators sma_slope,ad_slope   # [INERT] both → exit 1
+```
+
 ### forge shadow-null run
 
 Shadow-count the two teed-up permutation-test (§5.3.7) null corrections **before flipping
