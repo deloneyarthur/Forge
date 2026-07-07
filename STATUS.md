@@ -1,6 +1,14 @@
 # Forge — Status
 
-## 2026-07-06 (latest) — Services audit (D253): `forge-eod-check` RETIRED (timer disabled + units/script removed + docs); other 7 units confirmed earning. Also: D248's 3 doc bugs fixed + D245 follow-up landed (`crucible-handoff.md` both-directions restart rule, `2c7e6c0`). Daemon untouched by this work. [[D253]]
+## 2026-07-06 (latest) — Dependency/structure audit written: `fable-audit/dependency-structure/REPORT.md` (sixth track). Read-only; nothing executed; daemon untouched.
+
+**Operator-requested structural audit at HEAD `5ac7941`: dependency graph (cycles/god objects/layering) + dead code, duplication, >50-line functions — prioritized P0–P3 in the report's §8.**
+- **Graph healthy at the strict level:** zero top-level import cycles; the 2 soft cycles = the known prefilters↔feedback type-only cycle (SRC-M3) + a new lazy `cli.main ↔ shadow_null_cmd` cycle via `_build_feature_cache`. 4 layer-leak edges total, all vocabulary-misplacement (era-cut/coverage/stranded constants trapped in heavyweight feedback modules).
+- **Headline item (P0-1):** the nine ~1.00-similarity learned-weight loaders + nine formatter twins in `cli/main.py` still re-parse the gated-runs export up to ~10×/iteration — one fix ticks codebase-quality item 9 AND pipeline-performance P1-1 (~430→~80 lines + the biggest recurring parse waste).
+- **Dead code (P0-2):** near-clean repo — exactly 1 dead top-level name (`_REWIRE_DELTA_CRITERION`) + the test-only `compute_hypothesis_weights`/`compute_hypothesis_reward_weights`/`_iter_hypothesis_outcomes` stratum in rejection_weights (~150 lines; deleting closes pipeline-performance P4-8).
+- Nothing changed outside `fable-audit/` + this block; all items are versionless code changes with byte-identity cautions marked (hard rule #6, `model_id` content-hash).
+
+## 2026-07-06 — Services audit (D253): `forge-eod-check` RETIRED (timer disabled + units/script removed + docs); other 7 units confirmed earning. Also: D248's 3 doc bugs fixed + D245 follow-up landed (`crucible-handoff.md` both-directions restart rule, `2c7e6c0`). Daemon untouched by this work. [[D253]]
 
 **Operator: "do 3, then audit all services/timers/watchers — forge-eod-check can probably go." Verified, then retired it. (Numbering: self-assigned D249 → renumbered D253; the concurrent session took D249–D252.)**
 - **eod-check retire evidence:** nightly headless-Claude report (created 06-10) with a v17-fossilized prompt; alerting superseded 24× faster by the hourly healthcheck (D197/D240/D246); **failed its one real test** — the 07-04 21:06 report ran 3h into the D240 stall, saw the signature (841 depth-cap blocks, mix 100% depth-cap), and dismissed it as benign §7.3; nothing consumes the reports. Executed: timer disabled BEFORE its 21:00 fire; installed copies + `~/.local/bin` script removed; repo units/script `git rm`'d; 9 doc/comment sites updated. Reports at `~/forge_data/eod_checks/` kept as history. Revert recipe in D253.
