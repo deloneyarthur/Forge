@@ -1,6 +1,16 @@
 # Forge — Status
 
-## 2026-07-07 (latest) — GRAMMAR v22 → v24 DEPLOYED 15:05:50Z (trend D236 + MR D254 slices from the Crucible signal-quality handoff). Daemon healthy on v24; OVERALL=OK. [[D254]]
+## 2026-07-07 (latest) — Probe verdict: gate-tail does NOT starve useful ve → KEEP, no carve-out (D255). ve-supply monitor set. gate-tail live on v24; healthcheck OK. [[D255]]
+
+**Investigated the gate-tail ve-share drop (18%→8%) with a probe before deciding — it overturned the revert case.**
+
+- **The correction:** I'd read ve's *realized* component-rate (0.003) as its *predicted* P. Wrong. Probe on `shadow_scores.model_score` (logged per-config P): ve's predicted P has real spread (median 0.024, max 0.32), **54.7% clears the 0.02 gate** — gate-tail selects *within* ve, doesn't exclude the family.
+- **Decisive probe:** of **485 realized ve COMPONENTS, 90.3% clear the 0.02 gate** (median P 0.139); ve REJECTS have P median 0.0099 (39% clear). So P(component) predicts ve clearance — gate-tail keeps ~90% of the ve that matter and cuts the reject-bound ve. **Carve-out NOT necessary; no revert.**
+- **Decision: KEEP gate-tail** (running on v24, `GATE-TAIL ACTIVE` p_floor=0.02 verified in-journal, coexists with the operator's v24 grammar — orthogonal ranking vs enumeration).
+- **Monitor (light):** `scratchpad/monitor_ve_supply.py` tracks ve **components/day** (not rate — gate-tail keeps higher-P ve so the rate may rise; the book wants COUNT). **Baseline: blend era = 5.4 ve comps/day.** Trigger: revisit the carve-out only if gate-tail-era ve comps/day sits materially below ~5.4 once it has ~1-2 days of decided ve. A nudge to re-run it is scheduled.
+- **Timeline note:** the operator concurrently deployed grammar v24 (D254, 15:05Z) which restarted the daemon over my 03:22Z gate-tail restart — gate-tail survived (unit env in the merged HEAD). D-number collision on 253/254 → this entry is D255.
+
+## 2026-07-07 — GRAMMAR v22 → v24 DEPLOYED 15:05:50Z (trend D236 + MR D254 slices from the Crucible signal-quality handoff). Daemon healthy on v24; OVERALL=OK. [[D254]]
 
 **Operator: "fold it in and deploy." The whole trend/MR grammar upgrade shipped in one `v22 → v24` deploy** (v23/D236 trend slice had never shipped, so it lands here too).
 - **What deployed.** v23 (D236): trend `sma_slope`/`ad_slope` directionals + prune momentum-dup/weak dirs (§2.1–2.3), `chandelier_exit` default trend exit + `atr_multiplier` sweep (§2.7), `days_to_fomc` event window (60→14d, §2d). v24 (D254): admit **`vol_regime<2` to R1** as the MR regime gate (§2b.1 — Crucible's +0.244 CPCV-p25 xsect-MR champion), reweight MR ranging gates (drop hurst-boost/bias-away, add vol_regime), keep `zscore_returns`; D204 R2 `evidence_to_relax` fold. §2c.1 folded byte-identically (VE-direction retraction — no grammar change; days_to_fomc comment corrected to the magnitude-timer rationale).
