@@ -838,3 +838,19 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Files:** `crucible_contracts/queries.py` + `tests/test_queries.py` (1.26.0), `src/forge/core/contracts_check.py`, `STATUS.md`, this entry. Related: D244, D245, D249, D124.
 
 **STATUS: DEPLOYED 2026-07-06 (daemon PID 3101697, on 1.26.0). Verify: uncontended suite 1829 green; clean startup (grammar_version=v22, no traceback); reconciled batches=1 newly_gated_total=198 (tolerant loaders parsed the live gated export); healthcheck OVERALL=OK (11 ok, contracts pin==installed 1.26.0, WARN cleared). Trap-class arc fully closed (D245/D249/D250).**
+
+---
+
+## D251 — 2026-07-06 — Flip preregs resolved on the clean cohort: #2 (exclude_regime_filter) CONFIRMED, #1 (cumulative_trading) INSUFFICIENT (kept on correctness)
+
+**Spec section:** §5.3.6 / §5.3.7 prereg discipline (D208). Resolves `5082d332b26e` + `848a1f671392` on the clean post-runner-fix cohort (submissions ≥2026-07-07T00:38Z — the 88%-`other`-failure window before the D249 runner restart was discarded as biased; post-fix the real-gate rate is 90%, 1,432 decided in ~2h).
+
+**Flip #2 (`5082d332`, signal_correlation.exclude_regime_filter) → CONFIRMED.** ve signal_correlation reject 58.2%→4.5% (of reached), ve survival 5.5%→15.2% (~2.8×), content redundancy still fires (4.5%>0). No ve component regression — ve component-rate was ~0 PRE-flip too (0.0033), so the headline component-rate dip (0.127→0.097) is the INTENDED ve mix-shift (ve share of decided 7%→18%), not degradation. book-PBO stays Crucible-side/pending (contribution export empty until first promotion). Supply thesis confirmed; the ultimate book-value question is unchanged/pending.
+
+**Flip #1 (`848a1f67`, permutation_test.cumulative_trading) → INSUFFICIENT (flip KEPT).** Two findings: (1) **METHODOLOGICAL** — the controlled shadow-count can't re-measure a flip AFTER deploy: `shadow_null_cmd` loads the DEPLOYED `prefilter.yaml` as its prod baseline (`:181`), which is now already `cumulative_trading`, so flip-1's prod→cumulative comparison is cumulative-vs-cumulative → a degenerate net-0 (NOT a result; the table's ve −81 is the tool's flip-2 = the dropped `e1a43ba8` |move|). The valid controlled read was the PRE-flip D226 (showed up). (2) The post-flip clean cohort does NOT show the predicted per-family survival lift: trend 41.9%→40.0% (flat), event_momentum 91.1%→95.0% (up, tiny n), **volatility_event 44.5%→38.6% (DOWN — opposite the prediction)**; confounded by enumeration-mix + a 2h-vs-2d regime gap, so not a clean refute, but clearly not confirming, and ve (the key family) moved the wrong way. **Kept anyway** — flip #1 is ALSO a correctness fix (trading-day + cumulative vs the old single-calendar-day mode that dropped ~40% of Mon/Tue samples to weekends); "survival-lift not confirmed" ≠ "revert the bug fix." Dropped the ve-supply-lift expectation.
+
+**Lesson (recorded):** a permutation-null shadow-count must be run BEFORE the flip (prod=pre-flip); post-deploy it's degenerate. A definitive post-hoc flip-1 read would need a one-off script scoring single_day vs cumulative on the SAME configs (offered, not run).
+
+**Next-lever gating.** flip #2 confirmed clears part of the path, but gate-tail (`9063b405`) stays HELD until flip #1's status is settled — stacking a ranker re-wire on an unresolved prefilter flip repeats the confounding this resolution had to fight through. Sequence unchanged: settle #1 (keep-as-correctness, done) → then gate-tail → then `FORGE_EXPLORATION_HOLDOUT_FRAC`, one at a time.
+
+**Files:** `config/preregistrations.jsonl`, `STATUS.md`, this entry. Related: D238/D239 (the flips), D226 (pre-flip shadow-count), D249 (runner fix that unbiased the cohort), D208 (prereg discipline).

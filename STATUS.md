@@ -1,6 +1,15 @@
 # Forge — Status
 
-## 2026-07-06 (latest) — Built `parse_forward_compatible` into the export read path (contracts 1.26.0, D250) + DEPLOYED onto 1.26.0: Forge reconcile self-heals on future additive fields. Daemon healthy. [[D250]]
+## 2026-07-06 (latest) — Flip preregs RESOLVED on the clean cohort (D251): #2 exclude_regime_filter CONFIRMED, #1 cumulative_trading INSUFFICIENT (kept on correctness). gate-tail held. [[D251]]
+
+**Ran the resolution on the clean post-runner-fix cohort (≥00:38Z; 90% real-gate, 1,432 decided in ~2h — the earlier 88%-`other`-failure window discarded as biased).**
+
+- **Flip #2 (`5082d332`) → CONFIRMED.** ve signal_correlation reject 58%→4.5%, ve survival 5.5%→15.2% (~2.8×), content redundancy intact. Headline component-rate dip (0.127→0.097) is the INTENDED ve mix-shift (ve was ~0 component pre-flip too, 0.0033 — no regression). book-PBO Crucible-side/pending.
+- **Flip #1 (`848a1f67`) → INSUFFICIENT; flip KEPT.** (1) The controlled shadow-count CAN'T re-measure a flip post-deploy — `shadow_null_cmd` reads the deployed prefilter.yaml as prod (now already cumulative_trading) → degenerate net-0. (2) Post-flip cohort shows no lift: trend 41.9→40.0 (flat), em 91→95 (up, tiny), **ve 44.5→38.6 (down, opposite prediction)** — confounded, not clean-refute but not confirming. **Kept** because it's *also* a correctness fix (trading-day vs the buggy calendar-day mode); dropped the ve-supply-lift expectation.
+- **Levers:** flip #2 confirmed; **gate-tail (`9063b405`) HELD** until #1 settled (now settled = keep). Sequence next: gate-tail (unit-env + `daemon-reload`) → `FORGE_EXPLORATION_HOLDOUT_FRAC`, one at a time. The 07-07 reminder is now redundant (resolution done early — the gate rate recovered faster than expected).
+- **Lesson:** a permutation-null shadow-count must run BEFORE the flip; post-deploy it's degenerate. Definitive post-hoc #1 read would need a one-off single_day-vs-cumulative script on the same configs (offered, not run).
+
+## 2026-07-06 — Built `parse_forward_compatible` into the export read path (contracts 1.26.0, D250) + DEPLOYED onto 1.26.0: Forge reconcile self-heals on future additive fields. Daemon healthy. [[D250]]
 
 **Operator: "let's build the parse_forward_compatible." Wired it into the two export loaders Forge re-reads (gated + failed) — the read-side (Forge-consumer) fix completing the trap-class arc alongside D245 (Crucible inbox) + D249 (Crucible runner).**
 
