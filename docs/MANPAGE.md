@@ -132,7 +132,7 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 | `--poll-interval-seconds` | int | `60` (`600`) | Sleep between loop iterations. |
 | `--consume-feedback` | flag | off | Run feedback chain (consumer/analyzer/proposer/auto-tune) after submit. |
 | `--orthogonal-yield` | flag | off | H4 A/B: discount over-mined (hypothesis, directional, underlying-class) factor cells in the underlying draw, rewarding orthogonal components. Off is byte-identical to D105/D106. |
-| `--cross-sectional / --no-cross-sectional` | flag | on | H1 (v12) breadth lever: emit `cross_sectional` combiners for the breadth-starved directional archetypes (trend/mean_reversion) at a ~1/3 exploration share, defeating the 100-trade floor. ON by default (the point of v12); `--no-cross-sectional` is the kill switch (revert to confluence). |
+| `--cross-sectional-rank / --no-cross-sectional-rank` | flag | on | H1 (v12) breadth lever: emit `cross_sectional` combiners for the breadth-starved directional archetypes (trend/mean_reversion) at a ~1/3 exploration share, defeating the 100-trade floor. ON by default (the point of v12); `--no-cross-sectional-rank` is the kill switch (revert to confluence). |
 | `--cohort-yield` | flag | off | §3 yield-map refresh (D182): make the cohort draw (cross_sectional vs confluence) yield-driven by the learned (hypothesis, directional, dte_bucket, cohort) component-rate instead of the fixed share. On the service. Off is byte-identical to the H1 draw. |
 | `--regime-gate-yield` | flag | off | §2 yield-map refresh (D183): make the regime-gate draw yield-driven — compose the learned (hypothesis, directional, dte_bucket, regime_gate) rate onto the D150/uniform base, down-weighting sink gates (gamma_flip) and favouring minting ones. `relative_value` excluded (D119). On the service. Off is byte-identical. |
 | `--quality-rank` | flag | off | T1 quality lane (tail-aware ranking, §8.6, D193): BLEND the wf_p25 robustness prediction into the §6.2 prior — `prior := P(component) × tail_norm`. Needs an F3 P(component) base + a `target_wf_p25` robustness model. Env kill-switch `FORGE_QUALITY_RANKER`. On the service. Off is byte-identical (F3 prior unchanged). |
@@ -153,6 +153,12 @@ Only ever RAISES a family (`max` semantics; starves nothing). A/B feedback-chang
 operator-gated deploy, pre-registered (`forge prereg`, D208) + alpha-budget-charged (`forge alpha-budget`,
 D207) + later-cohort-confirmed (§8.4). Revert = drop the env var. Consumed by
 `forge.cli.main._orthogonal_family_floors` → `rejection_weights.apply_orthogonal_family_floor`.
+
+**Env kill-switch — `FORGE_F3_RANKER`** (D149): default `on` — the F3 `P(component)` ranker prior (latest
+trained model under `<forge-db-dir>/models`) feeds the §6.2 slot. Set `off`/`0`/`false`/`no` to skip the
+model load entirely and revert scoring to the pre-F3 Jaccard-novelty baseline. Emergency revert lever, the
+F3 sibling of `FORGE_QUALITY_RANKER` (which kills the D193 quality lane on top of F3). Never set in
+production; consumed by `forge.cli.main` at model-load time.
 
 **Env-only knob — `FORGE_QUALITY_RANK_MODE`** (the `--quality-rank` lane form, D217/P1.1): `blend` (default,
 unset → byte-identical) computes `prior := P(component) × tail_norm` into the §6.2 slot; `gate-tail`

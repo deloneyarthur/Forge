@@ -22,6 +22,14 @@ repos maintained by separate agents; the operator carries messages between them.
   publish, or (b) state the expected stall-and-restart explicitly. Journal trap: the loop logs
   `registry_loaded_from_export` BEFORE validation — a stalled daemon looks half-healthy; grep
   for `extra_forbidden` and recent `batch_id=` lines to tell.
+- **A contracts bump must restart BOTH directions' processes** (D244/D245): each process holds its
+  boot-time contracts modules, so upgrade asymmetry wedges either path. READ direction (D244):
+  Forge's daemon fail-loops on new export fields until `forge.service` restarts. SUBMIT direction
+  (D245): Crucible's `crucible-inbox-watcher` rejects 100% of Forge's submissions as
+  `extra_forbidden` when Forge emits new `StrategyConfig` fields first — surfaces only as a quiet
+  `0/N gated` per-batch stall (inbox-rejected runs enter NEITHER `gated_runs` NOR `failed_runs`;
+  healthcheck's `inbox_rejections` check, D246, CRITs on it within hours). Adoption plans must
+  name both restarts explicitly: Forge `forge.service` AND Crucible's inbox watcher + exporter.
 
 ## Outgoing (Forge → Crucible)
 
