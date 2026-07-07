@@ -1,6 +1,17 @@
 # Forge — Status
 
-## 2026-07-07 (latest) — Probe verdict: gate-tail does NOT starve useful ve → KEEP, no carve-out (D255). ve-supply monitor set. gate-tail live on v24; healthcheck OK. [[D255]]
+## 2026-07-07 (latest) — FLIP: exploration holdout MVP (FORGE_EXPLORATION_HOLDOUT_FRAC=0.05, D256, prereg 61837dd2). Last teed-up lever; the partner to gate-tail. Deploying. [[D256]]
+
+**Operator: "keep it at MVP, go ahead." The plain random holdout (not decorrelation-targeted — that would re-introduce bias; targeting decorrelation is an enumeration-floor job).**
+
+- **What:** reserve ~5% of each batch (10/200) as a seeded RANDOM draw from the survivors the ranker didn't pick — REPLACES rank slots (total unchanged), tags them `selection_mode='holdout'`. Composes with gate-tail (gate-tail picks top n−holdout_n, holdout adds the random rest). Cap 0.10; unset=byte-identical. REVERT = drop the line + daemon-reload + restart.
+- **Why now:** breaks the censored feedback loop — the F3/wf_p25/estimand models only ever get labels for configs they scored high, so they can't learn where they're wrong. Under gate-tail's hard P-gate that's sharper (ve exclusion could self-reinforce). The holdout keeps unbiased labels (and some ve) flowing regardless of the ranker.
+- **Bonus:** stands up a free ranker-vs-random A/B (ranked vs held-out component-rate).
+- **Prereg 61837dd2** (cut 22:49Z): ranked comp-rate > held-out comp-rate (ranker beats random) AND overall comp-rate ≥ baseline−0.006. Resolve by selection_mode on the post-flip cohort. Held-out ≥ ranked = ranker red flag.
+- **Fraction:** 0.05 (half the cap) — conservative MVP; raise toward 0.10 later if the A/B wants power. Deploy = unit-env ⇒ daemon-reload + restart; verify `exploration_holdout: N of M submitted` in-journal.
+- **Levers status:** flip #2 confirmed, flip #1 insufficient/kept, gate-tail live+kept (D255), holdout deploying. **The teed-up lever list is now exhausted.**
+
+## 2026-07-07 — Probe verdict: gate-tail does NOT starve useful ve → KEEP, no carve-out (D255). ve-supply monitor set. gate-tail live on v24; healthcheck OK. [[D255]]
 
 **Investigated the gate-tail ve-share drop (18%→8%) with a probe before deciding — it overturned the revert case.**
 

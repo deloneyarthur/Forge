@@ -918,3 +918,23 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Monitor (light, count-based).** `scratchpad/monitor_ve_supply.py` — tracks ve components/day (NOT rate: gate-tail keeps higher-P ve so the RATE may rise; the book wants ve component COUNT). **Baseline (blend era 07-02..04): 5.4 ve components/day** (13 comps / 3993 decided, rate 0.0033). Gate-tail window still too small to read (2 comps in ~hours). **Trigger: revisit the carve-out only if gate-tail-era ve components/day sits materially below ~5.4 once it has ~1-2 days of decided ve.** A scheduled nudge (~2-3 days) to re-run it accompanies this.
 
 **Files:** `scratchpad/monitor_ve_supply.py` (untracked ops tool), `STATUS.md`, this entry. Related: D252 (the flip), D216 (ve supply), D251 (flip preregs), D193 (blend).
+
+---
+
+## D256 — 2026-07-07 — FLIP: exploration holdout MVP (FORGE_EXPLORATION_HOLDOUT_FRAC=0.05, prereg 61837dd2)
+
+**Spec section:** §6 ranking / P3.3-B7 (learned-audit). The last teed-up lever; the natural partner to the D252 gate-tail flip.
+
+**The flip.** `FORGE_EXPLORATION_HOLDOUT_FRAC=0.05` on the systemd unit. Reserves ~5% of each batch (10 of 200) as a SEEDED RANDOM draw from the prefilter-survivors the ranker did NOT pick — it REPLACES rank slots (total submitted unchanged), tagging those rows `selection_mode='holdout'`. Composes with gate-tail: gate-tail selects the top (n−holdout_n), the holdout adds holdout_n random non-selected. Clamped to [0, 0.10]; unset/0 = byte-identical. REVERT = delete the line + daemon-reload + restart.
+
+**Why (the censored loop).** Every learned system (F3 P(component), wf_p25 tail, the estimand) trains on Forge's SUBMITTED configs — but Forge only submits what the ranker LIKED, so the models never get outcomes for the region they score low, and can't learn where they're wrong. Under gate-tail (a hard P-gate) this is sharper: if the F3 ve-P ever drifts low, gate-tail excludes ve → no fresh ve labels → the exclusion self-reinforces. The random holdout is the insurance: a trickle of ranker-bypassing submissions keeps unbiased labels flowing (and incidentally keeps some ve flowing regardless of the ranker). NOT decorrelation-targeted — biasing the draw would re-introduce the very bias it removes; targeting decorrelation is an enumeration-floor job (D216), targeting *uncertainty* would be the principled v2 (deferred).
+
+**Fraction choice.** 0.05 (half the 0.10 cap) — conservative MVP: establish non-harm first; raise toward 0.10 later if the ranker-vs-random A/B wants more power. 10 held-out/batch accrues ~enough over 1-2 days for the component-rate comparison.
+
+**Prereg 61837dd2 (cut 2026-07-07T22:49Z).** Predicts: ranked configs realize a HIGHER component-rate than the random held-out configs (the ranker beats random) AND the ~5% dilution keeps overall component-rate >= (baseline − ~0.006). Resolve on post-flip data by `selection_mode` (ranked vs holdout) + overall vs the pre-holdout baseline. If held-out >= ranked, the ranker is no better than random — a red flag worth surfacing.
+
+**Deploy.** UNIT-env change ⇒ daemon-reload + restart (deploy.md ritual). Verify the journal prints `exploration_holdout: N of M submitted (frac=0.050, ...)` — flip reached the iteration (D185 anti-inert).
+
+**Files:** `deploy/systemd/forge.service`, `config/preregistrations.jsonl`, `STATUS.md`, this entry. Related: D252 (gate-tail — the reason this matters now), D216 (ve supply / enumeration floor), D208 (prereg), the learned-systems review (the "censored loop" gap this closes).
+
+**STATUS: unit env added + prereg registered; DEPLOY (stop→suite→daemon-reload→start→verify exploration_holdout line) in progress. Resolve 61837dd2 on the post-flip cohort.**

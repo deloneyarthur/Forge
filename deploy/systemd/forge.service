@@ -34,6 +34,15 @@ Environment=FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20
 # must be ON). REVERT = delete these two lines + daemon-reload + restart (byte-identical to blend).
 Environment=FORGE_QUALITY_RANK_MODE=gate-tail
 Environment=FORGE_REWIRE_P_FLOOR=0.02
+# FORGE_EXPLORATION_HOLDOUT_FRAC (D256, prereg 61837dd2): reserve ~5% of each batch as a
+# SEEDED RANDOM draw from the prefilter-survivors the ranker did NOT pick — it REPLACES rank
+# slots (total submitted unchanged), tagging those rows selection_mode='holdout'. Breaks the
+# censored feedback loop: the F3/wf_p25/estimand models otherwise only ever get labels for
+# configs they already scored high (esp. under gate-tail), so they can't learn where they're
+# wrong. The unbiased labels also stand up a ranker-vs-random A/B (ranked vs holdout
+# component-rate). Clamped to [0, 0.10]; empty/unset => byte-identical (hard rule 6). REVERT =
+# delete this line + daemon-reload + restart.
+Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
