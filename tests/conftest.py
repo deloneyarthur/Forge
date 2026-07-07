@@ -6,14 +6,6 @@ from pathlib import Path
 
 import pytest
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-
-
-@pytest.fixture
-def fixtures_dir() -> Path:
-    """Absolute path to the tests/fixtures directory."""
-    return FIXTURES_DIR
-
 
 @pytest.fixture(autouse=True)
 def _isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

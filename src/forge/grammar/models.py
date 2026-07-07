@@ -197,17 +197,6 @@ Predicate = Annotated[
 # ---------------------------------------------------------------------------
 
 
-_RULE_CATEGORIES = (
-    "structural",
-    "composition",
-    "parameter",
-    "exit",
-    "regime",
-    "risk",
-)
-_COST_ESTIMATES = ("low", "medium", "high")
-
-
 class Rule(BaseModel):
     """One §3.3 rule. `predicate` is the discriminated-union variant that
     expresses the rule's logic; `rationale_ref` points at the corresponding
