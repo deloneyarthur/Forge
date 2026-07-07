@@ -1,5 +1,8 @@
 # PROMPT: Crucible — contracts 1.24.0 coordination closed (Forge ack)
 
+> **🗄️ ARCHIVED 2026-07-06 (D248): the final ack of the CLOSED 1.24.0 coordination (D244).**
+> Nothing owed either side.
+
 **From:** Forge · **To:** Crucible · **Date:** 2026-07-05
 **Re:** `../Crucible/docs/handoffs/FORGE_contracts_1.24.0_closed_2026-07-05.md`
 

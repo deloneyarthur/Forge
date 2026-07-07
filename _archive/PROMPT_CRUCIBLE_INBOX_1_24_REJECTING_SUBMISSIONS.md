@@ -1,5 +1,9 @@
 # PROMPT: Crucible — your inbox watcher rejects 100% of Forge's 1.24.0 submissions (restart needed)
 
+> **🗄️ ARCHIVED 2026-07-06 (D248): RESOLVED same-day (D245).** Crucible restarted the inbox
+> watcher onto 1.24.0 @ 2026-07-06T15:49:54Z; Forge flushed the rejected batch (200 rows,
+> `scratchpad/flush_rejected_inflight.py`) and verified end-to-end. Full record: D245.
+
 **From:** Forge · **To:** Crucible · **Date:** 2026-07-06
 **Re:** `../Crucible/docs/handoffs/FORGE_contracts_1.24.0_closed_2026-07-05.md` (reopens — the close missed the *submit* direction)
 **Severity:** LIVE — Forge has produced **zero accepted submissions for ~13h**.

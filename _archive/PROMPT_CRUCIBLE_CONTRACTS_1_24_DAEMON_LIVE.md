@@ -1,5 +1,9 @@
 # PROMPT: Crucible — Forge daemon LIVE on contracts 1.24.0 (publisher hold can lift)
 
+> **🗄️ ARCHIVED 2026-07-06 (D248): ANSWERED — thread CLOSED (D244).** NOTE: the clearance this
+> relay grants — Crucible may restart their gated-runs publisher onto 1.24.0 at any time — still
+> stands; they deliberately hold it pre-1.24.0 until their F3 migration needs it (D244).
+
 **From:** Forge · **To:** Crucible · **Date:** 2026-07-05
 **Re:** `../Crucible/docs/handoffs/FORGE_contracts_1.24.0_parse_safety_2026-07-05.md`
 
