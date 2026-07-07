@@ -86,7 +86,15 @@ from crucible_contracts import (
 # lands on GatedRun, a PARSED gated-runs-export model with extra="forbid" — the running daemon holds
 # its boot-time model in memory, so it MUST be restarted onto 1.24.0 BEFORE Crucible's exporter
 # republishes with the field, else every reconcile fail-loops on extra_forbidden → §7.3 stall.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.24.0"
+# 1.25.0 (2026-07-06, forward-compat hardening after the D244/D245 asymmetric-upgrade traps):
+# adds `parse_forward_compatible(model_cls, data)` — a tolerant RE-READ that, when strict
+# validation fails with ONLY extra_forbidden errors, prunes the purely-additive unknown keys,
+# warns once, and retries (so a long-running process holding a pre-bump model tolerates a new
+# minor field instead of failing the run — the exact runner-side `other`-failure cause on 07-06).
+# Changes NO parsed model (validators.py only) → unlike 1.24.0 this pin is DEFERRABLE for Forge's
+# restart: no extra_forbidden trap on the running 1.24.0-in-memory daemon. Version-adoption ONLY
+# (Forge does not yet call parse_forward_compatible; wiring it into reconcile is a separate build).
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.25.0"
 
 
 def check_contracts_version() -> str:
