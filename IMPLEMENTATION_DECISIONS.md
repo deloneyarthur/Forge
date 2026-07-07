@@ -869,4 +869,4 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 
 **Files:** `deploy/systemd/forge.service`, `STATUS.md`, this entry. Related: D193 (quality-lane blend), D251 (flip resolutions that unblocked this), D208 (prereg), D216 (the ORTHOGONAL_FAMILY_FLOOR env it sits beside).
 
-**STATUS: unit env added; DEPLOY (stop→suite→daemon-reload→start→verify gate-tail line) in progress. Resolve 9063b405 on the post-flip cohort later. Next teed-up lever after: FORGE_EXPLORATION_HOLDOUT_FRAC.**
+**STATUS: DEPLOYED 2026-07-06 (PID 3539733). Verify: uncontended suite 1829 green; daemon-reload; clean startup; journal "quality_rank: wf_p25 GATE-TAIL ACTIVE (p_floor=0.0200) hard-gate (composite bypassed)" — flip reached the iteration (not BLEND); healthcheck OVERALL=OK (11 ok). Resolve 9063b405 on the post-flip cohort later. Next teed-up lever: FORGE_EXPLORATION_HOLDOUT_FRAC.**
