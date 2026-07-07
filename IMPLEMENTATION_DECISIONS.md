@@ -854,3 +854,19 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Next-lever gating.** flip #2 confirmed clears part of the path, but gate-tail (`9063b405`) stays HELD until flip #1's status is settled — stacking a ranker re-wire on an unresolved prefilter flip repeats the confounding this resolution had to fight through. Sequence unchanged: settle #1 (keep-as-correctness, done) → then gate-tail → then `FORGE_EXPLORATION_HOLDOUT_FRAC`, one at a time.
 
 **Files:** `config/preregistrations.jsonl`, `STATUS.md`, this entry. Related: D238/D239 (the flips), D226 (pre-flip shadow-count), D249 (runner fix that unbiased the cohort), D208 (prereg discipline).
+
+---
+
+## D252 — 2026-07-06 — FLIP: gate-tail ranker re-wire (prereg 9063b405) — P(component) gates eligibility, wf_p25 tail orders
+
+**Spec section:** §8.6 quality lane / P1.1 (the hard-gate form). The teed-up lever after the D251 flip-prereg resolutions (flip #2 confirmed, flip #1 settled kept-as-correctness) cleared the sequencing hold.
+
+**The flip.** `FORGE_QUALITY_RANK_MODE=gate-tail` + `FORGE_REWIRE_P_FLOOR=0.02` on the systemd UNIT file. Selects the P1.1 hard-gate form of the `--quality-rank` lane: P(component) GATES eligibility at the floor (0.02, the coded default the flip-gate was validated against) and the wf_p25 tail model ORDERS the survivors — the §6.2 composite is bypassed, matching the shadow eval's `gate_tail_rank_score`. Default `blend` (D193: `prior := P × tail_norm`) stays the code default; the env selects the re-wire. REVERT = delete the two Environment lines + `daemon-reload` + restart (byte-identical to blend).
+
+**Flip-gate satisfied (the prereg's pre-commitment).** 9063b405 required the P1.2 flip gate MET at flip time: SPRT promote logLR **+15.45 / 2.77**, mean Δ **+0.344**, fresh-PASS streak **6/3** (n=6) — MET and durable (last7 all positive). Verified immediately before the flip.
+
+**Deploy.** UNIT-file env change ⇒ `daemon-reload` (not just restart), then the deploy.md ritual: stop → uncontended suite → daemon-reload → start → verify the journal prints the gate-tail lane line. It changes the RANKING (which survivors submit), so the submitted-stream composition shifts — resolve 9063b405 LATER on the POST-FLIP cohort (rewire Δ = top-decile realized worst-quartile WF floor vs the blend baseline; data AFTER this deploy only). Now that the flip preregs are resolved (D251), stacking this ranker change no longer confounds them.
+
+**Files:** `deploy/systemd/forge.service`, `STATUS.md`, this entry. Related: D193 (quality-lane blend), D251 (flip resolutions that unblocked this), D208 (prereg), D216 (the ORTHOGONAL_FAMILY_FLOOR env it sits beside).
+
+**STATUS: unit env added; DEPLOY (stop→suite→daemon-reload→start→verify gate-tail line) in progress. Resolve 9063b405 on the post-flip cohort later. Next teed-up lever after: FORGE_EXPLORATION_HOLDOUT_FRAC.**

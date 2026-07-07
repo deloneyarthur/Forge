@@ -1,6 +1,16 @@
 # Forge — Status
 
-## 2026-07-06 (latest) — Flip preregs RESOLVED on the clean cohort (D251): #2 exclude_regime_filter CONFIRMED, #1 cumulative_trading INSUFFICIENT (kept on correctness). gate-tail held. [[D251]]
+## 2026-07-06 (latest) — FLIP: gate-tail ranker re-wire (D252, prereg 9063b405) — P(component) gates eligibility, wf_p25 tail orders. Deploying. [[D252]]
+
+**Operator: "we can flip the gate-tail." Flip #1 being settled (D251, insufficient/kept) was the sequencing gate — now clear.**
+
+- **The flip:** `FORGE_QUALITY_RANK_MODE=gate-tail` + `FORGE_REWIRE_P_FLOOR=0.02` on the systemd unit. P1.1 hard-gate form of the `--quality-rank` lane: P(component) gates eligibility at 0.02, wf_p25 tail orders survivors, §6.2 composite bypassed. Default `blend` (D193) unchanged in code; env selects the re-wire. REVERT = delete the two Environment lines + daemon-reload + restart (byte-identical).
+- **Flip gate MET (pre-commitment):** SPRT promote logLR +15.45/2.77, mean Δ +0.344, fresh-PASS streak **6/3** — verified at flip time.
+- **Deploy:** unit-env change ⇒ `daemon-reload` + restart (deploy.md ritual). Changes the ranking → resolve 9063b405 LATER on the POST-FLIP cohort (rewire Δ vs blend baseline). No longer confounds the flip preregs (resolved D251).
+- **On flip #1 (answered):** its `insufficient` is STRUCTURAL, not thin-cohort — the controlled shadow-count can't re-run post-deploy, and the pre/post cohort is confounded (more data won't fix either). Kept as a correctness fix. Definitive closure would need a one-off single_day-vs-cumulative script (optional, not run).
+- **Next teed-up lever:** `FORGE_EXPLORATION_HOLDOUT_FRAC` (after gate-tail's post-flip cohort reads out).
+
+## 2026-07-06 — Flip preregs RESOLVED on the clean cohort (D251): #2 exclude_regime_filter CONFIRMED, #1 cumulative_trading INSUFFICIENT (kept on correctness). gate-tail held. [[D251]]
 
 **Ran the resolution on the clean post-runner-fix cohort (≥00:38Z; 90% real-gate, 1,432 decided in ~2h — the earlier 88%-`other`-failure window discarded as biased).**
 

@@ -26,6 +26,14 @@ WorkingDirectory=/home/aj/proj/Forge
 # feedback knob; empty/unset => byte-identical (hard rule 6). REVERT = delete this
 # line + restart. Pre-registered (D208) + alpha-budget-charged (D207); confirm §8.4.
 Environment=FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20
+# FORGE_QUALITY_RANK_MODE=gate-tail (D252, prereg 9063b405): the P1.1 hard-gate form of the
+# quality lane — P(component) GATES eligibility at FORGE_REWIRE_P_FLOOR and the wf_p25 tail
+# ORDERS the survivors (the §6.2 composite is bypassed), matching the shadow A/B (Δ +0.180
+# CI [+0.060,+0.309]; flip gate MET, fresh-PASS streak 6/3 at flip time). Default 'blend' in
+# code = the D193 blend above; this env selects the re-wire. Requires --quality-rank (the lane
+# must be ON). REVERT = delete these two lines + daemon-reload + restart (byte-identical to blend).
+Environment=FORGE_QUALITY_RANK_MODE=gate-tail
+Environment=FORGE_REWIRE_P_FLOOR=0.02
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
