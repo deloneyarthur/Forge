@@ -4,7 +4,8 @@ Four complementary full-repo audits, performed the same day by concurrent Claude
 sessions, written as durable records so a later agent (e.g. Opus) can execute the workplans
 without re-deriving the findings. All were taken against the same snapshot: HEAD `ceeefa4`
 plus the uncommitted D216 working-tree changes. (A fifth folder, `code-complete-retirement/`,
-added 2026-07-06, is a conditional plan, not an audit.)
+added 2026-07-06, is a conditional plan, not an audit. A sixth, `dependency-structure/`,
+added 2026-07-06 against HEAD `5ac7941`, is a follow-up structural audit.)
 
 | Folder | Scope | Start at |
 |---|---|---|
@@ -13,6 +14,7 @@ added 2026-07-06, is a conditional plan, not an audit.)
 | `pipeline-performance/` | Runtime performance of the production loop: where the daemon's ~12.6 CPU-h/day actually goes (submit/reconcile fsync anti-pattern, prefetch re-fetch, export re-parsing), measured baseline + benchmarks, scaling time-bombs. Workplan P0-1–P4-8. | `pipeline-performance/README.md` |
 | `strategy-methodology/` | The quant domain content: grammar/§3.5 strategy space, indicator reachability & threshold calibration, prefilter/submission statistical methodology, research-hygiene machinery (alpha budget, prereg, feedback rituals). Includes a measured per-family battery kill table. Workplan P0–P4. | `strategy-methodology/README.md` |
 | `code-complete-retirement/` | **CONDITIONAL plan, 2026-07-06 (trigger NOT met):** if the operator ever declares Forge+Crucible code-complete (development freeze, production keeps running), the prioritized retirement list — P0 grammar-change machinery, P1 flip/experiment apparatus, P2 dormant levers, P3 dev surface, plus the explicit steady-state KEEP line. Do not execute; preconditions in its §0. | `code-complete-retirement/REPORT.md` |
+| `dependency-structure/` | Structural audit, 2026-07-06 (HEAD `5ac7941`): module dependency graph (cycles, god objects, layering) + dead code, duplication clusters with proposed abstractions, >50-line function census. Prioritized workplan P0–P3 in its §8. Re-confirms codebase-quality SRC-M1/M2/M3 at the newer HEAD. | `dependency-structure/REPORT.md` |
 
 Each subfolder README carries the rules of engagement (CLAUDE.md hard rules, operator gates,
 production-tree cautions) — read them before executing anything.
@@ -28,3 +30,6 @@ P3.4/B8; its P1-1 permutation_test semantics fix must land BEFORE pipeline-perfo
 P2-3 memoizes that filter; its D216-activation items (P0-1..P0-5) supersede the framing
 of learned-systems P2.1 (activate only with gate-class telemetry + battery context).
 If executing multiple plans, land each shared item once and tick it in every plan.
+dependency-structure overlaps: its P0-1 = codebase-quality item 9 ∪ pipeline-performance
+P1-1 (one landing ticks all three); its P0-2 closes pipeline-performance P4-8 by deletion;
+its P1-2/P2-1/P3-2 = codebase-quality items 12/11/test-factory.
