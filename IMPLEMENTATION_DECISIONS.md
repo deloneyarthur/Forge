@@ -837,4 +837,4 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 
 **Files:** `crucible_contracts/queries.py` + `tests/test_queries.py` (1.26.0), `src/forge/core/contracts_check.py`, `STATUS.md`, this entry. Related: D244, D245, D249, D124.
 
-**STATUS: contracts 1.26.0 committed; Forge pin adopted; DEPLOY (restart onto 1.26.0) in progress — verify tolerant loaders live + healthcheck OK.**
+**STATUS: DEPLOYED 2026-07-06 (daemon PID 3101697, on 1.26.0). Verify: uncontended suite 1829 green; clean startup (grammar_version=v22, no traceback); reconciled batches=1 newly_gated_total=198 (tolerant loaders parsed the live gated export); healthcheck OVERALL=OK (11 ok, contracts pin==installed 1.26.0, WARN cleared). Trap-class arc fully closed (D245/D249/D250).**

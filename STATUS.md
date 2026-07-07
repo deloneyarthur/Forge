@@ -1,11 +1,11 @@
 # Forge — Status
 
-## 2026-07-06 (latest) — Built `parse_forward_compatible` into the export read path (contracts 1.26.0, D250): Forge reconcile self-heals on future additive fields. Adopted + deploying onto 1.26.0. [[D250]]
+## 2026-07-06 (latest) — Built `parse_forward_compatible` into the export read path (contracts 1.26.0, D250) + DEPLOYED onto 1.26.0: Forge reconcile self-heals on future additive fields. Daemon healthy. [[D250]]
 
 **Operator: "let's build the parse_forward_compatible." Wired it into the two export loaders Forge re-reads (gated + failed) — the read-side (Forge-consumer) fix completing the trap-class arc alongside D245 (Crucible inbox) + D249 (Crucible runner).**
 
 - **What/why:** 1.25.0 added the helper; 1.26.0 (`crucible_contracts 86c8515`) makes `load_recent_{gated,failed}_runs_from_export` parse rows via `parse_forward_compatible` — so a FUTURE additive Crucible export field (e.g. an eventual `failure_buckets` republish) prunes+warns instead of fail-looping the daemon on `extra_forbidden` (the D244 read-side trap). Correct seam per the helper's own docstring (tolerant RE-READ, not first ingest) + hard rule #2 (Forge reads exports only via these loaders). Byte-identical today; genuinely-invalid rows still raise.
-- **Forge:** pin 1.25.0 → 1.26.0; `forge check` OK; contracts suite 328 green. **This deploy DOES restart** (tolerant loaders need a fresh process; also moves the daemon off its stale 1.24.0-in-memory onto current code) — safe + byte-identical (no model change 1.24.0→1.26.0).
+- **Forge:** pin 1.25.0 → 1.26.0; `forge check` OK; contracts suite 328 green. **DEPLOYED 2026-07-07 01:08:20Z** (PID 3101697): uncontended suite 1829 green; clean startup, no traceback; `reconciled batches=1 newly_gated_total=198` (tolerant loaders parsed the live gated export); healthcheck **OVERALL=OK (11 ok)**, `contracts pin==installed 1.26.0` (WARN cleared). The restart also moved the daemon off its stale 1.24.0-in-memory onto current code — byte-identical (no model change 1.24.0→1.26.0).
 - **Trap-class arc now closed on all three faces:** D245 inbox ingest (Crucible watcher restart), D249 runner re-read (Crucible runner restart), D250 Forge reconcile re-read (this).
 
 ## 2026-07-06 — Contracts 1.25.0 pin ADOPTED (D249, resolves D248's side-finding) + the runner-side `other`-failure spike (88% of the cohort) RESOLVED by runner restart. Pipeline healthy. [[D249]]
