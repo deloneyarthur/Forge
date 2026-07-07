@@ -80,7 +80,8 @@ Determinism identity: `(grammar_version, registry_hash, seed)` → same enumerat
   F3 streak → `~/forge_data/ranker_eval/streak.jsonl` and the wf_p25 robustness streak; deterministic,
   telemetry-only); `forge-backup` (04:00, `scripts/backup_forge_db.sh` — nightly DR copy of `forge.db`
   + `models/`, D195); `forge-healthcheck` (hourly, `forge healthcheck` — alerts on the alive-but-stuck
-  daemon states systemd can't see, D197); and `forge-eod-check` (21:00, headless EOD read).
+  daemon states systemd can't see, D197). (`forge-eod-check`, a 21:00 headless EOD read, was
+  retired D253 — superseded by the hourly healthcheck.)
 - Forge state: `~/forge_data/forge.db` (DuckDB; live RW lock — snapshot before reading, see
   `docs/tasks/investigate-live.md`). Inter-system paths: table in `docs/HOW-TO.md`.
 - `scripts/` is operational glue around the daemon, not part of the import graph: pre-commit

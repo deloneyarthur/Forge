@@ -682,7 +682,6 @@ bumps `grammar_version` and archives the prior version. The second keeps
 | Script | What it is |
 |---|---|
 | `tail_verified_alignment.py` | Live tracking tool (D155): re-runnable verified-coverage alignment monitor for the tail-aware model — tail_score vs P(component) on the verified slice, run against a `/tmp` DB snapshot. |
-| `forge_eod_check.sh` | **Bash** — source of the vendored `forge-eod-check` timer entrypoint (`~/.local/bin/forge-eod-check.sh`, D203): headless, report-only EOD pipeline read (21:00). |
 | `probe_option_momentum_min_months.py` | One-shot historical probe: Q39 `option_momentum` `min_months` × percentile activation sweep against the live feature cache. |
 
 Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
@@ -741,7 +740,7 @@ The Crucible rows below are the **Forge-relevant subset**, not Crucible's full u
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-eod-check` (21:00, headless EOD pipeline read), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

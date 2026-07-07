@@ -10,11 +10,11 @@ Migrating Forge to a new machine. Profile chosen for this transfer:
 
 The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_new_box.sh` (new box).
 
-> **`setup_new_box.sh` is current (refreshed D203):** it symlinks **all** units in
-> `deploy/systemd/` (`forge.service` + every timer) and installs the `forge-eod-check` helper
-> to `~/.local/bin/`, and its contracts gate derives the expected version from
-> `FORGE_EXPECTED_CONTRACT_VERSION` in `contracts_check.py` (no hardcoded literal to re-stale).
-> No manual unit-install follow-up is needed — the "verify the units" step below is just a check.
+> **`setup_new_box.sh` is current (refreshed D203, eod-check retired D253):** it symlinks **all**
+> units in `deploy/systemd/` (`forge.service` + every timer), and its contracts gate derives the
+> expected version from `FORGE_EXPECTED_CONTRACT_VERSION` in `contracts_check.py` (no hardcoded
+> literal to re-stale). No manual unit-install follow-up is needed — the "verify the units" step
+> below is just a check.
 
 ---
 
@@ -103,12 +103,12 @@ up first.
 
 ### Verify the units (the script installs them all)
 
-`setup_new_box.sh` symlinks every unit in `deploy/systemd/` into `~/.config/systemd/user/`,
-installs the `forge-eod-check` helper to `~/.local/bin/`, and enables the timers (the daemon
-itself starts only with `--start`, after Crucible is up). Confirm the full set:
+`setup_new_box.sh` symlinks every unit in `deploy/systemd/` into `~/.config/systemd/user/`
+and enables the timers (the daemon itself starts only with `--start`, after Crucible is up).
+Confirm the full set:
 
 ```bash
-systemctl --user list-timers 'forge-*'    # all four timers scheduled
+systemctl --user list-timers 'forge-*'    # all three timers scheduled
 systemctl --user is-enabled forge.service
 ```
 
@@ -120,7 +120,9 @@ The full unit set after bring-up:
 | `forge-ranker-eval.timer` | 05:00 daily | train + eval the learned verdict / wf_p25 model; publish to `~/forge_data/models/` | F3 / D193 |
 | `forge-backup.timer` | 04:00 daily | DR backup of `forge.db` + `models/` | D195 |
 | `forge-healthcheck.timer` | hourly | `forge healthcheck` — detect an alive-but-unproductive daemon (CRITICAL surfaces in `--state=failed`) | D197 |
-| `forge-eod-check.timer` | 21:00 daily | headless-Claude EOD report (DB snapshot vs baseline) — **report-only, out-of-loop** (hard rule #5 unaffected); execs `~/.local/bin/forge-eod-check.sh`, vendored from `scripts/forge_eod_check.sh` | 06-10; vendored D203 |
+
+(`forge-eod-check.timer`, a 21:00 headless-Claude EOD report created 06-10, was RETIRED D253 —
+alerting superseded by the hourly healthcheck; its prompt had fossilized on a v17 baseline.)
 
 ### Data directories
 
@@ -195,7 +197,7 @@ set one on the new box if the host has only one disk.
 - [ ] `du -h ~/forge_data/forge.db` ≈ matches the old box (state came across)
 - [ ] `systemctl --user is-enabled forge.service` → enabled; linger on
 - [ ] `systemctl --user list-timers 'forge-*'` → `forge-ranker-eval`, `forge-backup`,
-      `forge-healthcheck`, `forge-eod-check` all four scheduled (king arm absent — D190)
+      `forge-healthcheck` all three scheduled (king arm absent — D190; eod-check retired — D253)
 - [ ] `ls ~/proj/Forge/scripts/*.sh` → backup/ranker-eval/preflight scripts present + executable
 - [ ] Crucible up + `~/optbt_data/exports/` populated → start Forge
 - [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version: v22`) without

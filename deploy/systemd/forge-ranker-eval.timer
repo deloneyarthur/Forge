@@ -4,8 +4,8 @@ Documentation=file://%h/proj/Forge/deploy/systemd/forge-ranker-eval.service
 
 [Timer]
 # 05:00 local: a full overnight verdict window has decided, and well clear of the
-# 03:00 prune, 06:00 digest, 19:00 ingest, and 21:00 eod-check (no colliding cp of
-# the 2.7 GB DB). Persistent=true catches a run missed while the host was off.
+# 03:00 prune, 06:00 digest, and 19:00 ingest (no colliding cp of the multi-GB DB).
+# Persistent=true catches a run missed while the host was off.
 OnCalendar=*-*-* 05:00:00
 Persistent=true
 Unit=forge-ranker-eval.service

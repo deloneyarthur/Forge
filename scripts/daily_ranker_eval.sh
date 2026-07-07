@@ -22,7 +22,7 @@
 #
 # Safety:
 #   * Live DB holds an intermittent RW lock -> cp to /tmp and read the copy
-#     (docs/tasks/investigate-live.md). PID-suffixed: no clash with the eod-check.
+#     (docs/tasks/investigate-live.md). PID-suffixed: no clash with other snapshots.
 #   * Train writes to a staging dir on the same filesystem, then atomically mv's
 #     the artifact into ~/forge_data/models -- the 24/7 daemon (load_latest_model
 #     every batch) never sees a half-written file.
