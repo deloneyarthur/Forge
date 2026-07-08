@@ -1,6 +1,83 @@
 # Path C — defined-risk scope expansion (grammar v2): PARKED resume dossier
 
-> **STATUS (2026-06-24):** OPEN / PARKED — still the active resume entry point. Path C (spreads, grammar v2) remains HELD as the last resort per the "exhaust long options before v2 spreads" operator directive; the provability gate is satisfied but the operator chose to hold. No change as of D200. Resume dossier below.
+> **STATUS (2026-07-08):** OPEN / PARKED — **RE-PRICED (§0 below): resume signals #1 and #2
+> are now MET**, quantified by the alpha-budget retrospective (`ALPHA_BUDGET_SCOPE.md` §7).
+> The decision to un-park remains the operator's; nothing is sent, nothing is built.
+> (Prior banner 2026-06-24: held as last resort, provability gate satisfied.)
+
+## 0. RE-PRICING 2026-07-08 — what changed since parking (operator decision brief)
+
+**Requested context:** the operator asked whether Forge (not Crucible) is the viable half of
+the pipeline; the answer ran through the Dim-C alpha-budget retrospective
+(`scripts/alpha_budget.py`, results `ALPHA_BUDGET_SCOPE.md` §7, committed `f1ade2e`). This
+section re-prices the parked decision against §3's resume signals. It advocates a *first
+step*, not the build.
+
+**Resume signal #1 (promotion drought in practice) — MET.** Since parking (06-15) the entire
+in-scope lever program ran to completion: F3 ranker wiring, quality lane, prefilter flips
+(cumulative_trading, exclude_regime_filter), ve orthogonal-family floor, gate-tail re-wire,
+exploration holdout (D256: "the teed-up lever list is now exhausted"), plus grammar v20→v24
+(hurst/rv_rank/MR-rank/trend D236/MR D254 slices). Standing promotions: **zero**. The only
+`promote` verdicts ever (07-01/07-02, 2 mr configs) were fullhist-refit flukes, re-gated to
+reject on 07-03 by a campaign-charged DSR (n_trials=46,131).
+
+**Resume signal #2 (the M1/M2 monitor firms the verdict) — MET, and stronger than the signal
+asked for.** The alpha-budget retrospective replaces the monitor with a closed answer:
+- Standard-window basis, honest slice (n=10,004 configs): **max cpcv-p25 = 1.343** — the
+  D152 ~1.40 gross wall did NOT creep up as the population grew ~10×.
+- The running max tracked **~0.7σ below** the zero-edge expected-max envelope for the whole
+  campaign; the observed max is statistically unremarkable against a noise search at any
+  plausible effective-N. **Accumulation mechanically cannot reopen long-options** — the
+  noise bar rises with every additional trial, so signal #2 can never firm further than this.
+- Every honest cpcv-p25 ≥ 1.5 ever recorded (2.99/2.17/1.97/1.87) is a **fullhist-refit
+  re-measurement** (post-selection, longer window — e.g. 0.125 standard → 2.99 refit), not
+  an organic wall-break. Sizing analyses for Path C must use the standard basis.
+- Final out-of-sample confirmation is pre-registered: **prereg `098ea730d5f2`** (v24+burst
+  cohort honest max ≤ 1.479; resolves at honest n ≥ 3,000 or **2026-07-21**). A breach
+  reopens the noise question and pauses this re-pricing.
+
+**New quantitative bar any Path C sleeve must clear (from the charged-DSR inversion).** The
+07-03 re-gates revealed Crucible's Step-4 campaign-charged DSR (deflates `sharpe_baseline`,
+T = trade count; reproduced to spread 0.011). Standalone promotion is now the triple:
+**cpcv-p25 ≥ 1.5 AND WF-median ≥ 2.0 AND sharpe_baseline ≥ 1.254 at today's 46k trials
+(≥ 1.303 @ 100k, ≥ 1.359 @ 250k)** — Path C configs inherit the campaign multiplicity, so
+the sizing ask (§4) must measure whether debit structures reach that triple net-of-cost,
+not just the CPCV lift. Rollout status of Step 4 as a standing gate is an open Crucible
+question (`PROMPT_CRUCIBLE_ALPHA_BUDGET_DSR.md`).
+
+**The in-v1 alternative weakened (07-07).** The "single-name vol_event = first promotable
+book in v1" thesis kept the park comfortable: its decorrelation half stands (book CSCV PBO
+0.178), but its magnitude half sits at ~1.0 vs 1.5 with no identified in-v1 lever, and
+Crucible triple-refuted the vol-event DIRECTION conditioning ask (call_wall/put_wall, §2c.1
+retraction, v24 handoff). Nothing in-v1 is currently pointed at the magnitude half.
+
+**What the grammar review sharpened (2026-06 `GRAMMAR_REVIEW_AND_EXPANSION.md` §3).** Tier 1
+= debit verticals (same signals, defined-risk, recovers part of the VRP bleed, stays
+net-long-vega OTM/ATM); Tier 2 = calendars (new forward-vol axis, pays in RANGING); the
+machine-checked **net-debit ∧ net-long-vega ∧ defined-risk invariant REPLACES this dossier's
+rung ladder** — §5's rungs 2–3 (credit/naked) are out-of-identity: drop/quarantine, do not
+size them as an entry path. Budgeted pitfalls: multi-leg execution realism (~53% of bid-ask
+width four-leg), early-assignment breaking "defined risk", and the multiplicity cost of a
+combinatorial structure space (charge it to the alpha budget — the §0 triple already prices
+that in via n_trials growth).
+
+**Known build surface + governance (Crucible's 06-28 capability answer, unchanged).**
+Contracts: additive `legs`/`structure_type` is feasible (≥1.22.0; must join the config_hash
+exclusion set at unset sentinels). Crucible runner: ~800–1,200-line refactor. **Governance
+gate first:** a §20 reconciliation of Crucible's hard-rule-9 ("no spreads in v1", spec
+§1.3/§28) must be operator-ratified BEFORE any byte ships — independent of, and prior to,
+all sizing outcomes.
+
+**The decision as it now stands.** The first step is unchanged from §4 and is still cheap,
+reversible, and commits nothing: refresh + send the held sizing relay
+(`PROMPT_CRUCIBLE_PATHC_DEBIT_VERTICAL_SIZING.md` — drafted 06-15, so it PREDATES the
+charged-DSR triple, the standard-basis discipline, and the net-long-vol invariant; refresh
+before sending). The only real timing question is **send now vs after prereg `098ea730d5f2`
+resolves (≤ 07-21)**. Off-ramps in §3 stand verbatim; if the sizing comes back short, the
+remaining exits are (a) the promotion-criterion revisit (the standalone ruling was explicit
+and stands — but the alpha budget now quantifies its cost: a ~1.0 decorrelated book exists
+and clears PBO today), or (b) reporting the frontier as genuinely capped. Not advocated
+here; listed for completeness.
 
 Status: **PARKED 2026-06-15 (operator) — explore later "when the time arises."** This is the single
 entry point for resuming the Path-C question. It consolidates the decision, the resume signals, and the
