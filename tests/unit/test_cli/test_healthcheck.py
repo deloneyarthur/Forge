@@ -17,6 +17,7 @@ from forge.cli.healthcheck_cmd import (
     check_loop_liveness,
     check_service_active,
     check_submission_progress,
+    check_tmp_headroom,
     parse_forge_journal,
 )
 
@@ -160,6 +161,26 @@ def test_inbox_rejections_levels() -> None:
     # The CRITICAL message must point at the D245 diagnosis (reason files + both-directions).
     crit = check_inbox_rejections(200, **kw)
     assert "errors" in crit.message.lower()
+
+
+def test_tmp_headroom_levels() -> None:
+    kw = {"warn_ratio": 5.0, "critical_ratio": 3.5}
+    gb = 10**9
+    # Plenty of headroom -> OK (boundary: exactly 5x is not < 5 -> OK).
+    assert check_tmp_headroom(10 * gb, gb, **kw).level is Level.OK
+    assert check_tmp_headroom(5 * gb, gb, **kw).level is Level.OK
+    # Getting tight -> WARN.
+    assert check_tmp_headroom(4 * gb, gb, **kw).level is Level.WARN
+    # About to fail the ranker-eval cp -> CRITICAL (the 2026-07-09 incident was ~3.3x).
+    assert check_tmp_headroom(3 * gb, gb, **kw).level is Level.CRITICAL
+    assert check_tmp_headroom(int(3.3 * gb), gb, **kw).level is Level.CRITICAL
+    # Scales with DB size: 20G free but a 10G DB is only 2x -> CRITICAL.
+    assert check_tmp_headroom(20 * gb, 10 * gb, **kw).level is Level.CRITICAL
+    # Unmeasurable -> OK (never a false CRIT).
+    assert check_tmp_headroom(None, gb, **kw).level is Level.OK
+    assert check_tmp_headroom(5 * gb, 0, **kw).level is Level.OK
+    # CRITICAL message points at the /tmp fix.
+    assert "tmp" in check_tmp_headroom(3 * gb, gb, **kw).message.lower()
 
 
 def test_learning_drift_levels() -> None:

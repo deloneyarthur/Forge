@@ -33,6 +33,7 @@ from __future__ import annotations
 import enum
 import json
 import re
+import shutil
 import subprocess
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -294,6 +295,55 @@ def check_inbox_rejections(
     return HealthResult(label, Level.OK, "no recent inbox rejections")
 
 
+# The ranker-eval + investigate-live probes snapshot forge.db here (the live DB holds an RW
+# lock). Referencing the path to check headroom — not creating an insecure temp file (S108).
+_EVAL_SNAPSHOT_DIR = "/tmp"  # noqa: S108
+
+
+def check_tmp_headroom(
+    tmp_free_bytes: int | None,
+    db_size_bytes: int | None,
+    *,
+    warn_ratio: float,
+    critical_ratio: float,
+) -> HealthResult:
+    """Headroom in the temp dir for the forge.db snapshot the daily ranker-eval copies (D259).
+
+    `forge-ranker-eval` (and the investigate-live probes) read the live DB via a `cp` of
+    forge.db into the temp snapshot dir, because the live DB holds an intermittent RW lock.
+    If that dir lacks room for the ~6 GB copy the `cp` fails ('Disk quota exceeded'), the eval
+    fails, and the F3 / wf_p25 models silently stale — only surfacing when the model-freshness
+    check CRITs ~2 days later (the 2026-07-09 incident: stale 5.5 GB probe snapshots left in
+    the temp dir starved the eval's `cp`). This WARNs on the CAUSE (thin headroom) before the
+    eval breaks. Ratio to the DB size (not an absolute) so it stays valid as forge.db grows;
+    the incident failed at ~3.3x (a quota effect below the raw free space), hence generous
+    defaults.
+    """
+    label = "tmp_headroom"
+    if tmp_free_bytes is None or db_size_bytes is None or db_size_bytes <= 0:
+        return HealthResult(label, Level.OK, f"n/a ({_EVAL_SNAPSHOT_DIR} or forge.db unmeasured)")
+    ratio = tmp_free_bytes / db_size_bytes
+    free_g = tmp_free_bytes / 1e9
+    db_g = db_size_bytes / 1e9
+    if ratio < critical_ratio:
+        return HealthResult(
+            label,
+            Level.CRITICAL,
+            f"{_EVAL_SNAPSHOT_DIR} free {free_g:.1f}G is only {ratio:.1f}x forge.db "
+            f"({db_g:.1f}G) — the ranker-eval snapshot cp will fail; clear stale snapshots (D259)",
+        )
+    if ratio < warn_ratio:
+        return HealthResult(
+            label,
+            Level.WARN,
+            f"{_EVAL_SNAPSHOT_DIR} free {free_g:.1f}G ({ratio:.1f}x forge.db {db_g:.1f}G) getting "
+            f"tight — clear stale snapshots before the ranker-eval cp breaks (D259)",
+        )
+    return HealthResult(
+        label, Level.OK, f"{_EVAL_SNAPSHOT_DIR} free {free_g:.1f}G ({ratio:.1f}x forge.db)"
+    )
+
+
 # Drift floors for the learned lanes surfaced by `forge status`. CRITICAL = the lane
 # is clearly anti-predictive (worse than no model); the WARN floor = it has lost its
 # edge over the §6.2 composite. Conservative, to avoid crying wolf on a noisy small-n
@@ -483,6 +533,12 @@ def cmd_healthcheck(
     inbox_reject_critical: int = typer.Option(
         100, help="CRITICAL (skew) if this many were rejected in the window"
     ),
+    tmp_warn_ratio: float = typer.Option(
+        5.0, help="WARN if /tmp free is below this multiple of the forge.db size"
+    ),
+    tmp_critical_ratio: float = typer.Option(
+        3.5, help="CRITICAL if /tmp free is below this multiple of the forge.db size"
+    ),
 ) -> None:
     """Report daemon health (alive AND productive); exit 0/1/2 = OK/WARN/CRITICAL."""
     from crucible_contracts import CONTRACT_VERSION
@@ -549,6 +605,21 @@ def cmd_healthcheck(
             critical=inbox_reject_critical,
         )
     )
+    # D259: /tmp headroom for the ranker-eval's forge.db snapshot cp. WARNs on the CAUSE
+    # (thin /tmp) before the eval's cp fails and silently stales the models.
+    try:
+        _tmp_free: int | None = shutil.disk_usage(_EVAL_SNAPSHOT_DIR).free
+    except OSError:
+        _tmp_free = None
+    try:
+        _db_size: int | None = (data_root / "forge.db").stat().st_size
+    except OSError:
+        _db_size = None
+    results.append(
+        check_tmp_headroom(
+            _tmp_free, _db_size, warn_ratio=tmp_warn_ratio, critical_ratio=tmp_critical_ratio
+        )
+    )
     # Crucible's component_contributions export (D216): the Layer-1 decorrelated-
     # supply signal. Soft — absent is expected until the first promotion.
     results.append(
@@ -609,6 +680,7 @@ __all__ = [
     "check_loop_liveness",
     "check_service_active",
     "check_submission_progress",
+    "check_tmp_headroom",
     "cmd_healthcheck",
     "parse_forge_journal",
 ]

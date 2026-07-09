@@ -980,3 +980,23 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Files:** `grammar/custom_predicates.py` (veto table), `enumeration/indicator_thresholds.py` (dsj spec), `enumeration/search_space.py` (veto pool + SearchSpace field), `enumeration/sampler.py` (2nd-gate draw + C1 guard + share), `grammar/signal_horizon.py` (horizon entry), `tests/unit/test_enumeration/test_sampler.py` (`test_d258_*`: dormancy, active, scope), `docs/GRAMMAR.md` (R2 note), grammar v25 bump + archive. Relay: `PROMPT_CRUCIBLE_DSJ_V25_CONFIRMS.md`. Related: D077/D107/D131 (R2 gates), D254 (goldens process). Shipped with D257 under the single v25 bump.
 
 **STATUS: DEPLOYED + VERIFIED 2026-07-09T00:14:11Z (v25 live; dsj DORMANT on `registry_hash=1456268f3db3995e` — correct, the live registry lacks the id, so the veto draws no rng and cold-start is byte-identical). EMISSION gated on Crucible's registry-live ping (~1 day), which states the registry_hash for re-pinning the dsj-active goldens. Path B (dsj-as-primary) deferred to v26.**
+
+---
+
+## D259 — 2026-07-09 — INCIDENT: ranker-eval starved by full /tmp (58h stale models) → cleaned + retrained + healthcheck `tmp_headroom` guard; gate-tail prereg CONFIRMED
+
+**Spec section:** ops instrumentation (`cli/healthcheck_cmd.py`, D197/D246 lineage); the daily ranker-eval (`scripts/daily_ranker_eval.sh`, D191/D192).
+
+**Finalized gate-tail (the "flip it on" ask).** Resolved prereg `9063b405` → **confirmed**: flip-gate precondition MET at flip time (streak 5/3 at the 07-07T03:22Z flip; 7/3 now, mean Δ +0.351), post-deploy rewire Δ = +0.390 (the 07-07T12:19 checkpoint). Per the prereg's literal terms (post-deploy Δ>0; k≥3 was the *flip-gate* bar, not a resolution bar). Gate-tail stays live + kept (D255). Only 1 post-flip checkpoint exists because of the incident below.
+
+**The incident.** `forge healthcheck` was **CRITICAL — models 58h stale**. Root cause: `forge-ranker-eval` (daily 05:00, trains F3 + wf_p25 AND appends the rewire/drift checkpoints) had **failed every run since 07-07** on `cp: error writing '/tmp/…': Disk quota exceeded` — it snapshots the live forge.db to /tmp (the DB holds an RW lock) and /tmp was full. That is also why there were no 07-08/09 rewire checkpoints. **The /tmp bloat was self-inflicted: four 5.5 GB forge.db snapshots I left behind during the D255 ve probing** (ad-hoc `cp forge.db /tmp/…` with no cleanup trap). `PrivateTmp=no` on the eval service confirms it shares /tmp with those leftovers. The eval script itself is clean (`trap cleanup EXIT` removes its own snapshot on every path); the daemon was unaffected (models load fine; only training was blocked).
+
+**Fix.** Cleaned the 4 stale snapshots (/tmp 73%→37%, freed 22 GB) → `systemctl start forge-ranker-eval.service` to retrain immediately (the cp succeeds with room). Models refresh + the rewire clock resumes.
+
+**Prevention (the operator's pick — proactive over reactive).** New healthcheck `check_tmp_headroom`: `/tmp` free as a MULTIPLE of the forge.db size (ratio, so it scales as the DB grows), WARN below `--tmp-warn-ratio` (5×), CRITICAL below `--tmp-critical-ratio` (3.5×). Generous defaults because the incident failed at ~3.3× raw free (a quota effect below the physical free). Filesystem-only, no daemon restart (the CLI/timer picks it up). This alerts on the CAUSE (thin headroom) *before* the eval breaks, vs the `model` check that only CRITs ~2 days later on the *symptom*. New unit test `test_tmp_headroom_levels`; MANPAGE → twelve checks. (Considered but declined: a self-cleaning snapshot helper for manual probes — the eval already self-cleans, so the only gap is human discipline, which the alert now backstops.)
+
+**Process lesson (mine):** clean up large /tmp snapshots as I go — leaving them is what starved the eval. This check makes that failure loud instead of silent-for-2-days.
+
+**Files:** `src/forge/cli/healthcheck_cmd.py`, `tests/unit/test_cli/test_healthcheck.py`, `docs/MANPAGE.md`, `config/preregistrations.jsonl` (gate-tail resolve), `STATUS.md`, this entry. Related: D246 (inbox_rejections check), D252/D255 (gate-tail), D197 (healthcheck), D191/D192 (ranker-eval).
+
+**STATUS: healthcheck tmp_headroom check built + green (12 unit tests, ruff/mypy clean); /tmp cleaned; ranker-eval retrain triggered (verify model fresh + OVERALL back to OK). gate-tail prereg confirmed. Holdout prereg (61837dd2) still deferred (see the 07-09+ nudge).**

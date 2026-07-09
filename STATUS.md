@@ -1,6 +1,16 @@
 # Forge — Status
 
-## 2026-07-08 (latest) — v25 grammar DEPLOYED + VERIFIED 2026-07-09T00:14:11Z (D257 exit fix + D258 dsj veto + contracts 1.27.0 adopted). forge.service on v25, NRestarts=0, no errors.
+## 2026-07-09 (latest) — gate-tail prereg CONFIRMED (finalized) + fixed a CRITICAL: ranker-eval starved by a full /tmp (58h stale models) → cleaned/retrained + new healthcheck tmp_headroom guard (D259). [[D259]]
+
+**Operator: "it's 07-09, flip the gate-tail on" (= finalize it) → then "clean up so it doesn't recur" → chose the proactive /tmp-headroom healthcheck.**
+
+- **gate-tail finalized:** prereg `9063b405` → **confirmed** (flip-gate MET at flip time, 7/3; post-deploy rewire Δ +0.390). Gate-tail was already live on v25 (survived v24→v25) — nothing to deploy; this cements it.
+- **CRITICAL found + root-caused:** healthcheck was CRIT (models **58h stale**). The daily `forge-ranker-eval` had failed every run since 07-07 on `cp forge.db /tmp: Disk quota exceeded` — **/tmp was full of four 5.5G forge.db snapshots I left during the D255 ve probing** (my discipline gap; `PrivateTmp=no` = shared /tmp). That also explains the missing 07-08/09 rewire checkpoints.
+- **Fixed:** cleaned /tmp (73%→37%, +22G) → triggered the ranker-eval retrain (in progress; models refresh, rewire clock resumes). The eval script itself self-cleans (`trap … EXIT`); daemon was unaffected.
+- **Prevention (built):** healthcheck `tmp_headroom` — /tmp free as a ratio of forge.db size (WARN <5×, CRIT <3.5×, scales as the DB grows), alerts on the CAUSE before the eval breaks vs the `model` check that CRITs 2 days late on the symptom. 12 unit tests green, ruff/mypy clean, no daemon restart (CLI/timer picks it up). MANPAGE → twelve checks.
+- **Still open:** holdout prereg `61837dd2` (deferred; ~3 decided holdout on 07-07, needs days) — on the 07-09+ nudge with the ve-supply monitor.
+
+## 2026-07-08 — v25 grammar DEPLOYED + VERIFIED 2026-07-09T00:14:11Z (D257 exit fix + D258 dsj veto + contracts 1.27.0 adopted). forge.service on v25, NRestarts=0, no errors.
 
 **Two Crucible-driven changes + the folded contracts pin, one v25 enumeration-policy bump (ff-merged `v25-dsj-exit-fix` → main `0559239`; `rules:` text untouched):**
 - **D257 — exit fix (ACTIVE):** `zscore_reversion_exit` dropped from `mean_reversion`'s S5 set (inert pair exit; Crucible `FORGE_inert_pair_exits_2026-07-08`). Scope narrower than the handoff — `convergence_exit` was already relative_value-only; only the MR mis-scope needed fixing. Caveat logged: shifts share to `target_exit` (Crucible-flagged harmful) → "what replaces it" left OPEN pending their `exit_timestop_sweep`. Feedback-invalidation ask = no-op (Forge keys feedback on hypothesis, not exit-id). `_REGIME_GOLDEN_PRE` re-pinned (MR seq 11/14) after re-verifying none==empty inertness.
