@@ -999,4 +999,4 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 
 **Files:** `src/forge/cli/healthcheck_cmd.py`, `tests/unit/test_cli/test_healthcheck.py`, `docs/MANPAGE.md`, `config/preregistrations.jsonl` (gate-tail resolve), `STATUS.md`, this entry. Related: D246 (inbox_rejections check), D252/D255 (gate-tail), D197 (healthcheck), D191/D192 (ranker-eval).
 
-**STATUS: healthcheck tmp_headroom check built + green (12 unit tests, ruff/mypy clean); /tmp cleaned; ranker-eval retrain triggered (verify model fresh + OVERALL back to OK). gate-tail prereg confirmed. Holdout prereg (61837dd2) still deferred (see the 07-09+ nudge).**
+**STATUS: RESOLVED. Retrain completed 2026-07-09T22:35Z (exit 0) → model FRESH, the 58h-stale CRITICAL cleared; tmp_headroom OK (6.6x); healthcheck committed a51d374 (suite 1867 green). gate-tail prereg confirmed. Residual: a MARGINAL wf_p25 drift WARN (latest -0.002 vs +0.252 trailing — one noisy checkpoint on the weak-IC lane after the 2-day eval gap; barely over the 0.25 threshold; watch the 07-10 eval, don't act). Holdout prereg (61837dd2) still deferred (07-09+ nudge).**
