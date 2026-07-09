@@ -957,7 +957,7 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 
 **Files:** `grammar/custom_predicates.py` (_S5 table), `tests/unit/test_enumeration/test_sampler.py` (new `test_d257_*` invariant + golden re-pin), `docs/GRAMMAR.md` (MR exit row), grammar v25 bump + archive. Related: D071 (S5 schema), D236 (exit-drop precedent). Shipped with D258 under the single v25 bump.
 
-**STATUS: BUILT in ../Forge-build-v25 (branch v25-dsj-exit-fix), suite green. DEPLOY PENDING — operator-gated, and blocked on the pre-existing 1.26.0→1.27.0 contracts pin (the deploy suite gate fails on `test_expected_contract_version_matches_installed` until the pin is bumped; unrelated to this change).**
+**STATUS: DEPLOYED + VERIFIED 2026-07-09T00:14:11Z (ff-merge `0559239`; forge.service on grammar_version=v25, NRestarts=0, no traceback / SchemaVersionMismatch). `_REGIME_GOLDEN_PRE` moved as predicted; preflight ran 1866 green. Shipped with D258 + the folded contracts 1.27.0 pin under the single v25 bump.**
 
 ---
 
@@ -979,4 +979,4 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 
 **Files:** `grammar/custom_predicates.py` (veto table), `enumeration/indicator_thresholds.py` (dsj spec), `enumeration/search_space.py` (veto pool + SearchSpace field), `enumeration/sampler.py` (2nd-gate draw + C1 guard + share), `grammar/signal_horizon.py` (horizon entry), `tests/unit/test_enumeration/test_sampler.py` (`test_d258_*`: dormancy, active, scope), `docs/GRAMMAR.md` (R2 note), grammar v25 bump + archive. Relay: `PROMPT_CRUCIBLE_DSJ_V25_CONFIRMS.md`. Related: D077/D107/D131 (R2 gates), D254 (goldens process). Shipped with D257 under the single v25 bump.
 
-**STATUS: BUILT in ../Forge-build-v25, suite green (dsj dormant on the current registry). EMISSION gated on Crucible's registry-live ping (~1 day) + operator deploy. Deploy blocked on the same 1.26→1.27 contracts pin as D257.**
+**STATUS: DEPLOYED + VERIFIED 2026-07-09T00:14:11Z (v25 live; dsj DORMANT on `registry_hash=1456268f3db3995e` — correct, the live registry lacks the id, so the veto draws no rng and cold-start is byte-identical). EMISSION gated on Crucible's registry-live ping (~1 day), which states the registry_hash for re-pinning the dsj-active goldens. Path B (dsj-as-primary) deferred to v26.**
