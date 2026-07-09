@@ -324,6 +324,22 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=(25.0, 75.0),  # [25, 50, 75] per PTS calibration
         op_regime="<",  # fire when rv_rank < threshold (vol is cheap)
     ),
+    # ----- days_since_jump event-frequency veto (D258, v25; Crucible
+    # FORGE_days_since_jump_indicator_2026-07-08, confirmed against the snapshot
+    # 2026-07-08) -----
+    # Trading days since the underlying's last |c2c return| >= 0.05 (default),
+    # saturated at window=252. A trend regime VETO: enter only while the name has
+    # jumped recently (op '<' — fire when days_since_jump < threshold), excluding
+    # "dead tape" where the champion's theta-bleed losses cluster. Regime-only
+    # (not a directional signal). Continuous sweep of the confirmed FLAT plateau
+    # 30-65 td (probe arms 30/45/65, proxy-p25 0.370/0.372/0.394; sweet spot ~45)
+    # — mirrors the continuous day-count gate `days_to_fomc`. Integer-valued
+    # indicator, so a fractional threshold (e.g. 47.3) reads as "<= 47".
+    "days_since_jump": IndicatorThresholdSpec(
+        directional_range=None,  # regime-only veto; never a directional signal
+        regime_range=(30.0, 65.0),  # trading days; confirmed flat plateau
+        op_regime="<",  # fire (enter) when days_since_jump < threshold = jumped recently
+    ),
     # ----- D131 (v17) activations — Crucible 2026-06-10 indicator batch -----
     # iv_minus_rv: per-name ATM IV minus trailing 21d realized vol, annualized
     # decimals (Crucible as-built: AAPL 2024 median +0.01, range -0.14..+0.25).

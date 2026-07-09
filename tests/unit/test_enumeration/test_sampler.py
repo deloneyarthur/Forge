@@ -232,6 +232,34 @@ def test_s5_required_exits_present_and_forbidden_absent(
             )
 
 
+# ---------------------------------------------------------------------------
+# D257 — pair-context exits are inert on non-pairs configs (Crucible handoff
+# FORGE_inert_pair_exits_2026-07-08). zscore_reversion_exit / convergence_exit
+# read ctx.pair_spread_zscore, populated ONLY by the pairs backtester
+# (relative_value). On any other hypothesis they can never fire — dead weight.
+# ---------------------------------------------------------------------------
+_PAIR_CONTEXT_EXIT_IDS = frozenset({"zscore_reversion_exit", "convergence_exit"})
+
+
+def test_d257_pair_context_exits_only_on_relative_value(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D257: the two pair-spread exits must be emitted ONLY under relative_value
+    (the pairs template). On single-name / xsect hypotheses they are structurally
+    inert (0 firings), so the grammar must not declare them there."""
+    seen_non_pairs = 0
+    for seed in range(300):
+        cfg = _sample(grammar, registry, seed=seed)
+        if cfg.hypothesis != "relative_value":
+            seen_non_pairs += 1
+            inert = {e.id for e in cfg.exits} & _PAIR_CONTEXT_EXIT_IDS
+            assert not inert, (
+                f"inert pair-context exit(s) {sorted(inert)} declared on "
+                f"hypothesis={cfg.hypothesis} at seed={seed}"
+            )
+    assert seen_non_pairs > 0, "no non-pairs configs sampled — test is vacuous"
+
+
 def test_p2_selector_dte_in_entry_window(grammar: Grammar, registry: RegistrySnapshot) -> None:
     for seed in range(30):
         cfg = _sample(grammar, registry, seed=seed)
@@ -1895,6 +1923,11 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # Golden hashes from the PRE-refactor sampler (plain enumerate, seed 7777) — the
 # regime draw fires for every config, so this pins that adding the learned param
 # preserves the D150/uniform rng sequence when the map is absent (hard rule #6).
+# D257 (v25): re-pinned. Dropping zscore_reversion_exit from mean_reversion's
+# exit set (an inert pair exit) changes the post-exit rng draw for MR configs, so
+# the config_hash moved at seq positions 11 & 14 (both MR). The flag-inertness
+# invariant (none_run == empty_run) was re-verified under v25 before re-pinning —
+# only the absolute sequence moved, hard rule #6 intact (version bump licenses it).
 _REGIME_GOLDEN_PRE = [
     "f228c547d273330f",
     "5e7cd4e85a465d62",
@@ -1907,10 +1940,10 @@ _REGIME_GOLDEN_PRE = [
     "f5f0403b180e1d3b",
     "e7e044f5d80304f4",
     "eee5cb3fac2259f8",
-    "eccffb9cb27f84bf",
+    "c4e866e656331847",
     "420f6c187024f808",
     "2e4054a200aca442",
-    "0413b2bd59839082",
+    "db9c78ca7e03bc15",
 ]
 
 
@@ -2027,3 +2060,83 @@ def test_regime_gate_yield_tilts_regime_draw(grammar: Grammar, registry: Registr
     tilted = _regime_dist(weights)
     assert tilted.get("adx", 0.0) < base.get("adx", 1.0) - 0.15  # adx crushed
     assert tilted.get("hurst", 0.0) > base.get("hurst", 0.0) + 0.1  # hurst favoured
+
+
+# ---------------------------------------------------------------------------
+# D258 (v25) — days_since_jump event-frequency VETO (Crucible
+# FORGE_days_since_jump_indicator_2026-07-08). An OPTIONAL SECOND regime gate
+# that ANDs on top of the mandatory trend-strength gate; trend_continuation only;
+# DORMANT until the registry serves the indicator.
+# ---------------------------------------------------------------------------
+def _v25_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """Fixture registry + the v25 days_since_jump veto indicator (family
+    volatility, version 3, rank-per-name coherent) — the object Forge reads once
+    Crucible publishes the snapshot serving dsj."""
+    dsj = IndicatorMetadata(
+        id="days_since_jump",
+        version=3,
+        family="volatility",
+        lookback=252,
+        params_schema={},
+        rank_per_name_coherent=True,
+        market_wide_by_design=False,
+    )
+    return base.model_copy(update={"indicators": (*base.indicators, dsj)})
+
+
+def test_d258_dsj_veto_dormant_without_registry_indicator(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Byte-identity's precondition: on a registry WITHOUT days_since_jump the veto
+    pool is empty, so no config carries the second gate and `days_since_jump` is
+    never emitted (complements the cold-start goldens)."""
+    for seed in range(200):
+        cfg = _sample(grammar, registry, seed=seed)
+        ids = {ind for s in cfg.signals for ind in s.indicators}
+        assert "days_since_jump" not in ids, f"dsj emitted while dormant at seed={seed}"
+        assert not any(s.id == "sig_regime_veto" for s in cfg.signals)
+
+
+def test_d258_dsj_veto_active_on_trend_and_grammar_valid(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """With the registry serving dsj, some trend_continuation configs carry a
+    SECOND regime gate = days_since_jump (op '<', threshold on the 30-65 plateau)
+    ANDed on top of the trend-strength gate. Every such config is grammar-valid:
+    R2 is still satisfied by the primary gate, and C1 holds — dsj (volatility)
+    never co-occurs with rv_rank/vol_regime (also volatility)."""
+    reg = _v25_registry(registry)
+    space = build_search_space(grammar, reg)
+    veto_seen = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="trend_continuation")
+        regime_sigs = [s for s in cfg.signals if s.role == "regime_filter"]
+        veto_sigs = [s for s in regime_sigs if s.indicators == ("days_since_jump",)]
+        if not veto_sigs:
+            continue
+        veto_seen += 1
+        assert validate(cfg, grammar, reg).valid, f"dsj-veto config invalid at seed={seed}"
+        # the veto is ADDITIONAL — a trend-strength primary gate is still present
+        assert len(regime_sigs) == 2, f"expected 2 regime gates at seed={seed}"
+        primary = next(s for s in regime_sigs if s.indicators != ("days_since_jump",))
+        assert primary.indicators[0] in _R2_TREND_CONTINUATION_REGIME_INDICATORS
+        # C1: dsj never stacks on another volatility-family gate
+        assert primary.indicators[0] not in {"rv_rank", "vol_regime"}, cfg.name
+        veto_params = veto_sigs[0].params
+        assert veto_params["op"] == "<", cfg.name
+        assert 30.0 <= veto_params["threshold"] <= 65.0, veto_params
+    assert veto_seen > 0, "no dsj-veto config produced under the active registry"
+
+
+def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Scope: the veto pool is trend_continuation-only, so mean_reversion (and
+    every other hypothesis) never carries days_since_jump even when the registry
+    serves it."""
+    reg = _v25_registry(registry)
+    space = build_search_space(grammar, reg)
+    for seed in range(200):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
+        ids = {ind for s in cfg.signals for ind in s.indicators}
+        assert "days_since_jump" not in ids, f"dsj leaked onto mean_reversion at seed={seed}"

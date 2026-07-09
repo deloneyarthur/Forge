@@ -140,7 +140,13 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # signal-quality handoff: +sma_slope/+ad_slope (percentile-only), prune
     # returns_12m_skip1/macd/ema_cross/supertrend. Threshold+horizon tables only;
     # the 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v24"  # type: ignore[attr-defined]
+    # D254 bumped v23 -> v24 (MR slice: rv_rank/vol_regime R1 widening + folds the
+    # deferred D204 R2 evidence_to_relax metadata fix. rules text unchanged).
+    # D257+D258 bumped v24 -> v25 (two enumeration-policy changes: D257 drops the
+    # inert zscore_reversion_exit from mean_reversion's S5 set; D258 adds the
+    # days_since_jump volatility veto as an optional 2nd trend regime gate, dormant
+    # until the registry serves it. The 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v25"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

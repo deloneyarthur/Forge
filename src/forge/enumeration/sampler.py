@@ -181,6 +181,18 @@ _RANK_K_CHOICES: tuple[int, ...] = (5, 10, 20)
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 
+# D258 (v25) — days_since_jump event-frequency VETO knobs. Share of eligible
+# (non-volatility-primary) trend_continuation configs that carry the optional
+# second regime gate. ~0.5 mints both veto and non-veto arms so the honest
+# campaign compares them; feedback-tunable in a later increment. Consumed ONLY
+# when the registry serves days_since_jump (veto pool non-empty), so the dormant
+# cold path draws no rng and stays byte-identical (hard rule #6).
+_DSJ_VETO_SHARE: float = 0.5
+# The veto's registry family (Crucible confirm 2026-07-08). C1 forbids two gates
+# of one family in a config, so the sampler skips the veto when the primary gate
+# is already this family (dsj vs rv_rank / vol_regime).
+_DSJ_VETO_FAMILY: str = "volatility"
+
 # Cohort-yield exploration band (§3 of Crucible's 2026-06-17 yield-map refresh).
 # When the cohort draw is yield-driven (`cohort_yield_weights` supplied), clamp
 # P(cross_sectional_rank) to [floor, 1 - floor] so neither cohort is ever starved
@@ -426,6 +438,17 @@ def _cohort_xsect_probability(
     if rank_combiner_share:
         return rank_combiner_share.get(hypothesis, 0.0)
     return 0.0
+
+
+def _config_has_veto_family_indicator(signals: list[SignalSpec], space: SearchSpace) -> bool:
+    """§3.5 C1 guard for the D258 veto: True iff ANY indicator already in the
+    config belongs to the veto's family (volatility) — the primary regime gate
+    (rv_rank / vol_regime), the vol_target X1 chain (realized_vol), or any other
+    volatility signal. Adding the volatility-family veto then would put two
+    same-family indicators in one config (C1 reject), so the sampler skips it —
+    staying valid-by-construction instead of minting configs C1 would filter out."""
+    vol_ids = set(space.indicators_by_family.get(_DSJ_VETO_FAMILY, ()))
+    return any(ind in vol_ids for sig in signals for ind in sig.indicators)
 
 
 def sample_config(
@@ -708,6 +731,35 @@ def sample_config(
             direction_mode=rng.choice(_RANK_DIRECTION_MODES),  # type: ignore[arg-type]
         )
         underlying = None
+
+    # D258 (v25) — days_since_jump event-frequency VETO: an OPTIONAL SECOND regime
+    # gate ANDed on top of the mandatory trend-strength gate (§3.5 R2 + S3),
+    # trend_continuation only. Crucible FORGE_days_since_jump_indicator_2026-07-08
+    # (endorsed 2026-07-08): vetoes "dead tape" (no >=5% move for N+ td) where the
+    # champion's theta-bleed losses cluster. DORMANT until the registry serves
+    # days_since_jump — the veto pool is empty pre-publish, so the `if veto_pool`
+    # guard short-circuits BEFORE any rng.random() (byte-identical cold path, hard
+    # rule #6), exactly like the H1 rank-combiner guard above. C1-safe by
+    # construction (skipped when ANY existing signal is volatility-family — the
+    # primary regime gate rv_rank/vol_regime OR the vol_target realized_vol chain
+    # — since dsj is volatility). Drawn LAST so activation shifts only the added
+    # signal, not the selector/sizer/exit/underlying/combiner draws.
+    veto_pool = space.regime_veto_indicators_by_hypothesis.get(hypothesis, ())
+    if (
+        veto_pool
+        and not _config_has_veto_family_indicator(signals, space)
+        and rng.random() < _DSJ_VETO_SHARE
+    ):
+        veto_id = rng.choice(veto_pool)
+        signals.append(
+            SignalSpec(
+                id="sig_regime_veto",
+                type="threshold",
+                role="regime_filter",
+                indicators=(veto_id,),
+                params=sample_threshold_params(veto_id, "regime_filter", rng),
+            )
+        )
 
     return StrategyConfig(
         name=config_name,

@@ -101,7 +101,12 @@ from crucible_contracts import (
 # today (tolerance only fires on extra_forbidden; determinism paths unaffected — no model change).
 # The RUNNING daemon must restart onto 1.26.0 to get the tolerant loaders (this pin's deploy DOES
 # restart, unlike D249's deferral) — safe + byte-identical (models unchanged since 1.24.0).
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.26.0"
+# 1.27.0 (2026-07-08, Crucible DSR Q4): adds two OPTIONAL RunResult fields — `measurement_basis`
+# (standard-window vs fullhist-refit, killing the alpha-budget basis-trap class) and
+# `fullhist_refit_of`. Purely additive; Forge parses no model that breaks, and the 1.25/1.26
+# forward-compat tolerance covers the new keys. Adopted (not just tolerated) so Forge↔Crucible
+# run on the same contracts version; folded into the v25 deploy (D257/D258) per operator.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.27.0"
 
 
 def check_contracts_version() -> str:

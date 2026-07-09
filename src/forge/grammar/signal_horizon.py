@@ -86,6 +86,11 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     "adx": 14,  # ADX(14)
     "hurst": 100,  # Hurst exponent needs a long window
     "rv_rank": 252,  # realized-vol rank over 1y
+    # D258 (v25): days_since_jump saturates at a 252-td window (min_bars 253), so
+    # it mirrors rv_rank's 1y class. S4 reads ONLY the directional signal's
+    # horizon (not regime gates), so this value does not constrain which DTE
+    # bucket may carry the veto — it attaches on the champion's short holds too.
+    "days_since_jump": 252,
     # ----- volatility family (regime / X1 chain) -----
     "realized_vol": 20,  # 21-day realized vol
     "parkinson_vol": 20,

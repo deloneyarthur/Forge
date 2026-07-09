@@ -938,3 +938,45 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Files:** `deploy/systemd/forge.service`, `config/preregistrations.jsonl`, `STATUS.md`, this entry. Related: D252 (gate-tail — the reason this matters now), D216 (ve supply / enumeration floor), D208 (prereg), the learned-systems review (the "censored loop" gap this closes).
 
 **STATUS: DEPLOYED + VERIFIED 2026-07-07T22:54:22Z (PID 2404500). Journal shows the full chain — f3_ranker ACTIVE → GATE-TAIL ACTIVE → "exploration_holdout: 10 of 200 submitted (frac=0.050, seeded bypass of the ranker)" — so the batch is 190 gate-tail-ranked + 10 random holdout; flip reached the iteration (D185). healthcheck OVERALL=OK. NOTE: the deploy's uncontended suite surfaced 2 PRE-EXISTING v24 stale goldens (cohort/regime cold-start byte-identity, D254 fallout, NOT this change) — regenerated in a separate commit after verifying flag-inertness (none==empty) still holds; full suite 1862 green. Resolve prereg 61837dd2 on the post-flip cohort (ranked vs holdout component-rate). The teed-up lever program is now COMPLETE.**
+
+---
+
+## D257 — 2026-07-08 — v25: zscore_reversion_exit DROPPED from mean_reversion (inert pair exit; Crucible autopsy)
+
+**Spec section:** §3.5 S5 (exit framework) — enumeration-policy bump (`grammar-change.md` #2, `rules:` text untouched). Source: Crucible handoff `FORGE_inert_pair_exits_2026-07-08.md`.
+
+**The defect.** `zscore_reversion_exit` (and `convergence_exit`) read `ctx.pair_spread_zscore`, populated ONLY by the pairs backtester (`relative_value`). On single-name / xsect templates that field is None every bar, so the exit is STRUCTURALLY INERT — 0 firings, no threshold makes it fire. Crucible's trade autopsy: the top honest-pool MR component (`81178ab6e7…`, cpcv-p25 2.166) declared it with 0 firings in 314 trades; its positions closed by the monthly `overlay_roll` instead.
+
+**Scope (narrower than the handoff's generic framing).** In Forge's `_S5_HYPOTHESIS_EXITS`, `convergence_exit` was ALREADY relative_value-only (no change). Only `zscore_reversion_exit` was mis-scoped — present in BOTH `relative_value` (correct) and `mean_reversion.required_from_set` (inert). Fix = drop it from mean_reversion only → `(time_stop, target_exit)`. It stays valid on relative_value.
+
+**⚠️ Open caveat (target_exit share).** Removing it shifts its ~1/3 share onto `target_exit`, which Crucible's SAME handoff flags as HURTING the MR book (D333, "breaks the book" — caps the convex right tail). The "what should MR declare instead" question is left OPEN pending Crucible's `probe_results/exit_timestop_sweep.json` (trailing-stop + time_stop sweeps). This entry ships the correctness fix only; a follow-up may revisit MR's exit distribution on that evidence.
+
+**Feedback invalidation (handoff ask #2) = no-op.** Forge's feedback keys on HYPOTHESIS, never exit-id (`rejection_weights.compute_hypothesis_*`), so there are no per-exit learned weights to null; the MR hypothesis reward stayed honest (the inert-exit configs really did trade via the roll).
+
+**Goldens.** The exit-set change (3→2 options) alters the post-exit rng draw for MR configs, so `_REGIME_GOLDEN_PRE` moved at seq positions 11 & 14 (both MR). Re-pinned after re-verifying the flag-inertness invariant (`none_run == empty_run`) under v25 — only the absolute sequence moved, hard rule #6 intact (the v25 bump licenses it). Cohort golden unaffected.
+
+**Files:** `grammar/custom_predicates.py` (_S5 table), `tests/unit/test_enumeration/test_sampler.py` (new `test_d257_*` invariant + golden re-pin), `docs/GRAMMAR.md` (MR exit row), grammar v25 bump + archive. Related: D071 (S5 schema), D236 (exit-drop precedent). Shipped with D258 under the single v25 bump.
+
+**STATUS: BUILT in ../Forge-build-v25 (branch v25-dsj-exit-fix), suite green. DEPLOY PENDING — operator-gated, and blocked on the pre-existing 1.26.0→1.27.0 contracts pin (the deploy suite gate fails on `test_expected_contract_version_matches_installed` until the pin is bumped; unrelated to this change).**
+
+---
+
+## D258 — 2026-07-08 — v25: days_since_jump event-frequency VETO — optional 2nd regime gate (Crucible; dormant-until-registry)
+
+**Spec section:** §3.5 S3 (≥1 regime gate) + R2 — enumeration-policy bump (`rules:` untouched). Source: Crucible handoffs `FORGE_days_since_jump_indicator_2026-07-08.md` + `FORGE_dsj_v25_CONFIRMS_REPLY_2026-07-08.md` (all 3 confirms verified against their snapshot build).
+
+**What.** `days_since_jump` = trading days since the underlying's last |c2c return| ≥ 0.05, saturated at 252. Wired as an OPTIONAL SECOND `regime_filter` on `trend_continuation` (single-name + xsect), op `<`, threshold on the confirmed flat plateau 30–65 td. It VETOES "dead tape" (no ≥5% move for N+ td) where the trend champion's theta-bleed losses cluster — a center-for-tail trade the worst-quartile gate rewards (engine probe: maxDD halves, CPCV-proxy p25 2.5×; known melt-up blindspot documented in the handoff).
+
+**Structural: it required a 2nd regime gate (Forge emitted one).** The validated champion form is dsj ANDed on top of the hurst/adx trend gate. §3.5 R2 requires a trend-strength gate (dsj does NOT satisfy R2), and S3 permits "≥ 1" — so dsj must be ADDITIVE, not a replacement. Forge's sampler emitted exactly one `sig_regime`; the validators (R2, C1) were already plural-aware, so the change is localized to the sampler: an optional 2nd `sig_regime` drawn LAST.
+
+**Confirms (Crucible, verified against `build_registry_snapshot()`):** family = `volatility` (so C1 gives the dsj-XOR-`rv_rank`/`vol_regime` exclusion automatically); version = 3 (`min_bars_required` 253); threshold set [30,45,65] = their probe arms → Forge sweeps the plateau continuously via `regime_range=(30,65)`, matching the day-count gate `days_to_fomc`.
+
+**Dormant-until-registry (byte-identical cold path).** The veto pool intersects `_R2_TREND_VOLATILITY_VETO_INDICATORS = (days_since_jump,)` with `registry_ids`, so it is EMPTY until Crucible publishes the snapshot serving dsj. The sampler's `if veto_pool` guard then short-circuits BEFORE any `rng.random()` (the H1 rank-combiner pattern) → zero rng consumed, cold-start byte-identical (hard rule #6; verified — existing goldens unchanged after the wiring). When the registry serves it, registry_hash rolls (a legitimate sequence change) and the dsj-active goldens get re-pinned against Crucible's stated hash on their ping (~1 day).
+
+**C1-safe by construction.** The veto is added only when NO existing signal is volatility-family — the primary regime gate (rv_rank/vol_regime) OR the vol_target X1 chain (realized_vol) — since dsj is volatility. (A first-cut guard checked only the regime gate; `test_d258_*` caught the realized_vol-chain collision.) `_DSJ_VETO_SHARE=0.5` mints both veto and non-veto arms so the honest campaign compares them; feedback-tunable later.
+
+**Path B deferred to v26.** Crucible's `dsj_swap` research arm (dsj REPLACING the vol-level gate) is in their runner; if it wins, that is the evidence for a v26 arm where dsj competes as the PRIMARY volatility-slot gate. Nothing for Forge now.
+
+**Files:** `grammar/custom_predicates.py` (veto table), `enumeration/indicator_thresholds.py` (dsj spec), `enumeration/search_space.py` (veto pool + SearchSpace field), `enumeration/sampler.py` (2nd-gate draw + C1 guard + share), `grammar/signal_horizon.py` (horizon entry), `tests/unit/test_enumeration/test_sampler.py` (`test_d258_*`: dormancy, active, scope), `docs/GRAMMAR.md` (R2 note), grammar v25 bump + archive. Relay: `PROMPT_CRUCIBLE_DSJ_V25_CONFIRMS.md`. Related: D077/D107/D131 (R2 gates), D254 (goldens process). Shipped with D257 under the single v25 bump.
+
+**STATUS: BUILT in ../Forge-build-v25, suite green (dsj dormant on the current registry). EMISSION gated on Crucible's registry-live ping (~1 day) + operator deploy. Deploy blocked on the same 1.26→1.27 contracts pin as D257.**

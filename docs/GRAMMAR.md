@@ -98,7 +98,7 @@ is a "foreign" exit and rejects.
 | Hypothesis | required_always | required_from_set (pick 1) | optional_additions | forbidden |
 |---|---|---|---|---|
 | `trend_continuation` | — | `trailing_atr` / `chandelier_exit` | `time_stop` | `hard_profit_target` |
-| `mean_reversion` | — | `time_stop` / `target_exit` / `zscore_reversion_exit` | `iv_crush_exit` | — |
+| `mean_reversion` | — | `time_stop` / `target_exit` | `iv_crush_exit` | — |
 | `regime_arbitrage` | — | `regime_flip_exit` | `time_stop` | — |
 | `relative_value` | — | `convergence_exit` / `zscore_reversion_exit` | `time_stop` | — |
 | `volatility_event` | `iv_crush_exit`, `event_passed_exit` | — | `time_stop` | — |
@@ -285,6 +285,8 @@ The trend overrides widen the UPPER edge only: systematically buying low-delta/O
 **Cost.** Medium. Excludes trend strategies without an explicit regime filter from the accepted set.
 
 **Evidence to relax.** Promoted trend strategies that use a regime gate outside `{adx, hurst, rv_rank, gamma_flip_distance_pct, market_state}`. (Fired once: the v17 `market_state` admission above.)
+
+**v25 (D258) — optional volatility veto (`days_since_jump`).** In addition to the mandatory trend-strength gate above, a `trend_continuation` config may carry an OPTIONAL SECOND `regime_filter` gate: `days_since_jump` (family `volatility`, `op: "<"`, threshold on the 30–65 trading-day plateau). It vetoes "dead tape" — names with no ≥5% move for N+ days, where the trend champion's theta-bleed losses cluster (Crucible `FORGE_days_since_jump_indicator_2026-07-08`). §3.5 S3 permits more than one regime gate, so R2 stays satisfied by the primary gate; and because it is `volatility` family, C1 keeps `days_since_jump` mutually exclusive with the volatility-level gates (`rv_rank` / `vol_regime`) — a config picks the frequency veto OR a level gate, never both. It is **not** a member of R2's accepted set (it does not satisfy R2 on its own), and it is emitted only when the registry serves the id (dormant otherwise).
 
 ### R3: Volatility-event strategies require event-proximity gate
 

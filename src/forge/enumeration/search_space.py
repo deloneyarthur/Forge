@@ -42,6 +42,7 @@ from forge.grammar.custom_predicates import (
     _R1_RV_RANK_REGIME_INDICATOR,
     _R1_VOL_REGIME_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
+    _R2_TREND_VOLATILITY_VETO_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
     _S5_HYPOTHESIS_EXITS,
     _X1_VOL_TARGET_INDICATOR,
@@ -176,6 +177,11 @@ class SearchSpace:
     indicators_by_family: Mapping[str, tuple[str, ...]]
     directional_indicators_by_hypothesis: Mapping[str, tuple[str, ...]]
     regime_indicators_by_hypothesis: Mapping[str, tuple[str, ...]]
+    # D258 (v25): optional volatility-family VETO gates that AND on top of the
+    # primary regime gate (dsj event-frequency veto, trend_continuation only,
+    # §3.5 S3). Empty per hypothesis until the registry serves the id, so the
+    # sampler's veto draw is skipped entirely → byte-identical cold path.
+    regime_veto_indicators_by_hypothesis: Mapping[str, tuple[str, ...]]
 
     # Sparse: only modes WITH a §3.5 X-rule requirement that the current
     # registry can satisfy. ``samplable_sizer_modes`` is the filtered set
@@ -232,6 +238,17 @@ def build_search_space(
     samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
     risk_pct_range = _resolve_p4_risk_pct_range(grammar)
 
+    # D258 (v25): the volatility-family veto pool (dsj), intersected with
+    # registry_ids so it is EMPTY until the registry serves the id — the sampler's
+    # `if veto_pool` guard then consumes no rng (byte-identical, hard rule #6).
+    regime_veto = MappingProxyType(
+        {
+            "trend_continuation": tuple(
+                sorted(set(_R2_TREND_VOLATILITY_VETO_INDICATORS) & registry_ids)
+            ),
+        }
+    )
+
     # D071: derive new schema fields from _S5_HYPOTHESIS_EXITS.
     s5_required_always = MappingProxyType(
         {h: _S5_HYPOTHESIS_EXITS[h]["required_always"] for h in _HYPOTHESES},
@@ -265,6 +282,7 @@ def build_search_space(
         indicators_by_family=indicators_by_family,
         directional_indicators_by_hypothesis=directional,
         regime_indicators_by_hypothesis=regime,
+        regime_veto_indicators_by_hypothesis=regime_veto,
         sizer_required_indicator=sizer_req,
         dte_entry_window_by_bucket=MappingProxyType(dict(_P2_ENTRY_DTE)),
         delta_band_by_bucket=MappingProxyType(dict(_P3_DELTA_BAND)),

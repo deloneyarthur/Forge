@@ -97,11 +97,22 @@ _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
     },
     "mean_reversion": {
         "required_always": (),
-        # D071-final (v3 bump): 3-way choice among MR-style exits.
+        # D071-final (v3 bump): choice among MR-style exits.
+        # D257 (v25): zscore_reversion_exit DROPPED. It is a pair-trading exit —
+        # its should_exit reads ctx.pair_spread_zscore, which ONLY the pairs
+        # backtester (relative_value) populates. On single-name / xsect MR it is
+        # None every bar → the exit can never fire (structurally inert, not
+        # parameter-dependent). Source: Crucible handoff
+        # FORGE_inert_pair_exits_2026-07-08 (the top honest-pool MR champion
+        # declared it with 0 firings in 314 trades). It stays valid on
+        # relative_value below (pairs context is populated there).
+        # CAVEAT (D257): removing it shifts its ~1/3 share onto target_exit,
+        # which Crucible flagged as HURTING the MR book (D333, "breaks the
+        # book"). The "what should MR declare instead" question is left OPEN
+        # pending Crucible's probe_results/exit_timestop_sweep.json.
         "required_from_set": (
             "time_stop",
             "target_exit",
-            "zscore_reversion_exit",
         ),
         # D071-final (v3 bump): iv_crush_exit as optional for MR strategies
         # that happen to fire during high-IV regimes.
@@ -258,6 +269,17 @@ _R2_TREND_CONTINUATION_REGIME_INDICATORS = (
     # correct for a market gate).
     "market_state",
 )
+# §3.5 S3 (D258, v25) — days_since_jump event-frequency VETO. NOT a member of the
+# R2 trend-strength set above: dsj does NOT satisfy R2 (it is not a trend-strength
+# read). It is an ADDITIONAL regime gate that ANDs on top of the mandatory
+# trend-strength gate — §3.5 S3 permits ">= 1" regime gate, and R2 is still
+# satisfied by the primary gate. Family `volatility` (Crucible confirm
+# 2026-07-08), so C1 keeps it mutually exclusive with rv_rank/vol_regime; the
+# sampler only adds it when the primary gate is non-volatility (C1-safe by
+# construction). trend_continuation only (Crucible evidence:
+# FORGE_days_since_jump_indicator_2026-07-08). Empty in the search space until the
+# registry serves the id → dormant + byte-identical cold path (hard rule #6).
+_R2_TREND_VOLATILITY_VETO_INDICATORS = ("days_since_jump",)
 # T1.4 (PROMPT_5_FORGE_V1_1_REVISED, grammar v2): expanded from
 # (days_to_earnings, days_to_fomc) to include macro-event indicators
 # (days_to_cpi, days_to_nfp, days_to_opex) that Crucible Prompt 6 added
