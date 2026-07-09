@@ -1,6 +1,16 @@
 # Forge — Status
 
-## 2026-07-09 (latest) — gate-tail prereg CONFIRMED (finalized) + fixed a CRITICAL: ranker-eval starved by a full /tmp (58h stale models) → cleaned/retrained + new healthcheck tmp_headroom guard (D259). [[D259]]
+## 2026-07-09 (latest) — ranker-eval slowness ROOT-FIXED: vectorized the learned-model trainer with numpy (D260). Verdict IRLS on 250k×106 was ~15 min / 15 G pure-Python single-core; now ~18 s, fp-identical models. [[D260]]
+
+**Operator: "ranker-eval is slow" → profiled it → the cost was the pure-Python fits, not IO/features.**
+
+- **Root cause:** the honest era grew to **N=250,533 rows × 106 features**; the pure-Python Newton-IRLS Hessian is O(N·d²) ≈ 14 B multiply-adds/train. D132 chose pure Python but sized it for a **10k-row window** that `build_dataset` never enforced (25× past premise). `build_dataset` itself is only ~20 s — never the bottleneck.
+- **Fix (D260):** numpy-vectorized `_fit_irls` / `_solve_ridge` / `_standardize_design` (linalg only, no RNG — rule-#8-clean). **Scoring untouched → daemon byte-identical.** Same math: old-vs-new on a real 251k snapshot = `max|Δcoef|` 5.6e-13 (verdict) / 9.7e-10 (robustness), metrics identical to 11-13 sig figs.
+- **Timing:** full-frame fits **17.6 s (verdict) + 2.6 s (robustness)** vs ~15-18 min pure-Python → the eval's 21-min CPU should drop to ~1 min. Also 15 G → ~0.3 G RAM (ndarray vs list-of-lists).
+- **Deploy:** training-only; **no daemon restart** (only the eval trains; daemon scores). numpy added to venv (`pyproject.toml`); next 05:00 eval picks up the fast path. Suite **1866 green** (lone red = concurrent contracts **1.28.0** ivol bump vs 1.27.0 pin — minor, no runtime halt, operator's work — NOT touched).
+- **Watch:** confirm the next `forge-ranker-eval` CPU/wall collapses as predicted; the 07-10 05:00 eval also resolves the D259 `wf_p25 drift` WARN.
+
+## 2026-07-09 — gate-tail prereg CONFIRMED (finalized) + fixed a CRITICAL: ranker-eval starved by a full /tmp (58h stale models) → cleaned/retrained + new healthcheck tmp_headroom guard (D259). [[D259]]
 
 **Operator: "it's 07-09, flip the gate-tail on" (= finalize it) → then "clean up so it doesn't recur" → chose the proactive /tmp-headroom healthcheck.**
 

@@ -8,6 +8,7 @@ license = { text = "Proprietary" }
 authors = [{ name = "aj", email = "akidnamedaj@gmail.com" }]
 dependencies = [
     "crucible_contracts",
+    "numpy>=1.26,<3",
     "pydantic>=2.7,<3",
     "polars>=1.10,<2",
     "duckdb>=1.0,<2",

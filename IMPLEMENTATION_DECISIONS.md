@@ -1000,3 +1000,25 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 **Files:** `src/forge/cli/healthcheck_cmd.py`, `tests/unit/test_cli/test_healthcheck.py`, `docs/MANPAGE.md`, `config/preregistrations.jsonl` (gate-tail resolve), `STATUS.md`, this entry. Related: D246 (inbox_rejections check), D252/D255 (gate-tail), D197 (healthcheck), D191/D192 (ranker-eval).
 
 **STATUS: RESOLVED. Retrain completed 2026-07-09T22:35Z (exit 0) → model FRESH, the 58h-stale CRITICAL cleared; tmp_headroom OK (6.6x); healthcheck committed a51d374 (suite 1867 green). gate-tail prereg confirmed. Residual: a MARGINAL wf_p25 drift WARN (latest -0.002 vs +0.252 trailing — one noisy checkpoint on the weak-IC lane after the 2-day eval gap; barely over the 0.25 threshold; watch the 07-10 eval, don't act). Holdout prereg (61837dd2) still deferred (07-09+ nudge).**
+
+---
+
+## D260 — 2026-07-09 — Vectorized the learned-model trainer with numpy (§8 F2/F3). The ~250k-row honest era outgrew D132's "10k-row" pure-Python premise → the daily ranker-eval spent ~15 min / 15 G single-core CPU in the IRLS fit alone. numpy makes it seconds with fp-identical math. A feedback-change (per `docs/tasks/feedback-change.md`), not a grammar/loosening.
+
+**Trigger (operator: "ranker-eval is slow").** Profiled `forge-ranker-eval` (21 min CPU ≈ 21 min wall = single-core-bound, 15.4 G RAM peak). The cost is entirely the pure-Python model fits, and they grow with the dataset: the verdict IRLS runs on **N=250,533 rows × d=106 features**, so each Newton step's Hessian accumulation is O(N·d²/2) ≈ 1.4 B multiply-adds, ×~10 iters ≈ **14 B pure-Python ops**. D132 chose pure Python explicitly ("zero new deps") but sized it for a **10k-row window** — `build_dataset` never capped (just `ORDER BY decided_at`), so the honest era grew 25× past that premise. `build_dataset` itself is only ~18-22 s (NOT the bottleneck). 61/106 features are one-hot ids that standardization densifies, defeating the `xj==0` sparsity fast-path.
+
+**Change (numpy = linear algebra only, NO RNG — rule #8 bans `np.random`, not BLAS; [[ml-allowed-in-loop-not-llms]]).**
+- `_fit_irls` — the triple-loop Hessian/gradient → `Xaᵀ diag(w) Xa` / `Xaᵀ(y-p)` with a leading ones column for the unpenalized intercept; identical math, `_PROB_CLIP` weight floor unchanged.
+- `_solve_ridge` — normal equations `(XᵀX+λI)β=Xᵀy` vectorized; `_standardize_design` now builds the `(N,d)` float64 **ndarray directly** (never the list-of-lists → the 15 G peak becomes ~0.3 G).
+- `_solve_linear` (pure-Python Gaussian elimination) → `_solve` (`np.linalg.solve`); re-raises `ValueError("singular system…")` so callers' error handling is unchanged.
+- **Scoring paths (`score_features` / `score_robustness`) UNTOUCHED** → the daemon (which only scores, never trains) is byte-identical; `calibration.platt_fit`'s `_fit_irls` signature preserved (list-in, tuple-out; converts internally).
+
+**Determinism preserved.** Two trains on the same frame → byte-identical artifact (invariant `test_training_is_deterministic_byte_identical` green); numpy CPU matmul is deterministic on a fixed machine. No golden coefficient is pinned — the only change vs the old impl is fp-level summation-order drift, and models retrain daily anyway.
+
+**Validation (old-vs-new on a live 251,141-row snapshot, identical `build_dataset` frame).** Verdict `max|Δcoef|=5.6e-13`, robustness `9.7e-10`; metrics identical to 11-13 sig figs (auc 0.906144899748 vs …919, etc.). **Full-frame fits: 17.6 s verdict + 2.6 s robustness** (was ~15-18 min pure-Python) → the eval's 21-min CPU collapses to ~1 min. Suite: 1866 pass (the lone red = concurrent contracts **1.28.0** `idiosyncratic_vol` bump vs Forge's 1.27.0 pin — minor, no runtime halt, operator's ivol work, NOT touched here).
+
+**Deploy posture.** Training-only behavior; daemon scoring unchanged → **no restart required**. numpy added to the venv (`pyproject.toml` `numpy>=1.26,<3`, installed) so a reboot loads `model.py` cleanly. The next 05:00 `forge-ranker-eval` (or a manual `systemctl start`) picks up the fast path via editable install.
+
+**Files:** `src/forge/ranking/model.py`, `pyproject.toml`, `STATUS.md`, this entry. Related: [[D132]] (F2 pure-Python origin), [[D191]]/[[D192]] (wf_p25 robustness head), [[D149]] (F3 wiring), [[D259]] (the /tmp-headroom guard from the same eval-slowness thread).
+
+**STATUS: COMMITTED, validated, NOT yet run in production. Next eval run confirms the fast path end-to-end (watch `forge-ranker-eval` CPU/wall drop from ~21 min to ~1 min).**

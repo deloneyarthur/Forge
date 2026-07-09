@@ -1,10 +1,14 @@
-"""Pure-Python L2 logistic regression for the learned verdict model (D132 / F2).
+"""L2 logistic regression for the learned verdict model (D132 / F2).
 
-Zero new dependencies (D132 decision 2): Newton-IRLS on the convex penalized
-log-likelihood, zero-init, fixed iteration order, NO RNG anywhere — the same
-training frame produces a byte-identical artifact (invariant-tested). At the
-window cap (10k rows x ~90 features) a train run is minutes of CPU in pure
-Python; accepted in D132 over adding numpy/sklearn.
+Newton-IRLS on the convex penalized log-likelihood, zero-init, fixed iteration
+order, NO RNG anywhere — the same training frame produces a byte-identical
+artifact (invariant-tested). The Hessian/gradient accumulation and the ridge
+normal equations are vectorized with numpy — linear algebra only, no RNG (rule
+#8 bans np.random, not BLAS; D260). The honest era outgrew D132's "10k-row"
+premise to ~250k rows, turning the pure-Python O(iters·N·d²) fit into ~15 min /
+15 G of single-core CPU; numpy makes it seconds / sub-GB with identical math
+(only fp-level summation-order drift in the coefficients). D132's "zero new
+deps" was a preference — not hard-rule #5, which bans LLMs, not classical ML.
 
 Artifacts are canonical JSON with coefficients BY FEATURE NAME so the operator
 can read what the model believes at every eval. The models directory is
@@ -31,6 +35,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import structlog
 
 from forge.ranking.dataset import COVERAGE_FEATURE, TARGET_COLUMNS
@@ -127,80 +132,66 @@ def _sigmoid(z: float) -> float:
     return 1.0 / (1.0 + math.exp(-z))
 
 
+def _sigmoid_vec(z: np.ndarray) -> np.ndarray:
+    """Element-wise `_sigmoid`: exact 1.0/0.0 at the ±35 clamps (matching the
+    scalar path bit-for-bit), and the clamp doubles as overflow protection so
+    `exp` never sees a saturating argument."""
+    out = np.empty_like(z, dtype=np.float64)
+    hi = z >= 35.0
+    lo = z <= -35.0
+    mid = ~(hi | lo)
+    out[hi] = 1.0
+    out[lo] = 0.0
+    out[mid] = 1.0 / (1.0 + np.exp(-z[mid]))
+    return out
+
+
 # ---------------------------------------------------------------------------
-# Linear algebra (dense, symmetric-exploiting)
+# Linear algebra (numpy BLAS; deterministic given fixed input + on-machine LAPACK)
 # ---------------------------------------------------------------------------
 
 
-def _solve_linear(matrix: list[list[float]], rhs: list[float]) -> list[float]:
-    """Gaussian elimination with partial pivoting. Deterministic."""
-    n = len(matrix)
-    aug = [[*row, rhs[i]] for i, row in enumerate(matrix)]
-    for col in range(n):
-        pivot = max(range(col, n), key=lambda r: abs(aug[r][col]))
-        if abs(aug[pivot][col]) < 1e-12:
-            msg = "singular system in IRLS solve"
-            raise ValueError(msg)
-        aug[col], aug[pivot] = aug[pivot], aug[col]
-        pivot_row = aug[col]
-        pivot_value = pivot_row[col]
-        for r in range(col + 1, n):
-            factor = aug[r][col] / pivot_value
-            if factor != 0.0:
-                row = aug[r]
-                for c in range(col, n + 1):
-                    row[c] -= factor * pivot_row[c]
-    solution = [0.0] * n
-    for r in range(n - 1, -1, -1):
-        acc = aug[r][n]
-        row = aug[r]
-        for c in range(r + 1, n):
-            acc -= row[c] * solution[c]
-        solution[r] = acc / row[r]
-    return solution
+def _solve(matrix: np.ndarray, rhs: np.ndarray) -> np.ndarray:
+    """Dense linear solve (LAPACK gesv). Re-raises the pure-Python contract's
+    ValueError on a singular system so callers' error handling is unchanged."""
+    try:
+        return np.linalg.solve(matrix, rhs)
+    except np.linalg.LinAlgError as exc:
+        msg = "singular system in IRLS solve"
+        raise ValueError(msg) from exc
 
 
 def _fit_irls(
-    x_rows: list[list[float]], labels: list[int], lambda_: float
+    x_rows: Sequence[Sequence[float]] | np.ndarray, labels: Sequence[int], lambda_: float
 ) -> tuple[float, list[float]]:
-    """Newton-IRLS on the L2-penalized log-likelihood; intercept unpenalized."""
-    d = len(x_rows[0]) if x_rows else 0
-    beta = [0.0] * (d + 1)  # beta[0] = intercept
+    """Newton-IRLS on the L2-penalized log-likelihood; intercept unpenalized.
+
+    Vectorized (D260): the design gains a leading ones column (the intercept),
+    so each step's gradient is ``Xaᵀ(y-p)`` and Hessian ``Xaᵀ diag(w) Xa`` — the
+    same quantities the pure-Python triple loop accumulated, at BLAS speed. The
+    ``_PROB_CLIP`` weight floor keeps the Hessian positive-definite exactly as
+    before."""
+    n_rows = len(x_rows)
+    x = np.asarray(x_rows, dtype=np.float64).reshape(n_rows, -1)
+    d = x.shape[1]
+    design = np.empty((n_rows, d + 1), dtype=np.float64)
+    design[:, 0] = 1.0  # intercept column
+    design[:, 1:] = x
+    y = np.asarray(labels, dtype=np.float64)
+    penalty = np.full(d + 1, lambda_, dtype=np.float64)
+    penalty[0] = 0.0  # intercept is unpenalized
+    beta = np.zeros(d + 1, dtype=np.float64)
     for _ in range(_MAX_ITERATIONS):
-        probs = [
-            _sigmoid(beta[0] + sum(b * v for b, v in zip(beta[1:], row, strict=True)))
-            for row in x_rows
-        ]
-        gradient = [0.0] * (d + 1)
-        hessian = [[0.0] * (d + 1) for _ in range(d + 1)]
-        for row, y, p in zip(x_rows, labels, probs, strict=True):
-            residual = y - p
-            weight = max(p * (1.0 - p), _PROB_CLIP)
-            gradient[0] += residual
-            hessian[0][0] += weight
-            for j in range(d):
-                xj = row[j]
-                if xj == 0.0:
-                    continue
-                gradient[j + 1] += xj * residual
-                wxj = weight * xj
-                hessian[0][j + 1] += wxj
-                for k in range(j, d):
-                    xk = row[k]
-                    if xk != 0.0:
-                        hessian[j + 1][k + 1] += wxj * xk
-        # Symmetrize + L2 penalty (intercept exempt).
-        for j in range(1, d + 1):
-            hessian[j][0] = hessian[0][j]
-            gradient[j] -= lambda_ * beta[j]
-            hessian[j][j] += lambda_
-            for k in range(j + 1, d + 1):
-                hessian[k][j] = hessian[j][k]
-        delta = _solve_linear(hessian, gradient)
-        beta = [b + s for b, s in zip(beta, delta, strict=True)]
-        if max(abs(s) for s in delta) < _CONVERGENCE_TOL:
+        probs = _sigmoid_vec(design @ beta)
+        weight = np.maximum(probs * (1.0 - probs), _PROB_CLIP)
+        gradient = design.T @ (y - probs) - penalty * beta
+        hessian = design.T @ (weight[:, None] * design)
+        hessian[np.diag_indices(d + 1)] += penalty
+        delta = _solve(hessian, gradient)
+        beta += delta
+        if float(np.max(np.abs(delta))) < _CONVERGENCE_TOL:
             break
-    return beta[0], beta[1:]
+    return float(beta[0]), [float(v) for v in beta[1:]]
 
 
 # ---------------------------------------------------------------------------
@@ -219,40 +210,49 @@ def _collapsible_prefix(name: str) -> str | None:
 
 def _standardize_design(
     columns: dict[str, list[float]], raw_names: list[str], n_rows: int
-) -> tuple[list[str], list[float], list[float], list[list[float]]]:
+) -> tuple[list[str], list[float], list[float], np.ndarray]:
     """Collapse rare id-level columns into per-prefix ``__other__`` buckets, drop
     zero-variance columns, and standardize the rest. Returns
-    ``(feature_names, means, stds, x_rows)``. Shared by the logistic and ridge
-    trainers so both featurize identically (behavior pinned by their suites)."""
-    merged: dict[str, list[float]] = {}
+    ``(feature_names, means, stds, design)`` where ``design`` is an
+    ``(n_rows, n_features)`` float64 array (built column-wise so the ~250k x 106
+    matrix never materializes as Python objects — D260). Shared by the logistic
+    and ridge trainers so both featurize identically (behavior pinned by their
+    suites)."""
+    merged: dict[str, np.ndarray] = {}
     for name in raw_names:
-        values = columns[name]
+        values = np.asarray(columns[name], dtype=np.float64)
         prefix = _collapsible_prefix(name)
-        if prefix is not None and sum(1 for v in values if v != 0.0) < _MIN_ID_ROWS:
-            bucket = merged.setdefault(_other_name(prefix), [0.0] * n_rows)
-            for i, v in enumerate(values):
-                bucket[i] += v
+        if prefix is not None and int(np.count_nonzero(values)) < _MIN_ID_ROWS:
+            bucket = merged.get(_other_name(prefix))
+            if bucket is None:
+                bucket = np.zeros(n_rows, dtype=np.float64)
+                merged[_other_name(prefix)] = bucket
+            bucket += values
         else:
             merged[name] = values
 
     feature_names: list[str] = []
     means: list[float] = []
     stds: list[float] = []
-    standardized_columns: list[list[float]] = []
+    standardized_columns: list[np.ndarray] = []
     for name in sorted(merged):
         values = merged[name]
-        mean = sum(values) / n_rows
-        variance = sum((v - mean) ** 2 for v in values) / n_rows
+        mean = float(values.mean())
+        variance = float(((values - mean) ** 2).mean())
         if variance <= 0.0:
             continue
         std = math.sqrt(variance)
         feature_names.append(name)
         means.append(mean)
         stds.append(std)
-        standardized_columns.append([(v - mean) / std for v in values])
+        standardized_columns.append((values - mean) / std)
 
-    x_rows = [[col[i] for col in standardized_columns] for i in range(n_rows)]
-    return feature_names, means, stds, x_rows
+    design = (
+        np.column_stack(standardized_columns)
+        if standardized_columns
+        else np.empty((n_rows, 0), dtype=np.float64)
+    )
+    return feature_names, means, stds, design
 
 
 def train_verdict_model(
@@ -274,10 +274,8 @@ def train_verdict_model(
     feature_names, means, stds, x_rows = _standardize_design(columns, raw_names, n_rows)
     intercept, coefficients = _fit_irls(x_rows, labels, lambda_)
 
-    probs = [
-        _sigmoid(intercept + sum(b * v for b, v in zip(coefficients, row, strict=True)))
-        for row in x_rows
-    ]
+    logits = intercept + x_rows @ np.asarray(coefficients, dtype=np.float64)
+    probs = _sigmoid_vec(logits).tolist()
     metrics = (
         ("auc", auc_score(labels, probs)),
         ("brier", brier_score(labels, probs)),
@@ -459,28 +457,21 @@ class RobustnessModel:
     train_metrics: tuple[tuple[str, float], ...]
 
 
-def _solve_ridge(x_rows: list[list[float]], y_centered: list[float], lambda_: float) -> list[float]:
+def _solve_ridge(
+    x_rows: Sequence[Sequence[float]] | np.ndarray, y_centered: Sequence[float], lambda_: float
+) -> list[float]:
     """Ridge normal equations ``(XᵀX + λI)β = Xᵀy`` on standardized X (so the
-    intercept is just the unpenalized target mean). Deterministic — the same
-    dense Gaussian solve as IRLS; λ>0 keeps the system positive-definite."""
-    d = len(x_rows[0]) if x_rows else 0
+    intercept is just the unpenalized target mean). λ>0 keeps the system
+    positive-definite; vectorized with numpy (D260)."""
+    n_rows = len(x_rows)
+    x = np.asarray(x_rows, dtype=np.float64).reshape(n_rows, -1)
+    d = x.shape[1]
     if d == 0:
         return []
-    ata = [[0.0] * d for _ in range(d)]
-    aty = [0.0] * d
-    for row, yi in zip(x_rows, y_centered, strict=True):
-        for j in range(d):
-            xj = row[j]
-            if xj == 0.0:
-                continue
-            aty[j] += xj * yi
-            for k in range(j, d):
-                ata[j][k] += xj * row[k]
-    for j in range(d):
-        ata[j][j] += lambda_
-        for k in range(j + 1, d):
-            ata[k][j] = ata[j][k]
-    return _solve_linear(ata, aty)
+    ata = x.T @ x
+    ata[np.diag_indices(d)] += lambda_
+    aty = x.T @ np.asarray(y_centered, dtype=np.float64)
+    return [float(v) for v in _solve(ata, aty)]
 
 
 def _robustness_fields(**fields: object) -> dict[str, object]:
@@ -529,11 +520,10 @@ def train_robustness_model(
     target_mean = sum(y) / n_rows
     coefficients = _solve_ridge(x_rows, [yi - target_mean for yi in y], lambda_)
 
-    preds = [
-        target_mean + sum(b * v for b, v in zip(coefficients, row, strict=True)) for row in x_rows
-    ]
-    ss_res = sum((t - p) ** 2 for t, p in zip(y, preds, strict=True))
-    ss_tot = sum((t - target_mean) ** 2 for t in y)
+    y_arr = np.asarray(y, dtype=np.float64)
+    preds = target_mean + x_rows @ np.asarray(coefficients, dtype=np.float64)
+    ss_res = float(((y_arr - preds) ** 2).sum())
+    ss_tot = float(((y_arr - target_mean) ** 2).sum())
     # Sorted so the artifact round-trips identically (load_robustness_model sorts).
     metrics = tuple(
         sorted(
@@ -619,20 +609,15 @@ def robustness_oos_r2(
 
     y_train = [y[j] for j in train_idx]
     train_mean = sum(y_train) / len(y_train)
-    coefficients = _solve_ridge(
-        [x_rows[j] for j in train_idx], [y[j] - train_mean for j in train_idx], lambda_
-    )
-    y_test = [y[j] for j in test_idx]
-    preds = [
-        train_mean + sum(b * v for b, v in zip(coefficients, x_rows[j], strict=True))
-        for j in test_idx
-    ]
-    ss_res = sum((t - p) ** 2 for t, p in zip(y_test, preds, strict=True))
-    test_mean = sum(y_test) / len(y_test)
-    ss_tot = sum((t - test_mean) ** 2 for t in y_test)
+    coefficients = _solve_ridge(x_rows[train_idx], [y[j] - train_mean for j in train_idx], lambda_)
+    y_test = np.asarray([y[j] for j in test_idx], dtype=np.float64)
+    preds = train_mean + x_rows[test_idx] @ np.asarray(coefficients, dtype=np.float64)
+    ss_res = float(((y_test - preds) ** 2).sum())
+    test_mean = float(y_test.mean())
+    ss_tot = float(((y_test - test_mean) ** 2).sum())
     if ss_tot <= 0.0:
         return None
-    return 1.0 - ss_res / ss_tot
+    return float(1.0 - ss_res / ss_tot)
 
 
 def score_robustness(model: RobustnessModel, features: Mapping[str, float]) -> float:
