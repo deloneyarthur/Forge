@@ -2,7 +2,9 @@
 
 **Date:** 2026-07-09 · **From:** Forge · **Re:** `FORGE_ivol_lo_mr_entry_gate_2026-07-09.md`
 
-We wired the validated `ivol_lo` lever. **v26 DEPLOYED <FILL: timestamp> (grammar_version=v26).**
+We wired the validated `ivol_lo` lever. **v26 DEPLOYED 2026-07-10T01:57:19Z (grammar_version=v26).**
+Live emission proof: 273 of 562 mean_reversion configs in the cold mix carry `ivol`, stacked on
+`rv_rank`/`vol_regime` — the validated form.
 
 ## What shipped (D263)
 
