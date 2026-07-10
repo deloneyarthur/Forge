@@ -106,7 +106,15 @@ from crucible_contracts import (
 # `fullhist_refit_of`. Purely additive; Forge parses no model that breaks, and the 1.25/1.26
 # forward-compat tolerance covers the new keys. Adopted (not just tolerated) so Forge↔Crucible
 # run on the same contracts version; folded into the v25 deploy (D257/D258) per operator.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.27.0"
+# 1.28.0 (2026-07-09, Crucible ivol reclassification): adds ONE family-literal value —
+# `idiosyncratic_vol` (ivol split off `volatility` so §3.5 C1 will permit `ivol_lo` stacked on a
+# volatility gate — the validated MR lever, wired later in v26). INCIDENT-DRIVEN adopt: Crucible
+# published a registry snapshot USING the new family before Forge spoke 1.28.0, so the running
+# 1.27.0 daemon failed EVERY poll with `literal_error: idiosyncratic_vol` on RegistrySnapshot (the
+# asymmetric-upgrade trap, registry-side — D245 class; the parse hole, not the version check, which
+# only raises on MAJOR mismatch). Purely additive; enumeration byte-identical (ivol is not
+# enumerated by Forge; rv_rank/vol_regime/realized_skew stay volatility). See D261.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.28.0"
 
 
 def check_contracts_version() -> str:

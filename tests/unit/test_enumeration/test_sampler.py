@@ -2140,3 +2140,52 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
         cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
         ids = {ind for s in cfg.signals for ind in s.indicators}
         assert "days_since_jump" not in ids, f"dsj leaked onto mean_reversion at seed={seed}"
+
+
+# D258 dsj-ACTIVE cold-start golden (seed 7777, max 15) — the registry-hash-free
+# analog of _REGIME_GOLDEN_PRE for the dsj-SERVING path. Crucible's snapshot has
+# served days_since_jump since 2026-07-09T00:06:43Z (verified family volatility /
+# version 3 / lookback 252, matching _v25_registry), so the daemon left the
+# dormant path at deploy. On the served registry the veto's eligibility check
+# `rng.random() < _DSJ_VETO_SHARE` is EVALUATED — consuming one draw — on every
+# veto-eligible trend_continuation config even when it does not fire, so the
+# sequence legitimately diverges from the dormant golden (indices 0-2 still match;
+# it splits once the first eligible trend config consumes the veto draw). That is
+# the D258 "registry_hash rolls = legitimate sequence change" the v25 bump
+# licenses; the DORMANT path stays byte-identical
+# (test_regime_gate_yield_cold_start_byte_identical). Crucible does NOT publish a
+# registry_hash (Forge computes it from snapshot content), so this pins the
+# deterministic _v25_registry fixture, not a live hash. The v26 ivol_lo MR gate
+# touches the same veto block and WILL move this — re-pin there with the D-entry.
+_REGIME_GOLDEN_DSJ_ACTIVE = [
+    "f228c547d273330f",
+    "5e7cd4e85a465d62",
+    "f2239a17df29b1d7",
+    "bba32f5692adf59f",
+    "9737c4c06a440ee4",
+    "617ffeebf9ccda8b",
+    "8159ebdd25570f8a",
+    "16bf62faf000af9a",
+    "099d4d876dd0bbc0",
+    "c757c989e2a95524",
+    "3070a725431875d8",
+    "4573ce4928291ee8",
+    "5bc21b45d2e09b22",
+    "bc0b069c84945150",
+    "3eabbdd914bbb332",
+]
+
+
+def test_d258_dsj_active_cold_start_golden(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """Byte-pin the dsj-ACTIVE enumeration sequence (registry serving
+    days_since_jump) so the veto path is determinism-covered independent of the
+    live, per-publish-rolling registry_hash. It DIFFERS from the dormant
+    _REGIME_GOLDEN_PRE (the veto eligibility draw is consumed on eligible
+    trend_continuation configs) — the D258 legitimate sequence change the v25 bump
+    licenses — while the dormant path stays byte-identical elsewhere."""
+    reg = _v25_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_DSJ_ACTIVE
+    # the served registry legitimately shifts the sequence vs dormant (D258)
+    assert active != _REGIME_GOLDEN_PRE
+    assert active[:3] == _REGIME_GOLDEN_PRE[:3]  # split begins at the first eligible trend config
