@@ -91,6 +91,11 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # horizon (not regime gates), so this value does not constrain which DTE
     # bucket may carry the veto — it attaches on the champion's short holds too.
     "days_since_jump": 252,
+    # D263 (v26): ivol = per-name CAPM-residual idiosyncratic vol over a 63-td
+    # window (the Crucible-validated MR veto window). Regime-only gate; S4 reads
+    # only the directional signal's horizon, so this does not constrain the DTE
+    # bucket — present for the horizon-coverage invariant.
+    "ivol": 63,
     # ----- volatility family (regime / X1 chain) -----
     "realized_vol": 20,  # 21-day realized vol
     "parkinson_vol": 20,

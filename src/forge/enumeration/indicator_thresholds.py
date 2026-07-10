@@ -66,6 +66,10 @@ class IndicatorThresholdSpec:
     # family directional oscillators + the adx/hurst trend regime gate (D099).
     directional_percentile_range: tuple[float, float] | None = None
     regime_percentile_range: tuple[float, float] | None = None
+    # v26 (D263): per-spec percentile window for the regime role. None → the
+    # shared `_PERCENTILE_WINDOW` (252) default, so every existing spec is
+    # byte-identical; set only when Crucible validated a specific window (ivol=63).
+    regime_percentile_window: int | None = None
 
 
 # Price-scale indicators — never threshold-style; passthrough-only.
@@ -339,6 +343,21 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         directional_range=None,  # regime-only veto; never a directional signal
         regime_range=(30.0, 65.0),  # trading days; confirmed flat plateau
         op_regime="<",  # fire (enter) when days_since_jump < threshold = jumped recently
+    ),
+    # v26 (D263) — ivol (per-name CAPM-residual idiosyncratic vol, family
+    # idiosyncratic_vol as of contracts 1.28.0) as an OPTIONAL additive
+    # mean_reversion regime veto: EXCLUDE the high-idio-vol oversold names (the
+    # "falling knives", Bhootra-Hur 2015). Crucible FORGE_ivol_lo_mr_entry_gate_
+    # 2026-07-09 (+0.163 cpcv, 6/6 champions): percentile plateau [0.2,0.3,0.4],
+    # op "<" (keep the LOW-idio-vol tail), window 63 FIXED. Regime-only (never a
+    # directional). Stacks on the vol_regime/rv_rank primary gate — C1-legal
+    # because idiosyncratic_vol != volatility (the whole point of the 1.28.0 split).
+    "ivol": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=None,
+        op_regime="<",
+        regime_percentile_range=(0.2, 0.4),
+        regime_percentile_window=63,
     ),
     # ----- D131 (v17) activations — Crucible 2026-06-10 indicator batch -----
     # iv_minus_rv: per-name ATM IV minus trailing 21d realized vol, annualized
@@ -631,6 +650,7 @@ def _percentile_params(
     prange: tuple[float, float],
     op: str,
     rng: random.Random,
+    window: int = _PERCENTILE_WINDOW,
 ) -> dict[str, object]:
     """Build percentile-mode `params` for a threshold SignalSpec (D099).
 
@@ -638,7 +658,9 @@ def _percentile_params(
     the same single `rng.uniform` as the absolute path, so the seeded sequence
     is unchanged (hard rule #6) — only the emitted value + the two extra keys
     differ. `op` is carried over unchanged from the absolute table: percentile
-    mode swaps the units of `threshold`, never the firing direction.
+    mode swaps the units of `threshold`, never the firing direction. `window`
+    defaults to the shared `_PERCENTILE_WINDOW` (252) so existing specs are
+    byte-identical; a spec may override it (v26/D263: ivol=63).
     """
     low, high = prange
     threshold = round(rng.uniform(low, high), 4) if low != high else low
@@ -646,7 +668,7 @@ def _percentile_params(
         "threshold": threshold,
         "op": op,
         "use_percentile": True,
-        "percentile_window": _PERCENTILE_WINDOW,
+        "percentile_window": window,
     }
 
 
@@ -688,10 +710,16 @@ def sample_threshold_params(  # noqa: PLR0911 — one return per (role, percenti
         # D138: percentile-first, mirroring the directional branch (supports a
         # future percentile-only regime gate without an empty-params leak).
         if spec.regime_percentile_range is not None:
+            window = (
+                spec.regime_percentile_window
+                if spec.regime_percentile_window is not None
+                else _PERCENTILE_WINDOW
+            )
             return _percentile_params(
                 spec.regime_percentile_range,
                 spec.op_regime,
                 rng,
+                window,
             )
         if spec.regime_range is None:
             return {}

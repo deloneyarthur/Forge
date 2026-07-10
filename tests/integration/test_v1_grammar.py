@@ -144,9 +144,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # deferred D204 R2 evidence_to_relax metadata fix. rules text unchanged).
     # D257+D258 bumped v24 -> v25 (two enumeration-policy changes: D257 drops the
     # inert zscore_reversion_exit from mean_reversion's S5 set; D258 adds the
-    # days_since_jump volatility veto as an optional 2nd trend regime gate, dormant
-    # until the registry serves it. The 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v25"  # type: ignore[attr-defined]
+    # days_since_jump volatility veto as an optional 2nd trend regime gate; D263
+    # (v26) adds the ivol idiosyncratic-vol veto as an optional 2nd MR regime gate.
+    # The 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v26"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

@@ -2189,3 +2189,147 @@ def test_d258_dsj_active_cold_start_golden(grammar: Grammar, registry: RegistryS
     # the served registry legitimately shifts the sequence vs dormant (D258)
     assert active != _REGIME_GOLDEN_PRE
     assert active[:3] == _REGIME_GOLDEN_PRE[:3]  # split begins at the first eligible trend config
+
+
+# ---------------------------------------------------------------------------
+# D263 (v26) — ivol name-selection VETO on mean_reversion (Crucible
+# FORGE_ivol_lo_mr_entry_gate_2026-07-09). An OPTIONAL SECOND regime gate that
+# ANDs on top of the mandatory MR regime gate; mean_reversion only; percentile
+# plateau [0.2,0.4] (op '<'), window 63. UNLIKE dsj: ivol is family
+# idiosyncratic_vol (contracts 1.28.0), so C1 lets it STACK on the volatility
+# gate (rv_rank/vol_regime) — the validated form.
+# ---------------------------------------------------------------------------
+def _v26_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """Fixture registry + the v25 dsj veto AND the v26 ivol veto indicator (family
+    idiosyncratic_vol, version 1, lookback 63) — the object Forge reads once the
+    registry serves both (the live v26 state: dsj served since 2026-07-09, ivol
+    since the 1.28.0 reclassification)."""
+    dsj = IndicatorMetadata(
+        id="days_since_jump",
+        version=3,
+        family="volatility",
+        lookback=252,
+        params_schema={},
+        rank_per_name_coherent=True,
+        market_wide_by_design=False,
+    )
+    ivol = IndicatorMetadata(
+        id="ivol",
+        version=1,
+        family="idiosyncratic_vol",
+        lookback=63,
+        params_schema={},
+        rank_per_name_coherent=True,
+        market_wide_by_design=False,
+    )
+    return base.model_copy(update={"indicators": (*base.indicators, dsj, ivol)})
+
+
+def test_d263_ivol_veto_dormant_without_registry_indicator(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Byte-identity's precondition: on the base registry (no ivol) the MR veto
+    pool is empty, so no mean_reversion config carries an ivol second gate and
+    `ivol` is never emitted (complements the cold-start goldens)."""
+    space = build_search_space(grammar, registry)
+    for seed in range(200):
+        cfg = sample_config(
+            space, registry, random.Random(seed), forced_hypothesis="mean_reversion"
+        )
+        ids = {ind for s in cfg.signals for ind in s.indicators}
+        assert "ivol" not in ids, f"ivol emitted while dormant at seed={seed}"
+        assert not any(s.id == "sig_regime_veto" for s in cfg.signals)
+
+
+def test_d263_ivol_veto_active_on_mr_and_grammar_valid(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """With the registry serving ivol, some mean_reversion configs carry a SECOND
+    regime gate = ivol (op '<', percentile plateau [0.2,0.4], window 63) ANDed on
+    top of the mandatory MR regime gate. Every such config is grammar-valid: R1 is
+    satisfied by the primary gate, and C1 holds. KEY (the OPPOSITE of dsj): ivol
+    (idiosyncratic_vol) STACKS on rv_rank/vol_regime (volatility) — the C1-legal
+    co-occurrence the 1.28.0 family split enabled."""
+    reg = _v26_registry(registry)
+    space = build_search_space(grammar, reg)
+    mr_primary_gates = {"iv_rank", "gamma_flip_distance_pct", "hurst", "rv_rank", "vol_regime"}
+    veto_seen = 0
+    stacked_on_volatility = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
+        regime_sigs = [s for s in cfg.signals if s.role == "regime_filter"]
+        veto_sigs = [s for s in regime_sigs if s.indicators == ("ivol",)]
+        if not veto_sigs:
+            continue
+        veto_seen += 1
+        assert validate(cfg, grammar, reg).valid, f"ivol-veto config invalid at seed={seed}"
+        # the veto is ADDITIONAL — the mandatory MR primary gate is still present
+        assert len(regime_sigs) == 2, f"expected 2 regime gates at seed={seed}"
+        primary = next(s for s in regime_sigs if s.indicators != ("ivol",))
+        assert primary.indicators[0] in mr_primary_gates, cfg.name
+        if primary.indicators[0] in {"rv_rank", "vol_regime"}:
+            stacked_on_volatility += 1  # ivol(idiosyncratic_vol) + a volatility gate: C1-legal
+        p = veto_sigs[0].params
+        assert p["op"] == "<", p
+        assert p["use_percentile"] is True, p
+        assert 0.2 <= float(p["threshold"]) <= 0.4, p
+        assert p["percentile_window"] == 63, p
+    assert veto_seen > 0, "no ivol-veto config produced under the active registry"
+    assert stacked_on_volatility > 0, "ivol never stacked on a volatility gate (the validated form)"
+
+
+def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Scope: the ivol veto pool is mean_reversion-only, so trend_continuation (and
+    every other hypothesis) never carries ivol even when the registry serves it.
+    (dsj may still appear on trend — that's the v25 veto, a different pool.)"""
+    reg = _v26_registry(registry)
+    space = build_search_space(grammar, reg)
+    for hypothesis in ("trend_continuation", "volatility_event", "event_momentum"):
+        for seed in range(150):
+            cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis=hypothesis)
+            ids = {ind for s in cfg.signals for ind in s.indicators}
+            assert "ivol" not in ids, f"ivol leaked onto {hypothesis} at seed={seed}"
+
+
+# D263 v26 cold-start golden (seed 7777, max 15) on a registry serving BOTH dsj
+# and ivol — the live v26 state. Differs from _REGIME_GOLDEN_DSJ_ACTIVE (dsj-only)
+# because veto-eligible mean_reversion configs now draw the ivol veto (3 of these
+# 15 actually carry it: positions 3, 7, 12). The dsj-only and fully-dormant
+# goldens above are UNCHANGED (their fixtures don't serve ivol → the MR veto pool
+# is empty), proving the generalization didn't perturb the existing paths.
+_REGIME_GOLDEN_V26_ACTIVE = [
+    "f228c547d273330f",
+    "5e7cd4e85a465d62",
+    "f2239a17df29b1d7",
+    "d94435bb869d78af",
+    "99cfd4e666b7c93b",
+    "4f17ab52f24af119",
+    "e3f9657096fe8082",
+    "124e5978f5816d29",
+    "e7e044f5d80304f4",
+    "eee5cb3fac2259f8",
+    "c4e866e656331847",
+    "80ea441fbf73e467",
+    "b39f64e46a428d07",
+    "a8eead226a36f2e3",
+    "4a3e140090930ea8",
+]
+
+
+def test_d263_ivol_active_cold_start_golden(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """Byte-pin the v26 enumeration sequence (registry serving dsj + ivol). It
+    diverges from the dsj-only _REGIME_GOLDEN_DSJ_ACTIVE once the first veto-
+    eligible mean_reversion config draws the ivol veto — the D263 licensed change;
+    the dormant + dsj-only goldens stay byte-identical (asserted by their own
+    tests)."""
+    reg = _v26_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_V26_ACTIVE
+    assert active != _REGIME_GOLDEN_DSJ_ACTIVE  # ivol on MR shifts the sequence
+    # at least one config actually carries the ivol veto in this slice
+    assert any(
+        any("ivol" in s.indicators for s in c.signals)
+        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
+    )

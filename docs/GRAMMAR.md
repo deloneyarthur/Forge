@@ -276,6 +276,8 @@ The trend overrides widen the UPPER edge only: systematically buying low-delta/O
 
 **Evidence to relax.** Promoted mean-reversion strategies that use a regime proxy outside the accepted set `{iv_rank, gamma_flip_distance_pct, hurst, rv_rank, vol_regime}` (e.g., `iv_zscore`, a custom realized-vs-implied ratio, or a new percentile-rank conditioner). (Fired: the v24/D254 `vol_regime` admission above.)
 
+**v26 (D263) — optional idiosyncratic-vol veto (`ivol`), a name-selection refinement.** In addition to the mandatory MR regime gate above, a `mean_reversion` config may carry an OPTIONAL SECOND `regime_filter` gate: `ivol` (per-name CAPM-residual idiosyncratic vol, family `idiosyncratic_vol`, `op: "<"`, percentile plateau [0.2,0.4], window 63). It EXCLUDES the high-idio-vol oversold names — the "falling knives" whose reversion fails (Bhootra-Hur 2015; Crucible `FORGE_ivol_lo_mr_entry_gate_2026-07-09`, +0.163 cpcv, 6/6). §3.5 S3 permits more than one regime gate, so R1 stays satisfied by the primary gate. UNLIKE the R2 `days_since_jump` veto (`volatility` family, mutually exclusive with the level gates), `ivol` is `idiosyncratic_vol` — a DISTINCT C1 family — so it STACKS **on top of** the `rv_rank` / `vol_regime` gate (the validated form; the reason contracts 1.28.0 split the family). It is **not** a member of R1's accepted set (it does not satisfy R1 on its own), and it is emitted only when the registry serves the id.
+
 ### R2: Trend strategies require regime gate (v2, D077; v11, D107; v17, D131)
 
 **What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx`, `hurst`, `rv_rank`, `gamma_flip_distance_pct`, or `market_state`.

@@ -280,6 +280,16 @@ _R2_TREND_CONTINUATION_REGIME_INDICATORS = (
 # FORGE_days_since_jump_indicator_2026-07-08). Empty in the search space until the
 # registry serves the id → dormant + byte-identical cold path (hard rule #6).
 _R2_TREND_VOLATILITY_VETO_INDICATORS = ("days_since_jump",)
+# §3.5 S3 (D263, v26) — ivol name-selection VETO for mean_reversion. Like the dsj
+# veto above, an ADDITIONAL regime gate that ANDs on top of the mandatory MR
+# regime gate (R1) — S3 permits ">= 1" regime gate; R1 stays satisfied by the
+# primary gate. UNLIKE dsj: ivol is family `idiosyncratic_vol` (contracts 1.28.0),
+# DISTINCT from the MR primary-gate families (rv_rank/vol_regime = volatility), so
+# C1 permits it to STACK on top rather than being skipped — the validated
+# `ivol_lo` form (Crucible FORGE_ivol_lo_mr_entry_gate_2026-07-09). Empty in the
+# search space until the registry serves `ivol` → dormant + byte-identical cold
+# path (hard rule #6).
+_MR_IVOL_VETO_INDICATORS = ("ivol",)
 # T1.4 (PROMPT_5_FORGE_V1_1_REVISED, grammar v2): expanded from
 # (days_to_earnings, days_to_fomc) to include macro-event indicators
 # (days_to_cpi, days_to_nfp, days_to_opex) that Crucible Prompt 6 added
