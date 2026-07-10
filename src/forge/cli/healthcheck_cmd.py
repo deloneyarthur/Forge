@@ -73,6 +73,10 @@ class JournalState:
     # learned yield weights failed to load) — a silent-degrade that mutes the whole
     # feedback loop. Warn-once in the daemon; surfaced here so it isn't invisible.
     hypothesis_weights_degraded_at: datetime | None = None
+    # D261: the registry loader dropped an indicator whose `family` Literal is unknown to
+    # Forge's installed contracts (a Crucible family added ahead of Forge's pin adoption).
+    # Graceful-degrade instead of failing every poll — but the drop must be visible.
+    registry_unknown_family_at: datetime | None = None
 
 
 # `<iso-ts> <host> forge[<pid>]: <message>` (journalctl -o short-iso).
@@ -81,6 +85,7 @@ _ITER_PREFIX = "--- loop iteration"
 _BLOCK_PREFIX = "blocked:"
 _SUBMIT_RE = re.compile(r"\bsubmitted=(?P<n>\d+)\b")
 _HYPWEIGHTS_DEGRADE_PREFIX = "hypothesis_weights: degraded"
+_REGISTRY_UNKNOWN_FAMILY_PREFIX = "registry_unknown_family_skipped"
 
 
 def parse_forge_journal(lines: Iterable[str]) -> JournalState:
@@ -95,6 +100,7 @@ def parse_forge_journal(lines: Iterable[str]) -> JournalState:
     last_block_at: datetime | None = None
     last_block_reason: str | None = None
     hypothesis_weights_degraded_at: datetime | None = None
+    registry_unknown_family_at: datetime | None = None
 
     for line in lines:
         m = _JOURNAL_LINE.match(line.rstrip("\n"))
@@ -112,6 +118,8 @@ def parse_forge_journal(lines: Iterable[str]) -> JournalState:
             last_block_reason = msg[len(_BLOCK_PREFIX) :].strip()
         elif msg.startswith(_HYPWEIGHTS_DEGRADE_PREFIX):
             hypothesis_weights_degraded_at = ts
+        elif msg.startswith(_REGISTRY_UNKNOWN_FAMILY_PREFIX):
+            registry_unknown_family_at = ts
         else:
             sm = _SUBMIT_RE.search(msg)
             if sm is not None and int(sm.group("n")) > 0:
@@ -123,6 +131,7 @@ def parse_forge_journal(lines: Iterable[str]) -> JournalState:
         last_block_at=last_block_at,
         last_block_reason=last_block_reason,
         hypothesis_weights_degraded_at=hypothesis_weights_degraded_at,
+        registry_unknown_family_at=registry_unknown_family_at,
     )
 
 
@@ -413,6 +422,26 @@ def check_hypothesis_weights_fallback(journal: JournalState) -> HealthResult:
     )
 
 
+def check_registry_unknown_family(journal: JournalState) -> HealthResult:
+    """D261: the registry loader dropped an indicator whose `family` Literal is unknown to
+    Forge's installed contracts — a Crucible family added to a live registry snapshot ahead
+    of Forge's pin adoption (the asymmetric-upgrade trap on the registry-READ face). The
+    loader degrades gracefully (drop the indicator, keep producing) instead of failing every
+    poll, but that WARN is load-bearing: it means a `crucible_contracts` bump is un-adopted
+    and the enumerable indicator set is silently reduced until it is. WARN (the daemon still
+    produces) and point at the fix — read the release + bump `FORGE_EXPECTED_CONTRACT_VERSION`
+    (D261). Appears in the journal window while the condition persists (logged per poll)."""
+    when = journal.registry_unknown_family_at
+    if when is None:
+        return HealthResult("registry_family", Level.OK, "no unknown-family indicators skipped")
+    return HealthResult(
+        "registry_family",
+        Level.WARN,
+        f"registry indicator(s) SKIPPED for an unknown `family` ({when:%Y-%m-%d %H:%M}) — a "
+        f"contracts family added ahead of Forge's pin; adopt the new crucible_contracts (D261)",
+    )
+
+
 def _newest_mtime(directory: Path, pattern: str) -> datetime | None:
     if not directory.is_dir():
         return None
@@ -656,6 +685,9 @@ def cmd_healthcheck(
     )
     if journal is not None:
         results.append(check_hypothesis_weights_fallback(journal))
+        # D261: registry-read tolerated an unknown `family` (contracts family added ahead of
+        # Forge's pin) → the indicator set is silently reduced until the pin is adopted.
+        results.append(check_registry_unknown_family(journal))
 
     overall = max((r.level for r in results), default=Level.OK)
     for r in results:
@@ -678,6 +710,7 @@ __all__ = [
     "check_inbox_rejections",
     "check_learning_drift",
     "check_loop_liveness",
+    "check_registry_unknown_family",
     "check_service_active",
     "check_submission_progress",
     "check_tmp_headroom",

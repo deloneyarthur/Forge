@@ -49,6 +49,7 @@ def test_parse_journal_empty() -> None:
     assert state.last_submit_at is None
     assert state.last_block_reason is None
     assert state.hypothesis_weights_degraded_at is None
+    assert state.registry_unknown_family_at is None
 
 
 def test_parse_journal_detects_hypothesis_weights_degrade() -> None:
@@ -69,6 +70,27 @@ def test_parse_journal_detects_hypothesis_weights_degrade() -> None:
     assert "UNIFORM-fallback" in res.message
     # Clean journal -> OK.
     ok = check_hypothesis_weights_fallback(parse_forge_journal([]))
+    assert ok.level == Level.OK
+
+
+def test_parse_journal_detects_registry_unknown_family_skip() -> None:
+    """D261: the registry loader logs `registry_unknown_family_skipped` when it drops an
+    indicator whose `family` Literal is unknown to Forge's installed contracts (a Crucible
+    family added ahead of the pin). WARN so the un-adopted contracts skew is visible."""
+    from forge.cli.healthcheck_cmd import Level, check_registry_unknown_family
+
+    lines = [
+        "2026-07-09T17:00:00-07:00 host forge[1]: --- loop iteration 42 (effective_seed=9) ---",
+        "2026-07-09T17:00:01-07:00 host forge[1]: registry_unknown_family_skipped "
+        "dropped=[{'id': 'ivol', 'family': 'idiosyncratic_vol'}] count=1",
+    ]
+    state = parse_forge_journal(lines)
+    assert state.registry_unknown_family_at == datetime.fromisoformat("2026-07-09T17:00:01-07:00")
+    res = check_registry_unknown_family(state)
+    assert res.level == Level.WARN
+    assert "unknown `family`" in res.message
+    # Clean journal -> OK.
+    ok = check_registry_unknown_family(parse_forge_journal([]))
     assert ok.level == Level.OK
 
 

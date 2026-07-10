@@ -148,3 +148,56 @@ def test_load_registry_propagates_validation_error_on_malformed_json(tmp_path: P
     # ValidationError or JSONDecodeError shape — both are honest signals.
     with pytest.raises(Exception):  # noqa: B017
         load_registry(exports_dir=exports)
+
+
+def _snapshot_json_with_extra_indicator(family: str, *, extra_id: str = "frobnicate") -> str:
+    """demo snapshot JSON with one EXTRA indicator carrying ``family`` (raw JSON so
+    an invalid Literal value can be written — the model would reject it at build)."""
+    import json
+
+    data = json.loads(demo_registry().model_dump_json())
+    template = dict(data["indicators"][0])
+    template["id"] = extra_id
+    template["family"] = family
+    data["indicators"].append(template)
+    return json.dumps(data)
+
+
+def test_load_registry_skips_unknown_family_indicator(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D261: a Crucible `family` added to `crucible_contracts` ahead of Forge's pin
+    adoption makes the WHOLE snapshot fail `model_validate` with a `literal_error`
+    — which pre-fix failed every enumeration poll (soft outage). Drop the
+    unknown-family indicator + WARN, and load the rest so the daemon keeps
+    producing with the known indicators (Forge can't grammar-place an unknown
+    family anyway; the WARN is the signal to adopt the new contracts)."""
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    (exports / "registry_snapshot_unknownfam.json").write_text(
+        _snapshot_json_with_extra_indicator("totally_unknown_family_xyz"),
+        encoding="utf-8",
+    )
+    with caplog.at_level(logging.WARNING):
+        loaded = load_registry(exports_dir=exports)
+    assert isinstance(loaded, RegistrySnapshot)
+    ids = {i.id for i in loaded.indicators}
+    assert "frobnicate" not in ids  # the unknown-family indicator was dropped
+    assert ids == {i.id for i in demo_registry().indicators}  # every known indicator survived
+    assert any("registry_unknown_family_skipped" in r.getMessage() for r in caplog.records)
+
+
+def test_load_registry_reraises_when_error_is_not_unknown_family(tmp_path: Path) -> None:
+    """Only unknown-`family` literals are tolerated. A genuinely malformed record
+    (here: a missing required field) must still surface loudly — the module's
+    standing 'corruption propagates' contract."""
+    import json
+
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    data = json.loads(demo_registry().model_dump_json())
+    del data["indicators"][0]["id"]  # missing-required -> not a family literal_error
+    (exports / "registry_snapshot_broken.json").write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(Exception):  # noqa: B017
+        load_registry(exports_dir=exports)

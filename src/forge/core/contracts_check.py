@@ -114,7 +114,14 @@ from crucible_contracts import (
 # asymmetric-upgrade trap, registry-side — D245 class; the parse hole, not the version check, which
 # only raises on MAJOR mismatch). Purely additive; enumeration byte-identical (ivol is not
 # enumerated by Forge; rv_rank/vol_regime/realized_skew stay volatility). See D261.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.28.0"
+# 1.29.0 (2026-07-09, Crucible reply to the D261 outage relay): adds
+# `parse_skipping_unknown_literals` — the shared tolerant reader for the unknown-enum face
+# (drops `skip_in` collection elements with an unknown Literal member + prunes additive
+# fields; strict otherwise). PURELY ADDITIVE (a new function, no Literal/vocab change) → cannot
+# reproduce the outage. Forge wires it into the registry loader (D262) and adopts the pin so
+# `contracts pin==installed`. Crucible's Ask-1 sequencing (vocabulary additions lead by a
+# consumer-adoption handshake; the export-side commit IS the publish) is agreed. See D262.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.29.0"
 
 
 def check_contracts_version() -> str:
