@@ -1037,4 +1037,4 @@ The deployed composite (prior at 0.10) ranks realized components at precision@K 
 
 **Files:** `src/forge/core/contracts_check.py`, `STATUS.md`, this entry. Related: [[D245]] (asymmetric-upgrade both-directions restart), [[D249]]/[[D250]] (prior contracts adoptions), D258 (dsj golden, same deploy).
 
-**STATUS: FIX APPLIED — deploy in progress (stop → uncontended suite → commit → restart → verify journal clears the `idiosyncratic_vol` literal_error).**
+**STATUS: DEPLOYED + VERIFIED 2026-07-10T00:24:57Z (commit `61fc821`).** Suite 1868 green (pin adopted) → stop (old PID 10235, exit 143) → commit → daemon-reload → start. New daemon PID 1768029, **NRestarts=0**; journal `grammar_version=v25 registry_hash=000d5a44d9c2ac9e` (grammar UNCHANGED — enumeration byte-identical), `registry_loaded_from_export` clean, the `idiosyncratic_vol` literal_error GONE, `reconciled batches=1 newly_gated_total=198`, full learned-weight maps + first unblocked iteration healthy, no traceback. `forge healthcheck` `contracts pin==installed 1.28.0` (skew cleared); OVERALL=WARN (11 ok, 1 warn, 0 crit) — the lone WARN = pre-existing `wf_p25 drift` (D260, unrelated). Incident RESOLVED.**
