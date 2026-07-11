@@ -946,3 +946,53 @@ Absence of a code reader does not prove absence of a consumer: ad-hoc DB forensi
 **What I did instead:** kept both untouched (removal is the irreversible direction for accumulated rows); logged here per the confirm-with-maintainer rule. If the operator confirms neither is used in investigations, retiring the writes is a small, restart-requiring change (both writers are on the daemon path).
 
 **Severity:** low (storage/complexity only; no correctness impact either way). **Tag:** `persistence`, `write-only-tables`, `D247-followup`
+
+---
+
+## 2026-07-10 — Q45 — Nine never-sampled registry indicators (dark supply): no standing triage loop — **MEDIUM**
+
+**Question:** Crucible's resid_vix handoff (FORGE_resid_vix_generation_request_2026-07-11) audited
+nine registered indicators with zero Forge submissions ever: `residual_momentum`, `linreg_slope`,
+`vix_term_slope`, `pct_off_52w_high`, `days_to_cover`, `trend_confirmation`, `overnight_drift`,
+`cs_dispersion`, `market_sma_cross` (all nine verified present in
+`registry_snapshot_2026-07-11T010003Z.json`). The mechanism is Forge's DELIBERATE activation gate:
+an indicator without an `indicator_thresholds.py` entry is `is_threshold_skippable` in every
+threshold role (defensive since D030 — no audited range means no honest threshold, and an
+empty-params emission would zero-trade). Registered ≠ enumerable is by design; the gap is that
+nothing SURFACES the dark set — a registry id that never gets an activation decision stays dark
+forever, and the learned sampler can never gather evidence on it (their columns killed
+`linreg_slope x trend_confirmation`, but zero-sampling means Forge could never find that out
+itself).
+
+**What I did instead:** two of the nine (`residual_momentum`, `vix_term_slope`) now ride the v27
+activation proposal (OPEN_PROPOSALS `0a4d8da8`, Crucible-evidenced). The other seven remain dark.
+Proposed fix (operator review): a periodic dark-supply report — registry ids lacking threshold
+entries + per-id submission counts — as a healthcheck INFO line or a scheduled script, so each new
+registry id gets a conscious activate/defer/reject decision instead of silence. Activation itself
+should stay evidence-gated (D254: `check-activations` INERT = NO-GO); the fix is visibility, not
+auto-activation.
+
+**Severity:** medium — supply-side blind spot, but every activation still needs per-id evidence.
+
+---
+
+## 2026-07-10 — Q46 — Multi-condition regime gates unreachable by generation (contract allows N, Forge emits 1 + hypothesis-specific veto) — **LOW-MEDIUM**
+
+**Question:** `crucible_contracts` SignalSpec carries a tuple of signals and Crucible's engine ANDs
+all `regime_filter` gates, but Forge's sampler emits exactly ONE primary regime gate (the R-rule
+pool draw) plus at most one hypothesis-specific veto (D258 dsj on trend, D263 ivol on MR —
+family-guarded, registry-gated). Multi-condition regime theses (e.g. calm AND near-52wk-high) are
+unreachable by generation; `pre_earnings_setup` was hand-COMPOSED into a single indicator precisely
+to work around this. §3.5 C1 additionally blocks same-family gate pairs (e.g. two macro gates —
+vix_term_slope + market_sma_cross), which any generalization must respect. Crucible flags this as
+"worth a look when convenient — not blocking" (their resid_vix ask is single-gate).
+
+**What I did instead:** logged only. The natural seam is the D258/D263 veto machinery — it already
+solved the hard parts (per-hypothesis additive-gate pools, C1 family guard via
+`regime_veto_family_by_hypothesis`, registry-gated dormancy, byte-identical cold path); the
+generalization is widening per-hypothesis veto pools beyond one id/family and letting the guard
+filter per-draw. Enumeration-policy bump when taken up (grammar_version attribution), no `rules:`
+text change expected, but it multiplies the config space — needs its own evidence-backed proposal,
+not a ride-along.
+
+**Severity:** low-medium — representational ceiling, explicitly non-blocking per Crucible.

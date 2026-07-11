@@ -1241,6 +1241,41 @@ def test_r2_trend_with_gamma_flip_passes() -> None:
     assert result.passed
 
 
+def test_r2_trend_with_vix_term_slope_passes() -> None:
+    """v27 (D264): vix_term_slope is an accepted R2 regime gate — the calm-market
+    (contango) conditioner for trend entries. Reverses the v17/D131 deliberate
+    exclusion: Crucible's resid_vix probe measured exactly this use at campaign
+    grade (first walk-forward-gate pass in program history). Gate fires when the
+    vol term structure is in contango: op '>', threshold ≥ 0."""
+    cfg = grammar_valid_baseline(
+        hypothesis="trend_continuation",
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("ema_50",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("vix_term_slope",),
+                params={"threshold": 0.0, "op": ">"},
+            ),
+        ),
+        exits=(
+            ExitSpec(id="expiry_exit"),
+            ExitSpec(id="theta_cliff_exit"),
+            ExitSpec(id="earnings_exit"),
+            ExitSpec(id="liquidity_exit"),
+            ExitSpec(id="trailing_atr", params={"activate_after_gain_pct": 0.30}),
+        ),
+    )
+    result = evaluate(_predicate("trend_requires_trend_strength_gate"), cfg, _registry())
+    assert result.passed
+
+
 def test_r2_trend_without_adx_or_hurst_fails() -> None:
     cfg = grammar_valid_baseline(
         hypothesis="trend_continuation",

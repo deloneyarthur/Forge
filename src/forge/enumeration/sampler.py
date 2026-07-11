@@ -1209,7 +1209,26 @@ def _directional_signal_params(
     # not a strategy axis.
     if indicator_id == "option_momentum":
         params.update(_sample_option_momentum_params())
+    # D264 (v27): residual_momentum's formation knobs (window/skip) are a real
+    # strategy axis in Crucible's sweep bounds — sampled per config, riding the
+    # same params dict as the percentile threshold.
+    if indicator_id == "residual_momentum":
+        params.update(_sample_residual_momentum_params(rng))
     return params
+
+
+def _sample_residual_momentum_params(rng: random.Random) -> dict[str, object]:
+    """D264 (v27) — Crucible residual_momentum computation params.
+
+    `window` (formation lookback of the beta-stripped drift) and `skip` (most-
+    recent bars excluded, the momentum-standard reversal guard) are the
+    handoff's sweep axes (`FORGE_resid_vix_generation_request_2026-07-11`):
+    window 63-252 td, skip 0-21 td; their probe won at 126/21. Crucible's
+    writer reads both from the per-config SignalSpec params (probe-confirmed —
+    the probe's params carried them). Uniform integer draws: no interior
+    evidence yet to shape the density; the funnel will.
+    """
+    return {"window": rng.randint(63, 252), "skip": rng.randint(0, 21)}
 
 
 def _sample_option_momentum_params() -> dict[str, object]:

@@ -147,7 +147,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # days_since_jump volatility veto as an optional 2nd trend regime gate; D263
     # (v26) adds the ivol idiosyncratic-vol veto as an optional 2nd MR regime gate.
     # The 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v26"  # type: ignore[attr-defined]
+    # D264 bumped v26 -> v27 (resid_vix activation: residual_momentum percentile-only
+    # trend directional + vix_term_slope R2 calm gate — reverses the v17/D131
+    # exclusion on Crucible's first-ever walk-forward-gate pass. Threshold/horizon
+    # tables + R2 python-side pool only; the 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v27"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

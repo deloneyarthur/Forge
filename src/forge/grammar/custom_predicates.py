@@ -268,6 +268,17 @@ _R2_TREND_CONTINUATION_REGIME_INDICATORS = (
     # design → also valid on trend's rank arm (uniform across names is
     # correct for a market gate).
     "market_state",
+    # D264 (v27, operator-approved via OPEN_PROPOSALS 0a4d8da8): vix_term_slope,
+    # the calm-market (contango) conditioner — REVERSES the v17/D131 deliberate
+    # exclusion ("validated for vol returns, not trend conditioning"): Crucible's
+    # resid_vix probe measured exactly this use at campaign grade and produced
+    # the first walk-forward-gate pass in program history (WF median 2.0611,
+    # FORGE_resid_vix_generation_request_2026-07-11). Known failure mode is
+    # measured, not hypothesized: the gate stays in contango too long at bear
+    # onsets (2022-02/05) — the sampled threshold range (0, 2] explores the
+    # tighter gates their failure analysis asks for. market-wide by design →
+    # also coherent on trend's rank arm (the market_state precedent).
+    "vix_term_slope",
 )
 # §3.5 S3 (D258, v25) — days_since_jump event-frequency VETO. NOT a member of the
 # R2 trend-strength set above: dsj does NOT satisfy R2 (it is not a trend-strength

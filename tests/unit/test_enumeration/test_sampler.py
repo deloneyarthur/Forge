@@ -2333,3 +2333,152 @@ def test_d263_ivol_active_cold_start_golden(grammar: Grammar, registry: Registry
         any("ivol" in s.indicators for s in c.signals)
         for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
     )
+
+
+# ---------------------------------------------------------------------------
+# D264 (v27): resid_vix activation — residual_momentum trend directional x
+# vix_term_slope R2 calm gate (Crucible FORGE_resid_vix_generation_request_
+# 2026-07-11: their probe on this pair = the FIRST walk-forward-gate pass in
+# program history). Reachability lives here; the table/horizon/R2-pool unit
+# assertions live in test_resid_vix_v27.py. The dormant goldens above stay
+# byte-identical (their fixtures serve neither id → pools unchanged).
+# ---------------------------------------------------------------------------
+def _v27_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """Fixture registry + dsj + ivol (the v26 state) + the two v27 activations
+    (residual_momentum family=trend rank-coherent; vix_term_slope family=macro
+    market-wide) — the object Forge reads on the live v27 registry (both ids
+    long-registered; verified in registry_snapshot_2026-07-11T010003Z.json)."""
+    resid = IndicatorMetadata(
+        id="residual_momentum",
+        version=1,
+        family="trend",
+        lookback=504,
+        params_schema={},
+        rank_per_name_coherent=True,
+        market_wide_by_design=False,
+    )
+    vix_slope = IndicatorMetadata(
+        id="vix_term_slope",
+        version=1,
+        family="macro",
+        lookback=0,
+        params_schema={},
+        rank_per_name_coherent=False,
+        market_wide_by_design=True,
+    )
+    v26 = _v26_registry(base)
+    return v26.model_copy(update={"indicators": (*v26.indicators, resid, vix_slope)})
+
+
+def test_d264_resid_vix_pools_reachable(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """Both ids enter their pools once the registry serves them: residual_momentum
+    the trend_continuation directional pool (C2 family=trend + threshold entry),
+    vix_term_slope the trend regime pool (R2 python-side accept + threshold entry)."""
+    space = build_search_space(grammar, _v27_registry(registry))
+    assert "residual_momentum" in space.directional_indicators_by_hypothesis["trend_continuation"]
+    assert "vix_term_slope" in space.regime_indicators_by_hypothesis["trend_continuation"]
+
+
+def test_d264_resid_vix_pair_emitted_and_grammar_valid(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The exact handoff pair (residual_momentum directional + vix_term_slope
+    gate) is actually SAMPLED — with the probe's param shape: percentile
+    threshold in [0.60, 0.90] + window/skip knobs on the directional, absolute
+    contango threshold in [0.0, 2.0] op '>' on the gate — and the emitted
+    config passes full grammar validation (C1: trend x macro never collides)."""
+    reg = _v27_registry(registry)
+    space = build_search_space(grammar, reg)
+    found = False
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="trend_continuation")
+        directional = next(s for s in cfg.signals if s.role == "directional")
+        if directional.indicators != ("residual_momentum",):
+            continue
+        gates = [s for s in cfg.signals if s.role == "regime_filter"]
+        vix_gates = [g for g in gates if g.indicators == ("vix_term_slope",)]
+        if not vix_gates:
+            continue
+        found = True
+        assert directional.params.get("use_percentile") is True
+        threshold = directional.params["threshold"]
+        assert isinstance(threshold, float)
+        assert 0.60 <= threshold <= 0.90
+        window = directional.params.get("window")
+        skip = directional.params.get("skip")
+        assert isinstance(window, int)
+        assert 63 <= window <= 252
+        assert isinstance(skip, int)
+        assert 0 <= skip <= 21
+        gate = vix_gates[0]
+        assert gate.params.get("op") == ">"
+        gate_threshold = gate.params["threshold"]
+        assert isinstance(gate_threshold, float)
+        assert 0.0 <= gate_threshold <= 2.0
+        result = validate(cfg, grammar, reg)
+        assert result.valid, f"seed={seed}: {result.errors}"
+        break
+    assert found, "resid_momentum x vix_term_slope never emitted in 400 seeds"
+
+
+def test_d264_new_ids_dormant_without_registry(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Byte-identity's precondition (the dsj/ivol pattern): on a registry that
+    serves neither id, neither is ever emitted — the base-fixture pools are
+    unchanged, so every pre-v27 golden above holds."""
+    space = build_search_space(grammar, registry)
+    assert (
+        "residual_momentum" not in space.directional_indicators_by_hypothesis["trend_continuation"]
+    )
+    assert "vix_term_slope" not in space.regime_indicators_by_hypothesis["trend_continuation"]
+
+
+# D264 v27 cold-start golden (seed 7777, max 15) on a registry serving dsj, ivol
+# AND the two v27 activations — the live v27 state. Diverges from
+# _REGIME_GOLDEN_V26_ACTIVE at position 2, the first trend_continuation config
+# that draws from the widened pools (positions 2 and 4 carry residual_momentum /
+# vix_term_slope in this slice). The dormant/dsj/v26 goldens above are UNCHANGED
+# (their fixtures serve neither new id), proving the activation didn't perturb
+# the existing paths.
+_REGIME_GOLDEN_V27_ACTIVE = [
+    "f228c547d273330f",
+    "5e7cd4e85a465d62",
+    "63a6f84ed16d537e",
+    "9ad6f0e8620dcd75",
+    "4921655eb1f7a490",
+    "6ef99e9cebfaf8be",
+    "46933e3c20ff9061",
+    "e7d72ace35192f77",
+    "f5f0403b180e1d3b",
+    "e7e044f5d80304f4",
+    "eee5cb3fac2259f8",
+    "c4e866e656331847",
+    "80ea441fbf73e467",
+    "b39f64e46a428d07",
+    "a8eead226a36f2e3",
+]
+
+
+def test_d264_resid_vix_active_cold_start_golden(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Byte-pin the v27 enumeration sequence (registry serving both new ids). It
+    diverges from _REGIME_GOLDEN_V26_ACTIVE once the first trend_continuation
+    config draws from the widened directional/R2 pools — the D264 licensed
+    change; every pre-v27 golden stays byte-identical (asserted by their own
+    tests)."""
+    reg = _v27_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_V27_ACTIVE
+    assert active != _REGIME_GOLDEN_V26_ACTIVE  # widened trend pools shift the sequence
+    assert active[:2] == _REGIME_GOLDEN_V26_ACTIVE[:2]  # split at the first eligible trend config
+    # at least one config in this slice actually carries a v27 id
+    assert any(
+        any(
+            ind in ("residual_momentum", "vix_term_slope")
+            for s in c.signals
+            for ind in s.indicators
+        )
+        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
+    )

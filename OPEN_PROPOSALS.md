@@ -587,3 +587,84 @@ proposal_yaml: |
 decided_at: '2026-06-24T22:30:30+00:00'
 decided_by: operator-directed retirement (effort-max session 2026-06-24, "retire now (one deploy)"); applied via the D104 deploy ritual — auto_tightened_thresholds.yaml emptied to an empty tightenings list; recorded in D206
 decision_marker: null
+---
+proposal_id: 0a4d8da8-9293-4048-8251-2c37780057be
+status: APPROVED
+proposed_at: '2026-07-11T06:30:46+00:00'
+proposal_type: loosen
+target: grammar_v27_resid_vix_activation
+rationale: 'v27 (Crucible handoff FORGE_resid_vix_generation_request_2026-07-11,
+  HIGH): activate the residual_momentum x vix_term_slope trend_continuation
+  family - the first config family EVER to pass the walk-forward gate
+  (probe_resid_vix_swing_mid blended 20% into their closest book:
+  walk_forward_sharpe_median 2.0611 vs gate 2.0, seed-robust 42/43/44 spread
+  0.014, cpcv_sharpe_p25 1.2987 vs parent 1.166 - lifted BOTH axes; all risk
+  gates pass, 1341 trades). Two activations, both long-registered, both dark
+  supply (0 of 430,563 submissions - corroborated structurally: no
+  indicator_thresholds entry -> is_threshold_skippable -> never emittable in
+  threshold roles). (1) residual_momentum (family trend, rank-coherent) as a
+  trend_continuation DIRECTIONAL: percentile-only entry (the
+  sma_slope/option_momentum pattern), directional_percentile_range (0.60,
+  0.90), op ">", default percentile_window 252 (matches the probe); custom
+  params sampler window int [63, 252] / skip int [0, 21] (the probe used
+  126/21; the option_momentum _directional_signal_params precedent). Horizon
+  entry 63 td -> medium_lookback -> S4 k*{2,3,4}*63 snaps to swing_mid ALWAYS
+  - the validated probe chassis. NOTE: the asked swing_mid-vs-swing_long axis
+  is NOT expressible for one indicator id under the D102 horizon-matched
+  derivation (any long_lookback horizon snaps k>=2 targets to swing_long
+  exclusively); swing_long arms belong to the injection lane (below) or a
+  future D102-class change. (2) R2 python-side pool += vix_term_slope as the
+  calm-market trend gate - REVERSES the D131 deliberate exclusion, whose
+  rationale ("validated for vol returns, not trend conditioning") is directly
+  superseded by Crucible''s measurement of exactly this use. Threshold entry
+  regime_range (0.0, 2.0) op ">" (uniform draw natively covers their
+  failure-mode ask to explore tighter gates 0.5-1.0; stale-contango
+  transition risk is measured, quarters 2022-02/2022-05); horizon entry 1
+  (gate-only, S4 never consults; coverage-invariant honesty like
+  market_state). C1-clean: one R2 gate is drawn per config, resid (trend) x
+  vix (macro) never collides; dsj veto (volatility) still stacks legally.
+  Delta bands already cover the asked 0.30-0.55 (v16 trend overrides). NOT in
+  scope: gate debounce/confirmation (no engine axis exists - relay back);
+  multi-gate generalization (Q46); the other seven dark indicators (Q45).
+  check-activations pre-wiring = [UNCHK] (not enumerable yet - cannot probe);
+  mitigation: Crucible''s campaign-grade probe ran this exact SignalSpec
+  through the real engine (1341 trades), proving the writer computes both
+  ids; MANDATORY re-probe post-wiring pre-deploy (D254 ritual). Piggyback on
+  the bump: the D204-deferred R2 evidence_to_relax metadata fix (add
+  gamma_flip_distance_pct + market_state to its listed pool). COMPLEMENTARY
+  FAST LANE (separate decision, not part of this bump): a one-off inbox
+  cohort injection (the 2026-07-07 winning-burst pattern) sweeping the FULL
+  asked grid incl. the swing_long arm generation cannot express - real supply
+  for their running overnight assembly campaign within ~a day.'
+evidence:
+  trigger: crucible_handoff_evidence_reviewed
+  handoff: '../Crucible/docs/handoffs/FORGE_resid_vix_generation_request_2026-07-11.md'
+  wf_gate: 'walk_forward_sharpe_median 2.0611 (gate 2.0) - first pass in program history'
+  seed_robustness: 'WF median 2.071/2.061/2.057 across seeds 42/43/44'
+  cpcv_lift: 'cpcv_sharpe_p25 1.2987 vs parent book 1.166'
+  honesty: 'raw CSCV 0.584 over 15-arm family (near-dup-cluster inflated); selected arm OOS rank median 11/15; fold vectors probe_results/wf_folds_resid_vix.json'
+  registry: 'both ids present in registry_snapshot_2026-07-11T010003Z.json (71 indicators); residual_momentum family=trend lookback=504 rank_coherent; vix_term_slope family=macro market_wide'
+  dark_supply: '0 of 430,563 submissions (their file-grounded audit; structurally corroborated Forge-side)'
+proposal_yaml: |
+  # v27 resid_vix activation (two entries + one pool add + one metadata fix):
+  #   indicator_thresholds.py:
+  #     residual_momentum: directional_percentile_range (0.60, 0.90), op ">"
+  #       (percentile-only; window/skip via custom params sampler 63-252/0-21)
+  #     vix_term_slope: regime_range (0.0, 2.0), op ">" (gate-only)
+  #   signal_horizon.py: residual_momentum 63 (-> swing_mid, the probe chassis);
+  #     vix_term_slope 1 (gate-only, invariant honesty)
+  #   custom_predicates.py: _R2_TREND_CONTINUATION_REGIME_INDICATORS += vix_term_slope
+  #   sampler.py: _sample_residual_momentum_params (window/skip int draws)
+  #   grammar.yaml: v26 -> v27 header note + archive; rules: text UNTOUCHED
+  #     (+ fold in the D204-deferred R2 evidence_to_relax metadata fix)
+  #   post-wiring: uv run forge check-activations --indicators residual_momentum
+  #     must print [ OK ] (D254: [INERT] = NO-GO, relay to Crucible)
+decided_at: '2026-07-11T07:05:00+00:00'
+decided_by: operator (in-session approval 2026-07-11, "Can we just put it in the next
+  grammar?" = grammar lane approved, injection fast-lane declined; D125 in-session
+  precedent). SCOPE NOTE recorded at approval: the proposed D204 evidence_to_relax
+  ride-along was found ALREADY SHIPPED in the v24 cycle (see the D254-era entry,
+  IMPLEMENTATION_DECISIONS.md "D204 fold") - dropped from v27 scope; the stale
+  pending-fixes note in docs/tasks/grammar-change.md is corrected in the v27 commit
+  instead.
+decision_marker: null

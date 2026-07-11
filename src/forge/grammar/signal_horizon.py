@@ -75,6 +75,14 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # move). ad_slope (A/D-line slope) is a faster volume-trend read → medium.
     "sma_slope": 200,  # SMA-200 slope
     "ad_slope": 60,  # accumulation/distribution-line slope (~quarter)
+    # D264 (v27): residual momentum's DRIFT horizon (~a quarter), NOT its
+    # formation window (the sampled `window` param, 63-252 td, rides SignalSpec
+    # params and is invisible to S4). 63 → medium_lookback, and the D102
+    # k∈{2,3,4} derivation snaps every target (126/189/252) to swing_mid — the
+    # Crucible-validated probe chassis. Deliberate: one id gets one horizon, so
+    # swing_mid-vs-swing_long was NOT expressible; the operator chose the
+    # validated bucket (OPEN_PROPOSALS 0a4d8da8).
+    "residual_momentum": 63,
     "ema_cross": 50,  # slow leg of the cross
     "ema_50": 50,
     "ema": 20,
@@ -130,6 +138,10 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # the thresholdable-coverage invariant honestly.
     "market_state": 252,
     "vix_level": 1,  # spot VIX
+    # D264 (v27): spot term-structure read, mirrors vix_level. Gate-only (no
+    # directional range), so S4 never consults this; the entry satisfies the
+    # thresholdable-coverage invariant honestly (the market_state precedent).
+    "vix_term_slope": 1,
     # ----- flow / calendar (event proximity — near-instant reads) -----
     "put_call_flow": 5,
     "days_to_earnings": 5,

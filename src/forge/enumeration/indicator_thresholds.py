@@ -359,6 +359,41 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_percentile_range=(0.2, 0.4),
         regime_percentile_window=63,
     ),
+    # ----- v27 (D264) resid_vix activation — Crucible FORGE_resid_vix_
+    # generation_request_2026-07-11: their probe on this signal pair produced
+    # the FIRST walk-forward-gate pass in program history (WF median 2.0611 vs
+    # gate 2.0, seed-robust, in-book at 20%; cpcv-p25 1.166→1.2987). Both ids
+    # were dark supply (0 of 430,563 submissions). Operator-approved loosening,
+    # OPEN_PROPOSALS 0a4d8da8. -----
+    # residual_momentum: beta-stripped (CAPM-residual) drift ranker, family
+    # trend. PERCENTILE-ONLY directional (the sma_slope/option_momentum
+    # precedent — brand-new id, no Forge-side value distribution): fire when
+    # the residual drift ranks in the top of its own trailing year. (0.60,
+    # 0.90) op ">" spans the handoff's sweep bounds around the probe's winning
+    # > 0.8 entry; the shared 252 percentile window IS the probe's ranking
+    # window. The computation knobs (window/skip) ride the params dict via
+    # _sample_residual_momentum_params (sampler.py). Directional-only — the
+    # handoff pairs it WITH a gate, it never is one.
+    "residual_momentum": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=None,
+        op_directional=">",
+        directional_percentile_range=(0.60, 0.90),
+    ),
+    # vix_term_slope: VIX term-structure slope (market-wide by design). R2
+    # calm-market gate for trend_continuation as of v27 — reverses the
+    # v17/D131 deliberate exclusion on Crucible's direct campaign-grade
+    # measurement. Fires in contango (op ">"); the (0.0, 2.0) native range is
+    # their sweep bound and the uniform draw covers the TIGHTER gates
+    # (> 0.5..1.0) their measured failure mode asks for (stale contango holds
+    # exposure into bear onsets: 2022-02/05). Never percentile: the zero
+    # crossing (contango/backwardation) is the economically meaningful cut.
+    # Gate-only — regime conditioning, not a return forecast.
+    "vix_term_slope": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=(0.0, 2.0),
+        op_regime=">",
+    ),
     # ----- D131 (v17) activations — Crucible 2026-06-10 indicator batch -----
     # iv_minus_rv: per-name ATM IV minus trailing 21d realized vol, annualized
     # decimals (Crucible as-built: AAPL 2024 median +0.01, range -0.14..+0.25).
