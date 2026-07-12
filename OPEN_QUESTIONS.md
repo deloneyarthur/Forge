@@ -996,3 +996,20 @@ text change expected, but it multiplies the config space — needs its own evide
 not a ride-along.
 
 **Severity:** low-medium — representational ceiling, explicitly non-blocking per Crucible.
+
+---
+
+## 2026-07-12 — Q47 — Trend lane lookback mix: `rolling_sharpe` (63d) warms up ~9 months earlier than `momentum_252` — **LOW, watch item, no action until Crucible's carry note**
+
+**Question:** Crucible's absolute-vol handoff (`FORGE_mr_absolute_vol_gate_request_2026-07-12`,
+secondary observation, "no action required yet") reports that `rolling_sharpe`-ranked trend configs
+(63d lookback) warm up ~9 months earlier than `momentum_252`-ranked ones — relevant to early-window
+coverage in their fold evaluation. d36b1cb1-style configs are being evaluated in-book on their side;
+a note will follow on whether the trend lane's lookback mix deserves deliberate weight.
+
+**What I did instead:** logged only, per the handoff's own framing. If their note carries, the
+Forge-side axis is the trend directional mix (D105/D106 learned directional/bucket weights already
+adapt on evidence; a deliberate mix shift beyond that would be an enumeration-policy change with its
+own proposal). Nothing to build until their in-book evaluation lands.
+
+**Severity:** low — coverage observation, explicitly non-blocking, their measurement in flight.

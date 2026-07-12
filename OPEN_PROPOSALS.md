@@ -668,3 +668,87 @@ decided_by: operator (in-session approval 2026-07-11, "Can we just put it in the
   pending-fixes note in docs/tasks/grammar-change.md is corrected in the v27 commit
   instead.
 decision_marker: null
+---
+proposal_id: 2121cafe-5be1-4325-ab46-104a95559dc1
+status: PENDING
+proposed_at: '2026-07-12T02:09:41+00:00'
+proposal_type: loosen
+target: grammar_v28_mr_absolute_rv_gate
+rationale: 'v28 (Crucible handoff FORGE_mr_absolute_vol_gate_request_2026-07-12,
+  MEDIUM-HIGH): add `realized_vol` as a sixth accepted R1 mean_reversion regime
+  gate - an ABSOLUTE annualized-RV threshold (op "<", sweep 0.15-0.30), the
+  systematic-vol complement to the percentile gates. Measured defect it targets:
+  the champion MR leg (forge_mean_reversion_swing_mid_1625fcfd, the v26 ivol_lo
+  descendant) is protected by rv_rank < 62, a PERCENTILE over a 126d window; in
+  regime-WIDE vol spikes the percentile normalizes (every name volatile -> ranks
+  mid-distribution) and the gate passes exactly when it should bind. Champion-
+  ledger evidence (regime-tagged, their probe_results/champion_trades.json):
+  HAL/CVX entered 2022-12 at abs rv21 0.27; SLB/TGT 2025-04 at 0.196 (tariff-crash
+  week); BAC/JPM 2025-03 at 0.135 pre-spike - the dominant losses of CPCV blocks
+  5+8, two of the five bottom-quartile blocks. HONEST COUNTERFACTUAL (theirs,
+  stated plainly): removal analysis on the ledger says trades at rv21>0.18 sum
+  -18,987 in the weak blocks but +46,883 in the strong blocks - a blanket absolute
+  gate is P&L-NEGATIVE overall and GATE-POSITIVE (strong blocks Sharpe 2.5-3.6
+  can afford the forfeit; weak blocks decide cpcv_p25). No gated config has been
+  probed - this ask IS the probe (the ivol_lo pattern: diagnostic -> generated
+  variants -> honest measurement; the gate decides). Registry verified
+  (registry_snapshot_2026-07-12T010004Z.json): realized_vol v2, family
+  volatility, lookback 20 (=their "21d RV"), rank_per_name_coherent (works on
+  MR''s rank arm, like rv_rank/D167). Writer-computed TODAY (rides live
+  vol_target X1 chains + trend confluence; their ledger reports its values) ->
+  the D254 gate-3 concern does not apply (and check-activations probes
+  directionals only). C1 EXPRESSIBILITY (relay back on response): realized_vol
+  is family volatility = same family as rv_rank/vol_regime, so §3.5 C1 makes
+  absolute-RV and rv_rank MUTUALLY EXCLUSIVE in one config - the absolute gate
+  REPLACES the percentile gate in the vol slot; "percentile AND absolute" in one
+  config is NOT expressible and is NOT proposed (would need a C1 carve-out -
+  operator-owned anti-redundancy invariant). The handoff''s asked both-gates
+  shape (absolute RV + ivol percentile) IS expressible: ivol is family
+  idiosyncratic_vol (1.28.0 split), the D263 veto stacks C1-legally on any
+  volatility primary at _REGIME_VETO_SHARE=0.5 -> ~half the new variants carry
+  ivol, giving Crucible both arms (with/without) to measure - ablation-friendly.
+  Change surface (all existing machinery, no contracts change - matches their
+  claim): (1) custom_predicates.py: _R1_REALIZED_VOL_REGIME_INDICATOR added to
+  the R1 OR (op-agnostic convention like gamma/hurst/rv_rank/vol_regime); (2)
+  search_space.py _build_regime_pool MR set += realized_vol; (3)
+  indicator_thresholds.py realized_vol regime_range (0.12,0.25) -> (0.15,0.30)
+  per the asked sweep (op_regime "<" already correct); blast radius: the shared
+  range also serves relative_value''s broad regime pool (rare draws) - shifts
+  under the same version bump, noted honestly; (4) sampler.py _MR_RANGING_GATES
+  += realized_vol (weight 3.0 - same calm-vol thesis class as rv_rank/
+  vol_regime) -> ~3/14 = 21% of MR primary draws pre-learned-yield, real supply
+  for their fold-column selection; learned regime-yield composes on top; (5)
+  grammar.yaml R1 comment + evidence_to_relax += realized_vol, v27 -> v28 bump +
+  archive + D-entry. NOT needed: signal_horizon (realized_vol=20 already; S4
+  reads directionals only; D102 - regime gates bucket-free), veto-slot changes
+  (MR veto stays ivol-only), contracts. Valid-by-construction interactions
+  verified in code: _compatible_regimes already excludes volatility gates when
+  the vol_target chain is drawn (chain_family guard) - same constraint the
+  rv_rank champion lineage lives under; C4 disjointness holds (MR directionals
+  are oscillators). Goldens: versioned enumeration-policy change -> MR regime
+  draw sequence legitimately shifts; re-pin under v28 (rule #6 binds versionless
+  changes only). Emission proof at build: 2000 cold samples on the live
+  registry -> count MR x realized_vol gates, ivol-stack share, threshold spread
+  across (0.15,0.30). Secondary handoff observation (rolling_sharpe 63d trend
+  warmup vs momentum_252) logged as Q47 - explicitly no-action-yet on their
+  side.'
+evidence:
+  trigger: crucible_handoff_evidence_reviewed
+  handoff: '../Crucible/docs/handoffs/FORGE_mr_absolute_vol_gate_request_2026-07-12.md'
+  defect: 'percentile rv gate normalizes in regime-wide spikes; champion knife-catches at abs rv21 0.135-0.27 dominate CPCV blocks 5+8 (two of five bottom-quartile blocks)'
+  counterfactual: 'ledger removal analysis: rv21>0.18 trades = -18,987 weak blocks / +46,883 strong blocks - P&L-negative overall, gate-positive; no gated config probed yet (this ask generates the probe family)'
+  registry: 'realized_vol v2 family=volatility lookback=20 rank_per_name_coherent (registry_snapshot_2026-07-12T010004Z.json); writer-computed today via live vol_target chains'
+  precedent: 'R1 widenings D167 (rv_rank, v22) + D254 (vol_regime, v24); veto-stack shape D263 (ivol_lo, v26)'
+proposal_yaml: |
+  # v28 MR absolute realized-vol gate (one R1 widening + pool/weight/range edits):
+  #   custom_predicates.py: R1 accepted OR += realized_vol (sixth gate)
+  #   search_space.py: _build_regime_pool mean_reversion += realized_vol
+  #   indicator_thresholds.py: realized_vol regime_range (0.12,0.25) -> (0.15,0.30), op "<"
+  #   sampler.py: _MR_RANGING_GATES += realized_vol (weight 3.0)
+  #   grammar.yaml: v27 -> v28 + R1 comment + evidence_to_relax + archive; rules: text
+  #     function reference UNCHANGED (accepted set lives in custom_predicates, D167 pattern)
+  #   NOT expressible (C1, relay back): rv_rank + realized_vol in ONE config (same family);
+  #     the absolute gate REPLACES the percentile in the vol slot; ivol stacks (~50%)
+decided_at: null
+decided_by: null
+decision_marker: null
