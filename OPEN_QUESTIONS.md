@@ -1013,3 +1013,31 @@ adapt on evidence; a deliberate mix shift beyond that would be an enumeration-po
 own proposal). Nothing to build until their in-book evaluation lands.
 
 **Severity:** low — coverage observation, explicitly non-blocking, their measurement in flight.
+
+---
+
+## 2026-07-12 — Q48 — Forge prefilter battery consumed cross-name activation dates since ~06-24 (Crucible writer cache bug): impact assessment pending their fix — **HIGH visibility, MEDIUM likely impact**
+
+**Question:** Crucible's `66a616d` (2026-06-24) keyed the writer feature-cache `activation_dates`
+rows on `(signal_content_key, sha256(first_dt))` — no underlying — so every underlying collides
+onto one row per spec content, first-writer-wins (verified live 2026-07-12: SPY/HAL/TGT/NVDA
+identical activation sets; non-monotonic threshold responses from poisoned rows; per-name data
+returns clean once cache-busted). Forge's prefilter battery reads exactly this layer per config
+underlying: since ~06-24, activation-count prefilters (expected_trades wall, signal density) have
+evaluated an unknown fraction of single-name configs against another name's firing dates. How much
+did stream quality (gate pass rate) degrade, and is any post-06-24 prefilter-derived signal
+(rejection weights on prefilter kills?) contaminated?
+
+**Scope bounds (verified):** value_series / returns / regime_label layers are keyed correctly —
+only activation_dates collides. Crucible's own gate/engine computes independently — gated_runs
+outcomes, learned feedback weights (gated-run-keyed), and all promotion evidence are CLEAN.
+`check-activations` INERT detection still works (no row exists for a never-computed spec); its
+per-name breakdown was decorative since 06-24, but past GO verdicts stand.
+
+**What I did instead:** relayed the bug with repro + suggested fix + cache-purge ask
+(`PROMPT_CRUCIBLE_FEATURE_CACHE_ACTIVATION_POISONING.md`); worked around it for the v28 probe via
+threshold-epsilon cache-busting. Impact assessment deferred until their fix + purge lands (funnel
+gate-pass-rate compare pre/post 06-24 vs pre/post fix would separate the noise floor).
+
+**Severity:** high-visibility incident, medium likely impact — prefilter precision only; the gate
+is the authority and its evidence is clean.
