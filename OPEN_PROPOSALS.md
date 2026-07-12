@@ -660,13 +660,13 @@ proposal_yaml: |
   #   post-wiring: uv run forge check-activations --indicators residual_momentum
   #     must print [ OK ] (D254: [INERT] = NO-GO, relay to Crucible)
 decided_at: '2026-07-11T07:05:00+00:00'
-decided_by: operator (in-session approval 2026-07-11, "Can we just put it in the next
+decided_by: 'operator (in-session approval 2026-07-11, "Can we just put it in the next
   grammar?" = grammar lane approved, injection fast-lane declined; D125 in-session
   precedent). SCOPE NOTE recorded at approval: the proposed D204 evidence_to_relax
   ride-along was found ALREADY SHIPPED in the v24 cycle (see the D254-era entry,
   IMPLEMENTATION_DECISIONS.md "D204 fold") - dropped from v27 scope; the stale
   pending-fixes note in docs/tasks/grammar-change.md is corrected in the v27 commit
-  instead.
+  instead.'
 decision_marker: null
 ---
 proposal_id: 2121cafe-5be1-4325-ab46-104a95559dc1
