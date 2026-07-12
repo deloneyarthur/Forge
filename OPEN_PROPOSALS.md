@@ -761,3 +761,68 @@ decided_by: operator (in-session green-light 2026-07-12, "Also green-light on gr
   (their "valid second family", probe-validated) and the market-level id registration ask is
   relayed for a fast-follow bump (the dsj confirmed-vocabulary discipline, D258/D261).
 decision_marker: null
+---
+proposal_id: 9f1c615b-88a2-4f31-b7c4-52e01d266001
+status: APPROVED
+proposed_at: '2026-07-12T06:02:27+00:00'
+proposal_type: loosen
+target: grammar_v29_market_realized_vol_activation
+rationale: 'v29 (D266) — the recorded fast-follow to 2121cafe/v28: activate
+  `market_realized_vol`, Crucible''s PREFERRED (market-level) variant of the
+  absolute-RV MR protection. Their D258-pattern confirm
+  (CRUCIBLE_market_realized_vol_registered_2026-07-12) supplies every wire-against
+  string: id market_realized_vol, family macro (DELIBERATE - C1 stacks it with the
+  vol-family rv_rank/vol_regime/realized_vol primaries and the idio-family ivol
+  veto, preserving the champion MR leg''s protections), version 1, lookback 0
+  (writer-internal reference warmup, market_sma_cross pattern), params
+  reference="SPY"/window=21 defaults, market_wide_by_design=true, semantics
+  byte-matching their rv21 ledger tag (pstdev ddof=0, c2c, sqrt(252)) so the
+  0.15-0.30 sweep bounds translate 1:1 - no per-name heterogeneity (the v28
+  family''s calibration weakness). All three serving layers INDEPENDENTLY
+  VERIFIED pre-build: registry snapshot 2026-07-12T053611Z grep-confirmed; writer
+  probe = 78.7% of SPY bars pass <0.20, identical sets across underlyings
+  (market-wide BY DESIGN, distinct from the fixed cache bug), 2022-12 knife
+  window mostly closed (7/21 open at 0.20). Change: (1) R1 accepted OR +=
+  market_realized_vol (seventh gate); (2) MR primary pool += id; (3) threshold
+  entry regime_range (0.15,0.30) op "<" absolute-only gate-only; (4) horizon 1
+  (gate-only, vix_term_slope precedent); (5) _MR_RANGING_GATES += id (3.0); (6)
+  MR VETO pool widened to TWO members (ivol, market_realized_vol) with the C1
+  guard generalized PER-ID (regime_veto_family_by_id replaces
+  regime_veto_family_by_hypothesis) - the D263 seam Q46 anticipated, minimally
+  widened to deliver their explicit "pair it with EITHER existing gate": one
+  veto slot still drawn per config (never ivol AND market_rv; three-gate stacks
+  stay Q46). Byte-identity: single-id pools consume rng identically under the
+  per-id refactor (share draw + rng.choice unchanged) -> ALL pre-v29 goldens
+  UNCHANGED (verified green, incl. a dedicated regression test); new
+  _REGIME_GOLDEN_V29_ACTIVE pinned (diverges from V26_ACTIVE at position 3,
+  carriers 3+11). Emission proof (live registry, 3000): market_rv PRIMARY on
+  163/590 MR (27.6% - ranging boost + a structural bonus: macro stays eligible
+  in vol_target-chained configs where volatility gates are excluded); veto
+  draws ivol 176 / market_rv 117; pairings market_rv+ivol 86,
+  rv_rank+market_rv 25, vol_regime+market_rv 19, realized_vol+market_rv 17 -
+  every asked shape; thresholds 0.1503-0.2995 all-absolute. Full suite 1912
+  green; ruff + mypy --strict clean.'
+evidence:
+  trigger: crucible_registration_confirm_wired
+  confirm: '../Crucible/docs/handoffs/CRUCIBLE_market_realized_vol_registered_2026-07-12.md'
+  registry: 'market_realized_vol v1 family=macro lookback=0 market_wide_by_design=true in registry_snapshot_2026-07-12T053611Z.json (independently verified)'
+  writer: 'direct activation-dates probe 2026-07-12: SPY <0.20 open 78.7% of 2119 bars; identical across underlyings (market-wide by design); 2022-12 mostly closed (7/21)'
+  lineage: 'the recorded fast-follow to 2121cafe (v28 decided_by scope note + STATUS + PROMPT_CRUCIBLE_MARKET_RV_REGISTRATION_ASK.md sect. 3); D258 confirmed-vocabulary discipline observed'
+proposal_yaml: |
+  # v29 market_realized_vol activation (R1 seventh gate + two-member MR veto pool):
+  #   custom_predicates.py: R1 accepted OR += market_realized_vol;
+  #     _MR_IVOL_VETO_INDICATORS -> _MR_REGIME_VETO_INDICATORS = (ivol, market_realized_vol)
+  #   search_space.py: MR primary pool += id; regime_veto_family_by_id (per-ID C1 guard)
+  #   sampler.py: veto eligibility filtered per-id; _MR_RANGING_GATES += id
+  #   indicator_thresholds.py: market_realized_vol regime_range (0.15,0.30) op "<"
+  #   signal_horizon.py: market_realized_vol 1 (gate-only)
+  #   grammar.yaml: v28 -> v29 + header note + R1 comment + evidence_to_relax; archive
+decided_at: '2026-07-12T06:02:27+00:00'
+decided_by: operator (in-session 2026-07-12 - attached the wire-against confirm
+  (CRUCIBLE_market_realized_vol_registered_2026-07-12, whose header names the D258
+  dormant-wiring pattern "this is the confirm you wire against") following the
+  recorded v28 fast-follow plan (2121cafe decided_by scope note, STATUS 07-12 block,
+  relay sect. 3 "On your confirm we ship the fast-follow bump"); the v28 green-light
+  covered the grammar-update program for this Crucible ask, market-level family
+  included, gated only on their id confirm - which this is.
+decision_marker: null

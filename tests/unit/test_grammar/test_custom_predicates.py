@@ -1140,6 +1140,36 @@ def test_r1_mean_reversion_accepts_realized_vol_gate() -> None:
     assert result.passed
 
 
+def test_r1_mean_reversion_accepts_market_realized_vol_gate() -> None:
+    """D266 (v29): market_realized_vol (op '<', the MARKET-level absolute-RV calm
+    gate — reference underlying's annualized 21-session realized vol, byte-matching
+    Crucible's rv21 ledger tag) is a seventh accepted R1 regime gate for
+    mean_reversion. Their preferred family from the convention reply: the losses
+    cluster in MARKET-wide spikes (baskets fail together), and the 0.15-0.30 sweep
+    bounds translate 1:1 at the market level. Registered family `macro`
+    (CRUCIBLE_market_realized_vol_registered_2026-07-12) so C1 lets it stack with
+    the vol-family and idio-family gates. ADD not replace (R1 stays an OR)."""
+    cfg = grammar_valid_baseline(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("rsi_2",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("market_realized_vol",),
+                params={"threshold": 0.20, "op": "<"},
+            ),
+        ),
+    )
+    result = evaluate(_predicate("mean_reversion_requires_iv_rank_gate"), cfg, _registry())
+    assert result.passed
+
+
 def test_r1_mean_reversion_without_iv_rank_or_gamma_fails() -> None:
     """D107: with neither iv_rank nor a gamma gate, R1 still fires and fails."""
     cfg = grammar_valid_baseline(

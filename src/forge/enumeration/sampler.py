@@ -123,7 +123,9 @@ _MR_RANGING_GATES: frozenset[str] = frozenset(
     # D265 (v28): realized_vol joins the boost — same calm-vol thesis class as
     # rv_rank/vol_regime (the absolute systematic complement), so the new family
     # gets real supply for Crucible's fold-column selection. hurst stays out (D254).
-    {"gamma_flip_distance_pct", "rv_rank", "vol_regime", "realized_vol"}
+    # D266 (v29): market_realized_vol joins — Crucible's PREFERRED (market-level)
+    # variant of the same thesis; at least equal supply to the per-name gates.
+    {"gamma_flip_distance_pct", "rv_rank", "vol_regime", "realized_vol", "market_realized_vol"}
 )
 _MR_RANGING_GATE_WEIGHT: float = 3.0
 
@@ -186,15 +188,17 @@ _RANK_K_CHOICES: tuple[int, ...] = (5, 10, 20)
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 
-# D258 (v25) / D263 (v26) — optional regime-VETO share. Fraction of ELIGIBLE
-# configs (primary gate is not the veto's own family) that carry the optional
-# second regime gate: dsj on trend_continuation (v25), ivol on mean_reversion
-# (v26). ~0.5 mints both veto and non-veto arms so the honest campaign compares
-# them; feedback-tunable in a later increment. Consumed ONLY when the registry
-# serves the veto id (pool non-empty), so the dormant cold path draws no rng and
-# stays byte-identical (hard rule #6). The veto's C1 family is per-hypothesis,
-# read from the registry (SearchSpace.regime_veto_family_by_hypothesis) — NOT a
-# module constant, since dsj is `volatility` but ivol is `idiosyncratic_vol`.
+# D258 (v25) / D263 (v26) / D266 (v29) — optional regime-VETO share. Fraction of
+# ELIGIBLE configs (at least one veto id whose family is absent from the config)
+# that carry the optional second regime gate: dsj on trend_continuation (v25),
+# ivol + market_realized_vol on mean_reversion (v26/v29 — one drawn per config).
+# ~0.5 mints both veto and non-veto arms so the honest campaign compares them;
+# feedback-tunable in a later increment. Consumed ONLY when the eligible set is
+# non-empty (registry-served AND C1-compatible), so the dormant cold path draws
+# no rng and stays byte-identical (hard rule #6). Each veto's C1 family is
+# per-ID, read from the registry (SearchSpace.regime_veto_family_by_id) — NOT a
+# module constant: dsj is `volatility`, ivol `idiosyncratic_vol`,
+# market_realized_vol `macro`.
 _REGIME_VETO_SHARE: float = 0.5
 
 # Cohort-yield exploration band (§3 of Crucible's 2026-06-17 yield-map refresh).
@@ -754,15 +758,21 @@ def sample_config(
     # (idiosyncratic_vol) nothing else in an MR config is that family, so it STACKS
     # on the volatility gate — the validated form. Drawn LAST so activation shifts
     # only the added signal, not the selector/sizer/exit/underlying/combiner draws.
+    # D266 (v29): the C1 guard is per-ID — each veto id is eligible iff no
+    # indicator of ITS OWN family is already in the config (MR's pool spans two
+    # families: ivol=idiosyncratic_vol, market_realized_vol=macro). For
+    # single-id pools (dsj on trend; any partially-served MR registry) the
+    # eligible set equals the old per-hypothesis guard, and the share draw +
+    # rng.choice consume identically — byte-identical to the D263 path
+    # (goldens assert it).
     veto_pool = space.regime_veto_indicators_by_hypothesis.get(hypothesis, ())
-    if (
-        veto_pool
-        and not _config_has_veto_family_indicator(
-            signals, space, space.regime_veto_family_by_hypothesis[hypothesis]
-        )
-        and rng.random() < _REGIME_VETO_SHARE
-    ):
-        veto_id = rng.choice(veto_pool)
+    eligible_vetoes = tuple(
+        v
+        for v in veto_pool
+        if not _config_has_veto_family_indicator(signals, space, space.regime_veto_family_by_id[v])
+    )
+    if eligible_vetoes and rng.random() < _REGIME_VETO_SHARE:
+        veto_id = rng.choice(eligible_vetoes)
         signals.append(
             SignalSpec(
                 id="sig_regime_veto",

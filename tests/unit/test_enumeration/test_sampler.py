@@ -2565,3 +2565,148 @@ def test_d265_ivol_veto_stacks_on_realized_vol_primary(
             res = validate(cfg, grammar, reg)
             assert res.valid, f"seed={seed}: {res.errors}"
     assert stacked > 0, "ivol veto never stacked on a realized_vol primary"
+
+
+# ---------------------------------------------------------------------------
+# D266 (v29): market_realized_vol — the MARKET-level absolute-RV MR gate
+# (Crucible CRUCIBLE_market_realized_vol_registered_2026-07-12; family macro
+# BY DESIGN so C1 stacks it with the vol/idio families). Primary (R1 seventh
+# gate) AND second MR veto-pool member — "pair it with EITHER existing gate".
+# Constants/table unit tests: test_mr_grammar_v29.py.
+# ---------------------------------------------------------------------------
+
+
+def _v29_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """_v26_registry + market_realized_vol (family macro, version 1, lookback 0,
+    market-wide) — the live v29 state (their registry serves it since
+    registry_snapshot_2026-07-12T053611Z)."""
+    market_rv = IndicatorMetadata(
+        id="market_realized_vol",
+        version=1,
+        family="macro",
+        lookback=0,
+        params_schema={},
+        rank_per_name_coherent=False,
+        market_wide_by_design=True,
+    )
+    v26 = _v26_registry(base)
+    return v26.model_copy(update={"indicators": (*v26.indicators, market_rv)})
+
+
+def test_d266_market_rv_mr_primary_reachable_and_grammar_valid(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """market_realized_vol draws as the MR PRIMARY gate: ABSOLUTE threshold in
+    the 0.15-0.30 sweep, op '<', never percentile; fully grammar-valid. Being
+    family macro it does NOT hit the vol_target chain guard (volatility), so
+    market-gated configs MAY carry vol_target sizers — validity asserted when
+    the pairing occurs."""
+    reg = _v29_registry(registry)
+    space = build_search_space(grammar, reg)
+    seen = 0
+    vol_target_paired = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
+        primary = next(s for s in cfg.signals if s.id == "sig_regime")
+        if primary.indicators != ("market_realized_vol",):
+            continue
+        seen += 1
+        p = primary.params
+        assert p["op"] == "<", p
+        assert "use_percentile" not in p, p
+        assert 0.15 <= float(p["threshold"]) <= 0.30, p
+        res = validate(cfg, grammar, reg)
+        assert res.valid, f"seed={seed}: {res.errors}"
+        if cfg.sizer.mode == "vol_target":
+            vol_target_paired += 1
+            assert res.valid  # macro + the volatility chain: C1-legal
+    assert seen > 0, "market_realized_vol never drawn as the MR primary gate"
+
+
+def test_d266_market_rv_vetoes_on_volatility_primary(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The asked pairing: a VOLATILITY primary (rv_rank / realized_vol) with
+    market_realized_vol as the ANDed second gate — C1-legal (macro ≠
+    volatility). One veto slot: never ivol AND market_rv in the same config;
+    a market_rv PRIMARY never also carries a market_rv veto (per-id family
+    guard: macro already present)."""
+    reg = _v29_registry(registry)
+    space = build_search_space(grammar, reg)
+    market_veto_seen = 0
+    on_volatility = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
+        regime_sigs = [s for s in cfg.signals if s.role == "regime_filter"]
+        vetoes = [s for s in regime_sigs if s.id == "sig_regime_veto"]
+        assert len(vetoes) <= 1, f"two vetoes at seed={seed}"
+        primary = next(s for s in regime_sigs if s.id == "sig_regime")
+        if vetoes and vetoes[0].indicators == ("market_realized_vol",):
+            market_veto_seen += 1
+            assert primary.indicators != ("market_realized_vol",), cfg.name
+            res = validate(cfg, grammar, reg)
+            assert res.valid, f"seed={seed}: {res.errors}"
+            p = vetoes[0].params
+            assert p["op"] == "<", p
+            assert "use_percentile" not in p, p
+            if primary.indicators[0] in {"rv_rank", "realized_vol", "vol_regime"}:
+                on_volatility += 1
+    assert market_veto_seen > 0, "market_realized_vol never drawn as the MR veto"
+    assert on_volatility > 0, "market_rv veto never paired with a volatility primary"
+
+
+def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The per-id C1 guard refactor must not perturb single-id veto pools: on the
+    v26 fixture (ivol-only MR veto, dsj-only trend veto) the enumeration sequence
+    equals the pinned _REGIME_GOLDEN_V26_ACTIVE exactly (also asserted by the
+    d263 golden test — duplicated here so a refactor failure names the cause)."""
+    reg = _v26_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_V26_ACTIVE
+
+
+# D266 v29 cold-start golden (seed 7777, max 15) on a registry serving dsj, ivol,
+# AND market_realized_vol — the live v29 state. Diverges from
+# _REGIME_GOLDEN_V26_ACTIVE at position 3 (the first MR config whose widened
+# primary pool / two-member veto draw lands differently; market_rv carriers at
+# positions 3 and 11). Every pre-v29 golden stays byte-identical — the fixtures
+# don't serve market_realized_vol, and the per-id guard refactor preserves
+# single-id-pool rng consumption exactly (asserted by their own tests plus
+# test_d266_veto_generalization_leaves_single_id_pools_byte_identical).
+_REGIME_GOLDEN_V29_ACTIVE = [
+    "f228c547d273330f",
+    "5e7cd4e85a465d62",
+    "f2239a17df29b1d7",
+    "623bcda3c4d262da",
+    "99cfd4e666b7c93b",
+    "4f17ab52f24af119",
+    "cd137256711e9ad1",
+    "b2e3a47f41f1abd9",
+    "c21d51b77738c9a2",
+    "856e56406f51bb7e",
+    "5534310aacb9d056",
+    "6e4d61b5b870c7e8",
+    "94fedfbcb08cd7e7",
+    "00900abd62421b3b",
+    "a8eead226a36f2e3",
+]
+
+
+def test_d266_market_rv_active_cold_start_golden(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Byte-pin the v29 enumeration sequence (registry serving dsj + ivol +
+    market_realized_vol). Diverges from _REGIME_GOLDEN_V26_ACTIVE at the first
+    MR config touched by the widened pools — the D266 licensed change."""
+    reg = _v29_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_V29_ACTIVE
+    assert active != _REGIME_GOLDEN_V26_ACTIVE
+    assert active[:3] == _REGIME_GOLDEN_V26_ACTIVE[:3]  # split at the first eligible MR config
+    # at least one config in this slice actually carries the market gate
+    assert any(
+        any("market_realized_vol" in s.indicators for s in c.signals)
+        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
+    )

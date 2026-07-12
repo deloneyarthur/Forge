@@ -300,7 +300,15 @@ _R2_TREND_VOLATILITY_VETO_INDICATORS = ("days_since_jump",)
 # `ivol_lo` form (Crucible FORGE_ivol_lo_mr_entry_gate_2026-07-09). Empty in the
 # search space until the registry serves `ivol` → dormant + byte-identical cold
 # path (hard rule #6).
-_MR_IVOL_VETO_INDICATORS = ("ivol",)
+# D266 (v29): pool widened to TWO members — market_realized_vol (family macro)
+# joins so the market gate can ride as the ANDed second gate on a volatility
+# primary (rv_rank / vol_regime / realized_vol): Crucible's "pair it with
+# EITHER existing gate". One veto slot is still drawn per config (ivol OR
+# market_rv, never both — the three-gate stack stays Q46); the sampler's C1
+# guard is per-ID (each veto id filtered by its OWN family), the D263
+# generalization seam minimally widened. Each id stays registry-gated
+# independently (intersection in search_space).
+_MR_REGIME_VETO_INDICATORS = ("ivol", "market_realized_vol")
 # T1.4 (PROMPT_5_FORGE_V1_1_REVISED, grammar v2): expanded from
 # (days_to_earnings, days_to_fomc) to include macro-event indicators
 # (days_to_cpi, days_to_nfp, days_to_opex) that Crucible Prompt 6 added
@@ -376,6 +384,19 @@ _R1_VOL_REGIME_INDICATOR = "vol_regime"
 # both-gates shape. Added per the D107/D150/D167/D254 widening pattern (ADD not
 # replace; R1 stays an OR). Operator-approved loosening, OPEN_PROPOSALS 2121cafe.
 _R1_REALIZED_VOL_REGIME_INDICATOR = "realized_vol"
+# D266 (v29, MR side): market_realized_vol (the MARKET-level absolute-RV calm
+# gate — reference underlying's annualized 21-session realized vol, population
+# stdev ddof=0 of c2c returns x sqrt(252), byte-matching Crucible's rv21 ledger
+# tag; registered family `macro`, market_wide_by_design, CRUCIBLE_market_
+# realized_vol_registered_2026-07-12) is a seventh accepted R1 regime gate.
+# Their PREFERRED family from the convention reply: the champion's knife-catch
+# losses cluster in MARKET-wide spikes (baskets fail together), and the
+# 0.15-0.30 sweep bounds were calibrated on market vol — they translate 1:1
+# here, unlike the per-name D265 gate. Family macro is DELIBERATE (their
+# words): C1 lets the market gate STACK with the vol-family rv_rank/
+# vol_regime/realized_vol primaries and the idio-family ivol veto. ADD not
+# replace (R1 stays an OR). Operator-approved fast-follow to 2121cafe.
+_R1_MARKET_REALIZED_VOL_REGIME_INDICATOR = "market_realized_vol"
 
 # H2 (v12 / D109): event_momentum's post-event TIMING gate. Unlike R1/R2/R3
 # this is NOT a grammar.yaml rule — adding a 22nd operator-owned rule would
@@ -890,7 +911,7 @@ def _e3_trailing_atr_has_activation_threshold(
 # ---------------------------------------------------------------------------
 
 
-def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early return per accepted R1 gate (OR over {iv_rank, gamma_flip, hurst, rv_rank, vol_regime, realized_vol}); the per-gate D-lineage comments are the value
+def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early return per accepted R1 gate (OR over {iv_rank, gamma_flip, hurst, rv_rank, vol_regime, realized_vol, market_realized_vol}); the per-gate D-lineage comments are the value
     config: StrategyConfig,
     registry: RegistrySnapshot,
 ) -> PredicateResult:
@@ -930,6 +951,11 @@ def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early ret
         # op-agnostic convention as the other non-iv_rank gates.
         if _R1_REALIZED_VOL_REGIME_INDICATOR in inds:
             return PredicateResult(passed=True)
+        # D266 (v29): a market_realized_vol gate satisfies R1 on its own — the
+        # MARKET-level absolute-RV calm gate (op "<"; Crucible's preferred
+        # family, sweep bounds translating 1:1 with their rv21 ledger tag).
+        if _R1_MARKET_REALIZED_VOL_REGIME_INDICATOR in inds:
+            return PredicateResult(passed=True)
         if _R1_IV_RANK_INDICATOR not in inds:
             continue
         threshold = regime.params.get("threshold")  # type: ignore[attr-defined]
@@ -948,7 +974,8 @@ def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early ret
             f"{_R1_HURST_REGIME_INDICATOR!r} (the D150 mean-reverting regime gate), "
             f"{_R1_RV_RANK_REGIME_INDICATOR!r} (the D167 cheap-realized-vol regime gate), "
             f"{_R1_VOL_REGIME_INDICATOR!r} (the D254 vol-tercile regime gate), "
-            f"or {_R1_REALIZED_VOL_REGIME_INDICATOR!r} (the D265 absolute-RV regime gate)"
+            f"{_R1_REALIZED_VOL_REGIME_INDICATOR!r} (the D265 absolute-RV regime gate), "
+            f"or {_R1_MARKET_REALIZED_VOL_REGIME_INDICATOR!r} (the D266 market-RV regime gate)"
         ),
     )
 

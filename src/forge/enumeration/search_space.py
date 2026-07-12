@@ -33,13 +33,14 @@ from crucible_contracts import MANDATORY_EXIT_IDS
 from forge.grammar.custom_predicates import (
     _C2_HYPOTHESIS_FAMILIES,
     _EVENT_MOMENTUM_REGIME_INDICATORS,
-    _MR_IVOL_VETO_INDICATORS,
+    _MR_REGIME_VETO_INDICATORS,
     _P2_ENTRY_DTE,
     _P3_DELTA_BAND,
     _P3_DELTA_BAND_OVERRIDES,
     _R1_GAMMA_REGIME_INDICATOR,
     _R1_HURST_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
+    _R1_MARKET_REALIZED_VOL_REGIME_INDICATOR,
     _R1_REALIZED_VOL_REGIME_INDICATOR,
     _R1_RV_RANK_REGIME_INDICATOR,
     _R1_VOL_REGIME_INDICATOR,
@@ -185,11 +186,13 @@ class SearchSpace:
     # the registry serves the id, so the sampler's veto draw is skipped entirely →
     # byte-identical cold path.
     regime_veto_indicators_by_hypothesis: Mapping[str, tuple[str, ...]]
-    # D263 (v26): the veto pool's registry family per hypothesis (dsj→volatility,
-    # ivol→idiosyncratic_vol), so the sampler's C1 guard checks the VETO's own
-    # family — skip when a same-family gate is present. Present only for hypotheses
-    # whose veto pool is non-empty (served).
-    regime_veto_family_by_hypothesis: Mapping[str, str]
+    # D263 (v26) / D266 (v29): the registry family per VETO ID (dsj→volatility,
+    # ivol→idiosyncratic_vol, market_realized_vol→macro), so the sampler's C1
+    # guard checks each veto id's OWN family — a veto id is eligible iff no
+    # same-family indicator is already in the config. Per-ID (not
+    # per-hypothesis) since v29: the MR pool holds ids from TWO families.
+    # Keyed only by served ids (members of a non-empty pool).
+    regime_veto_family_by_id: Mapping[str, str]
 
     # Sparse: only modes WITH a §3.5 X-rule requirement that the current
     # registry can satisfy. ``samplable_sizer_modes`` is the filtered set
@@ -246,24 +249,26 @@ def build_search_space(
     samplable_modes, sizer_req = _build_sizer_mode_views(registry.sizer_modes, registry_ids)
     risk_pct_range = _resolve_p4_risk_pct_range(grammar)
 
-    # D258 (v25) / D263 (v26): the veto pools (dsj on trend, ivol on MR),
-    # intersected with registry_ids so each is EMPTY until the registry serves the
-    # id — the sampler's `if veto_pool` guard then consumes no rng (byte-identical,
-    # hard rule #6).
+    # D258 (v25) / D263 (v26) / D266 (v29): the veto pools (dsj on trend;
+    # ivol + market_realized_vol on MR), intersected with registry_ids so each id
+    # is absent until the registry serves it — an empty pool consumes no rng
+    # (byte-identical, hard rule #6), and a partially-served MR pool simply
+    # offers fewer ids.
     regime_veto = MappingProxyType(
         {
             "trend_continuation": tuple(
                 sorted(set(_R2_TREND_VOLATILITY_VETO_INDICATORS) & registry_ids)
             ),
-            "mean_reversion": tuple(sorted(set(_MR_IVOL_VETO_INDICATORS) & registry_ids)),
+            "mean_reversion": tuple(sorted(set(_MR_REGIME_VETO_INDICATORS) & registry_ids)),
         }
     )
-    # D263 (v26): the veto family per hypothesis, read from registry metadata, so
-    # the sampler's C1 guard uses the VETO's own family (dsj→volatility,
-    # ivol→idiosyncratic_vol). Only for served (non-empty) pools.
+    # D263 (v26) / D266 (v29): the veto family per ID, read from registry
+    # metadata, so the sampler's C1 guard uses each veto id's OWN family
+    # (dsj→volatility, ivol→idiosyncratic_vol, market_realized_vol→macro).
+    # Per-ID since v29 — the MR pool spans two families.
     _id_to_family = {ind.id: ind.family for ind in registry.indicators}
     regime_veto_family = MappingProxyType(
-        {hyp: _id_to_family[ids[0]] for hyp, ids in regime_veto.items() if ids},
+        {i: _id_to_family[i] for ids in regime_veto.values() for i in ids},
     )
 
     # D071: derive new schema fields from _S5_HYPOTHESIS_EXITS.
@@ -300,7 +305,7 @@ def build_search_space(
         directional_indicators_by_hypothesis=directional,
         regime_indicators_by_hypothesis=regime,
         regime_veto_indicators_by_hypothesis=regime_veto,
-        regime_veto_family_by_hypothesis=regime_veto_family,
+        regime_veto_family_by_id=regime_veto_family,
         sizer_required_indicator=sizer_req,
         dte_entry_window_by_bucket=MappingProxyType(dict(_P2_ENTRY_DTE)),
         delta_band_by_bucket=MappingProxyType(dict(_P3_DELTA_BAND)),
@@ -387,6 +392,9 @@ def _build_regime_pool(
             # which normalizes regime-wide (FORGE_mr_absolute_vol_gate_request). C1
             # keeps it mutually exclusive with rv_rank/vol_regime (same family) and
             # with the vol_target chain (the sampler's chain-family guard).
+            # D266 (v29): market_realized_vol joins as a seventh — the MARKET-level
+            # absolute-RV gate (family macro, market-wide; Crucible's preferred
+            # variant, sweep bounds translating 1:1 with their rv21 ledger tag).
             pool[hyp] = tuple(
                 sorted(
                     {
@@ -396,6 +404,7 @@ def _build_regime_pool(
                         _R1_RV_RANK_REGIME_INDICATOR,
                         _R1_VOL_REGIME_INDICATOR,
                         _R1_REALIZED_VOL_REGIME_INDICATOR,
+                        _R1_MARKET_REALIZED_VOL_REGIME_INDICATOR,
                     }
                     & registry_ids
                 )

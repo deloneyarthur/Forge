@@ -142,6 +142,12 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # directional range), so S4 never consults this; the entry satisfies the
     # thresholdable-coverage invariant honestly (the market_state precedent).
     "vix_term_slope": 1,
+    # D266 (v29): reference underlying's 21-session annualized realized vol —
+    # a spot market-vol read (the indicator's warmup is writer-internal,
+    # registry lookback 0). Gate-only (no directional range), so S4 never
+    # consults this; the entry satisfies the thresholdable-coverage invariant
+    # honestly (the vix_term_slope/market_state precedent).
+    "market_realized_vol": 1,
     # ----- flow / calendar (event proximity — near-instant reads) -----
     "put_call_flow": 5,
     "days_to_earnings": 5,

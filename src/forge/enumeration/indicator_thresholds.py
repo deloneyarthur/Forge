@@ -389,6 +389,22 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         op_directional=">",
         directional_percentile_range=(0.60, 0.90),
     ),
+    # v29 (D266): market_realized_vol — the MARKET-level absolute-RV MR regime
+    # gate (Crucible CRUCIBLE_market_realized_vol_registered_2026-07-12: family
+    # macro BY DESIGN so C1 stacks it with the vol-family primaries and the
+    # ivol veto; reference="SPY"/window=21 defaults ride the writer, byte-
+    # matching their rv21 ledger tag — pstdev ddof=0, c2c, sqrt(252)). Their
+    # PREFERRED variant of the v28 ask: the knife-catch losses cluster in
+    # MARKET-wide spikes, and the (0.15, 0.30) sweep bounds were calibrated on
+    # market vol — they translate 1:1 here, no per-name heterogeneity (writer-
+    # probed 2026-07-12: <0.20 passes 78.7% of SPY bars; 2022-12 mostly
+    # closed, 7/21 open). ABSOLUTE only — never percentile (the percentile IS
+    # the diagnosed defect); gate-only, never a directional.
+    "market_realized_vol": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=(0.15, 0.30),
+        op_regime="<",
+    ),
     # vix_term_slope: VIX term-structure slope (market-wide by design). R2
     # calm-market gate for trend_continuation as of v27 — reverses the
     # v17/D131 deliberate exclusion on Crucible's direct campaign-grade

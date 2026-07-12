@@ -154,7 +154,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D265 bumped v27 -> v28 (realized_vol absolute MR regime gate: R1 accepted-set
     # widening + MR pool/boost + regime_range (0.15, 0.30); the 21 `rules:`
     # textually unchanged).
-    assert grammar.grammar_version == "v28"  # type: ignore[attr-defined]
+    # D266 bumped v28 -> v29 (market_realized_vol: R1 seventh gate + two-member MR
+    # veto pool with per-id C1 guard; the 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v29"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
