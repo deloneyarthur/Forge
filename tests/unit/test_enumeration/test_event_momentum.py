@@ -117,18 +117,57 @@ def test_sample_config_event_momentum_is_grammar_valid() -> None:
 
 
 def test_event_momentum_is_single_name_never_etf() -> None:
-    """PEAD is an earnings-event thesis: days_since_earnings sentinels on ETFs
-    (no earnings), exactly like days_to_earnings. The sampler must pick a single
-    name, never SPY/QQQ/IWM/DIA, or the gate never fires (0 trades)."""
+    """PEAD is an earnings-event thesis: days_since_earnings NaN-fills on ETFs
+    (no earnings), so the gate never blocks and a confluence passthrough backfills
+    a naked long-call — the degenerate leg Crucible flagged 2026-07-12 (SOXL). The
+    sampler must pick an earnings-covered single name, never a no-earnings ETF/
+    leveraged/index product, over the LIVE universe (D268)."""
+    from forge.enumeration.sampler import _NO_EARNINGS_UNDERLYINGS
+
     grammar = _grammar()
     registry = minimal_registry_snapshot()
     space = build_search_space(grammar, registry)
-    for seed in range(100):
+    for seed in range(200):
         cfg = sample_config(
             space, registry, random.Random(seed), forced_hypothesis="event_momentum"
         )
         assert cfg.underlying is not None
-        assert cfg.underlying not in _TIER_1_ETFS
+        assert cfg.underlying not in _NO_EARNINGS_UNDERLYINGS, cfg.name
+
+
+def test_no_earnings_set_covers_the_flagged_etfs_but_not_real_companies() -> None:
+    """D268: the stopgap exclusion superset must contain the no-earnings names
+    the T1.4 4-name set missed (SOXL — the promoted degenerate leg — plus the
+    leveraged/sector/commodity/vol suite), and must NOT contain earnings-covered
+    single names (the fragility guard: RTX *looks* ETF-ish but is RTX Corp, with
+    EPS; excluding it would silently starve honest supply)."""
+    from forge.enumeration.sampler import _NO_EARNINGS_UNDERLYINGS, _TIER_1_ETF_UNDERLYINGS
+
+    assert _TIER_1_ETF_UNDERLYINGS <= _NO_EARNINGS_UNDERLYINGS  # superset of the T1.4 set
+    for etf in ("SOXL", "SOXX", "TQQQ", "SQQQ", "GLD", "TLT", "UVXY", "VIX", "SMH", "XLK", "XLE"):
+        assert etf in _NO_EARNINGS_UNDERLYINGS, etf
+    for company in ("RTX", "AAPL", "NVDA", "JPM", "COIN", "MSTR"):
+        assert company not in _NO_EARNINGS_UNDERLYINGS, company
+
+
+def test_pick_underlying_excludes_no_earnings_for_earnings_gated_configs(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Hermetic (patched universe): for an earnings-gated regime draw, a no-earnings
+    name is never picked and a covered single-name still is — over the controlled
+    pool {AAPL, RTX (covered) | SOXL, XLK, SPY, TQQQ (no-earnings)}."""
+    import forge.enumeration.sampler as sampler_mod
+    from forge.enumeration.sampler import _pick_underlying
+
+    pool = ("AAPL", "RTX", "SOXL", "XLK", "SPY", "TQQQ")
+    monkeypatch.setattr(sampler_mod, "_load_underlyings", lambda: pool)
+    drawn = {
+        _pick_underlying(random.Random(s), "event_momentum", ("days_since_earnings",))
+        for s in range(300)
+    }
+    assert drawn <= {"AAPL", "RTX"}, drawn  # only covered single-names
+    assert "RTX" in drawn  # the ETF-lookalike company IS still drawable
+    # non-earnings-gated hypothesis: the full pool stays available (no exclusion)
+    unfiltered = {_pick_underlying(random.Random(s), "mean_reversion", ()) for s in range(300)}
+    assert unfiltered & {"SOXL", "XLK", "SPY", "TQQQ"}, unfiltered
 
 
 def test_event_momentum_sampling_is_deterministic() -> None:

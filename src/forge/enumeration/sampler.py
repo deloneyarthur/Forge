@@ -301,6 +301,90 @@ def universe_fingerprint() -> str:
 
 _TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 
+# D268 (v30) — no-earnings underlyings excluded from earnings-DEPENDENT generation.
+# The T1.4 exclusion above was only the 4 broad-market ETFs, but Crucible's universe
+# export has since grown to include ~26 more no-earnings names (leveraged/sector/
+# commodity/vol/bond/index products). Crucible's 2026-07-12 relay
+# (FORGE_event_momentum_no_earnings_underlying_degenerates): on such a name
+# `days_since_earnings` NaN-fills → the engine's no-data fallback returns allow=True
+# (never gates) and the `sue` directional NaN → FLAT, so a confluence `realized_vol`
+# passthrough backfills a naked long-call — a MISLABELED degenerate leg that trades
+# (passes expected_trades) and reached the first promoted book (SOXL). This CONSERVATIVE
+# superset (ETFs/leveraged/inverse/commodity/vol/bond/index ONLY — every entry
+# unambiguously EPS-less; earnings-covered single names like RTX Corp are deliberately
+# ABSENT so honest supply is never starved) closes the ~22.5% degenerate event_momentum
+# emission today. STOPGAP: superseded by the v31 coverage manifest (Crucible publishes
+# the financials.parquet covered-symbol set as a contracted export → Forge intersects
+# the earnings-gated pool with it and retires this hardcoded list). Until then, a
+# universe add of a NEW no-earnings ticker not listed here re-opens the blind spot for
+# that name — the manifest is the durable fix.
+_NO_EARNINGS_UNDERLYINGS: frozenset[str] = _TIER_1_ETF_UNDERLYINGS | frozenset(
+    {
+        # leveraged / inverse index products
+        "TQQQ",
+        "SQQQ",
+        "SOXL",
+        "SOXS",
+        "SPXL",
+        "SPXS",
+        "UPRO",
+        "TNA",
+        "TZA",
+        "UDOW",
+        "SDOW",
+        "FAS",
+        "FAZ",
+        "LABU",
+        "LABD",
+        # sector / industry ETFs (SPDR Select + others)
+        "XLB",
+        "XLC",
+        "XLE",
+        "XLF",
+        "XLI",
+        "XLK",
+        "XLP",
+        "XLRE",
+        "XLU",
+        "XLV",
+        "XLY",
+        "SMH",
+        "SOXX",
+        "XBI",
+        "IBB",
+        "KRE",
+        "XRT",
+        # broad / regional / factor ETFs
+        "EEM",
+        "EFA",
+        "ARKK",
+        "FXI",
+        "EWZ",
+        "KWEB",
+        "IWM",
+        "VNQ",
+        # commodity / currency funds
+        "GLD",
+        "SLV",
+        "USO",
+        "UNG",
+        "GDX",
+        "GDXJ",
+        "DBC",
+        # volatility products
+        "UVXY",
+        "VXX",
+        "SVXY",
+        "VIX",
+        # bond / rate ETFs
+        "TLT",
+        "HYG",
+        "IEF",
+        "LQD",
+        "AGG",
+    }
+)
+
 # Earnings-calendar regime indicators return a sentinel on ETF underlyings (no
 # earnings), so the gate never fires → 0 trades. A config gating on either the
 # forward (days_to_earnings; R3 / T1.4) or the backward (days_since_earnings;
@@ -371,7 +455,7 @@ def _pick_underlying(
         return None
     underlyings = _load_underlyings()
     if any(ind in _EARNINGS_CALENDAR_ETF_INCOMPATIBLE for ind in regime_indicators):
-        pool = tuple(u for u in underlyings if u not in _TIER_1_ETF_UNDERLYINGS)
+        pool = tuple(u for u in underlyings if u not in _NO_EARNINGS_UNDERLYINGS)
     else:
         pool = underlyings
     if underlying_class_weights or underlying_name_weights or factor_cell_discounts:

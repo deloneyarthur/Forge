@@ -156,7 +156,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # textually unchanged).
     # D266 bumped v28 -> v29 (market_realized_vol: R1 seventh gate + two-member MR
     # veto pool with per-id C1 guard; the 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v29"  # type: ignore[attr-defined]
+    # D268 bumped v29 -> v30 (earnings-gated underlying exclusion widened to the full
+    # no-earnings set; a generation tightening, the 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v30"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

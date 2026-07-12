@@ -1741,19 +1741,19 @@ _COHORT_TREND = "trend_continuation"
 _COHORT_GOLDEN_PRE_REFACTOR = [
     "dc125d8f4e014630",
     "4710371b04fac3d0",
-    "68b7660098f1b385",
+    "bd810fad45dfa485",
     "174df1ffb521246b",
     "d4719affe73e6187",
     "5713f48884331d79",
-    "fe60ab6185e44caf",
-    "c7aada72922e629c",
-    "9c25b03b9c6e087a",
-    "7d5cd3832a6d3f50",
-    "03f034017a2f2a19",
-    "2fb7d3ea7e83576a",
-    "9c367489d250a1d5",
-    "2af7fff2f5750d32",
-    "5d14c417fe47fa2c",
+    "2764eaad2e3d36f6",
+    "73b6497391e97291",
+    "4be92b875cc8aa22",
+    "7668a196a91709cc",
+    "358b69c99a36daf9",
+    "0fa5271aecef4d0c",
+    "e2da564ebf2549f8",
+    "01af924db4cbe79a",
+    "3a3f40a4cddf33d0",
 ]
 
 
@@ -1936,20 +1936,30 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # D265 (v28): re-pinned again — realized_vol joins the MR regime pool (the base
 # fixture already serves it for X1), moving position 14 (the slice's
 # realized_vol-gated MR config). none_run == empty_run re-verified under v28.
+# D268 (v30): re-pinned — the earnings-gated underlying exclusion widened from the
+# 4 tier-1 ETFs to the full no-earnings set (_NO_EARNINGS_UNDERLYINGS), so every
+# earnings-gated config (event_momentum / vol_event drawing an earnings gate) draws
+# from a smaller pool; `rng.choice` on that pool consumes rng differently, cascading
+# the sequence from the first earnings-gated config (position 0 here is a
+# volatility_event) onward. Non-earnings configs are individually unchanged; the
+# cascade is the rng-stream reshuffle, licensed by the v30 bump. All six cold-start
+# goldens re-pinned; none_run == empty_run + all inter-golden prefix relations
+# re-verified before pinning. NB these slices read the LIVE universe export via
+# `_load_underlyings` (pre-existing — earnings configs draw from it).
 _REGIME_GOLDEN_PRE = [
-    "f228c547d273330f",
-    "5e7cd4e85a465d62",
+    "6bfa51eb7329103c",
+    "4c09a2654e9913c7",
     "f2239a17df29b1d7",
     "5f790a00903621ed",
     "2c6b3f5717967ee1",
     "6ef99e9cebfaf8be",
     "ef0333e78106091a",
-    "e7d72ace35192f77",
-    "f5f0403b180e1d3b",
-    "e7e044f5d80304f4",
-    "eee5cb3fac2259f8",
-    "c4e866e656331847",
-    "420f6c187024f808",
+    "7013a217591147b0",
+    "45c1a2161d91d191",
+    "f177759e5da1b3c7",
+    "6ce97adb87c6079c",
+    "a80a081d90ebcef9",
+    "c3e07bfb3dc38665",
     "2e4054a200aca442",
     "7a78bc68429e7a9e",
 ]
@@ -2169,19 +2179,19 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # (the slice's realized_vol-gated MR config; same single-position shift as
 # _REGIME_GOLDEN_PRE, so the dsj-vs-PRE split structure is untouched).
 _REGIME_GOLDEN_DSJ_ACTIVE = [
-    "f228c547d273330f",
-    "5e7cd4e85a465d62",
+    "6bfa51eb7329103c",
+    "4c09a2654e9913c7",
     "f2239a17df29b1d7",
     "bba32f5692adf59f",
     "9737c4c06a440ee4",
     "617ffeebf9ccda8b",
     "8159ebdd25570f8a",
-    "16bf62faf000af9a",
+    "923b32f00655bcf3",
     "099d4d876dd0bbc0",
-    "c757c989e2a95524",
+    "3c4b391cae24e715",
     "3070a725431875d8",
-    "4573ce4928291ee8",
-    "5bc21b45d2e09b22",
+    "e29fdb33e72a8b64",
+    "a07ec8ea89dada1b",
     "bc0b069c84945150",
     "d057acfa6f58918d",
 ]
@@ -2320,21 +2330,21 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # configs from position 6 re-drew their gates, cascading the ivol-veto positions
 # (were 3, 7, 12).
 _REGIME_GOLDEN_V26_ACTIVE = [
-    "f228c547d273330f",
-    "5e7cd4e85a465d62",
+    "6bfa51eb7329103c",
+    "4c09a2654e9913c7",
     "f2239a17df29b1d7",
     "d94435bb869d78af",
-    "99cfd4e666b7c93b",
-    "4f17ab52f24af119",
+    "0b36140bdb9568d8",
+    "d48970b100b35e24",
     "cd137256711e9ad1",
-    "b2e3a47f41f1abd9",
-    "c21d51b77738c9a2",
-    "856e56406f51bb7e",
-    "5534310aacb9d056",
-    "1a98c7c758b041e3",
-    "94fedfbcb08cd7e7",
-    "00900abd62421b3b",
-    "a8eead226a36f2e3",
+    "16ad819246208325",
+    "f0198cf7715392b9",
+    "2594c484c61934fa",
+    "fd98a86b15e04865",
+    "8764842d35a62d39",
+    "30f07f8b94f92322",
+    "17230529a3cf5495",
+    "10cabe27b44e8768",
 ]
 
 
@@ -2464,21 +2474,21 @@ def test_d264_new_ids_dormant_without_registry(
 # D265 (v28): re-pinned — realized_vol in the MR regime pool moved position 12
 # (the slice's realized_vol-gated MR config).
 _REGIME_GOLDEN_V27_ACTIVE = [
-    "f228c547d273330f",
-    "5e7cd4e85a465d62",
+    "6bfa51eb7329103c",
+    "4c09a2654e9913c7",
     "63a6f84ed16d537e",
-    "9ad6f0e8620dcd75",
-    "4921655eb1f7a490",
-    "6ef99e9cebfaf8be",
-    "46933e3c20ff9061",
-    "e7d72ace35192f77",
-    "f5f0403b180e1d3b",
-    "e7e044f5d80304f4",
-    "eee5cb3fac2259f8",
-    "c4e866e656331847",
-    "467af7d9641d9be4",
-    "b39f64e46a428d07",
-    "a8eead226a36f2e3",
+    "a060e1c7054d2a0a",
+    "aa1ff071c93a09ac",
+    "4f17ab52f24af119",
+    "cd137256711e9ad1",
+    "16ad819246208325",
+    "f0198cf7715392b9",
+    "2594c484c61934fa",
+    "6494d6b68fb1872d",
+    "8764842d35a62d39",
+    "25602911f8cc65fc",
+    "17230529a3cf5495",
+    "10cabe27b44e8768",
 ]
 
 
@@ -2676,21 +2686,21 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # single-id-pool rng consumption exactly (asserted by their own tests plus
 # test_d266_veto_generalization_leaves_single_id_pools_byte_identical).
 _REGIME_GOLDEN_V29_ACTIVE = [
-    "f228c547d273330f",
-    "5e7cd4e85a465d62",
+    "6bfa51eb7329103c",
+    "4c09a2654e9913c7",
     "f2239a17df29b1d7",
     "623bcda3c4d262da",
-    "99cfd4e666b7c93b",
-    "4f17ab52f24af119",
+    "0b36140bdb9568d8",
+    "d48970b100b35e24",
     "cd137256711e9ad1",
-    "b2e3a47f41f1abd9",
-    "c21d51b77738c9a2",
-    "856e56406f51bb7e",
-    "5534310aacb9d056",
-    "6e4d61b5b870c7e8",
-    "94fedfbcb08cd7e7",
-    "00900abd62421b3b",
-    "a8eead226a36f2e3",
+    "16ad819246208325",
+    "f0198cf7715392b9",
+    "9f3dbb2051bcedc3",
+    "fd98a86b15e04865",
+    "8764842d35a62d39",
+    "30f07f8b94f92322",
+    "17230529a3cf5495",
+    "10cabe27b44e8768",
 ]
 
 
