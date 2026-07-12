@@ -670,7 +670,7 @@ decided_by: operator (in-session approval 2026-07-11, "Can we just put it in the
 decision_marker: null
 ---
 proposal_id: 2121cafe-5be1-4325-ab46-104a95559dc1
-status: PENDING
+status: APPROVED
 proposed_at: '2026-07-12T02:09:41+00:00'
 proposal_type: loosen
 target: grammar_v28_mr_absolute_rv_gate
@@ -752,6 +752,12 @@ proposal_yaml: |
   #     function reference UNCHANGED (accepted set lives in custom_predicates, D167 pattern)
   #   NOT expressible (C1, relay back): rv_rank + realized_vol in ONE config (same family);
   #     the absolute gate REPLACES the percentile in the vol slot; ivol stacks (~50%)
-decided_at: null
-decided_by: null
+decided_at: '2026-07-12T04:55:00+00:00'
+decided_by: operator (in-session green-light 2026-07-12, "Also green-light on grammar update",
+  given WITH Crucible's convention reply attached — both pre-build probes had PASSED (emission
+  + live-writer per-name data; see the probe_* evidence keys above). SCOPE NOTE recorded at
+  approval - their reply prefers a MARKET-level RV gate (reference underlying); no market-wide
+  realized-vol registry id exists (vix_level is implied), so v28 ships the per-name family
+  (their "valid second family", probe-validated) and the market-level id registration ask is
+  relayed for a fast-follow bump (the dsj confirmed-vocabulary discipline, D258/D261).
 decision_marker: null

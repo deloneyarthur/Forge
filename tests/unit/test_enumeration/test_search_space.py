@@ -231,12 +231,14 @@ def test_regime_pool_trend_continuation_includes_gamma_flip() -> None:
 
 def test_regime_pool_mean_reversion_iv_rank_and_hurst(space: SearchSpace) -> None:
     """R1: mean_reversion regime gates. The minimal fixture carries iv_rank, hurst,
-    and rv_rank (omits gamma_flip_distance_pct), so D150's hurst + D167's rv_rank
-    widenings make the pool ('hurst', 'iv_rank', 'rv_rank'), sorted. gamma-gate
-    membership is covered in `test_regime_pool_mean_reversion_includes_gamma_flip`."""
+    rv_rank, and realized_vol (omits gamma_flip_distance_pct / vol_regime), so the
+    D150 + D167 + D265 widenings make the pool ('hurst', 'iv_rank', 'realized_vol',
+    'rv_rank'), sorted. gamma-gate membership is covered in
+    `test_regime_pool_mean_reversion_includes_gamma_flip`."""
     assert space.regime_indicators_by_hypothesis["mean_reversion"] == (
         "hurst",
         "iv_rank",
+        "realized_vol",
         "rv_rank",
     )
 

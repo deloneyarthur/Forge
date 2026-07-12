@@ -363,6 +363,19 @@ _R1_RV_RANK_REGIME_INDICATOR = "rv_rank"
 # tercile — never use_percentile (degenerate on a 3-value series). hurst stays in
 # the OR but the sampler biases away from it (null-to-negative as an MR gate).
 _R1_VOL_REGIME_INDICATOR = "vol_regime"
+# D265 (v28, MR side): realized_vol (ABSOLUTE annualized RV, op_regime "<" =
+# calm tape in the name's own units — the table default) is a sixth accepted R1
+# regime gate for mean_reversion. Crucible's champion post-mortem
+# (FORGE_mr_absolute_vol_gate_request_2026-07-12): the rv_rank PERCENTILE gate
+# NORMALIZES in regime-WIDE vol spikes (every name volatile → ranks stay
+# mid-distribution) — probe-verified 2026-07-12: rv_rank<62 was open 21/21 days
+# on all five knife-catch names in 2022-12 while absolute rv held ≥ 0.25. The
+# absolute threshold is the SYSTEMATIC complement; C1 (same `volatility` family
+# as rv_rank/vol_regime) makes it REPLACE the percentile in the vol slot, and
+# the D263 ivol veto (idiosyncratic_vol) still stacks on top — the asked
+# both-gates shape. Added per the D107/D150/D167/D254 widening pattern (ADD not
+# replace; R1 stays an OR). Operator-approved loosening, OPEN_PROPOSALS 2121cafe.
+_R1_REALIZED_VOL_REGIME_INDICATOR = "realized_vol"
 
 # H2 (v12 / D109): event_momentum's post-event TIMING gate. Unlike R1/R2/R3
 # this is NOT a grammar.yaml rule — adding a 22nd operator-owned rule would
@@ -877,7 +890,7 @@ def _e3_trailing_atr_has_activation_threshold(
 # ---------------------------------------------------------------------------
 
 
-def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early return per accepted R1 gate (OR over {iv_rank, gamma_flip, hurst, rv_rank, vol_regime}); the per-gate D-lineage comments are the value
+def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early return per accepted R1 gate (OR over {iv_rank, gamma_flip, hurst, rv_rank, vol_regime, realized_vol}); the per-gate D-lineage comments are the value
     config: StrategyConfig,
     registry: RegistrySnapshot,
 ) -> PredicateResult:
@@ -911,6 +924,12 @@ def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early ret
         # op-agnostic, no-threshold-cap convention as the gamma/hurst/rv_rank gates.
         if _R1_VOL_REGIME_INDICATOR in inds:
             return PredicateResult(passed=True)
+        # D265 (v28): a realized_vol gate satisfies R1 on its own — the ABSOLUTE
+        # annualized-RV calm gate (op "<", the systematic complement to the
+        # percentile gates, which normalize in regime-wide spikes). Same
+        # op-agnostic convention as the other non-iv_rank gates.
+        if _R1_REALIZED_VOL_REGIME_INDICATOR in inds:
+            return PredicateResult(passed=True)
         if _R1_IV_RANK_INDICATOR not in inds:
             continue
         threshold = regime.params.get("threshold")  # type: ignore[attr-defined]
@@ -928,7 +947,8 @@ def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early ret
             f"{_R1_GAMMA_REGIME_INDICATOR!r} (the D107 dealer-gamma regime gate), "
             f"{_R1_HURST_REGIME_INDICATOR!r} (the D150 mean-reverting regime gate), "
             f"{_R1_RV_RANK_REGIME_INDICATOR!r} (the D167 cheap-realized-vol regime gate), "
-            f"or {_R1_VOL_REGIME_INDICATOR!r} (the D254 vol-tercile regime gate)"
+            f"{_R1_VOL_REGIME_INDICATOR!r} (the D254 vol-tercile regime gate), "
+            f"or {_R1_REALIZED_VOL_REGIME_INDICATOR!r} (the D265 absolute-RV regime gate)"
         ),
     )
 

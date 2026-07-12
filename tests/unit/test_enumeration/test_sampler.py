@@ -32,6 +32,7 @@ from forge.grammar.custom_predicates import (
     _R1_GAMMA_REGIME_INDICATOR,
     _R1_HURST_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
+    _R1_REALIZED_VOL_REGIME_INDICATOR,
     _R1_RV_RANK_REGIME_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
@@ -180,14 +181,16 @@ def test_r1_r2_r3_regime_indicator_when_applicable(
                 f"R2 violated at seed={seed}: regime={regime_id}"
             )
         elif cfg.hypothesis == "mean_reversion":
-            # D107 + D150 + D167: R1 accepts iv_rank, gamma_flip (long-gamma),
-            # hurst (mean-reverting H<0.5), or rv_rank (cheap realized vol) —
-            # all ranging/calm-admitting gates.
+            # D107 + D150 + D167 + D265: R1 accepts iv_rank, gamma_flip
+            # (long-gamma), hurst (mean-reverting H<0.5), rv_rank (cheap realized
+            # vol percentile), or realized_vol (D265 absolute calm) — all
+            # ranging/calm-admitting gates.
             assert regime_id in {
                 _R1_IV_RANK_INDICATOR,
                 _R1_GAMMA_REGIME_INDICATOR,
                 _R1_HURST_REGIME_INDICATOR,
                 _R1_RV_RANK_REGIME_INDICATOR,
+                _R1_REALIZED_VOL_REGIME_INDICATOR,
             }, f"R1 violated at seed={seed}: regime={regime_id}"
         elif cfg.hypothesis == "volatility_event":
             assert regime_id in _R3_EVENT_PROXIMITY_INDICATORS, (
@@ -1733,12 +1736,14 @@ _COHORT_TREND = "trend_continuation"
 # `if rank_combiner_share and ...` block) at seed 4242, rank_combiner_share
 # {trend/mr/em: 0.5}. The refactor to `_cohort_xsect_probability` MUST reproduce
 # this exact rng sequence when cohort_yield_weights is None (hard rule #6).
+# D265 (v28): re-pinned — realized_vol in the MR regime pool moved position 4
+# (an MR config's regime draw). none_run == empty_run re-verified under v28.
 _COHORT_GOLDEN_PRE_REFACTOR = [
     "dc125d8f4e014630",
     "4710371b04fac3d0",
     "68b7660098f1b385",
     "174df1ffb521246b",
-    "b004aa29b5807a0e",
+    "d4719affe73e6187",
     "5713f48884331d79",
     "fe60ab6185e44caf",
     "c7aada72922e629c",
@@ -1928,6 +1933,9 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # the config_hash moved at seq positions 11 & 14 (both MR). The flag-inertness
 # invariant (none_run == empty_run) was re-verified under v25 before re-pinning —
 # only the absolute sequence moved, hard rule #6 intact (version bump licenses it).
+# D265 (v28): re-pinned again — realized_vol joins the MR regime pool (the base
+# fixture already serves it for X1), moving position 14 (the slice's
+# realized_vol-gated MR config). none_run == empty_run re-verified under v28.
 _REGIME_GOLDEN_PRE = [
     "f228c547d273330f",
     "5e7cd4e85a465d62",
@@ -1943,7 +1951,7 @@ _REGIME_GOLDEN_PRE = [
     "c4e866e656331847",
     "420f6c187024f808",
     "2e4054a200aca442",
-    "db9c78ca7e03bc15",
+    "7a78bc68429e7a9e",
 ]
 
 
@@ -2157,6 +2165,9 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # registry_hash (Forge computes it from snapshot content), so this pins the
 # deterministic _v25_registry fixture, not a live hash. The v26 ivol_lo MR gate
 # touches the same veto block and WILL move this — re-pin there with the D-entry.
+# D265 (v28): re-pinned — realized_vol in the MR regime pool moved position 14
+# (the slice's realized_vol-gated MR config; same single-position shift as
+# _REGIME_GOLDEN_PRE, so the dsj-vs-PRE split structure is untouched).
 _REGIME_GOLDEN_DSJ_ACTIVE = [
     "f228c547d273330f",
     "5e7cd4e85a465d62",
@@ -2172,7 +2183,7 @@ _REGIME_GOLDEN_DSJ_ACTIVE = [
     "4573ce4928291ee8",
     "5bc21b45d2e09b22",
     "bc0b069c84945150",
-    "3eabbdd914bbb332",
+    "d057acfa6f58918d",
 ]
 
 
@@ -2252,7 +2263,14 @@ def test_d263_ivol_veto_active_on_mr_and_grammar_valid(
     co-occurrence the 1.28.0 family split enabled."""
     reg = _v26_registry(registry)
     space = build_search_space(grammar, reg)
-    mr_primary_gates = {"iv_rank", "gamma_flip_distance_pct", "hurst", "rv_rank", "vol_regime"}
+    mr_primary_gates = {
+        "iv_rank",
+        "gamma_flip_distance_pct",
+        "hurst",
+        "rv_rank",
+        "vol_regime",
+        "realized_vol",  # D265 (v28): the absolute-RV sixth gate
+    }
     veto_seen = 0
     stacked_on_volatility = 0
     for seed in range(400):
@@ -2296,9 +2314,11 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # D263 v26 cold-start golden (seed 7777, max 15) on a registry serving BOTH dsj
 # and ivol — the live v26 state. Differs from _REGIME_GOLDEN_DSJ_ACTIVE (dsj-only)
 # because veto-eligible mean_reversion configs now draw the ivol veto (3 of these
-# 15 actually carry it: positions 3, 7, 12). The dsj-only and fully-dormant
-# goldens above are UNCHANGED (their fixtures don't serve ivol → the MR veto pool
-# is empty), proving the generalization didn't perturb the existing paths.
+# 15 actually carry it: positions 3, 6, 11). The dsj-only and fully-dormant
+# goldens above shifted only where the D265 realized_vol pool add moved MR draws.
+# D265 (v28): re-pinned — realized_vol joins the MR regime pool; the slice's MR
+# configs from position 6 re-drew their gates, cascading the ivol-veto positions
+# (were 3, 7, 12).
 _REGIME_GOLDEN_V26_ACTIVE = [
     "f228c547d273330f",
     "5e7cd4e85a465d62",
@@ -2306,15 +2326,15 @@ _REGIME_GOLDEN_V26_ACTIVE = [
     "d94435bb869d78af",
     "99cfd4e666b7c93b",
     "4f17ab52f24af119",
-    "e3f9657096fe8082",
-    "124e5978f5816d29",
-    "e7e044f5d80304f4",
-    "eee5cb3fac2259f8",
-    "c4e866e656331847",
-    "80ea441fbf73e467",
-    "b39f64e46a428d07",
+    "cd137256711e9ad1",
+    "b2e3a47f41f1abd9",
+    "c21d51b77738c9a2",
+    "856e56406f51bb7e",
+    "5534310aacb9d056",
+    "1a98c7c758b041e3",
+    "94fedfbcb08cd7e7",
+    "00900abd62421b3b",
     "a8eead226a36f2e3",
-    "4a3e140090930ea8",
 ]
 
 
@@ -2441,6 +2461,8 @@ def test_d264_new_ids_dormant_without_registry(
 # vix_term_slope in this slice). The dormant/dsj/v26 goldens above are UNCHANGED
 # (their fixtures serve neither new id), proving the activation didn't perturb
 # the existing paths.
+# D265 (v28): re-pinned — realized_vol in the MR regime pool moved position 12
+# (the slice's realized_vol-gated MR config).
 _REGIME_GOLDEN_V27_ACTIVE = [
     "f228c547d273330f",
     "5e7cd4e85a465d62",
@@ -2454,7 +2476,7 @@ _REGIME_GOLDEN_V27_ACTIVE = [
     "e7e044f5d80304f4",
     "eee5cb3fac2259f8",
     "c4e866e656331847",
-    "80ea441fbf73e467",
+    "467af7d9641d9be4",
     "b39f64e46a428d07",
     "a8eead226a36f2e3",
 ]
@@ -2482,3 +2504,64 @@ def test_d264_resid_vix_active_cold_start_golden(
         )
         for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
     )
+
+
+# ---------------------------------------------------------------------------
+# D265 (v28): realized_vol ABSOLUTE mean_reversion regime gate — Crucible
+# FORGE_mr_absolute_vol_gate_request_2026-07-12. The base fixture already
+# serves realized_vol (the X1 vol_target chain), so reachability needs no
+# registry wrapper; the ivol-stack test rides _v26_registry. Constants/table
+# unit tests: test_mr_grammar_v28.py.
+# ---------------------------------------------------------------------------
+
+
+def test_d265_realized_vol_mr_primary_reachable_and_grammar_valid(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Some mean_reversion configs draw realized_vol as the PRIMARY regime gate:
+    ABSOLUTE threshold in the asked 0.15-0.30 sweep, op '<', never percentile
+    (a percentile IS rv_rank — the diagnosed defect). Every such config is fully
+    grammar-valid (the widened R1 accepts it; C1/C4 hold by construction), and
+    the vol_target chain guard keeps realized_vol single-role (a vol_target
+    sizer's chain would put a second volatility-family signal in the config)."""
+    space = build_search_space(grammar, registry)
+    seen = 0
+    for seed in range(400):
+        cfg = sample_config(
+            space, registry, random.Random(seed), forced_hypothesis="mean_reversion"
+        )
+        primary = next(s for s in cfg.signals if s.id == "sig_regime")
+        if primary.indicators != ("realized_vol",):
+            continue
+        seen += 1
+        p = primary.params
+        assert p["op"] == "<", p
+        assert "use_percentile" not in p, p
+        assert 0.15 <= float(p["threshold"]) <= 0.30, p
+        res = validate(cfg, grammar, registry)
+        assert res.valid, f"seed={seed}: {res.errors}"
+        assert cfg.sizer.mode != "vol_target", f"chain-guard breach at seed={seed}"
+    assert seen > 0, "realized_vol never drawn as the MR primary gate"
+
+
+def test_d265_ivol_veto_stacks_on_realized_vol_primary(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The asked both-gates shape: absolute realized_vol (volatility — SYSTEMATIC
+    protection) + the D263 ivol percentile veto (idiosyncratic_vol — the
+    ablation-proven falling-knife veto) AND-stacked in one config, C1-legal
+    because the 1.28.0 family split keeps the families distinct."""
+    reg = _v26_registry(registry)
+    space = build_search_space(grammar, reg)
+    stacked = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
+        regime_sigs = [s for s in cfg.signals if s.role == "regime_filter"]
+        primary = next(s for s in regime_sigs if s.id == "sig_regime")
+        if primary.indicators != ("realized_vol",):
+            continue
+        if any(s.id == "sig_regime_veto" and s.indicators == ("ivol",) for s in regime_sigs):
+            stacked += 1
+            res = validate(cfg, grammar, reg)
+            assert res.valid, f"seed={seed}: {res.errors}"
+    assert stacked > 0, "ivol veto never stacked on a realized_vol primary"

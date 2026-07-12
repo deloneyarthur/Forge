@@ -119,7 +119,12 @@ _REGIME_CURATED_HYPOTHESIS: str = "relative_value"
 # null-to-negative as an MR gate (-0.27 vs rv_rank, 0/6 folds) — but stays R1-
 # accepted (weight 1.0, still explorable), i.e. bias AWAY, not remove.
 _MR_HYPOTHESIS: str = "mean_reversion"
-_MR_RANGING_GATES: frozenset[str] = frozenset({"gamma_flip_distance_pct", "rv_rank", "vol_regime"})
+_MR_RANGING_GATES: frozenset[str] = frozenset(
+    # D265 (v28): realized_vol joins the boost — same calm-vol thesis class as
+    # rv_rank/vol_regime (the absolute systematic complement), so the new family
+    # gets real supply for Crucible's fold-column selection. hurst stays out (D254).
+    {"gamma_flip_distance_pct", "rv_rank", "vol_regime", "realized_vol"}
+)
 _MR_RANGING_GATE_WEIGHT: float = 3.0
 
 # D105 — hypothesis x dte_bucket weighting. Same component-rate scale and

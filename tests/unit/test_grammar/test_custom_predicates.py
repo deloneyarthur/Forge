@@ -1110,6 +1110,36 @@ def test_r1_mean_reversion_accepts_vol_regime_gate() -> None:
     assert result.passed
 
 
+def test_r1_mean_reversion_accepts_realized_vol_gate() -> None:
+    """D265 (v28): realized_vol (op '<', ABSOLUTE annualized RV — the systematic-
+    vol complement to the percentile gates) is a sixth accepted R1 regime gate for
+    mean_reversion. Crucible FORGE_mr_absolute_vol_gate_request_2026-07-12: the
+    champion's rv_rank percentile gate NORMALIZES in regime-wide vol spikes
+    (probe 2026-07-12: rv_rank<62 open 21/21 days on all five knife-catch names in
+    2022-12 while absolute rv held ≥ 0.25). ADD not replace (R1 stays an OR);
+    op-agnostic convention like gamma/hurst/rv_rank/vol_regime — the sampler sets
+    op '<' with the asked 0.15-0.30 absolute sweep."""
+    cfg = grammar_valid_baseline(
+        signals=(
+            SignalSpec(
+                id="sig_directional",
+                type="threshold",
+                role="directional",
+                indicators=("rsi_2",),
+            ),
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=("realized_vol",),
+                params={"threshold": 0.20, "op": "<"},
+            ),
+        ),
+    )
+    result = evaluate(_predicate("mean_reversion_requires_iv_rank_gate"), cfg, _registry())
+    assert result.passed
+
+
 def test_r1_mean_reversion_without_iv_rank_or_gamma_fails() -> None:
     """D107: with neither iv_rank nor a gamma gate, R1 still fires and fails."""
     cfg = grammar_valid_baseline(

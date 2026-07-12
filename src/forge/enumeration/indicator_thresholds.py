@@ -125,9 +125,18 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_percentile_range=(0.25, 0.50),  # v7 (D100): allow ~top 50-75%, mirrors adx
     ),
     # ----- Volatility (small positive, log-scale) -----
+    # v28 (D265): regime_range (0.12, 0.25) → (0.15, 0.30) — Crucible's asked
+    # absolute-RV sweep for the MR regime gate (FORGE_mr_absolute_vol_gate_
+    # request_2026-07-12), replacing the D031-era generic calibration. ABSOLUTE
+    # by design (a percentile IS rv_rank — the diagnosed normalization defect).
+    # Per-name pass rates are heterogeneous (probe 2026-07-12: <0.20 passes
+    # HAL 4% … JPM 39% of bars) — tight arms zero-trade hot names and the
+    # expected_trades wall culls them; the sweep's top half keeps them live.
+    # The range is shared with relative_value's broad regime pool (rare draws;
+    # shift licensed by the v28 bump).
     "realized_vol": IndicatorThresholdSpec(
         directional_range=(0.08, 0.15),  # calm window for entry
-        regime_range=(0.12, 0.25),
+        regime_range=(0.15, 0.30),
     ),
     "parkinson_vol": IndicatorThresholdSpec(
         directional_range=(0.08, 0.15),

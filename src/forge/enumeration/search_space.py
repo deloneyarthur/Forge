@@ -40,6 +40,7 @@ from forge.grammar.custom_predicates import (
     _R1_GAMMA_REGIME_INDICATOR,
     _R1_HURST_REGIME_INDICATOR,
     _R1_IV_RANK_INDICATOR,
+    _R1_REALIZED_VOL_REGIME_INDICATOR,
     _R1_RV_RANK_REGIME_INDICATOR,
     _R1_VOL_REGIME_INDICATOR,
     _R2_TREND_CONTINUATION_REGIME_INDICATORS,
@@ -381,6 +382,11 @@ def _build_regime_pool(
             # MR's confluence and rank genomes, unlike the chain-reading iv_rank).
             # D254 (v24): vol_regime (discrete vol tercile, gated <2) joins as a fifth
             # gate — the xsect-MR backtest champion (+0.244 CPCV-p25 vs rv_rank in 6/6).
+            # D265 (v28): realized_vol (ABSOLUTE annualized RV, 0.15-0.30 sweep) joins
+            # as a sixth — the systematic-spike complement to the rv_rank percentile,
+            # which normalizes regime-wide (FORGE_mr_absolute_vol_gate_request). C1
+            # keeps it mutually exclusive with rv_rank/vol_regime (same family) and
+            # with the vol_target chain (the sampler's chain-family guard).
             pool[hyp] = tuple(
                 sorted(
                     {
@@ -389,6 +395,7 @@ def _build_regime_pool(
                         _R1_HURST_REGIME_INDICATOR,
                         _R1_RV_RANK_REGIME_INDICATOR,
                         _R1_VOL_REGIME_INDICATOR,
+                        _R1_REALIZED_VOL_REGIME_INDICATOR,
                     }
                     & registry_ids
                 )
