@@ -1,6 +1,6 @@
 # Forge — Status
 
-## 2026-07-12 (latest) — GRAMMAR v29 → v30 BUILT (D268): exclude no-earnings underlyings from earnings-dependent generation — the event_momentum degeneracy fix. Suite 1914 green; emission 22.5% → 0. DEPLOY PENDING (stop-window next).
+## 2026-07-12 (latest) — GRAMMAR v29 → v30 DEPLOYED+VERIFIED 2026-07-12T15:52:12Z (D268): exclude no-earnings underlyings from earnings-dependent generation — the event_momentum degeneracy fix LIVE. Emission 22.5% → 0; healthcheck 13/13 OK. Commit `4a950ab`, PID 3461559, NRestarts=0, journal `grammar_version=v30`, clean.
 
 **Crucible relay `FORGE_event_momentum_no_earnings_underlying_degenerates_2026-07-12`:** event_momentum on a no-earnings underlying (SOXL — a live 17.5% leg of the FIRST promoted book) degenerates — `sue`/`days_since_earnings` NaN-fill → the engine's no-data fallback `allow=True` never gates + `sue`→FLAT, so a `realized_vol` confluence passthrough backfills a naked long-call that TRADES (expected_trades can't catch it) with zero PEAD contribution. Root cause Forge-side: the T1.4 earnings-ETF guard was frozen at the 4 tier-1 ETFs while the universe grew ~26 more no-earnings names; **22.5% of event_momentum emission was landing on them** (measured live, SOXL confirmed).
 - **Operator decision (AskUserQuestion): stopgap now + accept the manifest.** Forge can't determine coverage itself (universe export is ticker-lists only; RTX-type single-names are ETF-lookalikes with real EPS). v30 = conservative Forge-only exclusion; v31 = the durable coverage manifest.
