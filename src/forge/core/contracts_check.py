@@ -121,7 +121,20 @@ from crucible_contracts import (
 # reproduce the outage. Forge wires it into the registry loader (D262) and adopts the pin so
 # `contracts pin==installed`. Crucible's Ask-1 sequencing (vocabulary additions lead by a
 # consumer-adoption handshake; the export-side commit IS the publish) is agreed. See D262.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.29.0"
+# 1.30.0 (2026-07-12, Crucible 253da67): adds ONE Literal value —
+# `PromotedPortfolio.weighting_scheme += "explicit"` (operator-fixed maximin per-component
+# weights queued verbatim; identity-bearing → feeds compute_config_hash). The publisher-side
+# crossing-unblock for the FIRST full-gate portfolio promote (pure_sue175) — reconstruction
+# was fail-looping on `literal_error` so promoted_portfolios stayed n=0. NO-OP for Forge —
+# verified: this literal lives on `PromotedPortfolio`, which Forge NEVER constructs OR parses
+# (Forge's Crucible reads are get_recent_gated_runs / get_promoted_strategies → GatedRun only;
+# the changed model is QuantIQ-facing). So — UNLIKE the D261 registry-family literal Forge DOES
+# read — there is no read-face or inbox-face exposure in EITHER direction, and no D261-Ask-1
+# consumer-adoption handshake is owed (Forge is not a weighting_scheme consumer). Enumeration
+# byte-identical (no consumed model changed). §13.5 major-check already passes (both major 1);
+# this pin is adoption hygiene — the exact-match test_expected_contract_version_matches_installed
+# is the forcing function (red until adopted, which would NO-GO deploy-preflight). See D267.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.30.0"
 
 
 def check_contracts_version() -> str:
