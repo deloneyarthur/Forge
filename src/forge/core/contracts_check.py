@@ -134,7 +134,14 @@ from crucible_contracts import (
 # byte-identical (no consumed model changed). §13.5 major-check already passes (both major 1);
 # this pin is adoption hygiene — the exact-match test_expected_contract_version_matches_installed
 # is the forcing function (red until adopted, which would NO-GO deploy-preflight). See D267.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.30.0"
+# 1.31.0 (2026-07-13, Crucible cbb8671): adds `load_earnings_covered_symbols_from_export` (+ its
+# format registration) — the earnings-coverage MANIFEST loader promised for the D268 stopgap
+# (the durable fix that will retire Forge's hardcoded `_NO_EARNINGS_UNDERLYINGS` list). PURELY
+# ADDITIVE (a new query function; no model/Literal/vocab change; verified diff 253da67..cbb8671:
+# queries.py + formats.py + tests only) → NO-OP for the running daemon; Forge does not call it
+# yet. WIRING the manifest is its OWN operator-gated grammar bump (proposal to follow — it
+# changes underlying-pool emission); this pin is adoption hygiene per the D262/D267 discipline.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.31.0"
 
 
 def check_contracts_version() -> str:
