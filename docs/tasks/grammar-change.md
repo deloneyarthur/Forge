@@ -6,8 +6,12 @@ Scope: any change to what Forge enumerates. Classification first — it determin
 > **Pending metadata fixes to piggyback on the next bump** — these don't change enumeration, so
 > do NOT bump *for* them; fold them into the next real change so the byte edit rides an
 > already-needed version increment:
-> - (none currently. The D204 R2 `evidence_to_relax` fix shipped in the v24/D254 bump;
->   v27/D264 kept the listing current when `vix_term_slope` joined the pool.)
+> - **Q49 rv_rank/iv_rank semantic relabel** (2026-07-13): both kernels compute a min-max
+>   RANGE-POSITION, not a percentile rank (verified in `crucible_engine_core` rv_rank.py;
+>   Crucible capitulation follow-up §3). Relabel "percentile" → "range-position" in
+>   `indicator_thresholds.py` / `custom_predicates.py` comments + `docs/GRAMMAR.md`.
+>   Docs-only; calibrated thresholds unaffected (kernel-unit tuning). Candidate ride:
+>   the v32 manifest-wiring bump (proposal `682e1abd`).
 
 ## Classify the change
 

@@ -1041,3 +1041,27 @@ gate-pass-rate compare pre/post 06-24 vs pre/post fix would separate the noise f
 
 **Severity:** high-visibility incident, medium likely impact — prefilter precision only; the gate
 is the authority and its evidence is clean.
+
+## 2026-07-13 — Q49 — `rv_rank` (and `iv_rank`) are min-max RANGE-POSITIONS, not percentile ranks, despite kernel docstrings + Forge docs saying "percentile" — **MEDIUM (semantic drift; no behavior bug in calibrated gates; future intent-mapping hazard)**
+
+Surfaced by Crucible's capitulation stress-test follow-up (`FORGE_capitulation_v31_followup_2026-07-13` §3),
+**independently verified in `crucible_engine_core/features/realized_vol/rv_rank.py`**: the kernel computes
+`(cur − rolling_min)/(rolling_max − rolling_min) × 100` — a min-max range-position — while its own docstring
+says "trailing percentile rank." The docstring also states it shares semantics with `iv_history.iv_rank`, so
+**`iv_rank` has the same drift**. Consequences, split carefully:
+
+- **NOT affected:** every empirically-calibrated threshold (champion MR `rv_rank < 62`, trend's rv_rank cost
+  gate, R1's iv_rank ≤ 50, the v28/v29 absolute gates — different ids entirely). These were tuned in KERNEL
+  units through the funnel; behavior and evidence are self-consistent regardless of the label.
+- **Affected:** any threshold mapped from a PERCENTILE INTENT (v31's `[50,80]` was mapped from the handoff's
+  "intended `>= 60th pct`" framing — index drop-day median lands ~50 in kernel units, not the ~88 a percentile
+  reading implied), and any future cross-system threshold translation that trusts the "percentile" name.
+  Note Crucible's own gate SWEEP (§2) ran in kernel units on clean data, so its verdict (gate hurts the clean
+  index arm at every level 50–70, helps single names) already prices v31's band correctly — the LEVEL
+  miscalibration is moot for v31's fate; the lesson is for the NEXT mapping.
+- **Action queued:** relabel Forge-side references ("percentile" → "range-position" for rv_rank/iv_rank in
+  `indicator_thresholds.py` comments, `custom_predicates.py` R1/R2 comments, `docs/GRAMMAR.md`) — piggybacked
+  on the next grammar bump (added to `grammar-change.md`'s pending list; docs-only, no emission change).
+  Kernel docstring fix is Crucible's (flagged in the relay-back). `use_percentile` mode
+  (`snap.indicator_percentile`, a real trailing-window rank) is SEPARATE machinery — unaffected, but the
+  name collision is part of the hazard.
