@@ -2720,3 +2720,193 @@ def test_d266_market_rv_active_cold_start_golden(
         any("market_realized_vol" in s.indicators for s in c.signals)
         for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
     )
+
+
+# ---------------------------------------------------------------------------
+# D270 (v31): capitulation-bounce — `momentum` drop-trigger as a mean_reversion
+# directional (Crucible FORGE_capitulation_bounce_generation_request_2026-07-12).
+# §3.5 C2 per-id carve-out (operator-approved loosening, OPEN_PROPOSALS
+# e9d74318); gate PINNED to rv_rank op ">" [50, 80] (elevated vol — the
+# intended-strength condition the probe's coding bug left inert); veto slot
+# skipped (calm-side vetoes contradict the thesis); time_stop n_bars [5, 15]
+# (probe hold 10 td; the engine default is 5 and Forge never sampled it).
+# Constants/table/C2 unit tests: test_capitulation_bounce_v31.py.
+# ---------------------------------------------------------------------------
+
+
+def _v31_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """_v29_registry + the parameterized `momentum` (family trend, version 1,
+    rank-coherent) — the live v31 state (their registry has served it all
+    along; it was Forge-side dark)."""
+    momentum = IndicatorMetadata(
+        id="momentum",
+        version=1,
+        family="trend",
+        lookback=504,
+        params_schema={},
+        rank_per_name_coherent=True,
+        market_wide_by_design=False,
+    )
+    v29 = _v29_registry(base)
+    return v29.model_copy(update={"indicators": (*v29.indicators, momentum)})
+
+
+def test_d270_momentum_pools_scoped_to_mean_reversion(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The C2 carve-out admits momentum to MR's directional pool ONLY when the
+    registry serves it; the trend pool PIN-EXCLUDES it (contrarian op +
+    time-stop chassis are wrong for continuation — and trend draws must stay
+    byte-identical)."""
+    reg = _v31_registry(registry)
+    space = build_search_space(grammar, reg)
+    assert "momentum" in space.directional_indicators_by_hypothesis["mean_reversion"]
+    assert "momentum" not in space.directional_indicators_by_hypothesis["trend_continuation"]
+    base_space = build_search_space(grammar, registry)
+    assert "momentum" not in base_space.directional_indicators_by_hypothesis["mean_reversion"]
+
+
+def test_d270_capitulation_reachable_and_grammar_valid(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The full capitulation genome: momentum directional (absolute drop
+    threshold, lookback/skip knobs) x rv_rank elevated-vol gate (op '>',
+    threshold in [50, 80], the intended-strength condition) x swing_mid x
+    CALL-default x no veto x confluence-only x never vol_target — every
+    emitted instance fully grammar-valid."""
+    reg = _v31_registry(registry)
+    space = build_search_space(grammar, reg)
+    seen = 0
+    time_stop_seen = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
+        directional = next(s for s in cfg.signals if s.role == "directional")
+        if directional.indicators != ("momentum",):
+            continue
+        seen += 1
+        p = directional.params
+        assert p["op"] == "<", p
+        assert "use_percentile" not in p, p
+        assert -0.083 <= float(p["threshold"]) <= -0.041, p
+        assert isinstance(p["lookback"], int), p
+        assert 3 <= p["lookback"] <= 10, p
+        assert p["skip"] == 0, p
+        # the PINNED elevated-vol gate
+        primary = next(s for s in cfg.signals if s.id == "sig_regime")
+        assert primary.indicators == ("rv_rank",), primary
+        gp = primary.params
+        assert gp["op"] == ">", gp
+        assert "use_percentile" not in gp, gp
+        assert 50.0 <= float(gp["threshold"]) <= 80.0, gp
+        assert gp.get("rv_window") in (10, 21), gp
+        assert gp.get("window") in (126, 252), gp
+        # chassis: probe bucket, no calm-side veto, single-name-only, no vol chain
+        assert cfg.dte_bucket == "swing_mid", cfg.dte_bucket
+        assert not any(s.id == "sig_regime_veto" for s in cfg.signals), cfg.signals
+        assert cfg.combiner.type == "confluence", cfg.combiner
+        assert cfg.sizer.mode != "vol_target", cfg.sizer
+        for ex in cfg.exits:
+            if ex.id == "time_stop":
+                time_stop_seen += 1
+                n_bars = ex.params.get("n_bars")
+                assert isinstance(n_bars, int), ex.params
+                assert 5 <= n_bars <= 15, ex.params
+        res = validate(cfg, grammar, reg)
+        assert res.valid, f"seed={seed}: {res.errors}"
+    assert seen > 0, "momentum never drawn as the MR directional"
+    assert time_stop_seen > 0, "no capitulation config ever drew the time_stop exit"
+
+
+def test_d270_momentum_never_anchors_trend(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """The pool pin holds end-to-end: no trend_continuation draw ever anchors
+    on momentum (its threshold entry would otherwise auto-admit it — family
+    trend — with contrarian '<' semantics under a continuation thesis)."""
+    reg = _v31_registry(registry)
+    space = build_search_space(grammar, reg)
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="trend_continuation")
+        directional = next(s for s in cfg.signals if s.role == "directional")
+        assert directional.indicators != ("momentum",), f"seed={seed}"
+
+
+def test_d270_non_momentum_time_stop_params_unchanged(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The n_bars emission is scoped to the capitulation directional ONLY —
+    every other hypothesis/directional keeps the bare time_stop (engine
+    default 5), so the champion MR slice is untouched (the D169 concern)."""
+    reg = _v31_registry(registry)
+    space = build_search_space(grammar, reg)
+    checked = 0
+    for seed in range(400):
+        cfg = sample_config(space, reg, random.Random(seed))
+        directional = next(s for s in cfg.signals if s.role == "directional")
+        if directional.indicators == ("momentum",):
+            continue
+        for ex in cfg.exits:
+            if ex.id == "time_stop":
+                checked += 1
+                assert ex.params == {}, (directional.indicators, ex.params)
+    assert checked > 0, "no non-momentum time_stop draws sampled"
+
+
+def test_d270_v29_golden_byte_identical_without_momentum(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Hard rule #6 guard on the plumbing refactor (directional_id threaded
+    into _regime_signal_params/_build_exits + the veto short-circuit): on a
+    registry NOT serving momentum the sequence equals the pinned v29 golden
+    exactly (also asserted by the d266 golden test — duplicated so a failure
+    names this cause)."""
+    reg = _v29_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_V29_ACTIVE
+
+
+# D270 v31 cold-start golden (seed 7777, max 15) on a registry serving dsj, ivol,
+# market_realized_vol AND the parameterized momentum — the live v31 state.
+# Diverges from _REGIME_GOLDEN_V29_ACTIVE at position 3 (the first MR config:
+# the C2-carved momentum widens MR's directional pool, reshuffling its draw).
+# No carrier lands in this 15-slice at this seed (the first is at position 24 —
+# asserted below over a 30-slice); every pre-v31 golden stays byte-identical:
+# their fixtures never serve momentum, the trend pool pin-excludes it where
+# served, and the directional_id plumbing defaults keep all other paths'
+# rng consumption exact (asserted by their own tests plus
+# test_d270_v29_golden_byte_identical_without_momentum).
+_REGIME_GOLDEN_V31_ACTIVE = [
+    "6bfa51eb7329103c",
+    "4c09a2654e9913c7",
+    "f2239a17df29b1d7",
+    "5bbebce1e3c478e1",
+    "0b36140bdb9568d8",
+    "d48970b100b35e24",
+    "acff71cca8a07a40",
+    "16ad819246208325",
+    "f0198cf7715392b9",
+    "77c8508cf579ddc1",
+    "fd98a86b15e04865",
+    "8764842d35a62d39",
+    "30f07f8b94f92322",
+    "17230529a3cf5495",
+    "10cabe27b44e8768",
+]
+
+
+def test_d270_capitulation_active_cold_start_golden(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """Byte-pin the v31 enumeration sequence (registry serving momentum on top
+    of the v29 set). Diverges from _REGIME_GOLDEN_V29_ACTIVE at the first MR
+    config touched by the widened directional pool — the D270 licensed change —
+    and a full capitulation genome appears within the first 30 draws."""
+    reg = _v31_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_V31_ACTIVE
+    assert active != _REGIME_GOLDEN_V29_ACTIVE  # widened MR pool shifts the sequence
+    assert active[:3] == _REGIME_GOLDEN_V29_ACTIVE[:3]  # split at the first MR config
+    carriers = [
+        c
+        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=30)
+        if any(s.role == "directional" and s.indicators == ("momentum",) for s in c.signals)
+    ]
+    assert carriers, "no capitulation genome in the first 30 draws"

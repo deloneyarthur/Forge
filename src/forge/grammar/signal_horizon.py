@@ -69,6 +69,16 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     "macd": 26,  # slow-EMA leg of MACD(12,26,9)
     "momentum_252": 252,  # 12-month momentum
     "returns_12m_skip1": 252,
+    # D270 (v31): the parameterized `momentum` id as the CAPITULATION drop
+    # trigger (mean_reversion via the C2 per-id carve-out; sampler pins
+    # lookback 3-10 / skip 0). The horizon is the BOUNCE thesis window
+    # (~3-10 d formation + the probe's 10 td hold), NOT the id's class-max
+    # warmup (504): 15 → medium_lookback, and the D102 k∈{2,3,4} derivation
+    # snaps every target (30/45/60) to swing_mid — the probe's 25-45 DTE
+    # band. Deliberate: one id gets one horizon, so swing_mid-vs-swing_long
+    # was NOT expressible (the v27/residual_momentum finding); the operator
+    # approved the validated bucket (OPEN_PROPOSALS e9d74318).
+    "momentum": 15,
     # v23 (Crucible signal-quality handoff §2.1/§2.5): the SMA-200 slope is a
     # slow trend read — long_lookback, the SAME DTE-bucket class as the
     # momentum_252 it is meant to out-rank (a clean signal swap, not a bucket

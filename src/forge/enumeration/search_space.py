@@ -31,6 +31,7 @@ from crucible_contracts import MANDATORY_EXIT_IDS
 # grammar-derived data. A future cleanup can promote them to a top-level
 # `forge.grammar.tables` module without semantic change.
 from forge.grammar.custom_predicates import (
+    _C2_HYPOTHESIS_EXTRA_IDS,
     _C2_HYPOTHESIS_FAMILIES,
     _EVENT_MOMENTUM_REGIME_INDICATORS,
     _MR_REGIME_VETO_INDICATORS,
@@ -144,10 +145,21 @@ DEALER_POSITIONING_FAMILY: str = "dealer_positioning"
 # its flags: D115's re-admission clause needs the reference gate AND coherent
 # single-name MRxgamma evidence — a Crucible flag flip alone is only half the
 # trigger, and the D112 ~100x runner-cost rationale is coherence-independent.
+# D270 (v31): POLICY rank exclusions — ids kept out of universe-wide rank
+# configs even though their registry flags would admit them. `momentum` IS
+# rank_per_name_coherent, but the cross_sectional_rank combiner sorts
+# DESCENDING unconditionally: top-N by raw momentum buys the STRONGEST names —
+# the exact INVERSE of the capitulation-bounce mechanism the id was activated
+# for (a tightening; the threshold/confluence path is the validated form).
+_RANK_POLICY_EXCLUDED_IDS: frozenset[str] = frozenset({"momentum"})
+
+
 def rank_excluded_indicator_ids(registry: RegistrySnapshot) -> frozenset[str]:
     """Indicator ids that may never appear in a universe-wide config's
-    signals (rank branch: any role; universe regime pools: gate role)."""
-    return frozenset(
+    signals (rank branch: any role; universe regime pools: gate role).
+    Flag-derived (dealer family + every non-coherent non-market-wide id) plus
+    the D270 policy set."""
+    return _RANK_POLICY_EXCLUDED_IDS | frozenset(
         ind.id
         for ind in registry.indicators
         if ind.family == DEALER_POSITIONING_FAMILY
@@ -335,21 +347,37 @@ def _build_indicators_by_family(
     return MappingProxyType({fam: tuple(sorted(ids)) for fam, ids in sorted(by_family.items())})
 
 
+# D270 (v31): per-hypothesis directional-pool PIN-EXCLUSIONS (sampler-side
+# policy, not a §3.5 rule — the _EVENT_MOMENTUM_REGIME_INDICATORS pattern).
+# `momentum` gains a directional threshold entry for the MR capitulation
+# family; being family `trend` it would otherwise auto-join
+# trend_continuation's family-derived pool with contrarian `<` semantics under
+# a continuation thesis AND the wrong exit chassis (trend requires a trailing
+# exit; the validated capitulation chassis is time-stop-primary). Pinning it
+# out also keeps trend's draw sequence byte-identical across the bump.
+_DIRECTIONAL_POOL_EXCLUDED_IDS: dict[str, frozenset[str]] = {
+    "trend_continuation": frozenset({"momentum"}),
+}
+
+
 def _build_directional_pool(
     indicators_by_family: Mapping[str, tuple[str, ...]],
 ) -> Mapping[str, tuple[str, ...]]:
     """For each hypothesis, return the indicator ids whose family appears in
-    §3.5 C2's allowed-families table. `regime_arbitrage` allows any family."""
+    §3.5 C2's allowed-families table. `regime_arbitrage` allows any family.
+    D270 (v31): the C2 per-id carve-outs (`_C2_HYPOTHESIS_EXTRA_IDS`) are
+    unioned in (registry-gated); the pin-exclusions above are removed."""
+    all_ids = {ind for family_ids in indicators_by_family.values() for ind in family_ids}
     pool: dict[str, tuple[str, ...]] = {}
     for hyp in _HYPOTHESES:
         allowed_families = _C2_HYPOTHESIS_FAMILIES[hyp]
         if allowed_families is None:
-            ids = sorted(ind for family_ids in indicators_by_family.values() for ind in family_ids)
+            ids = set(all_ids)
         else:
-            ids = sorted(
-                ind for fam in allowed_families for ind in indicators_by_family.get(fam, ())
-            )
-        pool[hyp] = tuple(ids)
+            ids = {ind for fam in allowed_families for ind in indicators_by_family.get(fam, ())}
+        ids.update(i for i in _C2_HYPOTHESIS_EXTRA_IDS.get(hyp, ()) if i in all_ids)
+        ids -= _DIRECTIONAL_POOL_EXCLUDED_IDS.get(hyp, frozenset())
+        pool[hyp] = tuple(sorted(ids))
     return MappingProxyType(pool)
 
 

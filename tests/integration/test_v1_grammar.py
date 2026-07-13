@@ -158,7 +158,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # veto pool with per-id C1 guard; the 21 `rules:` textually unchanged).
     # D268 bumped v29 -> v30 (earnings-gated underlying exclusion widened to the full
     # no-earnings set; a generation tightening, the 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v30"  # type: ignore[attr-defined]
+    # D270 bumped v30 -> v31 (capitulation-bounce: momentum drop-trigger MR directional
+    # via the first C2 per-id carve-out + pinned rv_rank elevated-vol gate + scoped
+    # time_stop n_bars; the 21 `rules:` textually unchanged).
+    assert grammar.grammar_version == "v31"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

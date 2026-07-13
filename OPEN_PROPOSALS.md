@@ -826,3 +826,96 @@ decided_by: operator (in-session 2026-07-12 - attached the wire-against confirm
   covered the grammar-update program for this Crucible ask, market-level family
   included, gated only on their id confirm - which this is.
 decision_marker: null
+---
+proposal_id: e9d74318-c7f2-4d49-a7bd-defdd0b65be9
+status: APPROVED
+proposed_at: '2026-07-13T06:43:41+00:00'
+proposal_type: loosen
+target: grammar_v31_capitulation_bounce_momentum_mr_directional
+rationale: 'Crucible handoff FORGE_capitulation_bounce_generation_request_2026-07-12
+  (MEDIUM - their "highest-upside / lowest-maturity" candidate): a capitulation-bounce
+  long-call family - trailing 5-day return <= -5% trigger in ELEVATED vol, long
+  ATM-ish call ~35 DTE, held ~10 td. Probe (trade-level, 2018-2026, 2% per-leg
+  cost): pooled ALL +0.107 net on premium, high_vol +0.127 (n=898); attacks the
+  bear/high-vol cpcv-p25 crater as a worst-quartile COMPLEMENT (judge in-book,
+  not solo - their own framing; solo 8.7 will likely reject). It deliberately
+  occupies the corner the champion MR family vetoes (champion: rv_rank < 62
+  cheap-vol; this: rv_rank > 60 elevated-vol) so structural correlation with
+  existing supply should be low. VERIFIED FORGE-SIDE: momentum v1 (family
+  trend, rank-coherent), rv_rank v1, days_since_jump v3 all present in code AND
+  snapshot registry_snapshot_2026-07-13T010003Z.json (72 inds) - matches their
+  claim; momentum is dark because it has NO _INDICATOR_THRESHOLD_TABLE and NO
+  _SIGNAL_HORIZON_TABLE entry -> is_threshold_skippable in every role -> never
+  emittable (structural corroboration of their 0-of-462,990); the Crucible
+  Momentum indicator reads params lookback/skip with min_bars=max(lb,sk)+1 so
+  lookback 3-10 / skip 0 is fully supported; ThresholdSignal direction param
+  defaults long_call and Forge never emits direction -> CALL-only comes free;
+  time_stop reads params n_bars DEFAULT 5 (Forge never samples it - the probe
+  holds 10, sweep 5-15, so a scoped n_bars emission is required). KEY FINDING
+  their handoff understates: "prerequisite is sampler wiring, not registry or
+  contract work" is correct re registry/contracts, but momentum family=trend
+  and 3.5 C2 admits only (mean_reversion, dealer_positioning) directionals
+  under MR -> the family needs a C2 PER-ID CARVE-OUT, an operator-owned 3.5
+  rule surface AND a loosening (hard rules #1/#4). mean_reversion is the ONLY
+  viable host: the probe chassis is time-stop-primary (MR exits =
+  {time_stop, target_exit}; trend REQUIRES trailing_atr/chandelier - wrong
+  chassis) and hosting a contrarian trigger under trend_continuation would
+  pollute the trend learned cells and Crucible fold-column lineage. R1 note
+  for the operator: R1 is op-agnostic by documented convention (D107 "the
+  side is set by the sampler") so the elevated-vol rv_rank ">" gate satisfies
+  R1 as written - but every prior MR gate used the CALM side; this family
+  deliberately inverts the protection thesis (it buys the panic print).
+  Approval should confirm that reading. NOT expressible in grammar (->
+  injection lane, 07-07 pattern, separate decision): gate-OFF arms (R1
+  requires an accepted MR gate), swing_long DTE (D102 one-id-one-bucket;
+  horizon 15 -> swing_mid always = the probe bucket), delta 0.45-0.55 (MR
+  swing_mid P3 band caps at 0.45; NOT proposing a P3 widening - D125 evidence
+  has MR components concentrating LOW; the 0.40-0.45 edge covers the low end
+  of the asked sweep). Rank-path guard: momentum is rank-coherent but the
+  cross_sectional_rank combiner sorts DESCENDING unconditionally - top-N by
+  raw momentum = buy the STRONGEST names, the INVERSE of capitulation - so
+  momentum is pinned out of the rank path (policy set; a tightening).
+  Also pinned OUT of the trend_continuation directional pool (the threshold
+  entry would otherwise auto-admit it there with contrarian op "<" and the
+  wrong exit chassis). vol_target sizer chain excluded for this directional
+  (C1: the X1 realized_vol chain occupies the volatility family slot the
+  pinned rv_rank gate needs). The days_since_jump alternate trigger form is
+  NOT free either (family volatility - also outside MR C2 families; currently
+  regime-only) - deferred unless momentum samples poorly, their own framing.
+  Honest caveats acknowledged: trade-level probe, IV-crush-optimistic (their
+  exit-revaluation follow-up in flight); generating the family IS the probe
+  (the ivol_lo/v28 pattern) and their fold-columns/gate price honestly.
+  Construction/complement lever - NOT a promotion-unlock claim.'
+evidence:
+  trigger: crucible_generation_request
+  handoff: '../Crucible/docs/handoffs/FORGE_capitulation_bounce_generation_request_2026-07-12.md'
+  registry: 'momentum v1 family=trend rank_per_name_coherent=true; rv_rank v1; days_since_jump v3 - all in registry_snapshot_2026-07-13T010003Z.json (72 indicators, independently verified)'
+  engine: 'optbt/features/price_trend/momentum.py reads params lookback/skip (min_bars=max+1); engine_core ThresholdSignal direction defaults long_call; exits/registry.py:104 time_stop n_bars default 5'
+  dark_supply: 'momentum absent from _INDICATOR_THRESHOLD_TABLE and _SIGNAL_HORIZON_TABLE -> is_threshold_skippable every role -> never emittable (corroborates 0 of 462,990 runs)'
+  probe: 'probe_results/capitulation_bounce.json (Crucible-side): pooled +0.107, high_vol +0.127 n=898, index bear underlying +1.13% fwd-10d vs -1.56% baseline'
+proposal_yaml: |
+  # v31 capitulation-bounce activation (momentum drop-trigger as a mean_reversion directional):
+  #   custom_predicates.py: 3.5 C2 per-id carve-out - _C2_HYPOTHESIS_EXTRA_IDS
+  #     {mean_reversion: (momentum,)} consulted by the C2 predicate (family stays trend)
+  #   search_space.py: MR directional pool += momentum (via the carve-out);
+  #     trend_continuation directional pool PIN-EXCLUDES momentum;
+  #     rank-exclusion policy set += momentum (descending rank inverts the trigger)
+  #   indicator_thresholds.py: momentum directional_range (-0.083, -0.041) op "<"
+  #     (log-return native units = -8%..-4% simple; probe point -0.051), regime_range None
+  #   sampler.py: _sample_momentum_params lookback int [3,10] skip 0 (D264 pattern);
+  #     momentum-directional scoping - regime gate pinned rv_rank op ">" threshold [50,80]
+  #     (D107 opposite-side pattern, directional-scoped) + _sample_rv_rank_params;
+  #     veto slot SKIPPED (calm-vol ivol/market_rv contradict the elevated-vol thesis);
+  #     time_stop n_bars sampled int [5,15] (this directional only; engine default 5
+  #     elsewhere - D169 cross-hypothesis concern respected, champion MR slice untouched);
+  #     vol_target chain excluded (C1 collision with the pinned volatility-family gate)
+  #   signal_horizon.py: momentum 15 (bounce thesis horizon; medium class -> k*15 =
+  #     30/45/60 -> swing_mid ALWAYS per D102 - the probe bucket)
+  #   grammar.yaml: v30 -> v31 + header note + C2 comment; archive; Decision Log entry
+decided_at: '2026-07-13T07:05:00+00:00'
+decided_by: operator (in-session 2026-07-13 - "approve" on the staged proposal,
+  following the same-day review session that verified the handoff and drafted this
+  entry plus the held response relay; built same-session per
+  docs/tasks/grammar-change.md as D270, incl. the R1 elevated-side reading the
+  rationale asked the approval to confirm)
+decision_marker: null

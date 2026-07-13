@@ -201,6 +201,26 @@ _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 # market_realized_vol `macro`.
 _REGIME_VETO_SHARE: float = 0.5
 
+# D270 (v31) — the capitulation-bounce family (Crucible
+# FORGE_capitulation_bounce_generation_request_2026-07-12): `momentum` as a
+# mean_reversion directional (§3.5 C2 per-id carve-out, OPEN_PROPOSALS
+# e9d74318). The family's thesis is the PAIR (short-horizon panic drop x
+# ELEVATED realized vol), so the gate is pinned — rv_rank op ">" in [50, 80],
+# the intended-strength condition the probe's own coding bug left inert
+# ("generate gate-on variants so its value gets measured"; gate-OFF fails R1 →
+# injection lane). Scoped consequences, all keyed on this directional id:
+# regime pool pinned to rv_rank (`_compatible_regimes`); the calm-side
+# ivol/market_rv veto slot is SKIPPED (it would strangle co-fire on the very
+# prints the trigger selects); time_stop emits `n_bars` in [5, 15] (probe hold
+# 10 td — the engine default is 5 and Forge never sampled it; scoping keeps
+# the champion MR slice untouched, the D169 concern); computation knobs
+# lookback [3, 10] / skip 0 ride the SignalSpec params (D264 pattern).
+_CAPITULATION_DIRECTIONAL_ID: str = "momentum"
+_CAPITULATION_REGIME_ID: str = "rv_rank"
+_CAPITULATION_RV_RANK_GATE_RANGE: tuple[float, float] = (50.0, 80.0)
+_CAPITULATION_LOOKBACK_RANGE: tuple[int, int] = (3, 10)
+_CAPITULATION_TIME_STOP_NBARS_RANGE: tuple[int, int] = (5, 15)
+
 # Cohort-yield exploration band (§3 of Crucible's 2026-06-17 yield-map refresh).
 # When the cohort draw is yield-driven (`cohort_yield_weights` supplied), clamp
 # P(cross_sectional_rank) to [floor, 1 - floor] so neither cohort is ever starved
@@ -724,7 +744,7 @@ def sample_config(
             type="threshold",
             role="regime_filter",
             indicators=(regime_id,),
-            params=_regime_signal_params(hypothesis, regime_id, rng),
+            params=_regime_signal_params(hypothesis, regime_id, rng, directional_id=directional_id),
         ),
     ]
     # Belt-and-suspenders: a `type='threshold'` signal with no `threshold`
@@ -754,7 +774,7 @@ def sample_config(
 
     selector = _build_selector(space, hypothesis, bucket, rng)
     sizer = _build_sizer(space, mode, rng)
-    exits = _build_exits(space, hypothesis, rng)
+    exits = _build_exits(space, hypothesis, rng, directional_id=directional_id)
 
     config_name = f"forge_{hypothesis}_{bucket}_{rng.getrandbits(32):08x}"
 
@@ -849,13 +869,23 @@ def sample_config(
     # eligible set equals the old per-hypothesis guard, and the share draw +
     # rng.choice consume identically — byte-identical to the D263 path
     # (goldens assert it).
+    # D270 (v31): the capitulation directional NEVER draws a veto — both MR
+    # veto ids are CALM-side gates (ivol "<" excludes high idio-vol names,
+    # market_rv "<" excludes market spikes), the exact prints the elevated-vol
+    # drop trigger selects; ANDing one on would strangle co-fire to ~zero.
+    # The short-circuit precedes rng.random(), so non-momentum paths consume
+    # identically (hard rule #6).
     veto_pool = space.regime_veto_indicators_by_hypothesis.get(hypothesis, ())
     eligible_vetoes = tuple(
         v
         for v in veto_pool
         if not _config_has_veto_family_indicator(signals, space, space.regime_veto_family_by_id[v])
     )
-    if eligible_vetoes and rng.random() < _REGIME_VETO_SHARE:
+    if (
+        directional_id != _CAPITULATION_DIRECTIONAL_ID
+        and eligible_vetoes
+        and rng.random() < _REGIME_VETO_SHARE
+    ):
         veto_id = rng.choice(eligible_vetoes)
         signals.append(
             SignalSpec(
@@ -908,9 +938,17 @@ def _compatible_regimes(
     *directional* signal's horizon only (as the validator always has), so the
     regime gate is free to pair with any bucket. Dropping the constraint also
     undoes the degenerate-registry artifact (every lookback 0) that forced
-    trend regimes onto rv_rank — adx/hurst can now gate swing_mid/long."""
+    trend regimes onto rv_rank — adx/hurst can now gate swing_mid/long.
+
+    D270 (v31): the capitulation directional's gate is PINNED to rv_rank —
+    the family's thesis IS the (drop trigger x elevated realized vol) pair;
+    a calm-side gate (iv_rank/realized_vol '<' ...) ANDed onto a panic-print
+    trigger would structurally never co-fire. The pin composes with the
+    chain-family filter: under a vol_target chain (realized_vol, family
+    volatility) rv_rank is excluded → the pool is EMPTY → momentum is dropped
+    from `_directional_candidates` for that draw (C1-correct by construction)."""
     directional_family = by_id[directional_id].family
-    return tuple(
+    compatible = tuple(
         i
         for i in space.regime_indicators_by_hypothesis[hypothesis]
         if i in by_id
@@ -919,6 +957,9 @@ def _compatible_regimes(
         and not is_threshold_skippable(i, "regime_filter")
         and (chain_family is None or by_id[i].family != chain_family)
     )
+    if hypothesis == "mean_reversion" and directional_id == _CAPITULATION_DIRECTIONAL_ID:
+        return tuple(i for i in compatible if i == _CAPITULATION_REGIME_ID)
+    return compatible
 
 
 def _directional_candidates(
@@ -1237,6 +1278,8 @@ def _build_exits(
     space: SearchSpace,
     hypothesis: str,
     rng: random.Random,
+    *,
+    directional_id: str | None = None,
 ) -> tuple[ExitSpec, ...]:
     """§3.5 E1 mandatory + §3.5 S5 multi-exit composition (D071).
 
@@ -1273,7 +1316,22 @@ def _build_exits(
     ids.extend(picked_optional[:_K_MAX_OPTIONAL])
     # Preserve order, deduplicate (E1 / required_always / optional may overlap).
     deduped = list(dict.fromkeys(ids))
-    return tuple(ExitSpec(id=eid, params=_exit_params(eid, rng)) for eid in deduped)
+    exits = tuple(ExitSpec(id=eid, params=_exit_params(eid, rng)) for eid in deduped)
+    # D270 (v31): the capitulation directional's time_stop samples `n_bars`
+    # (probe hold 10 td, sweep 5-15) — Crucible's exit registry defaults n_bars
+    # to 5 and Forge has never emitted it, so an unscoped emission would move
+    # EVERY hypothesis's hold (the D169 "cross-hypothesis dirties the mr slice"
+    # concern). The extra randint is drawn AFTER the standard exit draws and
+    # only on this directional — every other path consumes rng identically
+    # (hard rule #6).
+    if directional_id == _CAPITULATION_DIRECTIONAL_ID and any(e.id == "time_stop" for e in exits):
+        low, high = _CAPITULATION_TIME_STOP_NBARS_RANGE
+        n_bars = rng.randint(low, high)
+        exits = tuple(
+            ExitSpec(id=e.id, params={"n_bars": n_bars}) if e.id == "time_stop" else e
+            for e in exits
+        )
+    return exits
 
 
 def _directional_signal_params(
@@ -1313,7 +1371,26 @@ def _directional_signal_params(
     # same params dict as the percentile threshold.
     if indicator_id == "residual_momentum":
         params.update(_sample_residual_momentum_params(rng))
+    # D270 (v31): the capitulation drop-trigger's formation knobs ride the same
+    # params dict as the absolute threshold (the residual_momentum precedent).
+    if indicator_id == _CAPITULATION_DIRECTIONAL_ID:
+        params.update(_sample_momentum_params(rng))
     return params
+
+
+def _sample_momentum_params(rng: random.Random) -> dict[str, object]:
+    """D270 (v31) — Crucible `momentum` computation params for the
+    capitulation trigger.
+
+    `lookback` is the drop-formation window, the handoff's sweep axis
+    (3-10 td; probe point 5). `skip` is PINNED 0: the trigger reads the raw
+    trailing drop INCLUDING the most recent bar — a reversal-avoidance skip
+    would erase the capitulation print the family exists to buy. Crucible's
+    writer reads both from the per-config SignalSpec params
+    (`Momentum.compute`: params.get("lookback"/"skip"); min_bars =
+    max(lookback, skip) + 1 — verified in their code, no engine change)."""
+    low, high = _CAPITULATION_LOOKBACK_RANGE
+    return {"lookback": rng.randint(low, high), "skip": 0}
 
 
 def _sample_residual_momentum_params(rng: random.Random) -> dict[str, object]:
@@ -1426,6 +1503,8 @@ def _regime_signal_params(
     hypothesis: str,
     regime_id: str,
     rng: random.Random,
+    *,
+    directional_id: str | None = None,
 ) -> dict[str, object]:
     """Threshold params for the regime_filter signal.
 
@@ -1433,6 +1512,10 @@ def _regime_signal_params(
     for the audited per-indicator distributions. §3.5 R1's "threshold <= 50"
     constraint on iv_rank is honored by the table's `regime_range=(10, 50)`
     entry for that indicator; no special-case logic needed here.
+
+    D270 (v31): ``directional_id`` scopes the capitulation override — the ONLY
+    directional-keyed switch; every prior switch is (hypothesis, regime)-keyed.
+    ``None`` (every pre-v31 call path) is byte-identical to the old signature.
     """
     params = sample_threshold_params(regime_id, "regime_filter", rng)
     if regime_id == "rv_rank":
@@ -1452,6 +1535,22 @@ def _regime_signal_params(
     # side (op "<"); the indicator_thresholds default ">" is R2's trend side.
     if hypothesis == "mean_reversion" and regime_id == "hurst":
         params["op"] = "<"
+    # D270 (v31): the capitulation family's gate fires on the ELEVATED-vol
+    # side — rv_rank op ">" in [50, 80], the D107 "opposite side" pattern
+    # scoped one level tighter (per-DIRECTIONAL, not per-hypothesis: the
+    # champion MR's calm "<" side is untouched on every other directional).
+    # R1 accepts it as written (op-agnostic by the documented D107 convention).
+    # The extra uniform re-draws the table's calm-side threshold into the
+    # elevated band — a NEW path (momentum was never emittable pre-v31), so
+    # no pre-v31 sequence consumes differently.
+    if (
+        hypothesis == "mean_reversion"
+        and directional_id == _CAPITULATION_DIRECTIONAL_ID
+        and regime_id == _CAPITULATION_REGIME_ID
+    ):
+        low, high = _CAPITULATION_RV_RANK_GATE_RANGE
+        params["op"] = ">"
+        params["threshold"] = round(rng.uniform(low, high), 4)
     return params
 
 

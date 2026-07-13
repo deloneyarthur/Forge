@@ -171,6 +171,22 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         op_directional=">",
         op_regime=">",
     ),
+    # D270 (v31): the parameterized `momentum` id (lookback/skip ride the
+    # SignalSpec params — sampler pins lookback 3-10, skip 0) as the
+    # CAPITULATION drop trigger, a mean_reversion directional via the §3.5 C2
+    # per-id carve-out (Crucible FORGE_capitulation_bounce_generation_request
+    # 2026-07-12). Output is a LOG return: the range is the handoff's
+    # -4%..-8% simple sweep in log units (ln(0.96)=-0.041, ln(0.92)=-0.083;
+    # probe point -0.051 = -5%). op "<" fires ON the panic print — never
+    # percentile (the probe validated an absolute drop floor). Regime role
+    # nulled: C4 keeps it single-role; the vol condition is rv_rank's job
+    # (pinned op ">" [50, 80] in the sampler — the intended-strength gate the
+    # probe's own coding bug left inert).
+    "momentum": IndicatorThresholdSpec(
+        directional_range=(-0.083, -0.041),
+        regime_range=None,
+        op_directional="<",
+    ),
     # v23 (Crucible signal-quality handoff §2.1, D236): sma_slope (SMA-200
     # slope) is the best cross-sectional trend signal — rank-IC 0.078 @63d,
     # DOMINATES momentum_252 (0.059; momentum_252 adds -0.012 incremental once

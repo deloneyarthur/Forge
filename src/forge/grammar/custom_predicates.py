@@ -200,6 +200,22 @@ _C2_HYPOTHESIS_FAMILIES: dict[str, tuple[str, ...] | None] = {
     "event_momentum": ("post_event_drift",),
 }
 
+# D270 (v31): §3.5 C2 PER-ID carve-outs — indicator ids admitted as a
+# hypothesis's directional even though their registry FAMILY is not in the
+# allowed-families tuple above. The capitulation-bounce family (Crucible
+# FORGE_capitulation_bounce_generation_request_2026-07-12): the parameterized
+# `momentum` id is family `trend` (the label follows the KERNEL — a trailing
+# log-return measurement), but the drop trigger (`momentum < -0.05`-ish,
+# lookback 3-10) is a contrarian REVERSION thesis whose validated chassis is
+# time-stop-primary — MR's exit schema, not trend's. Admitting the whole
+# `trend` family would flood MR with continuation directionals; the carve-out
+# is exactly one id. Operator-approved loosening (OPEN_PROPOSALS e9d74318,
+# hard rules #1/#4); consumed by both this predicate and
+# `search_space._build_directional_pool`.
+_C2_HYPOTHESIS_EXTRA_IDS: dict[str, tuple[str, ...]] = {
+    "mean_reversion": ("momentum",),
+}
+
 # §3.5 P2 entry DTE windows per bucket. (Exit DTE thresholds are tracked
 # via theta_cliff_exit's params, which isn't fully pinned in §3.5; P2
 # checks the entry-side window only for v1. See OPEN_QUESTIONS.md.)
@@ -646,7 +662,7 @@ def _c1_no_duplicate_indicator_families(
 # ---------------------------------------------------------------------------
 
 
-def _c2_directional_family_matches_hypothesis(
+def _c2_directional_family_matches_hypothesis(  # noqa: PLR0911 — one early return per C2 clause (any-family hypothesis, D270 per-id carve-out, family match) plus the guard returns; collapsing them buries the rule structure
     config: StrategyConfig,
     registry: RegistrySnapshot,
 ) -> PredicateResult:
@@ -667,6 +683,10 @@ def _c2_directional_family_matches_hypothesis(
             passed=False,
             detail="C2: directional signal has zero indicators",
         )
+    # D270 (v31): per-id carve-out — an id listed for this hypothesis passes
+    # C2 regardless of its registry family (see _C2_HYPOTHESIS_EXTRA_IDS).
+    if indicator_ids[0] in _C2_HYPOTHESIS_EXTRA_IDS.get(config.hypothesis, ()):
+        return PredicateResult(passed=True)
     # Use the first indicator's family as the signal's family (signals
     # are restricted to one indicator-per-family by C1, so any indicator
     # works for this check on a grammar-valid config).
