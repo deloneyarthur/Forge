@@ -159,6 +159,9 @@ def test_pick_underlying_excludes_no_earnings_for_earnings_gated_configs(monkeyp
 
     pool = ("AAPL", "RTX", "SOXL", "XLK", "SPY", "TQQQ")
     monkeypatch.setattr(sampler_mod, "_load_underlyings", lambda: pool)
+    # v32: pin the DORMANT (no-manifest) path explicitly so this asserts the frozen-list
+    # behaviour hermetically, independent of whether the live box has published coverage.
+    monkeypatch.setattr(sampler_mod, "_load_earnings_covered_symbols", lambda: ())
     drawn = {
         _pick_underlying(random.Random(s), "event_momentum", ("days_since_earnings",))
         for s in range(300)

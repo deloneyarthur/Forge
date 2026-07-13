@@ -153,6 +153,27 @@ def test_component_contributions_export_soft_check() -> None:
     assert "3.0h" in present.message
 
 
+def test_earnings_coverage_export_soft_check() -> None:
+    """v32 (D268): the earnings-coverage manifest ships dormant until Crucible starts the
+    publisher, so ABSENCE must be OK (never pollute OVERALL — the component_contributions
+    precedent). The sampler reads it with max_age_days=None (a stale coverage set never
+    HALTS generation — coverage changes slowly, stale beats the frozen list), so the
+    staleness teeth live here: present & fresh → OK; older than 45d → WARN (publisher may
+    be dead; the covered set is ossifying and a new no-earnings universe add re-opens the
+    SOXL blind spot)."""
+    from forge.cli.healthcheck_cmd import check_earnings_coverage_export
+
+    absent = check_earnings_coverage_export(None, _NOW)
+    assert absent.level is Level.OK
+    assert "no export yet" in absent.message
+
+    fresh = check_earnings_coverage_export(_NOW - timedelta(days=3), _NOW)
+    assert fresh.level is Level.OK
+
+    stale = check_earnings_coverage_export(_NOW - timedelta(days=46), _NOW)
+    assert stale.level is Level.WARN
+
+
 def test_file_freshness_levels() -> None:
     kw = {"label": "backup", "warn_hours": 26.0, "critical_hours": 50.0}
     assert check_file_freshness(None, _NOW, **kw).level is Level.WARN

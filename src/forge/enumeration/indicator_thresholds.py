@@ -313,6 +313,9 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     ),
     # ----- IV / event / pairs / macro (post-D031 real Crucible v2 implementations) -----
     # iv_rank: §3.5 R1 demands threshold <= 50 on mean_reversion regime; honored here.
+    # Q49: same kernel as rv_rank — a min-max RANGE-POSITION (cur-lo)/(hi-lo)*100,
+    # not a statistical percentile; these bounds are kernel-unit calibrated, so the
+    # relabel is semantic only (see the rv_rank note above).
     "iv_rank": IndicatorThresholdSpec(
         directional_range=(20.0, 40.0),  # low-IV entry
         regime_range=(10.0, 50.0),  # R1: <= 50.0
@@ -345,8 +348,14 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
         regime_range=(0.0, 0.01),
         op_regime=">",
     ),
-    # ----- Realized-vol percentile rank (D077, Crucible rv_rank.py) -----
+    # ----- Realized-vol RANGE-POSITION (D077, Crucible rv_rank.py) -----
     # 0 = vol at trailing min (cheap), 100 = vol at trailing max (expensive).
+    # Q49 (2026-07-13): the kernel computes a min-max RANGE-POSITION
+    # (cur-lo)/(hi-lo)*100, NOT a statistical percentile, despite the "rank"
+    # name / Crucible docstring (verified in `crucible_engine_core`). Calibrated
+    # gates are UNAFFECTED — these bounds are tuned in kernel units through the
+    # funnel; the distinction matters only for cross-system threshold INTENT-
+    # mapping (e.g. "the 60th percentile" must be read as a 60/100 range-position).
     # PTS thesis: enter when vol is LOW → op_regime = "<".
     "rv_rank": IndicatorThresholdSpec(
         directional_range=None,  # rv_rank is regime-only; not a directional signal

@@ -22,17 +22,29 @@ from __future__ import annotations
 from forge.enumeration.indicator_thresholds import auto_tightenings_fingerprint
 from forge.enumeration.iterator import EnumerationCapped, enumerate_candidates
 from forge.enumeration.registry_fingerprint import registry_hash
-from forge.enumeration.sampler import SamplerError, sample_config, universe_fingerprint
+from forge.enumeration.sampler import (
+    SamplerError,
+    earnings_coverage_fingerprint,
+    sample_config,
+    universe_fingerprint,
+)
 from forge.enumeration.search_space import SearchSpace, build_search_space
 
 
 def enumeration_inputs_hash() -> str:
     """H-3: combined fingerprint of the enumeration-shadowing inputs that
     `registry_hash`/`grammar_version` don't capture — the auto-tightenings YAML
-    (D073) and the universe pool (D078). Folded into `mint_batch_id` +
-    `batch_summaries` so the recorded identity tracks everything that determines
-    the enumerated config sequence (hard rule #6)."""
-    return f"{auto_tightenings_fingerprint()}|{universe_fingerprint()}"
+    (D073), the universe pool (D078), and (v32/D268) the earnings-coverage manifest.
+    Folded into `mint_batch_id` + `batch_summaries` so the recorded identity tracks
+    everything that determines the enumerated config sequence (hard rule #6). The
+    coverage fingerprint is appended ONLY when a manifest is published — dormant it is
+    empty and applies no intersection, so the pre-publish identity stays byte-identical
+    to v31."""
+    parts = [auto_tightenings_fingerprint(), universe_fingerprint()]
+    coverage_fp = earnings_coverage_fingerprint()
+    if coverage_fp:
+        parts.append(coverage_fp)
+    return "|".join(parts)
 
 
 __all__ = [
@@ -41,6 +53,7 @@ __all__ = [
     "SearchSpace",
     "auto_tightenings_fingerprint",
     "build_search_space",
+    "earnings_coverage_fingerprint",
     "enumerate_candidates",
     "enumeration_inputs_hash",
     "registry_hash",

@@ -242,6 +242,39 @@ def check_component_contributions_export(
     return HealthResult(label, Level.OK, f"present ({hrs:.1f}h old)")
 
 
+def check_earnings_coverage_export(
+    newest_mtime: datetime | None,
+    now: datetime,
+    *,
+    warn_days: float = 45.0,
+) -> HealthResult:
+    """Soft presence + staleness check for Crucible's earnings-coverage manifest (v32/D268).
+
+    Forge intersects its earnings-gated underlying pool with `earnings_covered_symbols.json`
+    — the durable replacement for the `_NO_EARNINGS_UNDERLYINGS` stopgap. The sampler reads it
+    with `max_age_days=None` so a stale set never HALTS generation (stale coverage beats the
+    frozen list; coverage changes slowly), which moves the staleness teeth HERE. Absence is OK:
+    the wiring ships dormant until Crucible starts the publisher, so a missing file must not
+    pollute OVERALL (the `check_component_contributions_export` precedent). Present & fresh → OK
+    with age; present & older than `warn_days` → WARN (the publisher may be dead — the covered
+    set is quietly ossifying and a new no-earnings universe add re-opens the SOXL degenerate-leg
+    blind spot). No typed read — glob+mtime only, so it does not pre-empt the contracts loader."""
+    label = "earnings_coverage"
+    if newest_mtime is None:
+        return HealthResult(
+            label, Level.OK, "no export yet (dormant until Crucible starts the publisher)"
+        )
+    days = _age_hours(newest_mtime, now) / 24.0
+    if days >= warn_days:
+        return HealthResult(
+            label,
+            Level.WARN,
+            f"newest earnings-coverage export is {days:.0f}d old (>{warn_days:.0f}d — publisher "
+            f"may be dead; coverage set ossifying, D268)",
+        )
+    return HealthResult(label, Level.OK, f"present ({days:.1f}d old)")
+
+
 def check_contracts_pin(pinned: str, installed: str) -> HealthResult:
     """Surface contracts drift before a reboot turns it into a hard halt.
 
@@ -657,6 +690,15 @@ def cmd_healthcheck(
             now,
         )
     )
+    # v32 (D268): Crucible's earnings-coverage manifest — the durable authority the
+    # sampler intersects earnings-gated draws with. Soft — absent is expected until the
+    # publisher starts; the sampler's max_age_days=None puts the staleness WARN here.
+    results.append(
+        check_earnings_coverage_export(
+            _newest_mtime(Path.home() / "optbt_data" / "exports", "earnings_covered_symbols*.json"),
+            now,
+        )
+    )
 
     # Learned-lane drift: a blind daily retrain (newest-wins adoption) can rotate a
     # degraded model live; catch it loudly instead of waiting for a human to read the
@@ -705,6 +747,7 @@ __all__ = [
     "Level",
     "check_component_contributions_export",
     "check_contracts_pin",
+    "check_earnings_coverage_export",
     "check_file_freshness",
     "check_hypothesis_weights_fallback",
     "check_inbox_rejections",

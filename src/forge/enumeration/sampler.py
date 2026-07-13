@@ -46,6 +46,7 @@ from crucible_contracts import (
     SignalSpec,
     SizerSpec,
     StrategyConfig,
+    load_earnings_covered_symbols_from_export,
     load_universe_tickers_from_export,
 )
 from crucible_contracts.exceptions import QueryError
@@ -319,6 +320,62 @@ def universe_fingerprint() -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
+@functools.lru_cache(maxsize=1)
+def _load_earnings_covered_symbols() -> tuple[str, ...]:
+    """D268 durable fix (v32): the earnings-covered symbol set from Crucible's
+    coverage export, via the blessed `load_earnings_covered_symbols_from_export`
+    (contracts 1.31.0, D271). This is the AUTHORITY on which underlyings may carry
+    earnings-gated templates — coverage truth lives where `financials.parquet` is
+    authored, so the hardcoded `_NO_EARNINGS_UNDERLYINGS` stopgap is retired from
+    maintenance (retained only as free defense-in-depth; see `_earnings_gated_pool`).
+
+    `max_age_days=None` at the read site: a stale coverage set (coverage changes
+    slowly) beats HALTING generation, so a silently-dead publisher surfaces in ops
+    via the `check_earnings_coverage_export` healthcheck line rather than the loader's
+    `StaleExportError`. Absent export → `()` (the contract's cold semantics) → no
+    intersection → v31 behaviour exactly. A corrupt export raises `QueryError`
+    (`StaleExportError`, its subclass, cannot fire with `max_age_days=None`) → logged
+    loudly + `()` fallback (mirrors `_load_underlyings`' `universe_export_unreadable`),
+    NOT silently caught, NOT a crash. Cached for the process lifetime — restart to pick
+    up a publish, so activation happens at a restart boundary (journal-visible), never
+    mid-run.
+    """
+    try:
+        covered = load_earnings_covered_symbols_from_export(_UNIVERSE_EXPORT_DIR, max_age_days=None)
+    except QueryError as err:
+        # A present-but-unreadable manifest is a drift signal, distinct from the
+        # expected "absent" pre-publish case. Log and fall back to no-intersection
+        # rather than narrowing (or emptying) the earnings-gated pool on bad data.
+        _logger.warning(
+            "earnings_coverage_export_unreadable",
+            path=str(_UNIVERSE_EXPORT_DIR),
+            error=str(err),
+        )
+        return ()
+    return tuple(covered)
+
+
+def earnings_coverage_fingerprint() -> str:
+    """H-3 (v32): stable 16-hex fingerprint of the resolved earnings-coverage set,
+    or `""` when no manifest is published.
+
+    Like `universe_fingerprint`, the covered set shadows `_pick_underlying`'s
+    earnings-gated draws but lives in neither `registry_hash` nor `grammar_version`;
+    once Crucible publishes `earnings_covered_symbols.json` (or changes it), a
+    same-seed reproduction would silently diverge unless the covered set is folded
+    into the recorded batch identity (hard rule #6). Empty → `""` so the DORMANT
+    (pre-publish) `enumeration_inputs_hash` stays byte-identical to v31: an empty
+    coverage set applies no intersection, so it shadows no draw and must contribute
+    nothing to the identity. `_load_earnings_covered_symbols()` returns a sorted
+    tuple, so the hash is order-stable.
+    """
+    covered = _load_earnings_covered_symbols()
+    if not covered:
+        return ""
+    payload = "|".join(covered)
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 _TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 
 # D268 (v30) — no-earnings underlyings excluded from earnings-DEPENDENT generation.
@@ -332,12 +389,13 @@ _TIER_1_ETF_UNDERLYINGS: frozenset[str] = frozenset({"SPY", "QQQ", "IWM", "DIA"}
 # (passes expected_trades) and reached the first promoted book (SOXL). This CONSERVATIVE
 # superset (ETFs/leveraged/inverse/commodity/vol/bond/index ONLY — every entry
 # unambiguously EPS-less; earnings-covered single names like RTX Corp are deliberately
-# ABSENT so honest supply is never starved) closes the ~22.5% degenerate event_momentum
-# emission today. STOPGAP: superseded by the v31 coverage manifest (Crucible publishes
-# the financials.parquet covered-symbol set as a contracted export → Forge intersects
-# the earnings-gated pool with it and retires this hardcoded list). Until then, a
-# universe add of a NEW no-earnings ticker not listed here re-opens the blind spot for
-# that name — the manifest is the durable fix.
+# ABSENT so honest supply is never starved) closed the ~22.5% degenerate event_momentum
+# emission. v32 (D268 durable fix) WIRED the coverage manifest as the authority
+# (`_earnings_gated_pool` intersects the pool with `_load_earnings_covered_symbols()`),
+# so this list is RETIRED FROM MAINTENANCE — retained only as free defense-in-depth
+# (every entry unambiguously EPS-less, so the union can never wrongly exclude a covered
+# name, and a manifest-publisher bug can't reintroduce SOXL-class supply). Full deletion
+# is a later cleanup bump once the manifest has survived a funnel window (operator's call).
 _NO_EARNINGS_UNDERLYINGS: frozenset[str] = _TIER_1_ETF_UNDERLYINGS | frozenset(
     {
         # leveraged / inverse index products
@@ -420,6 +478,37 @@ _EARNINGS_CALENDAR_ETF_INCOMPATIBLE: frozenset[str] = frozenset(
 )
 
 
+def _earnings_gated_pool(underlyings: tuple[str, ...]) -> tuple[str, ...]:
+    """The underlying pool for an earnings-gated config — names that actually carry
+    earnings data.
+
+    v32 (D268 durable fix): `(universe & covered) - _NO_EARNINGS_UNDERLYINGS` when
+    Crucible has published the coverage manifest; the frozen list is retained as free
+    defense-in-depth (order is immaterial — it and the covered set are disjoint by
+    construction). When the manifest is absent (dormant-until-publish) the covered set
+    is empty → exactly the v31 pool (`universe - frozen list`), byte-identical. A
+    present-but-DISJOINT covered set (which would empty the pool and crash `rng.choice`)
+    falls back to the v31 pool with a loud warn — a bad manifest must NOT halt
+    generation. Universe order is preserved (filter, not set ops) so the draw stays
+    deterministic (hard rule #6)."""
+    v31_pool = tuple(u for u in underlyings if u not in _NO_EARNINGS_UNDERLYINGS)
+    covered = _load_earnings_covered_symbols()
+    if not covered:
+        return v31_pool
+    covered_set = frozenset(covered)
+    pool = tuple(u for u in v31_pool if u in covered_set)
+    if not pool:
+        # A valid-but-disjoint manifest would starve the earnings-gated pool entirely.
+        # Fall back to the v31 pool rather than crash the loop on `rng.choice(())`.
+        _logger.warning(
+            "earnings_coverage_empty_intersection",
+            n_covered=len(covered),
+            n_universe=len(underlyings),
+        )
+        return v31_pool
+    return pool
+
+
 def _pick_underlying(
     rng: random.Random,
     hypothesis: str,
@@ -475,7 +564,7 @@ def _pick_underlying(
         return None
     underlyings = _load_underlyings()
     if any(ind in _EARNINGS_CALENDAR_ETF_INCOMPATIBLE for ind in regime_indicators):
-        pool = tuple(u for u in underlyings if u not in _NO_EARNINGS_UNDERLYINGS)
+        pool = _earnings_gated_pool(underlyings)
     else:
         pool = underlyings
     if underlying_class_weights or underlying_name_weights or factor_cell_discounts:
