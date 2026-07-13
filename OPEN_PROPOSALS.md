@@ -912,8 +912,9 @@ proposal_yaml: |
   #   signal_horizon.py: momentum 15 (bounce thesis horizon; medium class -> k*15 =
   #     30/45/60 -> swing_mid ALWAYS per D102 - the probe bucket)
   #   grammar.yaml: v30 -> v31 + header note + C2 comment; archive; Decision Log entry
-decided_at: '2026-07-13T07:05:00+00:00'
-decided_by: operator (in-session 2026-07-13 - "approve" on the staged proposal,
+decided_at: '2026-07-13T15:00:00+00:00'
+decided_by: operator (in-session 2026-07-13, timestamp approximate-to-the-hour -
+  "approve" on the staged proposal,
   following the same-day review session that verified the handoff and drafted this
   entry plus the held response relay; built same-session per
   docs/tasks/grammar-change.md as D270, incl. the R1 elevated-side reading the
