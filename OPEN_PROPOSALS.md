@@ -920,3 +920,85 @@ decided_by: operator (in-session 2026-07-13, timestamp approximate-to-the-hour -
   docs/tasks/grammar-change.md as D270, incl. the R1 elevated-side reading the
   rationale asked the approval to confirm)
 decision_marker: null
+---
+proposal_id: 682e1abd-ca1f-4e91-9695-c2bda05fbd42
+status: PENDING
+proposed_at: '2026-07-13T17:29:53+00:00'
+proposal_type: tighten
+target: grammar_v32_earnings_coverage_manifest_wiring
+rationale: 'The durable fix D268 promised: replace the hardcoded
+  _NO_EARNINGS_UNDERLYINGS stopgap with the Crucible-authored earnings-coverage
+  MANIFEST as the authority on which underlyings may carry earnings-gated
+  templates (event_momentum via days_since_earnings; vol_event/pre_earnings via
+  days_to_earnings). Coverage truth lives where financials.parquet is authored -
+  Forge cannot classify coverage from a ticker (the RTX-looks-like-an-ETF
+  problem), and the v30 frozen list has the documented blind spot: any FUTURE
+  universe add of a new no-earnings ticker reopens the SOXL degenerate-leg
+  pathology (NaN-fill -> allow=True + FLAT directional -> passthrough-backfilled
+  naked call that TRADES) for that name until a human edits the list. STATE
+  VERIFIED 2026-07-13: contracts 1.31.0 ships the blessed loader
+  load_earnings_covered_symbols_from_export (adopted pin-only, D271; docstring
+  contracts the exact Forge behavior including cold semantics) but Crucible has
+  NOT yet published earnings_covered_symbols*.json to ~/optbt_data/exports (no
+  file present) -> this wiring ships DORMANT-until-publish, byte-identical
+  today (the loader returns () when no file exists -> no intersection -> v31
+  behavior exactly; provable in the hermetic tests + goldens). TIGHTENING
+  direction (the manifested pool is a subset of the current universe-minus-list
+  pool: intersection can only remove uncovered names, e.g. a real company the
+  universe carries that financials.parquet does not cover) - operator-gated
+  anyway (grammar bump + a new cross-system data dependency). DESIGN, mirroring
+  the _load_underlyings/D078 precedent exactly: (1) read via the contracts
+  loader ONLY (hard rule #2) from registry_loader.DEFAULT_EXPORTS_DIR, cached
+  for PROCESS LIFETIME (restart to pick up publishes -> activation happens at a
+  restart boundary, journal-visible, never mid-run); (2) max_age_days=None at
+  the read site - the loader''s 45-day staleness teeth move to a NEW healthcheck
+  line check_earnings_coverage_export (OK-when-absent pre-publish so OVERALL is
+  never polluted, the component_contributions precedent; age>45d after first
+  publish -> WARN) because a dead Crucible publisher must surface in ops, not
+  halt generation on last-known-good coverage (stale coverage beats the frozen
+  list - coverage changes slowly); (3) corrupt export (QueryError) -> loud
+  structured warn (earnings_coverage_export_unreadable) + fall back to
+  no-intersection, mirroring universe_export_unreadable - NOT silently caught
+  (logged), NOT a crash (a bad file must not halt the daemon), and NOTE
+  StaleExportError subclasses QueryError so the None max-age keeps the two
+  paths distinct; (4) _pick_underlying earnings-gated branch becomes pool =
+  (universe INTERSECT covered) MINUS _NO_EARNINGS_UNDERLYINGS when covered is
+  non-empty (the frozen list is RETIRED FROM MAINTENANCE but retained as
+  free defense-in-depth against a manifest-publisher bug - every entry is
+  unambiguously EPS-less so the union can never wrongly exclude a covered
+  name; full deletion = a later cleanup bump after the manifest survives one
+  funnel window, operator''s call then); covered empty -> exactly today''s
+  v31 behavior; (5) DETERMINISM (hard rule #6, the H-3 lesson): the resolved
+  covered set shadows _pick_underlying draws but lives in neither
+  registry_hash nor grammar_version -> fold it into the batch-fingerprint
+  discipline exactly as universe_fingerprint does (extend that payload or a
+  sibling fingerprint folded into mint_batch_id + batch_summaries; exact shape
+  per mint_batch_id at build); (6) hermetic tests: absent-export cold path
+  byte-identical to v31 (golden), present-export intersection excludes a
+  not-on-the-frozen-list uncovered name (the blind-spot-closure test) while
+  RTX-type covered names stay drawable, corrupt -> warn + fallback,
+  process-cache semantics; (7) grammar v31 -> v32 + archive + D-entry. NO
+  contracts change (1.31.0 suffices). Deploy relay nudges Crucible to START
+  the publisher (loader shipped, file absent) - our side activates on their
+  first publish + our next restart. Complements (does not replace) their
+  planned Crucible-side all-NaN-directional admissibility guard.'
+evidence:
+  trigger: d268_durable_fix_followup
+  handoff: '../Crucible/docs/handoffs/FORGE_event_momentum_no_earnings_underlying_degenerates_2026-07-12.md (the pathology) + PROMPT_CRUCIBLE_EARNINGS_COVERAGE_MANIFEST.md (the accepted offer)'
+  contracts: 'crucible_contracts 1.31.0 (cbb8671) load_earnings_covered_symbols_from_export - adopted D271; docstring contracts cold=() semantics, {"covered_symbols": [...]} shape, earnings_covered_symbols*.json glob, 45d default staleness'
+  export_state: 'verified 2026-07-13T17:29Z: NO earnings_covered_symbols*.json in ~/optbt_data/exports - publisher not yet started; wiring is dormant-until-publish'
+  precedent: '_load_underlyings (D078/Q23: blessed loader + loud QueryError warn + fallback + process-lifetime cache) and universe_fingerprint (H-3: out-of-registry-hash pool folded into batch fingerprints); D258 dormant-until-served veto pattern'
+proposal_yaml: |
+  # v32 earnings-coverage manifest wiring (retire the D268 stopgap from maintenance):
+  #   sampler.py: _load_earnings_covered_symbols() - contracts loader, DEFAULT_EXPORTS_DIR,
+  #     max_age_days=None, process-lifetime cache, QueryError -> loud warn + () fallback;
+  #     _pick_underlying earnings-gated branch: covered non-empty ->
+  #     pool = (universe ∩ covered) - _NO_EARNINGS_UNDERLYINGS; covered empty -> v31 behavior;
+  #     fold resolved covered set into the batch-fingerprint discipline (H-3 pattern)
+  #   healthcheck: check_earnings_coverage_export (OK-when-absent; age>45d WARN post-publish)
+  #   tests: absent==v31 golden; intersection blind-spot closure; corrupt fallback; cache
+  #   grammar.yaml: v31 -> v32 + header note; archive; D-entry
+  #   deploy relay: ask Crucible to start the publisher (loader shipped, file absent)
+decided_at: null
+decided_by: null
+decision_marker: null
