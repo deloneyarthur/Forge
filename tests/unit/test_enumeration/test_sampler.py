@@ -2752,11 +2752,12 @@ def test_d270_momentum_pools_scoped_to_mean_reversion(
 def test_d270_capitulation_reachable_and_grammar_valid(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """The full capitulation genome: momentum directional (absolute drop
-    threshold, lookback/skip knobs) x rv_rank elevated-vol gate (op '>',
-    threshold in [50, 80], the intended-strength condition) x swing_mid x
-    CALL-default x no veto x confluence-only x never vol_target — every
-    emitted instance fully grammar-valid."""
+    """The full capitulation genome, v35/D280 BARE-DROP shape: momentum
+    directional (absolute drop threshold, lookback/skip knobs) x NO regime
+    gate (the v31 rv_rank pin dropped on Crucible's adjudication; R1-exempt)
+    x {swing_short, swing_mid} (the k=1 rider) x CALL-default x no veto x
+    confluence-only x never vol_target — every emitted instance fully
+    grammar-valid."""
     reg = _v31_registry(registry)
     space = build_search_space(grammar, reg)
     seen = 0
@@ -2774,17 +2775,11 @@ def test_d270_capitulation_reachable_and_grammar_valid(
         assert isinstance(p["lookback"], int), p
         assert 3 <= p["lookback"] <= 10, p
         assert p["skip"] == 0, p
-        # the PINNED elevated-vol gate
-        primary = next(s for s in cfg.signals if s.id == "sig_regime")
-        assert primary.indicators == ("rv_rank",), primary
-        gp = primary.params
-        assert gp["op"] == ">", gp
-        assert "use_percentile" not in gp, gp
-        assert 50.0 <= float(gp["threshold"]) <= 80.0, gp
-        assert gp.get("rv_window") in (10, 21), gp
-        assert gp.get("window") in (126, 252), gp
-        # chassis: probe bucket, no calm-side veto, single-name-only, no vol chain
-        assert cfg.dte_bucket == "swing_mid", cfg.dte_bucket
+        # D280 (v35): BARE-DROP — no regime gate of any kind.
+        assert not [s for s in cfg.signals if s.role == "regime_filter"], cfg.signals
+        # chassis: probe bucket + the k=1 swing_short rider, no calm-side
+        # veto, single-name-only, no vol chain
+        assert cfg.dte_bucket in ("swing_short", "swing_mid"), cfg.dte_bucket
         assert not any(s.id == "sig_regime_veto" for s in cfg.signals), cfg.signals
         assert cfg.combiner.type == "confluence", cfg.combiner
         assert cfg.sizer.mode != "vol_target", cfg.sizer

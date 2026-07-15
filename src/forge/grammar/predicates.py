@@ -17,6 +17,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
+from forge.grammar.custom_predicates import (
+    _R1_GATE_EXEMPT_DIRECTIONALS,
+)
 from forge.grammar.custom_predicates import REGISTRY as _CUSTOM_REGISTRY
 from forge.grammar.models import (
     CardinalityPredicate,
@@ -62,7 +65,7 @@ def evaluate(
 # ---------------------------------------------------------------------------
 
 
-def evaluate_cardinality(
+def evaluate_cardinality(  # noqa: PLR0911 — one return per (count/min/max/exempt) branch; the D280 S3 carve-out is the seventh
     predicate: CardinalityPredicate,
     config: StrategyConfig,
     registry: RegistrySnapshot,
@@ -81,6 +84,24 @@ def evaluate_cardinality(
         )
 
     count = len(matches)
+
+    # D280 (v35): §3.5 S3's regime_filter min-1 shares the gate REQUIREMENT
+    # with R1, so the operator-approved bare-drop carve-out (OPEN_PROPOSALS
+    # `4d35a046`) exempts the capitulation directional from BOTH surfaces —
+    # discovered at build time: the R1 predicate exemption alone left S3
+    # rejecting every gate-less config. Scoped to exactly the S3 shape (this
+    # field, a min bound, count 0) and the R1-exempt directional tuples; the
+    # yaml rule text is untouched (the D270/D280 carve-out convention).
+    if (
+        predicate.field == "signals.role.regime_filter"
+        and predicate.min is not None
+        and count == 0
+        and any(
+            sig.role == "directional" and sig.indicators in _R1_GATE_EXEMPT_DIRECTIONALS
+            for sig in config.signals
+        )
+    ):
+        return PredicateResult(passed=True)
 
     if predicate.count is not None:
         if count == predicate.count:

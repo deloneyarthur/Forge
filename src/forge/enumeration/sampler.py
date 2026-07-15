@@ -217,10 +217,20 @@ _REGIME_VETO_SHARE: float = 0.5
 # the champion MR slice untouched, the D169 concern); computation knobs
 # lookback [3, 10] / skip 0 ride the SignalSpec params (D264 pattern).
 _CAPITULATION_DIRECTIONAL_ID: str = "momentum"
+# D280 (v35): the v31 rv_rank pin is DROPPED — the capitulation arm is
+# BARE-DROP (no regime gate; R1 per-directional exemption, operator-approved
+# OPEN_PROPOSALS `4d35a046` on Crucible's 2026-07-15 adjudication: the [50,80]
+# kernel-unit gate bound harmfully — 69/69 decided dead, median 4 OOS trades —
+# and NO replacement gate ships: market_rv x drop co-fires 2x/8.4y). The two
+# constants below are retained for the submitted v31 lineage's
+# interpretability; the emission path no longer reads them.
 _CAPITULATION_REGIME_ID: str = "rv_rank"
 _CAPITULATION_RV_RANK_GATE_RANGE: tuple[float, float] = (50.0, 80.0)
 _CAPITULATION_LOOKBACK_RANGE: tuple[int, int] = (3, 10)
 _CAPITULATION_TIME_STOP_NBARS_RANGE: tuple[int, int] = (5, 15)
+# D280 (v35): the swing_short rider — k gains 1 for this directional only
+# (1 x horizon 15 td → swing_short; 2/3/4 keep the probe's swing_mid).
+_CAPITULATION_K_MULTIPLIERS: tuple[int, ...] = (1, 2, 3, 4)
 
 # D276 (v33) — resid_vix CONFIRMED-region concentration (Crucible
 # FORGE_resid_vix_region_followup_2026-07-13, first seen 07-15 in the
@@ -899,22 +909,7 @@ def sample_config(
             if h == hypothesis and d == directional_id
         }
 
-    signals = [
-        SignalSpec(
-            id="sig_directional",
-            type="threshold",
-            role="directional",
-            indicators=(directional_id,),
-            params=_directional_signal_params(directional_id, rng),
-        ),
-        SignalSpec(
-            id="sig_regime",
-            type="threshold",
-            role="regime_filter",
-            indicators=(regime_id,),
-            params=_regime_signal_params(hypothesis, regime_id, rng, directional_id=directional_id),
-        ),
-    ]
+    signals = _base_signals(hypothesis, directional_id, regime_id, rng)
     # Belt-and-suspenders: a `type='threshold'` signal with no `threshold`
     # key in params bypasses Crucible's predicate (`lambda _v: False`) and
     # silently gate-rejects on min_oos_trade_count. The `_directional_candidates`
@@ -1082,6 +1077,42 @@ def sample_config(
     )
 
 
+def _base_signals(
+    hypothesis: str,
+    directional_id: str,
+    regime_id: str | None,
+    rng: random.Random,
+) -> list[SignalSpec]:
+    """The directional signal plus (usually) the mandatory primary regime gate.
+
+    D280 (v35): ``regime_id`` is None ONLY for the bare-drop capitulation arm
+    (R1/S3-exempt) — that config carries no regime gate at all. Every other
+    path appends the gate exactly as before.
+    """
+    signals = [
+        SignalSpec(
+            id="sig_directional",
+            type="threshold",
+            role="directional",
+            indicators=(directional_id,),
+            params=_directional_signal_params(directional_id, rng),
+        ),
+    ]
+    if regime_id is not None:
+        signals.append(
+            SignalSpec(
+                id="sig_regime",
+                type="threshold",
+                role="regime_filter",
+                indicators=(regime_id,),
+                params=_regime_signal_params(
+                    hypothesis, regime_id, rng, directional_id=directional_id
+                ),
+            )
+        )
+    return signals
+
+
 def _rank_combiner(directional_id: str, rng: random.Random) -> CombinerSpec:
     """The cross_sectional_rank combiner for a rank-arm draw.
 
@@ -1152,7 +1183,12 @@ def _compatible_regimes(
         and (chain_family is None or by_id[i].family != chain_family)
     )
     if hypothesis == "mean_reversion" and directional_id == _CAPITULATION_DIRECTIONAL_ID:
-        return tuple(i for i in compatible if i == _CAPITULATION_REGIME_ID)
+        # D280 (v35): the capitulation arm is BARE-DROP — no regime gate at
+        # all (the v31 rv_rank pin bound harmfully and is dropped on
+        # Crucible's adjudication; R1 exempts this directional). The empty
+        # pool is the signal to `_select_bucket_directional_regime` to skip
+        # the regime draw; admission is handled in `_directional_candidates`.
+        return ()
     # D276 (v33): residual_momentum's gate is PINNED to the two CONFIRMED arms
     # (vix_term_slope / hurst) — the density lever of the concentrated sweep.
     # CHAINED draws (X1 vol_target / X2 kelly) host no resid at all: the chain
@@ -1187,7 +1223,19 @@ def _directional_candidates(
         if d in by_id
         and not is_threshold_skippable(d, "directional")
         and chain_compat.intersection(buckets_for_horizon_class(horizon_class(d)))
-        and _compatible_regimes(space, by_id, hypothesis, d, chain_family)
+        and (
+            _compatible_regimes(space, by_id, hypothesis, d, chain_family)
+            # D280 (v35): the bare-drop capitulation arm needs no regime
+            # partner (R1-exempt). Chain shape preserved from v31: a
+            # vol_target chain (family volatility) never hosted capitulation
+            # (previously a C1 side effect of the rv_rank pin; now explicit
+            # policy), while the kelly chain (smart_money) still may.
+            or (
+                hypothesis == "mean_reversion"
+                and d == _CAPITULATION_DIRECTIONAL_ID
+                and chain_family != "volatility"
+            )
+        )
     )
 
 
@@ -1207,7 +1255,16 @@ def _dte_target(
       it samples a bucket uniformly among the S4-permitted set and lets Crucible
       adapt per trade. See the horizon-matched-DTE handoff (2026-06-04)."""
     if hypothesis in _HORIZON_MATCHED_HYPOTHESES:
-        return float(rng.choice(_K_MULTIPLIERS) * signal_horizon_days(directional_id))
+        # D280 (v35): the capitulation directional adds k=1 — the swing_short
+        # rider (Crucible: "still fine, low stakes"). 1 x horizon 15 td snaps
+        # swing_short; k∈{2,3,4} keep the probe's swing_mid. Every other
+        # directional keeps D102's k∈{2,3,4} exactly.
+        ks = (
+            _CAPITULATION_K_MULTIPLIERS
+            if directional_id == _CAPITULATION_DIRECTIONAL_ID
+            else _K_MULTIPLIERS
+        )
+        return float(rng.choice(ks) * signal_horizon_days(directional_id))
     if hypothesis == "volatility_event":
         return float(rng.choice(_VOL_EVENT_LEAD_DAYS) + _VOL_EVENT_POST_WINDOW_TD)
     return None
@@ -1233,7 +1290,15 @@ def _directional_bucket_options(
     )
     if hypothesis in _HORIZON_MATCHED_HYPOTHESES:
         horizon = signal_horizon_days(directional_id)
-        return tuple(nearest_bucket(allowed, float(k * horizon)) for k in _K_MULTIPLIERS)
+        # D280 (v35): mirrors _dte_target's capitulation k=1 rider so the
+        # weighted joint draw carries the same structural bucket mass
+        # (1x swing_short + 3x swing_mid for the capitulation id).
+        ks = (
+            _CAPITULATION_K_MULTIPLIERS
+            if directional_id == _CAPITULATION_DIRECTIONAL_ID
+            else _K_MULTIPLIERS
+        )
+        return tuple(nearest_bucket(allowed, float(k * horizon)) for k in ks)
     if hypothesis == "volatility_event":
         return tuple(
             nearest_bucket(allowed, float(lead + _VOL_EVENT_POST_WINDOW_TD))
@@ -1253,7 +1318,7 @@ def _select_bucket_directional_regime(
     bucket_weights: Mapping[tuple[str, str], float] | None = None,
     directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str | None]:
     """v8 (D102) horizon-matched selection. Returns ``(bucket, directional_id,
     regime_id)``.
 
@@ -1316,6 +1381,13 @@ def _select_bucket_directional_regime(
         bucket = nearest_bucket(allowed, target) if target is not None else rng.choice(allowed)
 
     regimes = _compatible_regimes(space, by_id, hypothesis, directional_id, chain_family)
+    # D280 (v35): the bare-drop capitulation arm draws NO regime gate — its
+    # pool is empty by design (R1-exempt) and no regime rng is consumed, so
+    # every other directional's draw sequence is untouched. Keyed on the id
+    # (not on pool emptiness) so a genuinely-broken empty pool elsewhere still
+    # fails loudly in _pick_regime rather than silently going gate-less.
+    if directional_id == _CAPITULATION_DIRECTIONAL_ID and not regimes:
+        return bucket, directional_id, None
     # §2 yield-map refresh: slice the (hyp, dir, bucket, regime) yield map down to
     # this config's chosen (hyp, dir, bucket) — the regime cell is determined here
     # (the regime is drawn next), exactly the H4 (hyp, dir)-slice discipline.

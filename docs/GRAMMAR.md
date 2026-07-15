@@ -36,6 +36,13 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 ### S3: At least one regime gate per strategy
 
+> **v35 (D280) carve-out, shared with R1:** a mean_reversion config whose DIRECTIONAL is the
+> capitulation `momentum` id (the D270 C2 carve-out) is exempt from the min-1 regime gate —
+> the operator-approved BARE-DROP arm (OPEN_PROPOSALS `4d35a046`, Crucible adjudication
+> 2026-07-15: the v31 pinned rv_rank gate bound harmfully, 69/69 dead; no replacement gate).
+> Rule yaml untouched; the exemption lives at both predicate surfaces
+> (`_R1_GATE_EXEMPT_DIRECTIONALS`), keyed on the directional's exact indicator tuple.
+
 **What.** At least one signal has `role: regime_filter`.
 
 **Why.** A strategy without a regime gate fires in every market state, including states where its hypothesis is structurally wrong. Mean-reversion fires when momentum is at its strongest; trend-continuation fires when the market is range-bound; volatility-event fires when no event is near. Each fire in the wrong regime is dead-weight risk. Requiring an explicit regime gate forces the strategy to declare when it should *not* fire.
@@ -268,7 +275,7 @@ The trend overrides widen the UPPER edge only: systematically buying low-delta/O
 
 ## Regime coherence rules
 
-### R1: Mean-reversion requires IV-rank gate (v1, D013; v11, D107; v20, D150; v22, D167; v24, D254; v28, D265; v29, D266)
+### R1: Mean-reversion requires IV-rank gate (v1, D013; v11, D107; v20, D150; v22, D167; v24, D254; v28, D265; v29, D266; v35, D280)
 
 **What.** When `hypothesis == "mean_reversion"`, at least one `regime_filter` signal must reference `iv_rank` with `params.threshold ≤ 50`, **or** `gamma_flip_distance_pct` (v11, D107 — the dealer-gamma regime switch, MR side), **or** `hurst` (v20, D150 — the mean-reverting H<0.5 side, op `"<"`), **or** `rv_rank` (v22, D167 — cheap realized vol, op `"<"` = LOW/calm), **or** `vol_regime` (v24, D254 — the discrete vol tercile, `< 2` = exclude the high-vol tercile), **or** `realized_vol` (v28, D265 — ABSOLUTE annualized 21d realized vol, op `"<"`, sweep 0.15-0.30), **or** `market_realized_vol` (v29, D266 — the MARKET-level absolute-RV gate: the reference underlying's annualized 21-session realized vol, op `"<"`, same sweep). (D013 collapsed the second clause about directional-family alignment — redundant given C2.)
 

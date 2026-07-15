@@ -1005,8 +1005,9 @@ decision_marker: null
 
 ---
 proposal_id: 4d35a046-8dc3-4b95-a1b7-18408388a668
-status: PENDING
+status: APPROVED
 proposed_at: '2026-07-15T20:50:40+00:00'
+decided_at: '2026-07-15T21:20:17+00:00'
 proposal_type: loosen
 target: grammar_v35_capitulation_bare_drop
 rationale: 'v35: drop the pinned rv_rank gate from the capitulation-bounce family

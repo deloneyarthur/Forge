@@ -216,6 +216,14 @@ _C2_HYPOTHESIS_EXTRA_IDS: dict[str, tuple[str, ...]] = {
     "mean_reversion": ("momentum",),
 }
 
+# D280 (v35): R1 per-directional GATE EXEMPTIONS — configs whose directional
+# signal's indicator tuple matches an entry need no regime gate. The set holds
+# INDICATOR TUPLES (matched against SignalSpec.indicators exactly) so a
+# multi-indicator directional can never partially match. Sole member: the
+# capitulation bare-drop arm (see the WHY in `_r1_mean_reversion_requires_
+# iv_rank_gate`). Operator-approved loosening, OPEN_PROPOSALS `4d35a046`.
+_R1_GATE_EXEMPT_DIRECTIONALS: frozenset[tuple[str, ...]] = frozenset({("momentum",)})
+
 # §3.5 P2 entry DTE windows per bucket. (Exit DTE thresholds are tracked
 # via theta_cliff_exit's params, which isn't fully pinned in §3.5; P2
 # checks the entry-side window only for v1. See OPEN_QUESTIONS.md.)
@@ -942,10 +950,26 @@ def _r1_mean_reversion_requires_iv_rank_gate(  # noqa: PLR0911 — one early ret
     D107 (v11 / H3, MR side): a dealer-gamma regime gate
     (`gamma_flip_distance_pct`) is an accepted ALTERNATIVE to the iv_rank
     cheap-IV gate — MR pays in the long-gamma / dampening / ranging regime.
-    Either gate satisfies R1."""
+    Either gate satisfies R1.
+
+    D280 (v35): the capitulation directional (`momentum`, the D270 C2 per-id
+    carve-out) is EXEMPT from the gate requirement — the FIRST R1
+    per-directional exemption, operator-approved (OPEN_PROPOSALS `4d35a046`)
+    on Crucible's 2026-07-15 adjudication: the v31 pinned rv_rank gate binds
+    harmfully (clean drop-day median ~50 in kernel units vs the [50,80] band
+    → 69/69 decided dead at median 4 OOS trades), their sweep reads the gate
+    unhelpful-to-harmful at every threshold, and the BARE-DROP arm posted the
+    first positive slot delta of the program (cpcv +0.0267 / wf +0.0794). NO
+    replacement gate by their explicit instruction (a market-RV gate ANDed on
+    the drop trigger co-fires twice in 8.4y — born-dead). The exemption keys
+    on the DIRECTIONAL id, so every other MR directional still requires its
+    R1 gate."""
     del registry
     if config.hypothesis != "mean_reversion":
         return PredicateResult(passed=True)
+    for sig in config.signals:
+        if sig.role == "directional" and sig.indicators in _R1_GATE_EXEMPT_DIRECTIONALS:
+            return PredicateResult(passed=True)
     for regime in _regime_filter_signals(config):
         inds = regime.indicators  # type: ignore[attr-defined]
         # D107: a gamma-flip regime gate satisfies R1 on its own (the side is
