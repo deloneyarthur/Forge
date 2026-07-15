@@ -17,6 +17,11 @@ from pathlib import Path
 
 import pytest
 
+# Captured at collection time, BEFORE the autouse `_dormant_earnings_coverage`
+# fixture (D274) replaces the module attribute — the coverage-fingerprint tests
+# below need the REAL lru-cached loader, re-bound per test.
+from forge.enumeration.sampler import _load_earnings_covered_symbols as _real_coverage_loader
+
 
 def test_auto_tightenings_fingerprint_reflects_active_tightenings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -95,12 +100,13 @@ def test_earnings_coverage_fingerprint_empty_when_absent(
 ) -> None:
     from forge.enumeration import sampler as s
 
+    monkeypatch.setattr(s, "_load_earnings_covered_symbols", _real_coverage_loader)
     monkeypatch.setattr(s, "_UNIVERSE_EXPORT_DIR", tmp_path)  # no manifest
-    s._load_earnings_covered_symbols.cache_clear()
+    _real_coverage_loader.cache_clear()
     try:
         assert s.earnings_coverage_fingerprint() == ""  # dormant → contributes nothing
     finally:
-        s._load_earnings_covered_symbols.cache_clear()
+        _real_coverage_loader.cache_clear()
 
 
 def test_earnings_coverage_fingerprint_reflects_covered_set(
@@ -109,17 +115,18 @@ def test_earnings_coverage_fingerprint_reflects_covered_set(
     from forge.enumeration import sampler as s
 
     f = tmp_path / "earnings_covered_symbols.json"
+    monkeypatch.setattr(s, "_load_earnings_covered_symbols", _real_coverage_loader)
     monkeypatch.setattr(s, "_UNIVERSE_EXPORT_DIR", tmp_path)
 
     f.write_text(json.dumps({"covered_symbols": ["AAA", "BBB"]}))
-    s._load_earnings_covered_symbols.cache_clear()
+    _real_coverage_loader.cache_clear()
     fp1 = s.earnings_coverage_fingerprint()
 
     f.write_text(json.dumps({"covered_symbols": ["AAA", "CCC"]}))
-    s._load_earnings_covered_symbols.cache_clear()
+    _real_coverage_loader.cache_clear()
     fp2 = s.earnings_coverage_fingerprint()
 
-    s._load_earnings_covered_symbols.cache_clear()  # restore for other tests
+    _real_coverage_loader.cache_clear()  # restore for other tests
     assert fp1 != fp2, "fingerprint must change when the covered set changes"
     assert len(fp1) == 16
 
@@ -132,8 +139,9 @@ def test_enumeration_inputs_hash_folds_coverage_only_when_present(
     from forge.enumeration import enumeration_inputs_hash
     from forge.enumeration import sampler as s
 
+    monkeypatch.setattr(s, "_load_earnings_covered_symbols", _real_coverage_loader)
     monkeypatch.setattr(s, "_UNIVERSE_EXPORT_DIR", tmp_path)
-    s._load_earnings_covered_symbols.cache_clear()
+    _real_coverage_loader.cache_clear()
     try:
         dormant = enumeration_inputs_hash()
         assert dormant.count("|") == 1  # auto|universe only — dormant identity == v31 shape
@@ -141,9 +149,9 @@ def test_enumeration_inputs_hash_folds_coverage_only_when_present(
         (tmp_path / "earnings_covered_symbols.json").write_text(
             json.dumps({"covered_symbols": ["AAPL", "RTX"]})
         )
-        s._load_earnings_covered_symbols.cache_clear()
+        _real_coverage_loader.cache_clear()
         published = enumeration_inputs_hash()
         assert published.count("|") == 2  # + coverage fingerprint
         assert published != dormant
     finally:
-        s._load_earnings_covered_symbols.cache_clear()
+        _real_coverage_loader.cache_clear()
