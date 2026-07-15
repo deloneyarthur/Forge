@@ -1002,3 +1002,49 @@ proposal_yaml: |
 decided_at: null
 decided_by: null
 decision_marker: null
+
+---
+proposal_id: 4d35a046-8dc3-4b95-a1b7-18408388a668
+status: PENDING
+proposed_at: '2026-07-15T20:50:40+00:00'
+proposal_type: loosen
+target: grammar_v35_capitulation_bare_drop
+rationale: 'v35: drop the pinned rv_rank gate from the capitulation-bounce family
+  (D270 momentum-as-MR-directional) and admit the BARE-DROP arm via an R1
+  per-directional carve-out — the gate-less form is currently inexpressible
+  (R1 requires a regime gate on mean_reversion), which is why the v31 arm is
+  69/69 structurally dead (the [50,80] kernel-unit gate BINDS harmfully:
+  clean drop-day median rv_rank ~50 -> co-fire strangled to median 4 OOS
+  trades). Crucible adjudicated 2026-07-15
+  (FORGE_adjudications_capitulation_ve_floor_2026-07-15.md): ship ask 1 (the
+  gate-drop) — last blocker removed; do NOT add a replacement high-vol gate
+  (market_realized_vol>0.20 AND the drop trigger co-fires 2x/8.4y — the
+  born-dead class their row-45 preflight rejects); the index/broad-ETF arm
+  ask is WITHDRAWN (book-level no-op, 10-14 solo trades/8.4y); the
+  single-name bare-drop arm is KEPT with the value hypothesis CORRECTED to
+  "marginal center lever" (slot test: first positive slot delta of the
+  program, cpcv +0.0267 / wf +0.0794 at the 0.175 slot; bear-block delta
+  exactly 0.0 — recent-center margin, 8 of 13 trades in 2025). Mechanics:
+  R1 predicate gains a per-directional gate-exemption (the D270 C2 carve-out
+  pattern, one level deeper: rule-surface, operator-owned per hard rule #1);
+  sampler drops the _CAPITULATION_REGIME_ID pin and emits no regime gate for
+  this directional; the veto skip stays. OPTIONAL RIDER (their "still fine,
+  low stakes"): swing_short admitted next to swing_mid for this directional
+  only (needs a scoped D102 one-id-one-bucket exception). Loosening -> this
+  entry awaits operator approval (hard rule #4). Judged in-book by
+  fold-columns; solo-reject EXPECTED (do not feed solo verdicts back).'
+evidence:
+  trigger: crucible_adjudication_2026-07-15
+  probes: 'probe_capitulation_rvgate.json (gate unhelpful-to-harmful at every
+    threshold 50-70 on clean data); probe_results/bear_margin_sweep.json
+    (bare-drop ANET skeleton: cpcv +0.0267 / wf +0.0794 at the proven 0.175
+    slot; index QQQ/SPY legs byte-identical baseline = no-op); v31 emission
+    census: 69/69 dead, 97% WF=0.0, median 4 OOS trades'
+  caveats: 'bear-block delta 0.0 (NOT a crater complement — value hypothesis
+    is marginal center); all bear-block numbers are n=1-episode (2022)
+    evidence under the corrected label; right-tailed payoff, ugly solo folds
+    expected'
+proposal_yaml: |
+  # v35: capitulation bare-drop — R1 per-directional gate exemption for
+  # 'momentum' (MR host); drop the rv_rank pin; NO replacement gate.
+  # Optional rider: swing_short next to swing_mid for this directional.
