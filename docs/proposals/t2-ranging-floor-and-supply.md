@@ -1,5 +1,13 @@
 # Proposal: T2 ranging-complement floor + mean_reversion (ranging) supply growth
 
+> **CLOSED (2026-07-15): the un-shipped FLOOR is REFUTED — do not ship ([[D273]]).** Crucible's
+> per-block re-derivation (`FORGE_worst_quartile_regime_label_correction_2026-07-15.md`) corrects the
+> worst-quartile label to **bear-only (2.08×)**; ranging is **0.90 — at/below base rate** (the 06-13
+> 1.33× was a hull-CPCV artifact). A ranging reservation would spend batch slots on a regime the book
+> is NOT disproportionately bad in; bear remains Forge-unsuppliable ([[D148]]). The SHIPPED
+> supply-growth half (D150/D151/D167 and successors) stands unchanged — it is also justified as
+> stream-quality / R1-thesis supply, and Crucible explicitly asked for no supply reduction.
+
 > **STATUS (2026-06-24):** PARTIALLY LANDED. The ranging SUPPLY-growth half shipped: grammar v20 added the `hurst` mr R1 gate + biased the regime draw toward ranging [[D150]], and v21 enabled mr RANK [[D151]]; v22 added `rv_rank` [[D167]]. The T2 enforcement FLOOR itself remains un-shipped (gated on complement supply + the §8.6 criterion + F3). Historical record below.
 
 Status: **SCOPING — awaiting operator sign-off on the supply lever (the grammar/enumeration change).**

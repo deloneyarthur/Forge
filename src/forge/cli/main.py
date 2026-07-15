@@ -2324,13 +2324,15 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # journal carries the full per-hypothesis funnel in three lines.
     _log_hypothesis_distributions(reports, ranked)
 
-    # T2 (tail-aware ranker, SHADOW): log how much ranging/bear regime-complement
-    # a future T2 floor *could* reserve — in the submitted batch and the passed
+    # T2 (tail-aware ranker, SHADOW): log how much bear regime-complement a
+    # future T2 floor *could* reserve — in the submitted batch and the passed
     # pool it was drawn from. Observational only (read over already-ranked configs,
     # threaded nowhere near submit) → the submitted set is byte-identical. The
-    # book's worst CPCV quartile fails in bear/ranging (T3a-measured); this surfaces
-    # complement under-fill before any enforcement (proposals/tail-aware-ranker.md
-    # §4 T2 / §7 coupling risk). Daemon-inert: a pure tally, never reshapes a batch.
+    # book's worst CPCV quartile over-populates BEAR only (2026-07-15 per-block
+    # correction; the 06-13 "ranging 1.33x" half was a hull-CPCV artifact); this
+    # surfaces complement under-fill before any enforcement (proposals/
+    # tail-aware-ranker.md §4 T2 / §7 coupling risk). Daemon-inert: a pure
+    # tally, never reshapes a batch.
     from forge.ranking.regime_supply import compute_regime_complement_supply
 
     regime_supply = compute_regime_complement_supply(

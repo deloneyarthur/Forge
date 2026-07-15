@@ -1,16 +1,22 @@
 """§T2 regime-complement supply metric — SHADOW / telemetry-only (daemon-inert).
 
-WHY: the assembled book's worst CPCV quartile fails in BEAR (T3a-measured 2.39x
-regime_lift) and RANGING (1.33x) markets, so the tail-aware ranker's T2 floor
-will eventually *reserve* batch slots for the regime-bets that pay there (see
+WHY: the assembled book's worst CPCV quartile over-populates BEAR markets only —
+2.08x regime_lift on Crucible's 2026-07-15 per-block re-derivation
+(`FORGE_worst_quartile_regime_label_correction_2026-07-15.md`). The original
+06-13 T3a label also named RANGING (1.33x), but that half was a convex-hull CPCV
+measurement artifact: corrected ranging lift is 0.90, at/below base rate, so the
+complement a T2 floor would reserve is BEAR-ONLY (see
 `docs/proposals/tail-aware-ranker.md` §4 T2; DESIGN.md §8.3 sanctions metric
-distributions weighting the ranker). But T2 reshapes only what enumerates — and
-the complement it must reserve (mean_reversion for ranging, tail_hedge for bear)
-is the thinnest-to-broken part of today's stream. Enforcing a reservation over an
-empty complement just under-fills the batch (the §7 coupling risk).
+distributions weighting the ranker). Bear remains structurally unsuppliable from
+Forge (D148: no bearish stance in the grammar; bear = Crucible's `tail_leg`
+overlay), so this metric's load-bearing output is the bear 0/0 line — evidence,
+per batch, that a bear reservation has nothing to reserve over. Enforcing a
+reservation over an empty complement just under-fills the batch (the §7
+coupling risk). The ranging tally stays visible as a CELL (mean_reversion's R1
+ranging thesis is label-independent) but is no longer counted as complement.
 
 This module makes that supply VISIBLE before any enforcement: per batch it
-classifies each ranked survivor's regime-bet and counts how much ranging/bear
+classifies each ranked survivor's regime-bet and counts how much bear
 complement the floor *could* reserve, in both the submitted batch and the
 pre-filter-passed pool it was drawn from. It NEVER reshapes a batch — it is read
 only over configs that were already ranked/selected, exactly like the post-submit
@@ -38,11 +44,13 @@ if TYPE_CHECKING:
 
     from crucible_contracts import StrategyConfig
 
-# The roll-up classes, ordered for stable journal output. `trending_dominant` is
-# the trend sleeve we are flooded with; `ranging_complement` / `bear_complement`
-# are the two T3a-measured failure-regime complements; `other` is everything the
-# grammar does not bind to a bear/ranging payoff (honestly un-classified rather
-# than force-fit).
+# The roll-up classes, ordered for stable journal output. Class NAMES are frozen
+# at their D144 spellings so journal lines stay greppable/re-bucketable across
+# the 2026-07-15 label correction; semantics moved under them: `bear_complement`
+# is the sole measured failure-regime complement, `ranging_complement` is a
+# visible regime-bet cell that no longer counts toward the complement headline
+# (corrected ranging lift 0.90 ~ base rate). `other` is everything the grammar
+# does not bind to a bear/ranging payoff (honestly un-classified, not force-fit).
 RegimeBetClass = Literal[
     "trending_dominant",
     "ranging_complement",
@@ -58,8 +66,9 @@ REGIME_BET_CLASSES: tuple[RegimeBetClass, ...] = (
 )
 
 # Hypothesis -> regime-bet roll-up. Grounded in C2 (hypothesis -> directional
-# family) + R1/R2/R3 + D107 (dealer-gamma regime switch). The two complements
-# are the T3a-measured failure regimes; the rest are not a bear/ranging bet.
+# family) + R1/R2/R3 + D107 (dealer-gamma regime switch). bear_complement is the
+# sole corrected failure-regime complement (2026-07-15); ranging_complement is a
+# tracked cell only; the rest are not a bear/ranging bet.
 _BET_CLASS_BY_HYPOTHESIS: dict[str, RegimeBetClass] = {
     "trend_continuation": "trending_dominant",  # R2: short-gamma / trending payer
     "mean_reversion": "ranging_complement",  # R1/D107: long-gamma / low-vol / ranging
@@ -131,18 +140,20 @@ class RegimeComplementSupply:
 
     @property
     def complement_selected(self) -> int:
-        """Ranging + bear complement in the submitted batch."""
-        return self.selected["ranging_complement"] + self.selected["bear_complement"]
+        """Bear complement in the submitted batch (bear-only since the
+        2026-07-15 label correction; ranging is a cell, not complement)."""
+        return self.selected["bear_complement"]
 
     @property
     def complement_pool(self) -> int:
-        """Ranging + bear complement available in the passed pool (the ceiling)."""
-        return self.pool["ranging_complement"] + self.pool["bear_complement"]
+        """Bear complement available in the passed pool (the ceiling)."""
+        return self.pool["bear_complement"]
 
     def summary_line(self) -> str:
         """The one-line journal record (greppable `regime_supply:`), leading with
-        the headline complement supply and calling out bear specifically (the
-        load-bearing 0), then the full per-cell selected/pool breakdown."""
+        the bear-only complement supply (the load-bearing 0 — bear is the sole
+        corrected crater regime), then the full per-cell selected/pool breakdown
+        (ranging stays a visible cell for re-bucketing from the journal)."""
         cs, ps = self.complement_selected, self.complement_pool
         s, p = self.selected, self.pool
         cells = " ".join(
@@ -150,10 +161,9 @@ class RegimeComplementSupply:
             for cls in REGIME_BET_CLASSES
         )
         return (
-            "regime_supply: complement(ranging+bear) "
+            "regime_supply: complement(bear) "
             f"selected {cs}/{self.selected_total} ({_pct(cs, self.selected_total):.1f}%) "
             f"pool {ps}/{self.pool_total} ({_pct(ps, self.pool_total):.1f}%); "
-            f"bear selected {s['bear_complement']} pool {p['bear_complement']}; "
             f"cells [{cells}]"
         )
 

@@ -1,5 +1,11 @@
 # Proposal / work-up: worst-quartile complement supply (bear + ranging)
 
+> **CORRECTION (2026-07-15, [[D273]]):** the T3a label this work-up targets was re-derived on
+> per-block CPCV math (`FORGE_worst_quartile_regime_label_correction_2026-07-15.md`): **bear 2.08× is
+> the SOLE crater; ranging 0.90 — at/below base rate (hull-CPCV artifact)**. With bear already CLOSED
+> for Forge (below) and ranging no longer a crater, the Forge-suppliable share of the worst-quartile
+> complement is NIL — this document is fully historical.
+
 > **STATUS (2026-06-24):** RESOLVED — bear CLOSED for Forge (constant bear hedge is negative-carry; `tail_hedge`-only, keep D066, no §3.5 bearish rule — see the inline DECIDED 2026-06-14 block below). The Forge half of the complement is RANGING only, grown via the v20–v22 mr supply increments ([[D150]]/[[D151]]/[[D167]]). Historical record below.
 
 Status: **WORK-UP (analysis only) — no grammar/code change proposed for direct ship.**

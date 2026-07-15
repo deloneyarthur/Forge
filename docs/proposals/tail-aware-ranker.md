@@ -1,5 +1,18 @@
 # Tail-Aware Ranking — Design Proposal (F-track successor)
 
+> **CORRECTION (2026-07-15, Crucible `FORGE_worst_quartile_regime_label_correction_2026-07-15.md`, [[D273]]):**
+> the §4 T3a label was computed on a since-fixed convex-hull CPCV pathology (36/45 paths measured
+> near-full-period through intervening TRAIN groups; fixed Crucible-side `093b893` live 07-02, but the
+> label was never recomputed). Re-derived per-block on the pinned era-C 342-component book:
+> **bear 2.08× — the SOLE crater regime; ranging 0.90 — at/below base rate (a measurement artifact,
+> not a signal)**; other regimes ≈ unchanged. Consequences: the T2 complement target is **bear-only**
+> — the 06-16 "ranging-only floor" premise is REFUTED, and bear stays Forge-unsuppliable per [[D148]],
+> so the T2 enforcement floor is now DEAD both ways; the `regime_supply` headline narrowed to
+> `complement(bear)`. The corrected era-C basket CPCV p25 is **0.88, not 1.14** — recalibrate anything
+> anchored on 1.14 (repo scan 07-15: nothing was). Bear-crater directionality (07-03 straddle re-test)
+> and capitulation-bounce v31 are UNAFFECTED (reinforced). Read every bear/ranging figure below
+> through this correction.
+
 > **STATUS (2026-06-24):** LANDED (retargeted). T1 offline head built [[D140]]/[[D141]]; T2 supply-metric built (shadow) [[D144]]. The live lane shipped as the quality ranker: target moved cpcv_p25 → `wf_p25` and FLIPPED ON in prod [[D193]] (arc [[D189]]–[[D192]]; King retired [[D190]]). The T2 enforcement FLOOR remains un-shipped (gated). Historical design record below.
 
 **Status: §8 DECIDED 2026-06-13 (in-session AskUserQuestion — all six decisions, all

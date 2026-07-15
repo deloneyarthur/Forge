@@ -1,5 +1,11 @@
 # Proposal / scoping: edge-magnitude — regime-orthogonal arms (the promotion unlock)
 
+> **CORRECTION (2026-07-15, [[D273]]):** the "worst quartile = bear (2.39×) / ranging (1.33×)" input
+> below is corrected to **bear-only (2.08×; ranging 0.90 = hull-CPCV artifact)** on per-block math
+> (`FORGE_worst_quartile_regime_label_correction_2026-07-15.md`). The ranging-arm case (premium-selling
+> in chop, Path C) must now stand on its own edge magnitude — it is no longer a worst-quartile-crater
+> fill; the bear-crater half of the framing is unchanged.
+
 > **STATUS (2026-06-24):** SCOPING — research framing, no code shipped off this doc. The ranging-supply increments shipped separately ([[D150]]/[[D151]] grew mr supply; v22 added the `rv_rank` mr gate); bear was CLOSED for Forge (`worst-quartile-complement-supply.md`). The deeper "regime-orthogonal unlock" lands in Path C, which remains HELD. Historical record below.
 
 Status: **SCOPING (research framing) — no code; defines the problem, the paths, and the first

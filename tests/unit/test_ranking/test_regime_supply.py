@@ -94,8 +94,9 @@ def test_supply_tally_counts_and_complement_share() -> None:
     assert supply.selected["bear_complement"] == 1
     assert supply.selected["other"] == 1
     assert supply.selected_total == 6
-    # complement = ranging + bear = 2 of 6.
-    assert supply.complement_selected == 2
+    # complement = bear ONLY (the 2026-07-15 per-block label correction:
+    # ranging is at/below base rate, no longer a crater-regime complement).
+    assert supply.complement_selected == 1
 
 
 def test_pool_and_selected_are_counted_separately() -> None:
@@ -109,9 +110,10 @@ def test_pool_and_selected_are_counted_separately() -> None:
 
     assert supply.selected_total == 1
     assert supply.complement_selected == 0
-    # The pool (the reservable ceiling) carries complement the batch did not.
+    # The pool (the reservable ceiling) carries bear complement the batch did
+    # not; the mean_reversion config counts as a ranging CELL, not complement.
     assert supply.pool_total == 3
-    assert supply.complement_pool == 2
+    assert supply.complement_pool == 1
 
 
 def test_empty_inputs_are_zero_with_no_division_error() -> None:
@@ -138,12 +140,16 @@ def test_summary_line_is_the_greppable_journal_contract() -> None:
     line = compute_regime_complement_supply(selected, pool).summary_line()
 
     assert line.startswith("regime_supply:")
-    assert "complement(ranging+bear)" in line
-    # bear is called out explicitly (the load-bearing 0 for the current stream).
-    assert "bear selected 0 pool 1" in line
-    # per-cell selected/pool breakdown present for re-bucketing from the journal.
+    # Bear-only headline since the 2026-07-15 label correction (the load-bearing
+    # 0 for the current stream leads the line directly).
+    assert "complement(bear)" in line
+    assert "selected 0/2 (0.0%)" in line
+    assert "pool 1/4 (25.0%)" in line
+    # per-cell selected/pool breakdown present for re-bucketing from the journal
+    # (ranging stays visible as a cell even though it is no longer complement).
     assert "trending=1/1" in line
     assert "ranging=1/1" in line
+    assert "bear=0/1" in line
 
 
 def test_metric_is_pure_deterministic_and_non_mutating() -> None:

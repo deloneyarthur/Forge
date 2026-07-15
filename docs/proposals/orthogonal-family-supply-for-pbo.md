@@ -15,6 +15,12 @@
 >   (held) asks for a consumable export; that replaces the hand-set Layer-2 floor with the principled learned
 >   estimand.
 >
+> **NOTE (2026-07-15, [[D273]]):** the worst-quartile label behind the "ranging complement" framing
+> is corrected to **bear-only** (ranging 0.90 ≈ base rate — hull-CPCV artifact;
+> `FORGE_worst_quartile_regime_label_correction_2026-07-15.md`). The ~85%-mr stream is therefore
+> over-concentrated in a regime bet with NO crater justification — reinforcing this doc's
+> un-crowding case.
+
 > **STATUS (2026-06-25):** SCOPING — analysis + grounded finding; **no code, grammar, or config
 > changed**. Responds to Crucible's `FORGE_decorrelated_supply_for_portfolio_pbo.md` (2026-06-25).
 > The Layer-2 interim lever is a versionless **feedback-change** (operator-gated per
