@@ -1089,3 +1089,14 @@ it, and re-baseline goldens against the fallback universe (same re-pin, plus pro
 (c) leave universe live-coupled and accept re-pinning goldens on universe republish (status quo,
 documented here). Any golden re-baseline must be its own commit with the trigger recorded
 (hard rule #6 discipline). Related: D274, D272, D078/D033, `_isolated_home` (tests/conftest.py).
+
+## 2026-07-15 — Q51 — `test_held_out_platt_reduces_ece_vs_raw` flaky in full-suite runs (DuckDB scan-order-dependent even/odd Platt split) — **LOW (test flake; diagnostic lane only)**
+
+Failed once (of 3 full-suite runs) during the D273 deploy preflights; passes in isolation and in its
+own file. `_held_out_platt_ece` (`evaluation.py`) splits fit/eval halves by ROW INDEX (even/odd), and
+the row order comes from the shadow-eval SELECT — DuckDB gives NO order guarantee without ORDER BY and
+can vary across runs (parallel scans, load-dependent), so the split — and occasionally the assertion
+`ece_platt <= ece + 1e-9` — wobbles. Durable fix (next ranking-lane touch, not mid-deploy): ORDER BY a
+stable key in the eval query (or sort rows before the split) — deterministic split, unchanged
+semantics; then re-check the test's margin. Production impact: none on submissions (diagnostic
+telemetry); the same scan-order wobble technically touches the LIVE `model_ece_platt` journal number.
