@@ -1,6 +1,8 @@
 # Proposal: v34 — census dead-dimension retirements (two items; three census asks resolve without a build)
 
-Status: **SCOPING — operator-gated grammar bump; nothing ships off this doc.**
+> **STATUS (2026-07-15): APPROVED + BUILT + DEPLOYED ([[D278]]) — operator "go ahead with v34"; both build items shipped. The three no-build dispositions and the two Crucible adjudications stand as written below.**
+
+Status: **SCOPING — operator-gated grammar bump; nothing ships off this doc.** *(superseded — see above)*
 Date: 2026-07-15. Source: `FORGE_grammar_census_dead_dimensions_2026-07-15.md` (companion to
 the generation-health addendum → [[D275]]/[[D276]]). Census: 228,021 configs decided
 07-01→07-15; healthy-gate baseline 8-14% component rate.

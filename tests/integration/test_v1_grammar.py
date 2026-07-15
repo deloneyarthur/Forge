@@ -164,7 +164,7 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D272 bumped v31 -> v32 (earnings-coverage manifest wiring; dormant-until-publish,
     # byte-identical to v31 until Crucible publishes earnings_covered_symbols.json; the
     # 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v33"  # type: ignore[attr-defined]
+    assert grammar.grammar_version == "v34"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

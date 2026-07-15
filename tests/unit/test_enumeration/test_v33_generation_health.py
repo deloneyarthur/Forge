@@ -136,13 +136,16 @@ def test_v33_gamma_flip_not_a_mean_reversion_directional(
     assert "call_wall_distance_pct" in space.directional_indicators_by_hypothesis["mean_reversion"]
 
 
-def test_v33_gamma_flip_still_an_r1_regime_gate(
+def test_v33_gamma_flip_r1_gate_superseded_by_v34(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """The retirement is directional-only: the D107 long-gamma/ranging R1 gate
-    is untouched (its single-gated MR cells are not in the dead table)."""
+    """v33 kept the D107 R1 gate on the addendum's evidence ("single-gated MR
+    cells are not in the dead table"); the census #2 (D278/v34) then measured
+    the gate dead at scale in EVERY pairing (12,088 uses, 0.1% component) and
+    retired it from emission globally — the v34 pool tests own the pin; this
+    records the supersession so the v33 assumption isn't re-derived."""
     space = build_search_space(grammar, _v33_registry(registry))
-    assert "gamma_flip_distance_pct" in space.regime_indicators_by_hypothesis["mean_reversion"]
+    assert "gamma_flip_distance_pct" not in space.regime_indicators_by_hypothesis["mean_reversion"]
 
 
 # --- item 4: pre_earnings_setup retired from vol_event EMISSION ---------------
@@ -173,23 +176,11 @@ def test_v33_r3_predicate_still_accepts_pre_earnings_setup() -> None:
 # --- item 5: dsj veto never stacks on a gamma_flip primary gate ---------------
 
 
-def test_v33_trend_dsj_veto_never_on_gamma_flip_gate(
-    grammar: Grammar, registry: RegistrySnapshot
-) -> None:
-    """The days_since_jump+gamma_flip AND-pair is 93-98%% dead (~300/wk);
-    single-gated versions of the same directionals convert at trend's healthy
-    rate. The veto slot is skipped when the primary gate is gamma_flip."""
-    reg = _v33_registry(registry)
-    space = build_search_space(grammar, reg)
-    seen_gamma_gate = 0
-    for seed in range(600):
-        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="trend_continuation")
-        gates = [s for s in cfg.signals if s.role == "regime_filter"]
-        if gates[0].indicators[0] != "gamma_flip_distance_pct":
-            continue
-        seen_gamma_gate += 1
-        assert not any("days_since_jump" in g.indicators for g in gates), cfg.name
-    assert seen_gamma_gate > 0
+# test_v33_trend_dsj_veto_never_on_gamma_flip_gate was superseded by v34/D278:
+# gamma_flip is no longer emittable as a PRIMARY gate at all, so the emission
+# path can't exercise the pairing filter. The filter itself is kept as
+# defense-in-depth against re-admission and is unit-pinned in
+# test_v34_census_retirements.py::test_v34_dsj_gamma_flip_veto_filter_kept_as_defense_in_depth.
 
 
 def test_v33_trend_dsj_veto_survives_on_other_gates(

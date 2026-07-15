@@ -1697,21 +1697,24 @@ _COHORT_TREND = "trend_continuation"
 # this exact rng sequence when cohort_yield_weights is None (hard rule #6).
 # D265 (v28): re-pinned — realized_vol in the MR regime pool moved position 4
 # (an MR config's regime draw). none_run == empty_run re-verified under v28.
+# D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
+# underlying draw on (nearly) every position, and gamma_flip left the MR/trend
+# regime pools; relational splits between the goldens are preserved (asserted).
 _COHORT_GOLDEN_PRE_REFACTOR = [
     "dc125d8f4e014630",
     "4710371b04fac3d0",
-    "bd810fad45dfa485",
+    "7c80c5ef34eb9736",
     "174df1ffb521246b",
     "d4719affe73e6187",
-    "5713f48884331d79",
-    "2764eaad2e3d36f6",
-    "73b6497391e97291",
-    "4be92b875cc8aa22",
-    "7668a196a91709cc",
+    "9844b82ddceb82d5",
+    "15b5daf88aa8ea6d",
+    "61ef630a7cdd878e",
+    "83a5fa4ec72188f5",
+    "227c8bfc1deb305f",
     "358b69c99a36daf9",
-    "0fa5271aecef4d0c",
-    "e2da564ebf2549f8",
-    "01af924db4cbe79a",
+    "626ce742d2a8c980",
+    "6ef2a11f3c11b95e",
+    "51737ab3d1d303d2",
     "3a3f40a4cddf33d0",
 ]
 
@@ -1905,22 +1908,25 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # goldens re-pinned; none_run == empty_run + all inter-golden prefix relations
 # re-verified before pinning. NB these slices read the LIVE universe export via
 # `_load_underlyings` (pre-existing — earnings configs draw from it).
+# D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
+# underlying draw on (nearly) every position, and gamma_flip left the MR/trend
+# regime pools; relational splits between the goldens are preserved (asserted).
 _REGIME_GOLDEN_PRE = [
-    "6bfa51eb7329103c",
-    "4c09a2654e9913c7",
-    "f2239a17df29b1d7",
-    "5f790a00903621ed",
+    "f24dd5df12658e13",
+    "ade33963ff5205f5",
+    "88cc34e46805731d",
+    "3022000cf80f609e",
     "2c6b3f5717967ee1",
     "6ef99e9cebfaf8be",
     "ef0333e78106091a",
-    "7013a217591147b0",
-    "45c1a2161d91d191",
-    "f177759e5da1b3c7",
-    "6ce97adb87c6079c",
-    "a80a081d90ebcef9",
-    "c3e07bfb3dc38665",
+    "89165f9935585eed",
+    "3421557590814e38",
+    "b9658fd628075142",
+    "711af2058c49e38c",
+    "02477e9120dc498d",
+    "94e01c89b74dee7b",
     "2e4054a200aca442",
-    "7a78bc68429e7a9e",
+    "c98be8c7b3f46105",
 ]
 
 
@@ -2137,21 +2143,24 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # D265 (v28): re-pinned — realized_vol in the MR regime pool moved position 14
 # (the slice's realized_vol-gated MR config; same single-position shift as
 # _REGIME_GOLDEN_PRE, so the dsj-vs-PRE split structure is untouched).
+# D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
+# underlying draw on (nearly) every position, and gamma_flip left the MR/trend
+# regime pools; relational splits between the goldens are preserved (asserted).
 _REGIME_GOLDEN_DSJ_ACTIVE = [
-    "6bfa51eb7329103c",
-    "4c09a2654e9913c7",
-    "f2239a17df29b1d7",
+    "f24dd5df12658e13",
+    "ade33963ff5205f5",
+    "88cc34e46805731d",
     "bba32f5692adf59f",
-    "9737c4c06a440ee4",
+    "41992e48c6fff3f2",
     "617ffeebf9ccda8b",
-    "8159ebdd25570f8a",
-    "923b32f00655bcf3",
-    "099d4d876dd0bbc0",
-    "3c4b391cae24e715",
-    "3070a725431875d8",
-    "e29fdb33e72a8b64",
-    "a07ec8ea89dada1b",
-    "bc0b069c84945150",
+    "313fe9b681c10f94",
+    "32bc15f831790217",
+    "f7c3be8b495a2438",
+    "ca021f125a995cf5",
+    "3a9e2ac7312d02f0",
+    "a27b53944bc14484",
+    "788daa572fcd4b0c",
+    "9ef2c2f3ac8f8b69",
     "d057acfa6f58918d",
 ]
 
@@ -2288,22 +2297,25 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # D265 (v28): re-pinned — realized_vol joins the MR regime pool; the slice's MR
 # configs from position 6 re-drew their gates, cascading the ivol-veto positions
 # (were 3, 7, 12).
+# D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
+# underlying draw on (nearly) every position, and gamma_flip left the MR/trend
+# regime pools; relational splits between the goldens are preserved (asserted).
 _REGIME_GOLDEN_V26_ACTIVE = [
-    "6bfa51eb7329103c",
-    "4c09a2654e9913c7",
-    "f2239a17df29b1d7",
+    "f24dd5df12658e13",
+    "ade33963ff5205f5",
+    "88cc34e46805731d",
     "d94435bb869d78af",
-    "0b36140bdb9568d8",
+    "953673fbbe2e2b72",
     "d48970b100b35e24",
-    "cd137256711e9ad1",
-    "16ad819246208325",
+    "cadccc6a3e5d4fb5",
+    "f74678a978eb82f3",
     "f0198cf7715392b9",
-    "2594c484c61934fa",
-    "fd98a86b15e04865",
-    "8764842d35a62d39",
-    "30f07f8b94f92322",
-    "17230529a3cf5495",
-    "10cabe27b44e8768",
+    "9e6edef5333b527d",
+    "0190fdc5b2d16d17",
+    "670afbba496d174f",
+    "621b77149f9a6471",
+    "ad03d88118f83479",
+    "75cbd26f612e923d",
 ]
 
 
@@ -2438,19 +2450,22 @@ def test_d264_new_ids_dormant_without_registry(
 # residual_momentum (2-8, 12-14); the non-trend positions 0-1 and 9-11 are
 # byte-identical, and the pre-v27 goldens above are untouched (their fixtures
 # never serve the id) — the licensed-where-changed shape.
+# D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
+# underlying draw on (nearly) every position, and gamma_flip left the MR/trend
+# regime pools; relational splits between the goldens are preserved (asserted).
 _REGIME_GOLDEN_V27_ACTIVE = [
-    "6bfa51eb7329103c",
-    "4c09a2654e9913c7",
+    "f24dd5df12658e13",
+    "ade33963ff5205f5",
     "5b374a94041abba3",
     "403a8cec4775355a",
-    "79e9a82693da0f36",
-    "db496a413b649643",
-    "bac11814259f68b7",
-    "6c1e918baa126cab",
-    "ef5dbe94d9f1d7a8",
-    "2594c484c61934fa",
-    "6494d6b68fb1872d",
-    "8764842d35a62d39",
+    "3e97c520c29c5072",
+    "5d323373c1566c7c",
+    "46f3e65fabc74b50",
+    "a6a838b7d3d3f6c1",
+    "fb5e9145393cd567",
+    "9e6edef5333b527d",
+    "42622fd1879f1e3e",
+    "670afbba496d174f",
     "4581161b11aed8a4",
     "3a20d5f768f5f188",
     "0e365d3d80772d79",
@@ -2650,22 +2665,25 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # don't serve market_realized_vol, and the per-id guard refactor preserves
 # single-id-pool rng consumption exactly (asserted by their own tests plus
 # test_d266_veto_generalization_leaves_single_id_pools_byte_identical).
+# D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
+# underlying draw on (nearly) every position, and gamma_flip left the MR/trend
+# regime pools; relational splits between the goldens are preserved (asserted).
 _REGIME_GOLDEN_V29_ACTIVE = [
-    "6bfa51eb7329103c",
-    "4c09a2654e9913c7",
-    "f2239a17df29b1d7",
+    "f24dd5df12658e13",
+    "ade33963ff5205f5",
+    "88cc34e46805731d",
     "623bcda3c4d262da",
-    "0b36140bdb9568d8",
+    "953673fbbe2e2b72",
     "d48970b100b35e24",
-    "cd137256711e9ad1",
-    "16ad819246208325",
+    "cadccc6a3e5d4fb5",
+    "f74678a978eb82f3",
     "f0198cf7715392b9",
-    "9f3dbb2051bcedc3",
-    "fd98a86b15e04865",
-    "8764842d35a62d39",
-    "30f07f8b94f92322",
-    "17230529a3cf5495",
-    "10cabe27b44e8768",
+    "a825b3186251decd",
+    "0190fdc5b2d16d17",
+    "670afbba496d174f",
+    "621b77149f9a6471",
+    "ad03d88118f83479",
+    "75cbd26f612e923d",
 ]
 
 
@@ -2838,22 +2856,25 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # served, and the directional_id plumbing defaults keep all other paths'
 # rng consumption exact (asserted by their own tests plus
 # test_d270_v29_golden_byte_identical_without_momentum).
+# D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
+# underlying draw on (nearly) every position, and gamma_flip left the MR/trend
+# regime pools; relational splits between the goldens are preserved (asserted).
 _REGIME_GOLDEN_V31_ACTIVE = [
-    "6bfa51eb7329103c",
-    "4c09a2654e9913c7",
-    "f2239a17df29b1d7",
+    "f24dd5df12658e13",
+    "ade33963ff5205f5",
+    "88cc34e46805731d",
     "5bbebce1e3c478e1",
-    "0b36140bdb9568d8",
+    "953673fbbe2e2b72",
     "d48970b100b35e24",
-    "acff71cca8a07a40",
-    "16ad819246208325",
+    "0ebd05bbc1df42f1",
+    "f74678a978eb82f3",
     "f0198cf7715392b9",
-    "77c8508cf579ddc1",
-    "fd98a86b15e04865",
-    "8764842d35a62d39",
-    "30f07f8b94f92322",
-    "17230529a3cf5495",
-    "10cabe27b44e8768",
+    "64b462591be049c9",
+    "0190fdc5b2d16d17",
+    "670afbba496d174f",
+    "621b77149f9a6471",
+    "ad03d88118f83479",
+    "75cbd26f612e923d",
 ]
 
 

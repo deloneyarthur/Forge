@@ -514,6 +514,21 @@ _EARNINGS_CALENDAR_ETF_INCOMPATIBLE: frozenset[str] = frozenset(
 )
 
 
+# D278 (v34) — structurally untradeable single names (Crucible census #2,
+# FORGE_grammar_census_dead_dimensions_2026-07-15 §1): these rank into the
+# tier lists on DOLLAR option volume, but zero of their contracts clear the
+# v1 selector's min_open_interest/min_volume floor on a sampled day (BKNG
+# additionally: a ~$4-5k underlying makes one ATM contract's premium exceed
+# the 2%-of-equity per-trade budget) — every config on them is born dead
+# (100% WF=0.0 at n=703/431). A FROZEN list by design: the mechanism is
+# Crucible-measured per-name against THEIR chain data, not classifiable from
+# the ticker; re-admission on their relay ("until we say otherwise"), and the
+# whole list retires when their queue-time liquidity preflight ships. NOTE:
+# this cannot keep the names out of cross_sectional_rank baskets (underlying
+# None; the universe is Crucible's) — their preflight is the complete fix.
+_STRUCTURALLY_UNTRADEABLE_UNDERLYINGS: frozenset[str] = frozenset({"BKNG", "BRK.B"})
+
+
 def _earnings_gated_pool(underlyings: tuple[str, ...]) -> tuple[str, ...]:
     """The underlying pool for an earnings-gated config — names that actually carry
     earnings data.
@@ -603,6 +618,9 @@ def _pick_underlying(
         pool = _earnings_gated_pool(underlyings)
     else:
         pool = underlyings
+    # D278 (v34): filter AFTER the branch so it covers both pools; order
+    # preserved (filter, not set ops) so the draw stays deterministic (#6).
+    pool = tuple(u for u in pool if u not in _STRUCTURALLY_UNTRADEABLE_UNDERLYINGS)
     if underlying_class_weights or underlying_name_weights or factor_cell_discounts:
         names = underlying_name_weights or {}
         classes = underlying_class_weights or {}

@@ -210,20 +210,18 @@ def test_regime_pool_trend_continuation_is_r2(space: SearchSpace) -> None:
     )
 
 
-def test_regime_pool_trend_continuation_includes_gamma_flip() -> None:
-    """D107 (v11 / H3): when the registry carries `gamma_flip_distance_pct` (it
-    does live — enumerated 3.4k+ times), it joins the trend_continuation regime
-    pool via R2, sorted second. Tested directly on `_build_regime_pool` so the
-    shared minimal fixture (and its golden sampler-sequence tests) stays stable."""
-    # D112/D116: gamma_flip stays in the trend (single-name) pool even though
-    # it is a dealer indicator — the exclusion targets universe templates only.
+def test_regime_pool_trend_continuation_excludes_gamma_flip() -> None:
+    """D278 (v34) retires the D107 R2 admission from EMISSION: the census read
+    the gate at 0.1% component rate / 79% WF=0.0 across 12,088 uses — dead in
+    every pairing, not just the v33-flagged dsj one. Even when the registry
+    serves it, the trend pool omits it; the R2 predicate still accepts it
+    (lineage validity)."""
     pool = _build_regime_pool(
         {"adx", "hurst", "rv_rank", "gamma_flip_distance_pct"},
         single_name_only_ids=frozenset({"gamma_flip_distance_pct"}),
     )
     assert pool["trend_continuation"] == (
         "adx",
-        "gamma_flip_distance_pct",
         "hurst",
         "rv_rank",
     )
@@ -233,8 +231,8 @@ def test_regime_pool_mean_reversion_iv_rank_and_hurst(space: SearchSpace) -> Non
     """R1: mean_reversion regime gates. The minimal fixture carries iv_rank, hurst,
     rv_rank, and realized_vol (omits gamma_flip_distance_pct / vol_regime), so the
     D150 + D167 + D265 widenings make the pool ('hurst', 'iv_rank', 'realized_vol',
-    'rv_rank'), sorted. gamma-gate membership is covered in
-    `test_regime_pool_mean_reversion_includes_gamma_flip`."""
+    'rv_rank'), sorted. The gamma-gate RETIREMENT (v34/D278) is covered in
+    `test_regime_pool_mean_reversion_excludes_gamma_flip`."""
     assert space.regime_indicators_by_hypothesis["mean_reversion"] == (
         "hurst",
         "iv_rank",
@@ -243,21 +241,16 @@ def test_regime_pool_mean_reversion_iv_rank_and_hurst(space: SearchSpace) -> Non
     )
 
 
-def test_regime_pool_mean_reversion_includes_gamma_flip() -> None:
-    """D107 (v11 / H3, MR side): when the registry carries
-    `gamma_flip_distance_pct`, it joins mean_reversion's R1 regime pool as an
-    alternative to `iv_rank` (the long-gamma / ranging regime). Pool is sorted →
-    gamma_flip first. Tested directly on `_build_regime_pool` so the shared
-    minimal fixture (and its golden sampler-sequence tests) stays stable."""
-    # D112/D116: gamma_flip AND iv_rank stay in the MR (single-name) pool even
-    # though both are single-name-only ids — the exclusion targets universe
-    # templates only; R1's single-name gate semantics are coherent (the chain
-    # is pinned to the traded name on Crucible's single-name path).
+def test_regime_pool_mean_reversion_excludes_gamma_flip() -> None:
+    """D278 (v34) retires the D107 R1 admission from EMISSION (census: dead in
+    every MR pairing too — 94-97% WF=0 as a directional died in v33, the gate
+    side dies here). Even when the registry serves it, MR's pool omits it;
+    the R1 predicate still accepts it (lineage validity)."""
     pool = _build_regime_pool(
         {"iv_rank", "gamma_flip_distance_pct"},
         single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
     )
-    assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "iv_rank")
+    assert pool["mean_reversion"] == ("iv_rank",)
 
 
 def test_regime_pool_mean_reversion_includes_hurst() -> None:
@@ -269,7 +262,8 @@ def test_regime_pool_mean_reversion_includes_hurst() -> None:
         {"iv_rank", "gamma_flip_distance_pct", "hurst"},
         single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
     )
-    assert pool["mean_reversion"] == ("gamma_flip_distance_pct", "hurst", "iv_rank")
+    # gamma_flip absent since v34/D278 (emission retirement).
+    assert pool["mean_reversion"] == ("hurst", "iv_rank")
 
 
 def test_regime_pool_mean_reversion_includes_rv_rank() -> None:
@@ -283,8 +277,8 @@ def test_regime_pool_mean_reversion_includes_rv_rank() -> None:
         {"iv_rank", "gamma_flip_distance_pct", "hurst", "rv_rank"},
         single_name_only_ids=frozenset({"gamma_flip_distance_pct", "iv_rank"}),
     )
+    # gamma_flip absent since v34/D278 (emission retirement).
     assert pool["mean_reversion"] == (
-        "gamma_flip_distance_pct",
         "hurst",
         "iv_rank",
         "rv_rank",

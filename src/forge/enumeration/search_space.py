@@ -401,6 +401,19 @@ def _build_directional_pool(
 # use site in `_build_regime_pool`.
 _VOL_EVENT_REGIME_EXCLUDED_IDS: frozenset[str] = frozenset({"pre_earnings_setup"})
 
+# D278 (v34): regime-gate EMISSION exclusions applied to EVERY hypothesis's
+# pool. gamma_flip_distance_pct is dead as a gate at census scale — 12,088
+# uses 07-01→07-15, 0.1% component rate, 79% WF=0.0 (~1/100th of the healthy
+# gates), in every pairing (Crucible census #2 §3; supersedes v33's narrower
+# assumption that single-gated cells were alive). Consistent with their older
+# finding that chain-derived gates are only coherent on the reference
+# underlying. EMISSION-side only: the R1/R2 predicates still accept it (the
+# D107 admission lineage stays valid on re-validation), and its vol_event
+# DIRECTIONAL use is untouched (C2 dealer family — the census §5 share
+# question is Crucible's open adjudication). Re-admission = a deliberate
+# bump on new evidence, never a pool-rebuild side effect.
+_REGIME_GATE_GLOBALLY_EXCLUDED_IDS: frozenset[str] = frozenset({"gamma_flip_distance_pct"})
+
 
 def _build_regime_pool(
     registry_ids: set[str],
@@ -484,7 +497,15 @@ def _build_regime_pool(
             pool[hyp] = tuple(sorted(registry_ids - single_name_only_ids))
         else:
             pool[hyp] = tuple(sorted(registry_ids))
-    return MappingProxyType(pool)
+    # D278 (v34): the global regime-gate exclusions apply to EVERY pool after
+    # the per-hypothesis build — one application point so a future pool
+    # rebuild cannot silently re-admit a retired gate (see the constant's WHY).
+    return MappingProxyType(
+        {
+            hyp: tuple(i for i in ids if i not in _REGIME_GATE_GLOBALLY_EXCLUDED_IDS)
+            for hyp, ids in pool.items()
+        }
+    )
 
 
 _X_RULE_REQUIREMENTS: Mapping[str, str] = MappingProxyType(
