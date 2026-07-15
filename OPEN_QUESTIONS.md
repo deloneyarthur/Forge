@@ -1066,6 +1066,16 @@ says "trailing percentile rank." The docstring also states it shares semantics w
   (`snap.indicator_percentile`, a real trailing-window rank) is SEPARATE machinery — unaffected, but the
   name collision is part of the hazard.
 
+- **RESOLVED both sides 2026-07-15:** Forge relabel shipped as the v32/D272 ride-along
+  (`indicator_thresholds.py` spec sites + `docs/GRAMMAR.md`); Crucible relabeled BOTH kernel docstrings
+  (shim + engine-core, formula spelled out; docstring-only, no compute change / no cache re-key —
+  `FORGE_earnings_manifest_published_2026-07-13.md` §Q49) and their capitulation RV-gate probe
+  independently corroborated (index drop-day median ~50, not 88). Residual teeth: v31 capitulation's
+  [50,80] band was mapped on the percentile reading and is now measured co-fire-strangling (69/69 dead)
+  → the gate-drop is item 3 of `docs/proposals/v33-generation-health.md`. CLOSED as a question; the
+  lesson (reconcile metric definition before mapping cross-system thresholds) stands in
+  `grammar-change.md`'s pending list.
+
 ## 2026-07-15 — Q50 — Cold-start goldens depend on LIVE export files (`_UNIVERSE_EXPORT_DIR` resolved at import, defeating `_isolated_home`) — **MEDIUM (latent golden fragility; coverage half fixed D274, universe half open)**
 
 `sampler._UNIVERSE_EXPORT_DIR` is expanded at module IMPORT time, before the `_isolated_home`
