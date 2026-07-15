@@ -1,6 +1,11 @@
 # Proposal: v33 — generation-health change set (resid_vix concentration + dead-cell reclamation)
 
-Status: **SCOPING — operator-gated grammar bump; nothing here ships off this doc.**
+> **STATUS (2026-07-15): APPROVED + BUILT ([[D276]]) — items 1, 2, 4, 5, 6, 7 shipped in the
+> v32→v33 bump (operator: "go ahead with v33"). Item 3 (capitulation rv_rank gate) remains
+> HELD on Crucible's index-vs-single adjudication (`PROMPT_CRUCIBLE_GENERATION_HEALTH_RECEIPT.md`
+> §A.3); it ships as its own increment when they answer. Deploy record: STATUS.md 2026-07-15.**
+
+Status: **SCOPING — operator-gated grammar bump; nothing here ships off this doc.** *(superseded — see above)*
 Date: 2026-07-15. Author: triage of `FORGE_generation_health_capitulation_addendum_2026-07-15.md`
 plus the three late-published relays it shipped with (`FORGE_resid_vix_region_followup_2026-07-13.md`,
 `FORGE_days_to_nfp_cpi_threshold_prior_2026-07-14.md`, `FORGE_capitulation_v31_followup_2026-07-13.md`).

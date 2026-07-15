@@ -222,6 +222,42 @@ _CAPITULATION_RV_RANK_GATE_RANGE: tuple[float, float] = (50.0, 80.0)
 _CAPITULATION_LOOKBACK_RANGE: tuple[int, int] = (3, 10)
 _CAPITULATION_TIME_STOP_NBARS_RANGE: tuple[int, int] = (5, 15)
 
+# D276 (v33) — resid_vix CONFIRMED-region concentration (Crucible
+# FORGE_resid_vix_region_followup_2026-07-13, first seen 07-15 in the
+# late-relay batch): three PIPELINE-NATIVE residual_momentum configs pass the
+# WF gate in-book (blend WF 2.119/2.103/2.031 vs probe 2.0611; best cpcv
+# carrier 1.4099 — closest-ever to the 1.5 gate); no config carries both axes
+# yet, and coverage was ~1 sample per cell over a 5-dim box. Their ask:
+# concentrate generation on the converter-anchored region at tens-of-samples-
+# per-neighborhood density. All scoped on this directional id (the D270
+# pattern): regime pool PINNED to the two confirmed arms (vix_term_slope —
+# the WF carriers' gate; hurst — the cpcv carrier's percentile gate); gate
+# thresholds narrowed to the converter neighborhoods; structure pinned by
+# evidence (every converter is monthly cross_sectional_rank — the closest
+# confluence config trades 3 times in 8.5y — so the combiner is forced, with
+# rank_k {5,10} and direction_mode long_only-BIASED: 2 of 3 WF passes are
+# long_only, and the long_short config nearest the probe params failed, but
+# the arm stays explorable). Solo-reject is EXPECTED for this family (all
+# three passes are solo §8.7 rejects) — never feed solo verdicts back as kill
+# signals.
+_RESID_MOMENTUM_DIRECTIONAL_ID: str = "residual_momentum"
+_RESID_MOMENTUM_REGIME_IDS: frozenset[str] = frozenset({"vix_term_slope", "hurst"})
+_RESID_MOMENTUM_WINDOW_RANGE: tuple[int, int] = (70, 160)
+_RESID_MOMENTUM_SKIP_RANGE: tuple[int, int] = (7, 21)
+_RESID_VIX_GATE_RANGE: tuple[float, float] = (0.1, 0.7)
+_RESID_HURST_GATE_PERCENTILE_RANGE: tuple[float, float] = (0.40, 0.50)
+_RESID_RANK_K_CHOICES: tuple[int, ...] = (5, 10)
+_RESID_LONG_ONLY_SHARE: float = 0.75
+
+# D276 (v33) — the trend days_since_jump veto never stacks on a
+# gamma_flip_distance_pct primary gate: the AND-pair is 93-98% structurally
+# dead across every trend directional (~300 configs/wk; Crucible addendum §B),
+# while single-gated versions of the same directionals convert at trend's
+# healthy rate. Pairings with the OTHER trend gates keep the veto — the
+# resid x vix_term_slope x dsj dual-gate arm is explicitly requested supply.
+_DSJ_VETO_ID: str = "days_since_jump"
+_DSJ_VETO_EXCLUDED_PRIMARY_GATES: frozenset[str] = frozenset({"gamma_flip_distance_pct"})
+
 # Cohort-yield exploration band (§3 of Crucible's 2026-06-17 yield-map refresh).
 # When the cohort draw is yield-driven (`cohort_yield_weights` supplied), clamp
 # P(cross_sectional_rank) to [floor, 1 - floor] so neither cohort is ever starved
@@ -630,6 +666,14 @@ def _cohort_xsect_probability(
     """
     if hypothesis not in RANK_COMBINER_HYPOTHESES:
         return 0.0
+    # D276 (v33): residual_momentum is PINNED to the rank arm — every in-book
+    # converter is cross_sectional_rank; the confluence config nearest the
+    # probe params trades 3 times in 8.5y (the combiner is load-bearing for
+    # the mechanism). Overrides the yield-driven cohort draw for this one
+    # directional; the rank-excluded-signal guard at the call site remains
+    # the backstop (chained draws host no resid — `_compatible_regimes`).
+    if directional_id == _RESID_MOMENTUM_DIRECTIONAL_ID:
+        return 1.0
     if cohort_yield_weights:
         w_xsect = cohort_yield_weights.get((hypothesis, directional_id, bucket, "xsect"))
         w_single = cohort_yield_weights.get((hypothesis, directional_id, bucket, "single"))
@@ -639,6 +683,23 @@ def _cohort_xsect_probability(
     if rank_combiner_share:
         return rank_combiner_share.get(hypothesis, 0.0)
     return 0.0
+
+
+def _eligible_regime_vetoes(
+    signals: list[SignalSpec], space: SearchSpace, hypothesis: str
+) -> tuple[str, ...]:
+    """The veto ids drawable for this config: the per-ID §3.5 C1 family guard
+    (D266) plus the D276 pairing exclusion — dsj never stacks on a gamma_flip
+    primary gate (the AND-pair is 93-98% structurally dead; a pure filter, no
+    rng consumed, so unaffected paths draw identically)."""
+    primary_gate_id = next((s.indicators[0] for s in signals if s.role == "regime_filter"), None)
+    veto_pool = space.regime_veto_indicators_by_hypothesis.get(hypothesis, ())
+    return tuple(
+        v
+        for v in veto_pool
+        if not _config_has_veto_family_indicator(signals, space, space.regime_veto_family_by_id[v])
+        and not (v == _DSJ_VETO_ID and primary_gate_id in _DSJ_VETO_EXCLUDED_PRIMARY_GATES)
+    )
 
 
 def _config_has_veto_family_indicator(
@@ -924,17 +985,18 @@ def sample_config(
         cohort_yield_weights=cohort_yield_weights,
         rank_combiner_share=rank_combiner_share,
     )
+    # D276 (v33): residual_momentum arrives here PINNED to the rank arm —
+    # `_cohort_xsect_probability` returns 1.0 for it (see the WHY there), so
+    # the rng.random() consumption and the rank-excluded-signal guard both
+    # stay; resid cannot reach the guard excluded (chained draws host no resid
+    # — `_compatible_regimes` — and resid/vix/hurst are rank-eligible on the
+    # live registry flags).
     if (
         p_xsect > 0.0
         and not _uses_single_name_only_indicator(signals, space.rank_excluded_ids)
         and rng.random() < p_xsect
     ):
-        combiner = CombinerSpec(
-            type="cross_sectional_rank",
-            rank_k=rng.choice(_RANK_K_CHOICES),
-            rebalance_frequency=rng.choice(_RANK_REBALANCE_CHOICES),  # type: ignore[arg-type]
-            direction_mode=rng.choice(_RANK_DIRECTION_MODES),  # type: ignore[arg-type]
-        )
+        combiner = _rank_combiner(directional_id, rng)
         underlying = None
 
     # D258 (v25) / D263 (v26) — optional SECOND regime gate ANDed on top of the
@@ -964,12 +1026,13 @@ def sample_config(
     # drop trigger selects; ANDing one on would strangle co-fire to ~zero.
     # The short-circuit precedes rng.random(), so non-momentum paths consume
     # identically (hard rule #6).
-    veto_pool = space.regime_veto_indicators_by_hypothesis.get(hypothesis, ())
-    eligible_vetoes = tuple(
-        v
-        for v in veto_pool
-        if not _config_has_veto_family_indicator(signals, space, space.regime_veto_family_by_id[v])
-    )
+    # D276 (v33): the dsj veto is additionally ineligible when the PRIMARY
+    # regime gate is gamma_flip_distance_pct — the AND-pair is 93-98%
+    # structurally dead (~300/wk); single-gated versions convert fine. Pure
+    # eligibility filter (no rng consumed), so non-gamma_flip paths draw
+    # identically; gamma_flip-gated trend paths skip the share draw when the
+    # (single-id) eligible set empties — licensed by the v33 bump.
+    eligible_vetoes = _eligible_regime_vetoes(signals, space, hypothesis)
     if (
         directional_id != _CAPITULATION_DIRECTIONAL_ID
         and eligible_vetoes
@@ -998,6 +1061,30 @@ def sample_config(
         sizer=sizer,
         exits=exits,
         equity_hedge_metadata=None,  # D5: Forge submits pure options
+    )
+
+
+def _rank_combiner(directional_id: str, rng: random.Random) -> CombinerSpec:
+    """The cross_sectional_rank combiner for a rank-arm draw.
+
+    D276 (v33): residual_momentum's structure is pinned by evidence — monthly
+    rebalance (every in-book converter; the weekly config failed hardest and
+    breached the book dd gate), rank_k {5, 10} (their 5-10 ask), direction_mode
+    long_only-BIASED (2 of 3 WF passes; long_short stays explorable). Every
+    other directional keeps the H1 uniform knob draws exactly as before.
+    """
+    if directional_id == _RESID_MOMENTUM_DIRECTIONAL_ID:
+        return CombinerSpec(
+            type="cross_sectional_rank",
+            rank_k=rng.choice(_RESID_RANK_K_CHOICES),
+            rebalance_frequency="monthly",
+            direction_mode=("long_only" if rng.random() < _RESID_LONG_ONLY_SHARE else "long_short"),
+        )
+    return CombinerSpec(
+        type="cross_sectional_rank",
+        rank_k=rng.choice(_RANK_K_CHOICES),
+        rebalance_frequency=rng.choice(_RANK_REBALANCE_CHOICES),  # type: ignore[arg-type]
+        direction_mode=rng.choice(_RANK_DIRECTION_MODES),  # type: ignore[arg-type]
     )
 
 
@@ -1048,6 +1135,19 @@ def _compatible_regimes(
     )
     if hypothesis == "mean_reversion" and directional_id == _CAPITULATION_DIRECTIONAL_ID:
         return tuple(i for i in compatible if i == _CAPITULATION_REGIME_ID)
+    # D276 (v33): residual_momentum's gate is PINNED to the two CONFIRMED arms
+    # (vix_term_slope / hurst) — the density lever of the concentrated sweep.
+    # CHAINED draws (X1 vol_target / X2 kelly) host no resid at all: the chain
+    # signal is rank-flag-excluded, which would force those draws onto the
+    # confluence arm — the structure Crucible measured DEAD for this mechanism
+    # (the nearest confluence config trades 3 times in 8.5y). Emptying the
+    # pool drops resid from `_directional_candidates` for that draw (the
+    # capitulation pin's mechanism), so every emitted resid config is
+    # chain-less and rank-eligible by construction.
+    if hypothesis == "trend_continuation" and directional_id == _RESID_MOMENTUM_DIRECTIONAL_ID:
+        if chain_family is not None:
+            return ()
+        return tuple(i for i in compatible if i in _RESID_MOMENTUM_REGIME_IDS)
     return compatible
 
 
@@ -1488,12 +1588,16 @@ def _sample_residual_momentum_params(rng: random.Random) -> dict[str, object]:
     `window` (formation lookback of the beta-stripped drift) and `skip` (most-
     recent bars excluded, the momentum-standard reversal guard) are the
     handoff's sweep axes (`FORGE_resid_vix_generation_request_2026-07-11`):
-    window 63-252 td, skip 0-21 td; their probe won at 126/21. Crucible's
-    writer reads both from the per-config SignalSpec params (probe-confirmed —
-    the probe's params carried them). Uniform integer draws: no interior
-    evidence yet to shape the density; the funnel will.
+    the v27 exploration bounds were window 63-252 td, skip 0-21 td (probe
+    126/21). D276 (v33): narrowed to the CONFIRMED-converter region
+    (FORGE_resid_vix_region_followup_2026-07-13 — converters at window
+    73/126/147, skip 7/15/21; skip < 7 never converted): window [70, 160],
+    skip [7, 21]. Crucible's writer reads both from the per-config SignalSpec
+    params (probe-confirmed).
     """
-    return {"window": rng.randint(63, 252), "skip": rng.randint(0, 21)}
+    w_lo, w_hi = _RESID_MOMENTUM_WINDOW_RANGE
+    s_lo, s_hi = _RESID_MOMENTUM_SKIP_RANGE
+    return {"window": rng.randint(w_lo, w_hi), "skip": rng.randint(s_lo, s_hi)}
 
 
 def _sample_option_momentum_params() -> dict[str, object]:
@@ -1639,6 +1743,20 @@ def _regime_signal_params(
     ):
         low, high = _CAPITULATION_RV_RANK_GATE_RANGE
         params["op"] = ">"
+        params["threshold"] = round(rng.uniform(low, high), 4)
+    # D276 (v33): the resid_vix confirmed-region gate bands, per-DIRECTIONAL
+    # (the D270 pattern — every other pairing keeps the table's ranges). The
+    # extra uniform re-draws the table's threshold into the converter
+    # neighborhood: vix_term_slope [0.1, 0.7] absolute (converters 0.22/0.66;
+    # the table's (0.0, 2.0) wastes mass above the region); hurst [0.40, 0.50]
+    # PERCENTILE (the cpcv carrier's p41-p46 — the table keys op/use_percentile/
+    # window, only the value moves). Sequence changes on resid paths are
+    # licensed by the v33 bump.
+    if directional_id == _RESID_MOMENTUM_DIRECTIONAL_ID and regime_id == "vix_term_slope":
+        low, high = _RESID_VIX_GATE_RANGE
+        params["threshold"] = round(rng.uniform(low, high), 4)
+    if directional_id == _RESID_MOMENTUM_DIRECTIONAL_ID and regime_id == "hurst":
+        low, high = _RESID_HURST_GATE_PERCENTILE_RANGE
         params["threshold"] = round(rng.uniform(low, high), 4)
     return params
 

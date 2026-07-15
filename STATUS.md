@@ -1,5 +1,11 @@
 # Forge — Status
 
+## 2026-07-15 — GRAMMAR v32 → v33 (D276): generation-health change set BUILT — resid_vix confirmed-region concentration + 4 dead-cell retirements + nfp/cpi inert-threshold fix. Operator-approved ("go ahead with v33"); capitulation-gate item HELD on Crucible's adjudication
+
+**Built + verified pre-deploy (full record: [[D276]]):** items 1/2/4/5/6/7 of `docs/proposals/v33-generation-health.md` — all EMISSION-side (sampler pools + threshold table + per-directional scoping; `rules:` text UNCHANGED, submitted lineage stays valid). TDD 14 new tests (`test_v33_generation_health.py`); v27 golden re-pinned (divergence exactly at the resid-capable trend positions — licensed-where-changed); v18/v19 activation tests flipped to retirement pins; option_momentum invariant file flipped to a RETIREMENT invariant. Scoped suite **789 green**, ruff + mypy --strict clean. **Emission proof (3000 cold, live registry):** all four retirements at 0 (option_momentum / MR-gamma_flip directional / pre_earnings_setup gate / trend gamma_flip+dsj pair); dsj veto alive on other gates (138); nfp/cpi max threshold 29.9 (n=302); **resid 39/3000, 100% in-spec** — gates {hurst 22, vix_term_slope 17}, dual-gate dsj 20, all monthly xsect-rank, rank_k {5,10}, long_only 72%. Ride-alongs: Q49 custom_predicates relabel (Q49 CLOSED both sides), GRAMMAR.md emission-status notes.
+
+**Deploy evidence:** (appended below at restart.)
+
 ## 2026-07-15 — Generation-health addendum + 3 LATE-PUBLISHED relays folded (D275): ~1,000 dead configs/wk audit ACCEPTED → v33 change set STAGED (operator-gated); resid_vix region CONFIRMED in-book (3 pipeline-native WF-gate passes — the sweep is the headline v33 item); capitulation "reweight to index" ask CONTRADICTS their own 07-13 honest pricing — flagged back, not acted on
 
 **Inbound (operator-carried): `FORGE_generation_health_capitulation_addendum_2026-07-15.md`** + its §C revelation that a 07-12/07-14 relay batch was never received. Verified our side: `FORGE_capitulation_v31_followup_2026-07-13.md` **WAS received + folded** (`ab6a609` — their ledger is wrong on that one); `FORGE_resid_vix_region_followup_2026-07-13.md`, `FORGE_days_to_nfp_cpi_threshold_prior_2026-07-14.md`, `FORGE_earnings_manifest_published_2026-07-13.md` genuinely first-seen 2026-07-15 (zero adoption explained — never carried). All four now read + triaged.

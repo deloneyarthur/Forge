@@ -355,8 +355,24 @@ def _build_indicators_by_family(
 # a continuation thesis AND the wrong exit chassis (trend requires a trailing
 # exit; the validated capitulation chassis is time-stop-primary). Pinning it
 # out also keeps trend's draw sequence byte-identical across the bump.
+#
+# D276 (v33) — generation-health retirements (Crucible
+# FORGE_generation_health_capitulation_addendum_2026-07-15 §B, measured on the
+# last-7-day funnel; EMISSION-side only, the C2 predicate still accepts the
+# submitted lineage):
+#   option_momentum — 100% structurally dead (47/wk, median 5 OOS trades, ~0
+#     component conversions in the month since the v19 min_months fix); retired
+#     from every hypothesis that could draw it (trend via C2 smart_money;
+#     regime_arbitrage via its any-family pool). The sibling smart_money id
+#     `expected_value_estimator` stays the X2 kelly chain feature.
+#   gamma_flip_distance_pct as a MEAN_REVERSION directional — dead in every
+#     gate combination (~100/wk, 94-97% WF=0). MR-scoped: it remains an R1
+#     REGIME gate (D107), and the other dealer directionals (walls, gex) keep
+#     their D062 admission.
 _DIRECTIONAL_POOL_EXCLUDED_IDS: dict[str, frozenset[str]] = {
-    "trend_continuation": frozenset({"momentum"}),
+    "trend_continuation": frozenset({"momentum", "option_momentum"}),
+    "regime_arbitrage": frozenset({"option_momentum"}),
+    "mean_reversion": frozenset({"gamma_flip_distance_pct"}),
 }
 
 
@@ -379,6 +395,11 @@ def _build_directional_pool(
         ids -= _DIRECTIONAL_POOL_EXCLUDED_IDS.get(hyp, frozenset())
         pool[hyp] = tuple(sorted(ids))
     return MappingProxyType(pool)
+
+
+# D276 (v33): vol_event regime-gate EMISSION exclusions — see the WHY at the
+# use site in `_build_regime_pool`.
+_VOL_EVENT_REGIME_EXCLUDED_IDS: frozenset[str] = frozenset({"pre_earnings_setup"})
 
 
 def _build_regime_pool(
@@ -438,7 +459,20 @@ def _build_regime_pool(
                 )
             )
         elif hyp == "volatility_event":
-            pool[hyp] = tuple(sorted(set(_R3_EVENT_PROXIMITY_INDICATORS) & registry_ids))
+            # D276 (v33): pre_earnings_setup retired from EMISSION (~450
+            # configs/wk at 91-100% structurally dead — the composed quiet-RV
+            # pre-earnings window opens a few days per name-quarter, and ANDed
+            # with any directional threshold it starves below the OOS trade
+            # floor; ve conversion 0.1%). The R3 predicate still ACCEPTS it
+            # (hard rule #1 — validity of the submitted lineage unchanged);
+            # re-admission needs a Crucible-measured window parameter that
+            # opens the gate to a usable co-fire rate.
+            pool[hyp] = tuple(
+                sorted(
+                    (set(_R3_EVENT_PROXIMITY_INDICATORS) & registry_ids)
+                    - _VOL_EVENT_REGIME_EXCLUDED_IDS
+                )
+            )
         elif hyp == "event_momentum":
             # H2 (v12 / D109): post-event TIMING gate only (days_since_earnings).
             # Sampler-side policy, not a grammar.yaml rule (hard rule #1) — see

@@ -276,13 +276,21 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     # here, so `is_threshold_skippable(..., 'regime_filter')` filtered them out
     # and the widening was inert. Mirror days_to_fomc's "event imminent" /
     # allow-window ranges (all are days-to-event countdowns with the same scale).
+    # v33 (D276): regime_range (7,60) → (7,30) for BOTH monthly countdowns.
+    # Their max inter-event gap ceilings the indicator at 35 (nfp) / 34 (cpi),
+    # so ~42% of the old op-"<" draws sat above the ceiling — always-true
+    # no-op gates (Crucible FORGE_days_to_nfp_cpi_threshold_prior_2026-07-14,
+    # measured on 22,508 configs). 30 mirrors the already-safe days_to_opex.
+    # Guardrail (their caveat): if op-sampling ever generalizes to these two,
+    # a ">" near the ceiling flips the failure mode from inert to always-FALSE
+    # — pair that change with a ceiling-aware clamp.
     "days_to_cpi": IndicatorThresholdSpec(
         directional_range=(5.0, 14.0),
-        regime_range=(7.0, 60.0),
+        regime_range=(7.0, 30.0),
     ),
     "days_to_nfp": IndicatorThresholdSpec(
         directional_range=(5.0, 14.0),
-        regime_range=(7.0, 60.0),
+        regime_range=(7.0, 30.0),
     ),
     "days_to_opex": IndicatorThresholdSpec(
         directional_range=(3.0, 10.0),  # OPEX is monthly — tighter imminence window
@@ -408,11 +416,14 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     # window. The computation knobs (window/skip) ride the params dict via
     # _sample_residual_momentum_params (sampler.py). Directional-only — the
     # handoff pairs it WITH a gate, it never is one.
+    # v33 (D276): percentile range (0.60, 0.90) → (0.65, 0.85) — the CONFIRMED
+    # in-book region (FORGE_resid_vix_region_followup_2026-07-13: converters
+    # carried 0.71-0.82; the sweep edges never converted). Window stays 252.
     "residual_momentum": IndicatorThresholdSpec(
         directional_range=None,
         regime_range=None,
         op_directional=">",
-        directional_percentile_range=(0.60, 0.90),
+        directional_percentile_range=(0.65, 0.85),
     ),
     # v29 (D266): market_realized_vol — the MARKET-level absolute-RV MR regime
     # gate (Crucible CRUCIBLE_market_realized_vol_registered_2026-07-12: family

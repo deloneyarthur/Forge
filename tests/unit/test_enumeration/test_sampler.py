@@ -1625,92 +1625,51 @@ def test_v18_ve_draws_iv_term_slope_directional(
     assert seen_swing_mid > 0
 
 
-def test_v18_ve_draws_pre_earnings_setup_regime_gate(
+def test_v33_ve_never_draws_pre_earnings_setup(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """D135 (v18): pre_earnings_setup joins R3's event-proximity pool. The
-    binary gate is the degenerate-by-design cut (`> 0.5`); the composed
-    params ride the same signal: enter window in CALENDAR days centered on
-    the literature's [7, 14] (their Correction note), rv_q on the
-    component-native [0, 100] scale around the shipped default 50."""
+    """D276 (v33) retires the D135/v18 admission from EMISSION: ~450 configs/wk
+    at 91-100% structurally dead (the composed quiet-RV pre-earnings window
+    ANDed with any directional threshold starves below the OOS trade floor;
+    ve conversion 0.1% — Crucible addendum 2026-07-15 §B). Even with the
+    registry serving the id, volatility_event never draws it; the R3 predicate
+    still ACCEPTS it (emission-side retirement, hard rule #1 — the v18
+    param-shape history lives in git). The T1.4 ETF-underlying constraint it
+    exercised keeps its own coverage via days_to_earnings."""
     reg = _v18_registry(registry)
     space = build_search_space(grammar, reg)
-    seen = 0
+    assert "pre_earnings_setup" not in space.regime_indicators_by_hypothesis["volatility_event"]
     for seed in range(400):
         cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
-        g = next(s for s in cfg.signals if s.role == "regime_filter")
-        if g.indicators[0] != "pre_earnings_setup":
-            continue
-        seen += 1
-        assert g.params["threshold"] == 0.5, cfg.name
-        assert g.params["op"] == ">", cfg.name
-        assert g.params["enter_min"] in (5, 6, 7, 8, 9), cfg.name
-        assert g.params["enter_max"] in (12, 13, 14, 15, 16), cfg.name
-        assert isinstance(g.params["rv_q"], float), cfg.name
-        assert 30.0 <= g.params["rv_q"] <= 60.0, cfg.name
-    assert seen > 0
+        assert not any("pre_earnings_setup" in s.indicators for s in cfg.signals), cfg.name
 
 
-def test_v18_pre_earnings_setup_never_on_etf_underlying(
+def test_v33_option_momentum_retired_from_directional_emission(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """pre_earnings_setup composes days_to_earnings, which is far-value on
-    ETFs (no earnings) — the conjunction is a permanent 0.0 there (never
-    admits, silent zero-trade). The sampler must constrain such draws to
-    single names, exactly like days_to_earnings itself (T1.4 precedent)."""
-    from forge.enumeration.sampler import _TIER_1_ETF_UNDERLYINGS
-
-    reg = _v18_registry(registry)
-    space = build_search_space(grammar, reg)
-    seen = 0
-    for seed in range(400):
-        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
-        if not any("pre_earnings_setup" in s.indicators for s in cfg.signals):
-            continue
-        seen += 1
-        assert cfg.underlying is not None, cfg.name
-        assert cfg.underlying not in _TIER_1_ETF_UNDERLYINGS, cfg.name
-    assert seen > 0
-
-
-def test_v19_option_momentum_activated_under_trend_only(
-    grammar: Grammar, registry: RegistrySnapshot
-) -> None:
-    """D138 (v19): option_momentum ACTIVATED as a trend_continuation directional
-    (smart_money pinned to trend's C2 families; the Heston-et-al. option-momentum
-    continuation thesis). Percentile-only + min_months=3. Reverses the v18 hold
-    (Q39 resolved by Crucible's coverage handoff — the zeros were min_months=6
-    sparsity, not coverage). The pin: among ENUMERABLE hypotheses only
-    trend_continuation lists it; the smart_money sibling expected_value_estimator
-    stays pinned OUT of the directional path (range nulled)."""
+    """D276 (v33) retires the D138/v19 activation from EMISSION: 100%
+    structurally dead (47/wk, median 5 OOS trades, ~0 component conversions in
+    the month since the min_months=3 fix — Crucible addendum 2026-07-15 §B).
+    The threshold-table entry stays (is_threshold_skippable unchanged — the
+    submitted lineage's params remain interpretable); the pool exclusion does
+    the retirement, and the smart_money sibling expected_value_estimator stays
+    pinned out of the directional path exactly as before (the X2 kelly sizer
+    feature — the C2 smart_money family admission itself is untouched)."""
     from forge.enumeration.indicator_thresholds import is_threshold_skippable
-    from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES
 
-    assert not is_threshold_skippable("option_momentum", "directional")  # activated
-    assert is_threshold_skippable("option_momentum", "regime_filter")  # directional-only
+    assert not is_threshold_skippable("option_momentum", "directional")  # entry kept
     assert is_threshold_skippable("expected_value_estimator", "directional")  # EV pinned out
     reg = _v18_registry(registry)
     space = build_search_space(grammar, reg)
     for hyp, pool in space.directional_indicators_by_hypothesis.items():
-        if hyp in NON_ENUMERABLE_HYPOTHESES:
-            continue
-        if hyp == "trend_continuation":
-            assert "option_momentum" in pool, hyp
-        else:
-            assert "option_momentum" not in pool, hyp
-    saw_om = 0
+        assert "option_momentum" not in pool, hyp
     for seed in range(300):
         cfg = sample_config(space, reg, random.Random(seed))
         for s in cfg.signals:
             if s.role != "directional":
                 continue
+            assert "option_momentum" not in s.indicators, cfg.name
             assert "expected_value_estimator" not in s.indicators, cfg.name
-            if "option_momentum" in s.indicators:
-                assert cfg.hypothesis == "trend_continuation", cfg.name
-                assert s.params.get("use_percentile") is True, s.params
-                assert s.params.get("min_months") == 3, s.params
-                saw_om += 1
-    assert saw_om > 0, "option_momentum never emitted from the v19 registry"
 
 
 def test_v18_new_ids_rank_excluded(grammar: Grammar, registry: RegistrySnapshot) -> None:
@@ -2473,22 +2432,28 @@ def test_d264_new_ids_dormant_without_registry(
 # the existing paths.
 # D265 (v28): re-pinned — realized_vol in the MR regime pool moved position 12
 # (the slice's realized_vol-gated MR config).
+# D276 (v33): re-pinned — the resid_vix confirmed-region concentration (regime
+# pool pin to {vix_term_slope, hurst}, narrowed knobs/gates, forced monthly
+# rank combiner) reshuffles exactly the trend positions that can draw
+# residual_momentum (2-8, 12-14); the non-trend positions 0-1 and 9-11 are
+# byte-identical, and the pre-v27 goldens above are untouched (their fixtures
+# never serve the id) — the licensed-where-changed shape.
 _REGIME_GOLDEN_V27_ACTIVE = [
     "6bfa51eb7329103c",
     "4c09a2654e9913c7",
-    "63a6f84ed16d537e",
-    "a060e1c7054d2a0a",
-    "aa1ff071c93a09ac",
-    "4f17ab52f24af119",
-    "cd137256711e9ad1",
-    "16ad819246208325",
-    "f0198cf7715392b9",
+    "5b374a94041abba3",
+    "403a8cec4775355a",
+    "79e9a82693da0f36",
+    "db496a413b649643",
+    "bac11814259f68b7",
+    "6c1e918baa126cab",
+    "ef5dbe94d9f1d7a8",
     "2594c484c61934fa",
     "6494d6b68fb1872d",
     "8764842d35a62d39",
-    "25602911f8cc65fc",
-    "17230529a3cf5495",
-    "10cabe27b44e8768",
+    "4581161b11aed8a4",
+    "3a20d5f768f5f188",
+    "0e365d3d80772d79",
 ]
 
 

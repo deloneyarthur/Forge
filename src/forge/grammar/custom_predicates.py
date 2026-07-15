@@ -369,7 +369,8 @@ _R1_GAMMA_REGIME_INDICATOR = "gamma_flip_distance_pct"
 # purest ranging signal; C4 keeps hurst single-role (it can't be both this gate and
 # the directional). Same indicator, opposite side per hypothesis — the D107 pattern.
 _R1_HURST_REGIME_INDICATOR = "hurst"
-# D167 (v22, MR side): rv_rank (cheap REALIZED-vol percentile, op_regime "<" = LOW =
+# D167 (v22, MR side): rv_rank (cheap REALIZED-vol min-max RANGE-POSITION — Q49:
+# the kernel is (cur-lo)/(hi-lo)*100, not a percentile rank; op_regime "<" = LOW =
 # the calm / reversion-friendly regime — its indicator_thresholds default op is
 # already "<") is a fourth accepted R1 regime gate for mean_reversion. Crucible's
 # causal attribution (FORGE_mr_rv_hurst_overlap_response): rv_rank is INDEPENDENT of
@@ -395,7 +396,7 @@ _R1_VOL_REGIME_INDICATOR = "vol_regime"
 # mid-distribution) — probe-verified 2026-07-12: rv_rank<62 was open 21/21 days
 # on all five knife-catch names in 2022-12 while absolute rv held ≥ 0.25. The
 # absolute threshold is the SYSTEMATIC complement; C1 (same `volatility` family
-# as rv_rank/vol_regime) makes it REPLACE the percentile in the vol slot, and
+# as rv_rank/vol_regime) makes it REPLACE the range-position (Q49) in the vol slot, and
 # the D263 ivol veto (idiosyncratic_vol) still stacks on top — the asked
 # both-gates shape. Added per the D107/D150/D167/D254 widening pattern (ADD not
 # replace; R1 stays an OR). Operator-approved loosening, OPEN_PROPOSALS 2121cafe.
