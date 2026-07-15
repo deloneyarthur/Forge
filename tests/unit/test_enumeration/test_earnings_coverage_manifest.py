@@ -120,11 +120,11 @@ def test_load_covered_absent_returns_empty(monkeypatch: pytest.MonkeyPatch, tmp_
     """No `earnings_covered_symbols*.json` → () (the contract's cold semantics), so a
     cold consumer applies no intersection — exactly as before the export existed."""
     monkeypatch.setattr(sampler_mod, "_UNIVERSE_EXPORT_DIR", tmp_path)
-    sampler_mod._load_earnings_covered_symbols.cache_clear()
+    _load_earnings_covered_symbols.cache_clear()
     try:
         assert _load_earnings_covered_symbols() == ()
     finally:
-        sampler_mod._load_earnings_covered_symbols.cache_clear()
+        _load_earnings_covered_symbols.cache_clear()
 
 
 def test_load_covered_reads_manifest_sorted_deduped(
@@ -140,11 +140,11 @@ def test_load_covered_reads_manifest_sorted_deduped(
         )
     )
     monkeypatch.setattr(sampler_mod, "_UNIVERSE_EXPORT_DIR", tmp_path)
-    sampler_mod._load_earnings_covered_symbols.cache_clear()
+    _load_earnings_covered_symbols.cache_clear()
     try:
         assert _load_earnings_covered_symbols() == ("AAPL", "RTX")  # deduped + sorted
     finally:
-        sampler_mod._load_earnings_covered_symbols.cache_clear()
+        _load_earnings_covered_symbols.cache_clear()
 
 
 def test_load_covered_corrupt_warns_and_falls_back(
@@ -155,11 +155,11 @@ def test_load_covered_corrupt_warns_and_falls_back(
     (mirrors `_load_underlyings`' `universe_export_unreadable`)."""
     (tmp_path / "earnings_covered_symbols.json").write_text("{ this is not valid json")
     monkeypatch.setattr(sampler_mod, "_UNIVERSE_EXPORT_DIR", tmp_path)
-    sampler_mod._load_earnings_covered_symbols.cache_clear()
+    _load_earnings_covered_symbols.cache_clear()
     try:
         assert _load_earnings_covered_symbols() == ()
     finally:
-        sampler_mod._load_earnings_covered_symbols.cache_clear()
+        _load_earnings_covered_symbols.cache_clear()
 
 
 def test_load_covered_is_process_cached() -> None:

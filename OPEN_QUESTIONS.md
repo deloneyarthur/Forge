@@ -1065,3 +1065,27 @@ says "trailing percentile rank." The docstring also states it shares semantics w
   Kernel docstring fix is Crucible's (flagged in the relay-back). `use_percentile` mode
   (`snap.indicator_percentile`, a real trailing-window rank) is SEPARATE machinery — unaffected, but the
   name collision is part of the hazard.
+
+## 2026-07-15 — Q50 — Cold-start goldens depend on LIVE export files (`_UNIVERSE_EXPORT_DIR` resolved at import, defeating `_isolated_home`) — **MEDIUM (latent golden fragility; coverage half fixed D274, universe half open)**
+
+`sampler._UNIVERSE_EXPORT_DIR` is expanded at module IMPORT time, before the `_isolated_home`
+autouse fixture patches `Path.home()` — so both lru-cached loaders that read it bypass test
+isolation and consume the operator's live `~/optbt_data/exports/`:
+
+- **`_load_earnings_covered_symbols` (v32/D272): FIXED for tests (D274).** The moment Crucible
+  started the coverage publisher (2026-07-13T23:32:11Z) the earnings-gated pool intersection
+  activated INSIDE the test run and broke all 9 exact-hash cold-start goldens (deploy-preflight
+  NO-GO on an untouched enumeration surface). Now pinned dormant-`()` by a global autouse fixture.
+- **`_load_underlyings` (D078): STILL LIVE-COUPLED.** The goldens pass today against the live
+  `universe_tickers_2026-07-07T222959Z.json` (stable since 07-07); when the export is ABSENT they'd
+  pin against the D033 fallback list instead. Consequence: a Crucible universe republish with
+  different tiers, or running the suite on a box without exports, changes cold-start emission and
+  can flip goldens — the same class of surprise as the D274 incident, just on a slower-moving file.
+
+Durable options (pick at next test-infra touch, NOT mid-deploy): (a) autouse-pin
+`_load_underlyings` to a fixture universe and re-baseline all goldens once (biggest diff, cleanest);
+(b) resolve `_UNIVERSE_EXPORT_DIR` lazily via `Path.home()` at call time so `_isolated_home` covers
+it, and re-baseline goldens against the fallback universe (same re-pin, plus prod-inert code churn);
+(c) leave universe live-coupled and accept re-pinning goldens on universe republish (status quo,
+documented here). Any golden re-baseline must be its own commit with the trigger recorded
+(hard rule #6 discipline). Related: D274, D272, D078/D033, `_isolated_home` (tests/conftest.py).
