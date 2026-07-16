@@ -6,12 +6,18 @@ promote over time*. The daily ranker-eval timer already distils that into two cu
 
   * **F3 verdict ranker** (`streak.jsonl`) — how much better the learned P(component)
     model ranks than the incumbent §6.2 composite (AUC margin), and the trailing
-    consecutive-PASS streak toward the F3 criterion.
-  * **§8.6 wf_p25 tail** (`robustness_streak_wfp25.jsonl`) — Spearman of the quality
-    lane's predicted WF-floor against the realized worst-quartile gate.
+    consecutive-PASS streak toward the F3 criterion. (D284: the streak judges on the
+    hygiene incumbent — `margin_source` in the row — once the column populates.)
   * **re-wire gate→tail** (`rewire_streak_wfp25.jsonl`) — the shadow clock for the
-    gate-then-tail re-wire candidate (docs/proposals/quality-lane-rewire.md): Δ of its
-    top-K realized WF floor vs ranking by P(component) alone (≈ the deployed lane).
+    NOW-LIVE gate-then-tail lane (docs/proposals/quality-lane-rewire.md): Δ of its
+    top-K realized WF floor vs ranking by P(component) alone.
+
+The **§8.6 wf_p25 tail clock** (`robustness_streak_wfp25.jsonl`) was RETIRED 2026-07-16
+(D285): after the gate-tail flip, the "incumbent" it paired against was the recorded
+production ranking score — the lane's own value — so its delta pinned to ≈0 by
+construction and its SPRT could never resolve. The history file stays on disk; the tail
+model itself is unaffected (it is the live lane's ordering engine, judged by the
+re-wire clock above).
 
 Until now reading them meant `tail -1 … | json` spelunking. This command pretty-prints
 both — the trend at a glance — with zero DB access (the JSONL files carry no lock, unlike
@@ -43,10 +49,6 @@ _FLIP_GATE_K = 3
 _FLIP_ALPHA = 0.05  # target false-promote rate
 _FLIP_BETA = 0.20  # target false-reject rate
 _FLIP_MIN_EFFECT = 0.05  # the mean WF-floor Δ worth flipping for (matches the old margin)
-# §8.6 tail lane (P3.1 follow-up): the paired Spearman-delta (tail minus incumbent) worth
-# crediting as marginal skill. Modest — the tail model beat the incumbent ~+0.23 on verified
-# rows historically, but ties on the unverified majority, so the honest mean delta is small.
-_TAIL_FLIP_MIN_EFFECT = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,23 +174,6 @@ def rewire_flip_gate(
     )
 
 
-def tail_flip_gate(
-    records: Sequence[dict[str, object]], *, clean_era_iso: str, k: int = _FLIP_GATE_K
-) -> FlipGateStatus:
-    """The §8.6 tail-lane skill gate (P3.1 follow-up): SPRT over the streak's per-checkpoint
-    `spearman_delta` (tail-model Spearman minus the incumbent P(component) Spearman, same rows).
-    Replaces the absolute Spearman ≥ 0.30 bar with a paired significance test — the input P4.1
-    (retire-or-keep) should read instead of the streak count."""
-    return _sprt_flip_gate(
-        records,
-        clean_era_iso=clean_era_iso,
-        delta_key="spearman_delta",
-        min_effect=_TAIL_FLIP_MIN_EFFECT,
-        label="§8.6 tail flip gate",
-        k=k,
-    )
-
-
 def summarize_streak(
     records: Sequence[dict[str, object]],
     *,
@@ -274,20 +259,21 @@ def _format_calibration(
     return f"{'P calibration/floor':<22} {cv:<4} max_ce {mce}   keep-rate(P>=floor) {kr}"
 
 
-def _format_adoption(f3: StreakSummary, tail: StreakSummary) -> str:
+def _format_adoption(f3: StreakSummary, lane: StreakSummary) -> str:
     """P3.2 (B6) adoption guard: should the daemon rotate to the newest artifact? Reads each
-    lane's latest fresh signal — F3 AUC margin, wf_p25 paired Δ Spearman — and BLOCKs adoption
-    when it isn't strictly positive (a model no better than the incumbent isn't worth the
-    rotation). Telemetry; the healthcheck raises the matching WARN/CRITICAL."""
+    lane's latest fresh signal — F3 AUC margin, and (D285, replacing the retired §8.6 paired
+    delta) the re-wire clock's Δ: the LIVE gate-tail lane vs the P-alone baseline — and BLOCKs
+    adoption when it isn't strictly positive (a model no better than its baseline isn't worth
+    the rotation). Telemetry; the healthcheck raises the matching WARN/CRITICAL."""
 
     def _m(v: float | None) -> str:
         return f"{v:+.3f}" if v is not None else "n/a"
 
     f3_v = adoption_verdict(f3.latest_metric)
-    tail_v = adoption_verdict(tail.latest_metric)
+    lane_v = adoption_verdict(lane.latest_metric)
     return (
         f"{'adoption guard':<22} F3={f3_v} ({_m(f3.latest_metric)})  "
-        f"wf_p25={tail_v} ({_m(tail.latest_metric)})"
+        f"gate-tail-lane={lane_v} ({_m(lane.latest_metric)})"
     )
 
 
@@ -324,18 +310,11 @@ def cmd_status(
     eval_dir = data_root / "ranker_eval"
     f3_records = _read_jsonl(eval_dir / "streak.jsonl")
     rewire_records = _read_jsonl(eval_dir / "rewire_streak_wfp25.jsonl")
-    tail_records = _read_jsonl(eval_dir / "robustness_streak_wfp25.jsonl")
     f3 = summarize_streak(
         f3_records,
         label="F3 verdict ranker",
         metric_key="auc_margin",
         metric_name="AUC margin",
-    )
-    tail = summarize_streak(
-        tail_records,
-        label="§8.6 wf_p25 tail",
-        metric_key="spearman_delta",
-        metric_name="Δ Spearman vs P",
     )
     rewire = summarize_streak(
         rewire_records,
@@ -345,15 +324,17 @@ def cmd_status(
     )
     typer.echo(f"forge status — learning-signal clocks ({eval_dir}; no DB)")
     typer.echo(_format_summary(f3))
-    typer.echo(_format_summary(tail))
     typer.echo(_format_summary(rewire))
     typer.echo(_format_calibration(f3_records, rewire_records))
-    typer.echo(_format_adoption(f3, tail))
+    typer.echo(_format_adoption(f3, rewire))
     from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
 
     clean_era_iso = CLEAN_ERA_LABEL_CUT.isoformat()
     typer.echo(_format_flip_gate(rewire_flip_gate(rewire_records, clean_era_iso=clean_era_iso)))
-    typer.echo(_format_flip_gate(tail_flip_gate(tail_records, clean_era_iso=clean_era_iso)))
+    typer.echo(
+        "(§8.6 wf_p25 tail clock retired 2026-07-16, D285 — self-referential after the "
+        "gate-tail flip; history: robustness_streak_wfp25.jsonl)"
+    )
     typer.echo("(authoritative recompute: `forge ranker-model eval` / `eval-robustness`)")
 
 
@@ -363,5 +344,4 @@ __all__ = [
     "cmd_status",
     "rewire_flip_gate",
     "summarize_streak",
-    "tail_flip_gate",
 ]

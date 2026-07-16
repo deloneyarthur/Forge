@@ -1428,3 +1428,30 @@ falls back to `margin_source="ranking"` (verified against a live snapshot).
 
 **Interim guidance:** judge F3 skill on holdout-only pooled AUC, not the streak margin.
 Related: [[D252]], [[D193]], [[D132]]; the §8.6 clock retirement is D285.
+
+## D285 — 2026-07-16 — §8.6 wf_p25 tail clock RETIRED (streak + SPRT + adoption arm + drift arm): self-referential since the gate-tail flip; the re-wire clock is the lane's monitor
+
+**Why:** per the D284 finding, every §8.6 comparison read `shadow_scores.composite_score`
+as "the incumbent" — which post-flip IS the gate-tail lane's own score, ≈ the tail
+ordering (P-floor keep-rate 0.97–0.99). The paired delta pinned to ≈0 BY CONSTRUCTION
+the moment post-flip verdicts dominated (07-09: incumbent_sp jumped 0.10–0.29 → 0.49–0.54
+= tail_sp, after 6 consecutive PASSes at +0.14…+0.38 vs the true composite through
+07-07), its SPRT froze at logLR +2.66 (≈0-mean increments — could never resolve), and
+`forge status` "adoption guard wf_p25=BLOCK" + healthcheck "wf_p25 drift" WARN read the
+same broken series. The question the clock existed to answer ("should the tail wire
+in?") was answered by the flip itself; the LIVE lane's monitor is the re-wire clock
+(gate-tail vs P-alone: +0.44…+0.68, 16/3 PASS, SPRT promote +22.4). **The tail model is
+NOT retired** — it is the live lane's ordering engine, and stays trained/published daily.
+
+**Changes (TDD):** `daily_ranker_eval.sh` drops the §8.6 streak block (history JSONL
+stays on disk; `eval-robustness` stays as the observational per-model tail readout —
+NOTE its printed spearman_delta pairs against the recorded ranking score, so read its
+ABSOLUTE spearman, not the delta, until hygiene rows accrue). `forge status` drops the
+clock line + the `§8.6 tail flip gate` SPRT line (`tail_flip_gate` removed), prints a
+tombstone, and the adoption guard's second arm re-points to the re-wire clock's latest
+Δ (`gate-tail-lane=`). `forge healthcheck` re-points "wf_p25 drift" → "gate-tail drift"
+(rewire `delta` series, same thresholds) — this also clears the standing near-WARN the
+broken series caused (verified live: gate-tail drift OK +0.596, OVERALL=OK 14/14).
+MANPAGE updated in all four places. Effective at the next 05:00 timer fire (editable
+install; no service restart needed for script/CLI). Related: [[D284]], [[D252]],
+[[D229]], [[D147]].

@@ -12,7 +12,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from forge.cli.main import app
-from forge.cli.status_cmd import rewire_flip_gate, summarize_streak, tail_flip_gate
+from forge.cli.status_cmd import rewire_flip_gate, summarize_streak
 
 runner = CliRunner()
 
@@ -96,7 +96,12 @@ def test_cmd_status_smoke(tmp_path: Path) -> None:
     result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
     assert result.exit_code == 0, result.stdout
     assert "F3 verdict ranker" in result.stdout
-    assert "wf_p25 tail" in result.stdout
+    # D285: the §8.6 wf_p25 tail clock is RETIRED (self-referential after the gate-tail
+    # flip made the recorded incumbent the lane's own score) — no clock line (its unique
+    # metric label), no SPRT line; a tombstone note points at the history file instead.
+    assert "Δ Spearman vs P" not in result.stdout
+    assert "§8.6 tail flip gate" not in result.stdout
+    assert "retired" in result.stdout
 
 
 def test_cmd_status_shows_rewire_clock(tmp_path: Path) -> None:
@@ -152,38 +157,20 @@ def test_flip_gate_streak_breaks_on_qualifying_fail() -> None:
     assert not g.met
 
 
-def _tail_rec(
-    spearman_delta: float, verdict: str, *, window_since: str = "2026-07-01T00:00:00"
-) -> dict:
-    return {
-        "spearman_delta": spearman_delta,
-        "verdict": verdict,
-        "qualifies": True,
-        "window_since": window_since,
-        "ts": "2026-07-01T12:00:00+00:00",
-    }
-
-
-def test_tail_flip_gate_uses_paired_spearman_delta() -> None:
-    # P3.1 follow-up: three fresh checkpoints where the tail model beats the incumbent by a
-    # tight, large margin -> SPRT promotes -> MET. Labelled as the §8.6 gate.
-    records = [_tail_rec(d, "PASS") for d in (0.30, 0.33, 0.31)]
-    g = tail_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
-    assert g.label.startswith("§8.6")
-    assert g.sprt_decision == "promote"
-    assert g.met
-
-
-def test_tail_flip_gate_ignores_rows_without_delta() -> None:
-    # Legacy rows carry `spearman` (absolute) but not the paired `spearman_delta` -> skipped,
-    # so the gate stays NOT MET rather than crediting the un-paired signal.
-    records = [
-        {"spearman": 0.5, "verdict": "PASS", "qualifies": True, "ts": "t", "window_since": "w"}
-        for _ in range(4)
-    ]
-    g = tail_flip_gate(records, clean_era_iso=_CLEAN_ERA_ISO)
-    assert g.n_fresh_qualifying == 0
-    assert not g.met
+def test_cmd_status_adoption_guard_reads_rewire_lane(tmp_path: Path) -> None:
+    # D285: with the §8.6 clock retired, the adoption guard's second arm reads the
+    # LIVE lane's signal — the rewire clock's latest delta (gate-tail vs P-alone) —
+    # instead of the self-referential wf_p25 paired delta.
+    eval_dir = tmp_path / "ranker_eval"
+    eval_dir.mkdir()
+    (eval_dir / "streak.jsonl").write_text(json.dumps(_rec(0.4, "PASS")) + "\n", encoding="utf-8")
+    (eval_dir / "rewire_streak_wfp25.jsonl").write_text(
+        json.dumps(_rewire_rec(0.333, "PASS")) + "\n", encoding="utf-8"
+    )
+    result = runner.invoke(app, ["status", "--data-root", str(tmp_path)])
+    assert result.exit_code == 0, result.stdout
+    assert "gate-tail-lane=ADOPT" in result.stdout
+    assert "wf_p25=" not in result.stdout
 
 
 def test_cmd_status_shows_flip_gate_line(tmp_path: Path) -> None:

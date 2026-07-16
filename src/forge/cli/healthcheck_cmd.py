@@ -715,11 +715,12 @@ def cmd_healthcheck(
     )
     results.append(
         check_learning_drift(
-            # P3.2/D229: read the PAIRED delta (tail Spearman - incumbent), the real
-            # adoption signal — a negative delta means the lane is worse than the
-            # incumbent it would rotate over. Legacy rows (pre-delta) contribute nothing.
-            _read_metric_series(eval_dir / "robustness_streak_wfp25.jsonl", "spearman_delta"),
-            label="wf_p25 drift",
+            # D285 (replacing the retired §8.6 clock's spearman_delta, which became
+            # self-referential after the gate-tail flip): read the re-wire clock's Δ —
+            # the LIVE gate-tail lane's top-K realized WF floor vs the P-alone
+            # baseline. A negative delta means the lane orders worse than P alone.
+            _read_metric_series(eval_dir / "rewire_streak_wfp25.jsonl", "delta"),
+            label="gate-tail drift",
             warn_below=_TAIL_WARN_BELOW,
             critical_below=_TAIL_CRITICAL_BELOW,
             regression_delta=drift_regression_delta,

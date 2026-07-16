@@ -55,13 +55,12 @@ _MAX_CE_CRITERION = 0.20
 _TAIL_SPEARMAN_CRITERION = 0.30
 
 # §8.6 tail PAIRED criterion (P3.1 follow-up / B5). The per-checkpoint PASS margin on the
-# PAIRED statistic — tail-model Spearman minus the incumbent P(component) Spearman on the same
-# rows (`TailEvaluation.spearman_delta`). Replaces the absolute `_TAIL_SPEARMAN_CRITERION`
-# (which rewarded a model that merely tracks a signal the incumbent already ranks). This is now
-# a DISPLAY-only per-checkpoint label; the FLIP/keep gate is the Wald SPRT over the delta
-# history (`status_cmd.tail_flip_gate`, alpha=0.05). +0.05 = a modest "beats the incumbent's
-# ranking" margin — the tail model historically beat P ~+0.23 on verified rows but tied on the
-# unverified majority, so the honest pooled delta is small.
+# PAIRED statistic — tail-model Spearman minus the incumbent Spearman on the same rows
+# (`TailEvaluation.spearman_delta`). DISPLAY-only, printed by `eval-robustness`. D285: the
+# §8.6 streak + its SPRT flip gate are RETIRED — the incumbent column pairs against the
+# recorded production ranking score, which post-gate-tail-flip is the lane's own value, so
+# the delta reads ≈0 by construction; judge the tail on its ABSOLUTE spearman (and the lane
+# on the re-wire clock) until hygiene-incumbent rows (D284) accrue.
 _TAIL_SPEARMAN_DELTA_CRITERION = 0.05
 
 # Gate-then-tail re-wire per-checkpoint PASS margin (docs/proposals/quality-lane-rewire.md).

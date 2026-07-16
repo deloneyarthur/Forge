@@ -367,15 +367,15 @@ criterion margin is set once the shadow distribution is visible.
 — it snapshots the DB, trains BOTH shadow models (`train` for P(component) + `train-robustness
 --target target_wf_p25` for the quality lane's tail-aware model, D191/D192; each atomic-published to
 `~/forge_data/models/`), evaluates (`eval` for the streak + `eval-robustness --gate wf_sharpe_p25`
-for the tail readout), and appends **TWO consecutive-PASS clocks**: the F3 verdict-model streak to
-`~/forge_data/ranker_eval/streak.jsonl`, and the **§8.6 wf_p25 tail-robustness streak to
-`~/forge_data/ranker_eval/robustness_streak_wfp25.jsonl`** (pooled across the daily-rolling tail
-models, since `tail_score` is a `wf_p25` prediction in the same units; PROVISIONAL
-`_TAIL_SPEARMAN_CRITERION`=0.30 / `MIN_FRESH_TAIL`=50, raw spearman+n recorded each row for operator
-re-judging). Both judge a **fresh per-checkpoint window** (verdicts decided since the prior run), NOT
-the cumulative `--since` default — read the clocks there instead of re-deriving them. The F3 verdict
-model is live (D149); the wf_p25 quality lane flips via `--quality-rank` under its own operator gate
-(D104), and the operator may override the §8.6 streak.
+for the observational tail readout), and appends **TWO consecutive-PASS clocks**: the F3
+verdict-model streak to `~/forge_data/ranker_eval/streak.jsonl` (judged on the hygiene incumbent
+once populated, D284 — `margin_source` per row) and the gate-then-tail re-wire streak to
+`~/forge_data/ranker_eval/rewire_streak_wfp25.jsonl`. Both judge a **fresh per-checkpoint window**
+(verdicts decided since the prior run), NOT the cumulative `--since` default — read the clocks
+there instead of re-deriving them. The **§8.6 wf_p25 tail streak**
+(`robustness_streak_wfp25.jsonl`) was **RETIRED 2026-07-16 (D285)**: after the gate-tail flip its
+recorded incumbent was the lane's own ranking score, pinning its paired delta to ≈0 by
+construction; the history file stays on disk.
 
 ### forge ranker-model eval-rewire
 
@@ -455,8 +455,10 @@ forge healthcheck        # or: systemctl --user start forge-healthcheck.service
 Pretty-prints the two curated learning clocks the daily ranker-eval timer writes under
 `~/forge_data/ranker_eval/` — answering "is the stream improving?" at a glance, with no
 `tail|json` spelunking and **no DB access**: the **F3 verdict ranker** (`streak.jsonl`, AUC
-margin over the §6.2 incumbent) and the **§8.6 wf_p25 tail** (`robustness_streak_wfp25.jsonl`,
-Spearman vs the realized worst-quartile gate). Each line shows the latest verdict, the
+margin over the incumbent — hygiene-judged once populated, D284) and the **re-wire gate-tail**
+clock (`rewire_streak_wfp25.jsonl`, Δ of the live lane's top-K realized WF floor vs P-alone).
+The §8.6 wf_p25 tail clock was retired 2026-07-16 (D285, self-referential post gate-tail flip)
+— a tombstone line points at its history file. Each line shows the latest verdict, the
 trailing consecutive-PASS streak (N/3), the latest metric, and an N-checkpoint trend. A
 **`P calibration/floor`** line (P1.3) adds the drift guard: the latest floor-relevant
 calibration verdict + `max_ce` (from the F3 streak) and the gate-tail floor keep-rate
@@ -663,8 +665,9 @@ hand too. Snapshots the live DB to `/tmp`, trains the verdict model AND the tail
 `wf_p25` robustness model (D191/D192, the quality lane's) into a staging dir and **atomically**
 publishes each to `~/forge_data/models/` (the daemon's `load_latest_model` never reads a half-written
 file), evaluates the live shadow models, and appends one JSON row to EACH of two clocks — the F3
-verdict streak `~/forge_data/ranker_eval/streak.jsonl` and the §8.6 wf_p25 tail-robustness streak
-`~/forge_data/ranker_eval/robustness_streak_wfp25.jsonl` (pooled across tail models) — both judged
+verdict streak `~/forge_data/ranker_eval/streak.jsonl` (hygiene-incumbent-judged once populated,
+D284) and the gate-then-tail re-wire streak `~/forge_data/ranker_eval/rewire_streak_wfp25.jsonl`
+(the §8.6 tail streak was retired 2026-07-16, D285) — both judged
 on a fresh per-checkpoint window. Deterministic (no LLM, hard rule #5); telemetry-only — never
 touches grammar/weights/config/ranking. Trap-cleans the snapshot + staging on every exit. No args.
 
@@ -773,7 +776,7 @@ The Crucible rows below are the **Forge-relevant subset**, not Crucible's full u
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict) + `robustness_streak_wfp25.jsonl` (§8.6 wf_p25 tail), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict, hygiene-judged once populated D284) + `rewire_streak_wfp25.jsonl` (gate-tail lane; the §8.6 tail clock retired D285), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:
