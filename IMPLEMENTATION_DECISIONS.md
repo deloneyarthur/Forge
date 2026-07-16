@@ -1455,3 +1455,49 @@ broken series caused (verified live: gate-tail drift OK +0.596, OVERALL=OK 14/14
 MANPAGE updated in all four places. Effective at the next 05:00 timer fire (editable
 install; no service restart needed for script/CLI). Related: [[D284]], [[D252]],
 [[D229]], [[D147]].
+
+## D286 — 2026-07-16 — v37: cohort-read follow-ups BUILT+DEPLOYED — SOXX/LLY/GS/MSTR out of single-name sampling; resid gate draw un-starved (uniform coin, D119 precedent); Q50 durable test-side universe pin. Deploy also ACTIVATES the D284 hygiene-score recording
+
+**Operator go:** "deploy v37 so the hygiene column starts populating" (the staged D283
+items + the D284 activation ride one restart). Scope per
+`docs/proposals/v37-cohort-followups.md`; emission-side only, `rules:` untouched
+(classification #2, enumeration-policy bump). All three items TDD'd.
+
+1. **Exclusions (sampler):** `_STRUCTURALLY_UNTRADEABLE_UNDERLYINGS` += SOXX/LLY/GS/MSTR
+   (Crucible row-45 trailing-window guard: 96.1–99.8% WF-zero on ~1,000-run samples
+   each; their queue-time guard already eats them, so our draws were ~4.4k wasted
+   draws/wk). Same v34/D278 terms: frozen list, re-admission on their relay, retires
+   whole when their liquidity preflight ships. Emission proof: 0 draws for all six
+   excluded names over a 3,000-config cold mix; 114 distinct names drawn (118-pool − 4;
+   BKNG/BRK.B already left the July universe).
+2. **Resid 50/50 (sampler):** the learned regime-gate posteriors (minted when hurst
+   carried the cpcv config) composed onto the D276-pinned two-member pool and starved
+   vix_term_slope to ~94% hurst — on an EXPERIMENTAL two-arm sweep whose spec wants both
+   arms fed (vix is the WF-conversion carrier). Fix: skip the learned-slice for
+   `residual_momentum` at the `_pick_regime` call site → the uniform coin on the pinned
+   pair (the D119 relative_value precedent). Test reproduces the starvation adversarially
+   (4/518 vix pre-fix → ~50/50 post-fix); learned weighting for every other directional
+   untouched.
+3. **Q50 durable fix (test-only):** conftest autouse `_pinned_universe` binds
+   `sampler._load_underlyings` to `tests/fixtures/universe_snapshot.py` (the 07-16 July
+   export, 118 names, fingerprint 260321aaaad60241) — the exact D274 earnings-pin shape,
+   incl. the import-time `_UNIVERSE_EXPORT_DIR` gotcha; `real_universe_loader` re-binds
+   the real cached loader for the 13 loader/fingerprint tests. Live tier exports can no
+   longer move test draws (the class that broke 9 goldens at position 0 in BOTH the v34
+   and v36 deploys). Daemon's live read untouched.
+
+**Golden re-pin (licensed, environment-matched):** all 7 cold-start goldens re-pinned
+via the v36 harness method — OLD code under the pinned environment reproduced every
+constant EXACTLY (environment clean), then NEW code's first divergence per golden was
+verified to be a scoped draw (a single-name underlying; position 0's BMY maps
+identically by index — pool 118→114 shifts index→ticker mapping only from the first
+removed name). The d105/d106 byte-identity baselines now compare against the
+post-exclusion pool (the fallback list carries GS/MSTR — pre-D286 the pools coincided
+by luck). Relational splits re-asserted green.
+
+**Ritual:** v36→v37 bump + archive + integration test pin in the down-window; deploy
+evidence + first-batch audit in STATUS. The restart ALSO activates D284's
+`hygiene_score` recording (first non-NULL rows expected in the first post-restart
+batch) — the F3 streak's hygiene incumbent starts accruing from decided verdicts on
+those rows (~1–2 days). Related: [[D283]], [[D278]], [[D276]], [[D119]], [[D274]],
+[[D284]], Q50 (CLOSES at this deploy).

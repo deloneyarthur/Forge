@@ -56,7 +56,7 @@ def test_auto_tightenings_fingerprint_reflects_active_tightenings(
 
 
 def test_universe_fingerprint_reflects_pool(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, real_universe_loader: object
 ) -> None:
     from forge.enumeration import sampler as s
 

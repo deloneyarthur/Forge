@@ -556,7 +556,14 @@ _EARNINGS_CALENDAR_ETF_INCOMPATIBLE: frozenset[str] = frozenset(
 # whole list retires when their queue-time liquidity preflight ships. NOTE:
 # this cannot keep the names out of cross_sectional_rank baskets (underlying
 # None; the universe is Crucible's) — their preflight is the complete fix.
-_STRUCTURALLY_UNTRADEABLE_UNDERLYINGS: frozenset[str] = frozenset({"BKNG", "BRK.B"})
+# D286 (v37): +SOXX/LLY/GS/MSTR — their row-45 trailing-window guard measures
+# 96.1-99.8% WF-zero on ~1,000-run samples each (all clear the ≥25-runs /
+# ≥95%-exact-zero bar); the guard eats them at queue time, so our draws on
+# them are pure wasted budget (~4.4k draws/wk). Same terms: re-admission on
+# their relay; the list retires whole when their liquidity preflight ships.
+_STRUCTURALLY_UNTRADEABLE_UNDERLYINGS: frozenset[str] = frozenset(
+    {"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR"}
+)
 
 
 def _earnings_gated_pool(underlyings: tuple[str, ...]) -> tuple[str, ...]:
@@ -1413,7 +1420,15 @@ def _select_bucket_directional_regime(
     # (the regime is drawn next), exactly the H4 (hyp, dir)-slice discipline.
     # None/empty → no slice → _pick_regime keeps its D150/uniform draw.
     learned_regime: dict[str, float] | None = None
-    if regime_gate_yield_weights:
+    # D286 (v37): the resid two-arm sweep is an EXPERIMENT — the learned
+    # regime-gate posteriors (minted when hurst carried the cpcv config) compose
+    # onto the D276-pinned two-member pool and starve the vix_term_slope arm
+    # (~94% hurst emission vs the 07-13 two-arm spec; vix is the WF-conversion
+    # carrier). Bypass the composition for this directional — `_pick_regime`
+    # then draws the uniform coin on the pinned pair (the D119 relative_value
+    # precedent: learned weights must not bias an experimental draw). Learned
+    # weighting for every other directional is untouched.
+    if regime_gate_yield_weights and directional_id != _RESID_MOMENTUM_DIRECTIONAL_ID:
         learned_regime = {
             r: w
             for (h, d, b, r), w in regime_gate_yield_weights.items()

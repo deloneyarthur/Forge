@@ -798,7 +798,7 @@ def _pick_underlyings_against_fallback(
         _load_underlyings.cache_clear()
 
 
-def test_d105_underlying_cold_start_byte_identical() -> None:
+def test_d105_underlying_cold_start_byte_identical(real_universe_loader: object) -> None:
     """Hard rule #6: class weights are an ADDED input — absent (None) and empty
     ({}) must reproduce the pre-D105 `rng.choice` sequence exactly."""
     import forge.enumeration.sampler as sampler_mod
@@ -808,7 +808,14 @@ def test_d105_underlying_cold_start_byte_identical() -> None:
     sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d105_test_dir")
     try:
         _load_underlyings.cache_clear()
-        pool = _load_underlyings()
+        # D286 (v37): the baseline draws from the POST-exclusion pool — the
+        # fallback list carries GS/MSTR, which the untradeable filter now eats
+        # (pre-D286 the fallback and filtered pools happened to coincide).
+        pool = tuple(
+            u
+            for u in _load_underlyings()
+            if u not in sampler_mod._STRUCTURALLY_UNTRADEABLE_UNDERLYINGS
+        )
         r1, r2, r3 = random.Random(9), random.Random(9), random.Random(9)
         seq_none = [
             _pick_underlying(r1, "mean_reversion", (), underlying_class_weights=None)
@@ -825,7 +832,9 @@ def test_d105_underlying_cold_start_byte_identical() -> None:
         _load_underlyings.cache_clear()
 
 
-def test_d105_underlying_class_weights_tilt_toward_high_idio_vol() -> None:
+def test_d105_underlying_class_weights_tilt_toward_high_idio_vol(
+    real_universe_loader: object,
+) -> None:
     """A learned high_idio_vol class (component-rate scale ~0.04) must pull the
     draw strongly toward single names while the floor keeps the diversified
     ETFs explorable (evidence keeps flowing to revise the wall-of-zeros)."""
@@ -841,7 +850,9 @@ def test_d105_underlying_class_weights_tilt_toward_high_idio_vol() -> None:
     assert div / (div + high) < 0.05
 
 
-def test_d105_underlying_weights_respect_earnings_etf_exclusion() -> None:
+def test_d105_underlying_weights_respect_earnings_etf_exclusion(
+    real_universe_loader: object,
+) -> None:
     """T1.4 invariant survives the weighted path: with days_to_earnings in the
     regime, Tier-1 ETFs stay out of the pool regardless of class weights."""
     from forge.enumeration.sampler import _TIER_1_ETF_UNDERLYINGS
@@ -977,7 +988,9 @@ def test_sampler_raises_when_no_sizer_mode_is_samplable(grammar: Grammar) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_load_underlyings_returns_fallback_when_no_export(tmp_path: Path) -> None:
+def test_load_underlyings_returns_fallback_when_no_export(
+    tmp_path: Path, real_universe_loader: object
+) -> None:
     """D078: when universe export is absent, fallback list is used."""
     from forge.enumeration.sampler import (
         _FALLBACK_TIER_1_2_UNDERLYINGS,
@@ -998,7 +1011,7 @@ def test_load_underlyings_returns_fallback_when_no_export(tmp_path: Path) -> Non
         _load_underlyings.cache_clear()
 
 
-def test_load_underlyings_reads_export(tmp_path: Path) -> None:
+def test_load_underlyings_reads_export(tmp_path: Path, real_universe_loader: object) -> None:
     """D078 / Q23 (contracts 1.13.0): tickers load from `universe_tickers.json`
     in the export dir via the blessed contracts helper."""
     import json as json_mod
@@ -1028,7 +1041,7 @@ def test_load_underlyings_reads_export(tmp_path: Path) -> None:
 
 
 def test_m13_unreadable_export_logs_drift_warning(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], real_universe_loader: object
 ) -> None:
     """M-13: a present-but-unparseable universe export logs a distinct drift
     WARNING (not silent) before falling back — separate from the expected
@@ -1069,7 +1082,7 @@ def test_m13_unreadable_export_logs_drift_warning(
 # ---------------------------------------------------------------------------
 
 
-def test_d106_name_weights_override_class_within_pool() -> None:
+def test_d106_name_weights_override_class_within_pool(real_universe_loader: object) -> None:
     """A learned-hot name (AAPL-like) must outdraw its class peers; names
     without a name-level weight keep the class weight (the fallback chain)."""
     import forge.enumeration.sampler as sampler_mod
@@ -1104,7 +1117,7 @@ def test_d106_name_weights_override_class_within_pool() -> None:
         _load_underlyings.cache_clear()
 
 
-def test_d106_name_weights_cold_start_byte_identical() -> None:
+def test_d106_name_weights_cold_start_byte_identical(real_universe_loader: object) -> None:
     """Both underlying maps empty -> the pre-D105 uniform rng.choice sequence."""
     import forge.enumeration.sampler as sampler_mod
     from forge.enumeration.sampler import _load_underlyings, _pick_underlying
@@ -1113,7 +1126,12 @@ def test_d106_name_weights_cold_start_byte_identical() -> None:
     sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d106_test_dir")
     try:
         _load_underlyings.cache_clear()
-        pool = _load_underlyings()
+        # D286 (v37): baseline = the post-exclusion pool (see the D105 test).
+        pool = tuple(
+            u
+            for u in _load_underlyings()
+            if u not in sampler_mod._STRUCTURALLY_UNTRADEABLE_UNDERLYINGS
+        )
         r1, r2 = random.Random(11), random.Random(11)
         seq = [
             _pick_underlying(
@@ -1332,7 +1350,7 @@ def _pick_underlyings_with_discount(
         _load_underlyings.cache_clear()
 
 
-def test_h4_discount_cold_start_byte_identical() -> None:
+def test_h4_discount_cold_start_byte_identical(real_universe_loader: object) -> None:
     """Hard rule #6: the factor-cell discount is an ADDED input — None and {}
     must reproduce the D105/D106 weighted draw (and, transitively, the pre-D105
     uniform draw) exactly."""
@@ -1376,7 +1394,7 @@ def test_h4_discount_cold_start_byte_identical() -> None:
         _load_underlyings.cache_clear()
 
 
-def test_h4_discount_tilts_draw_away_from_crowded_name() -> None:
+def test_h4_discount_tilts_draw_away_from_crowded_name(real_universe_loader: object) -> None:
     """A discount on an over-mined NAME (AAPL) cuts its draw share; the freed mass
     redistributes to the peer names in the same pool — 'reward the marginal
     orthogonal sleeve' at the granularity the 36-on-AAPL concentration lives."""
@@ -1390,7 +1408,7 @@ def test_h4_discount_tilts_draw_away_from_crowded_name() -> None:
     assert sum(disc.values()) == sum(base.values())
 
 
-def test_h4_discount_preserves_exploration_floor() -> None:
+def test_h4_discount_preserves_exploration_floor(real_universe_loader: object) -> None:
     """Even a maximal discount on a name can't drive it below the sampler's
     exploration floor — an over-mined name stays explorable so evidence keeps
     flowing to revise its discount (the discount is applied BEFORE the floor)."""
@@ -1405,7 +1423,7 @@ def test_h4_discount_preserves_exploration_floor() -> None:
 
 
 def test_h4_discount_slices_by_hypothesis_and_directional_in_sample_config(
-    grammar: Grammar, registry: RegistrySnapshot
+    grammar: Grammar, registry: RegistrySnapshot, real_universe_loader: object
 ) -> None:
     """Through `sample_config`: the (hyp, dir, name) map is sliced by the CHOSEN
     (hypothesis, directional) before reaching the underlying draw, so a discount
@@ -1709,21 +1727,27 @@ _COHORT_TREND = "trend_continuation"
 # (b) Crucible's 2026-07-16T08:27:54Z July tier export (-FCX/WBD/WDC/VIX/
 # BKNG/XLY/XLB, +APH/MDT) landed mid-deploy and moved underlying draws —
 # the Q50 live-export coupling, second environment hit in two days.
+# D286 (v37): re-pinned — the SOXX/LLY/GS/MSTR untradeable-name exclusion
+# shifts the single-name underlying draw (pool 118->114; licensing harness
+# environment-matched: OLD code reproduced every constant exactly, and each
+# first divergence is a single-name draw — position 0's BMY maps identically
+# by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
+# Relational splits re-asserted by the tests below.
 _COHORT_GOLDEN_PRE_REFACTOR = [
     "dc125d8f4e014630",
     "4710371b04fac3d0",
     "41a6490720e28408",
     "174df1ffb521246b",
     "d4719affe73e6187",
-    "5f24952395537021",
+    "df028f4253e1a090",
     "766ce2e829e37b6e",
-    "d86bdb1ea24708e8",
+    "40941d81eaa3feb0",
     "984a82a4a1ece90a",
     "8df00579f3560af0",
     "f24bb37927105256",
     "321c2ab518dda26a",
     "93143e12c13eda9c",
-    "39e700b1a50041d6",
+    "639fdbf61e8a45c3",
     "3a3f40a4cddf33d0",
 ]
 
@@ -1925,21 +1949,27 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # under the SAME universe first diverges at attempt 2), and the 07-16 universe
 # export shrink independently moved underlying draws (Q50). none_run ==
 # empty_run re-verified under v36.
+# D286 (v37): re-pinned — the SOXX/LLY/GS/MSTR untradeable-name exclusion
+# shifts the single-name underlying draw (pool 118->114; licensing harness
+# environment-matched: OLD code reproduced every constant exactly, and each
+# first divergence is a single-name draw — position 0's BMY maps identically
+# by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
+# Relational splits re-asserted by the tests below.
 _REGIME_GOLDEN_PRE = [
     "6bfa51eb7329103c",
-    "ade33963ff5205f5",
+    "704bd0ae2ae8ebc4",
     "8d06c6fe4757ddd5",
     "d7bbe58b9d44d96c",
     "2b624f2afa4c3c22",
     "617ffeebf9ccda8b",
-    "313fe9b681c10f94",
-    "9b850879d651a434",
-    "2d3e8e18dd820ded",
+    "3d0ac225cbcd0a26",
+    "56e6a793104491be",
+    "0628984763d514ab",
     "c757c989e2a95524",
-    "6d646bed0780ad37",
+    "f6ff4f6ec4bd71a9",
     "bde6a02b5bbbaa85",
-    "ef858b680404b71e",
-    "3c5fed6c027d97bd",
+    "58b675ee45b27670",
+    "3ac2ebb7b47e0085",
     "bdabe1c70fdd187f",
 ]
 
@@ -2164,21 +2194,27 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # new code under the SAME universe first diverges at attempt 2) + the 07-16
 # universe export shrink (Q50). Under these pins the PRE-vs-DSJ split sits at
 # position 3 (the first eligible trend config), as pre-v36.
+# D286 (v37): re-pinned — the SOXX/LLY/GS/MSTR untradeable-name exclusion
+# shifts the single-name underlying draw (pool 118->114; licensing harness
+# environment-matched: OLD code reproduced every constant exactly, and each
+# first divergence is a single-name draw — position 0's BMY maps identically
+# by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
+# Relational splits re-asserted by the tests below.
 _REGIME_GOLDEN_DSJ_ACTIVE = [
     "6bfa51eb7329103c",
-    "ade33963ff5205f5",
+    "704bd0ae2ae8ebc4",
     "8d06c6fe4757ddd5",
     "68af2ceaeca546ae",
     "8b246f11f1401ba8",
-    "42c89c36d9667a8f",
-    "c0d74dad6647d37d",
+    "905ea76a10f7c8ce",
+    "cbc0f93dbf3631e3",
     "5db3d6e6cc9179cc",
     "fee451ce01b630e1",
-    "a8d94323174c6adc",
-    "8e111fbee647ed9e",
-    "c03e10503ac53b9c",
-    "cb0d91fc690e2e5b",
-    "0a893192a5b84c49",
+    "836ae20b650be520",
+    "592d2ea41ec1870a",
+    "2b6ce44e8d06338d",
+    "84e4afc7fa2566cd",
+    "fcad61c25fad3d32",
     "abbd4f45df5a18ca",
 ]
 
@@ -2321,21 +2357,27 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # D282 (v36): re-pinned — scoped n_bars attempts at 2, 9 & 12 (licensing:
 # first old-vs-new divergence == attempt 2 under the SAME universe) + the
 # 07-16 universe export shrink (Q50).
+# D286 (v37): re-pinned — the SOXX/LLY/GS/MSTR untradeable-name exclusion
+# shifts the single-name underlying draw (pool 118->114; licensing harness
+# environment-matched: OLD code reproduced every constant exactly, and each
+# first divergence is a single-name draw — position 0's BMY maps identically
+# by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
+# Relational splits re-asserted by the tests below.
 _REGIME_GOLDEN_V26_ACTIVE = [
     "6bfa51eb7329103c",
-    "ade33963ff5205f5",
+    "704bd0ae2ae8ebc4",
     "8d06c6fe4757ddd5",
     "68af2ceaeca546ae",
     "8b246f11f1401ba8",
-    "42c89c36d9667a8f",
-    "c0d74dad6647d37d",
+    "905ea76a10f7c8ce",
+    "cbc0f93dbf3631e3",
     "b8f9352489908472",
     "ea87585eac26b540",
     "05c511fff6b980da",
-    "73e9eae21dae69b6",
+    "46855ad3cd256da9",
     "9bab5b0304e7191c",
     "4ab710e17ad72e09",
-    "5627651ac026a378",
+    "e26cfc7734b1eb1e",
     "e603bcafd6443537",
 ]
 
@@ -2478,22 +2520,28 @@ def test_d264_new_ids_dormant_without_registry(
 # 9 (the resid concentration reshapes the earlier trend positions' buckets;
 # licensing: first old-vs-new divergence == attempt 9 under the SAME universe)
 # + the 07-16 universe export shrink (Q50), which moved earlier positions too.
+# D286 (v37): re-pinned — the SOXX/LLY/GS/MSTR untradeable-name exclusion
+# shifts the single-name underlying draw (pool 118->114; licensing harness
+# environment-matched: OLD code reproduced every constant exactly, and each
+# first divergence is a single-name draw — position 0's BMY maps identically
+# by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
+# Relational splits re-asserted by the tests below.
 _REGIME_GOLDEN_V27_ACTIVE = [
     "6bfa51eb7329103c",
-    "ade33963ff5205f5",
+    "704bd0ae2ae8ebc4",
     "5b374a94041abba3",
     "403a8cec4775355a",
-    "3e97c520c29c5072",
-    "f067fcdeb209c584",
-    "b0ddcf9b2c8297ca",
-    "20474cf2a09dd1eb",
-    "fb5e9145393cd567",
-    "2415fb52cd0b5438",
-    "6ee9788b24c34f94",
-    "9a4b64cc038a39f8",
+    "37c98654d1c3322b",
+    "65ddcd7e5c8faf42",
+    "de4b912adc249490",
+    "55c250b06c8403df",
+    "aff3d95820756635",
+    "28732ba139c413b0",
+    "0f369fa617bd667d",
+    "dda3641fd58ac73a",
     "7a88edfbcdac0b97",
-    "8b631f575b995700",
-    "75cbd26f612e923d",
+    "0f6c9737b34d7901",
+    "2a959b6cc8a25d59",
 ]
 
 
@@ -2697,21 +2745,27 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # _REGIME_GOLDEN_V26_ACTIVE) + the 07-16 universe export shrink (Q50); the
 # mutual V26/V29 split sits at position 7 under these pins, prefix relation
 # [:3] preserved and asserted.
+# D286 (v37): re-pinned — the SOXX/LLY/GS/MSTR untradeable-name exclusion
+# shifts the single-name underlying draw (pool 118->114; licensing harness
+# environment-matched: OLD code reproduced every constant exactly, and each
+# first divergence is a single-name draw — position 0's BMY maps identically
+# by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
+# Relational splits re-asserted by the tests below.
 _REGIME_GOLDEN_V29_ACTIVE = [
     "6bfa51eb7329103c",
-    "ade33963ff5205f5",
+    "704bd0ae2ae8ebc4",
     "8d06c6fe4757ddd5",
     "68af2ceaeca546ae",
     "8b246f11f1401ba8",
-    "42c89c36d9667a8f",
-    "c0d74dad6647d37d",
+    "905ea76a10f7c8ce",
+    "cbc0f93dbf3631e3",
     "9473b2354f914bfd",
     "ea87585eac26b540",
     "05c511fff6b980da",
-    "73e9eae21dae69b6",
+    "46855ad3cd256da9",
     "9bab5b0304e7191c",
     "61be7f02f5f7453d",
-    "c62cab0f1a4fe7c4",
+    "76aef8db4e57771a",
     "59f10afe89ab9c28",
 ]
 
@@ -2906,21 +2960,27 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # veto-frozen D270 box) + the 07-16 universe export shrink (Q50); the mutual
 # V29/V31 split sits at position 13 under these pins, prefix relation [:3]
 # preserved and asserted.
+# D286 (v37): re-pinned — the SOXX/LLY/GS/MSTR untradeable-name exclusion
+# shifts the single-name underlying draw (pool 118->114; licensing harness
+# environment-matched: OLD code reproduced every constant exactly, and each
+# first divergence is a single-name draw — position 0's BMY maps identically
+# by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
+# Relational splits re-asserted by the tests below.
 _REGIME_GOLDEN_V31_ACTIVE = [
     "6bfa51eb7329103c",
-    "ade33963ff5205f5",
+    "704bd0ae2ae8ebc4",
     "8d06c6fe4757ddd5",
     "68af2ceaeca546ae",
     "8b246f11f1401ba8",
-    "42c89c36d9667a8f",
-    "c0d74dad6647d37d",
+    "905ea76a10f7c8ce",
+    "cbc0f93dbf3631e3",
     "9473b2354f914bfd",
     "ea87585eac26b540",
     "05c511fff6b980da",
-    "73e9eae21dae69b6",
+    "46855ad3cd256da9",
     "9bab5b0304e7191c",
     "61be7f02f5f7453d",
-    "01956de8589578ac",
+    "b09bcb5c1212cc90",
     "59f10afe89ab9c28",
 ]
 
@@ -2943,3 +3003,78 @@ def test_d270_capitulation_active_cold_start_golden(
         if any(s.role == "directional" and s.indicators == ("momentum",) for s in c.signals)
     ]
     assert carriers, "no capitulation genome in the first 30 draws"
+
+
+# ---------------------------------------------------------------------------
+# D286 (v37) — cohort-read follow-ups: 4 outcome-starved names out of
+# single-name sampling; the resid two-arm gate draw un-starved (uniform coin,
+# the D119 "learned weights must not bias an experimental draw" precedent);
+# the conftest universe pin (Q50 durable fix) asserted active.
+# ---------------------------------------------------------------------------
+
+
+def test_v37_untradeable_names_never_drawn() -> None:
+    """D286 (v37): SOXX/LLY/GS/MSTR join the structurally-untradeable exclusion
+    (Crucible row-45 trailing-window guard: 96.1-99.8% WF-zero on ~1,000-run
+    samples each) — the single-name draw must never emit them. Same terms as the
+    D278 frozen list: re-admission on Crucible's relay only."""
+    from forge.enumeration.sampler import _pick_underlying
+
+    rng = random.Random(0xD286)
+    drawn = {_pick_underlying(rng, "volatility_event", ()) for _ in range(4000)}
+    assert drawn.isdisjoint({"SOXX", "LLY", "GS", "MSTR"})
+    # Sanity: the draw still covers most of the pinned 118-name July universe.
+    assert len(drawn) > 80
+
+
+def test_v37_resid_gate_mix_ignores_learned_weights(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """D286 (v37): the resid two-arm sweep is an EXPERIMENT — adversarial learned
+    regime-gate weights (hurst minting, vix_term_slope crushed) must NOT starve
+    the vix arm. The pinned pair draws a uniform coin (D119 precedent), so the
+    emitted resid gate mix stays ~50/50 regardless of the posteriors that starved
+    it to ~94% hurst in production (Crucible's 07-16 cohort read)."""
+    from collections import Counter
+
+    reg = _v27_registry(registry)  # serves residual_momentum + vix_term_slope
+    space = build_search_space(grammar, reg)
+    weights: dict[tuple[str, str, str, str], float] = {}
+    for d in space.directional_indicators_by_hypothesis["trend_continuation"]:
+        for b in space.dte_buckets:
+            weights[("trend_continuation", d, b, "hurst")] = 0.50
+            weights[("trend_continuation", d, b, "vix_term_slope")] = 0.001
+
+    gates: Counter[str] = Counter()
+    for seed in range(3000):
+        cfg = sample_config(
+            space,
+            reg,
+            random.Random(seed),
+            forced_hypothesis="trend_continuation",
+            regime_gate_yield_weights=weights,
+        )
+        directional = next(s for s in cfg.signals if s.role == "directional")
+        if directional.indicators[0] != "residual_momentum":
+            continue
+        regime = next((s for s in cfg.signals if s.role == "regime_filter"), None)
+        if regime is None:
+            continue
+        gates[regime.indicators[0]] += 1
+
+    total = gates.get("hurst", 0) + gates.get("vix_term_slope", 0)
+    assert total >= 100, f"too few resid draws to judge the mix: {gates}"
+    vix_share = gates.get("vix_term_slope", 0) / total
+    assert 0.35 < vix_share < 0.65, f"vix arm starved/flooded despite the pin: {gates}"
+
+
+def test_v37_universe_pin_active_by_default() -> None:
+    """Q50 durable fix (D286/v37): the conftest autouse pin freezes the sampler
+    universe to the 2026-07-16 export snapshot — a live tier export can no longer
+    move test draws (the class that broke 9 goldens at position 0 in both the v34
+    and v36 deploys ends here)."""
+    import forge.enumeration.sampler as sampler_mod
+    from tests.fixtures.universe_snapshot import UNIVERSE_SNAPSHOT_2026_07_16
+
+    assert sampler_mod._load_underlyings() == UNIVERSE_SNAPSHOT_2026_07_16
+    assert len(UNIVERSE_SNAPSHOT_2026_07_16) == 118

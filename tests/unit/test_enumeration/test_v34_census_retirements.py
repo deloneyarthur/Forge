@@ -70,7 +70,11 @@ def test_v34_untradeable_exclusion_applies_to_the_pool_itself() -> None:
     the exclusion filters the pool BEFORE any draw, on both branches."""
     import forge.enumeration.sampler as sampler_mod
 
-    assert frozenset({"BKNG", "BRK.B"}) == sampler_mod._STRUCTURALLY_UNTRADEABLE_UNDERLYINGS
+    # D286 (v37): +SOXX/LLY/GS/MSTR — the row-45 trailing-window guard cohort.
+    assert (
+        frozenset({"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR"})
+        == sampler_mod._STRUCTURALLY_UNTRADEABLE_UNDERLYINGS
+    )
 
 
 # --- item 2: gamma_flip retired as a regime gate everywhere --------------------

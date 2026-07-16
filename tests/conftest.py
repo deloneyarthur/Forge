@@ -43,3 +43,45 @@ def _dormant_earnings_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
     import forge.enumeration.sampler as sampler_mod
 
     monkeypatch.setattr(sampler_mod, "_load_earnings_covered_symbols", lambda: ())
+
+
+@pytest.fixture(autouse=True)
+def _pinned_universe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the sampler's underlying pool to the frozen 2026-07-16 snapshot — for
+    every test (Q50 durable fix, D286/v37; the universe half of the D274 pattern).
+
+    Same import-time gotcha as the earnings pin above: `_UNIVERSE_EXPORT_DIR` is
+    resolved when `sampler` is imported, so `_load_underlyings()` reads the
+    operator's LIVE `universe_tickers*.json` inside test runs — Crucible's July
+    tier export landed 17 minutes before the v36 deploy gate and broke 9 goldens
+    at position 0 (the second live-export bite in two days; v34's was the first).
+    Tests that exercise the loader/fingerprint paths re-bind the real function via
+    `real_universe_loader`; tests that pin their own pool (e.g. event_momentum)
+    override this default per-test as before.
+    """
+    import forge.enumeration.sampler as sampler_mod
+    from tests.fixtures.universe_snapshot import UNIVERSE_SNAPSHOT_2026_07_16
+
+    monkeypatch.setattr(sampler_mod, "_load_underlyings", lambda: UNIVERSE_SNAPSHOT_2026_07_16)
+
+
+@pytest.fixture
+def real_universe_loader(_pinned_universe: None, monkeypatch: pytest.MonkeyPatch) -> object:
+    """Re-bind the REAL cached `_load_underlyings` (undoing the autouse pin) for
+    loader/fingerprint tests. Depends on `_pinned_universe` so the re-bind is
+    ordered after the pin; returns the original function object (which carries
+    `cache_clear`)."""
+    import forge.enumeration.sampler as sampler_mod
+
+    monkeypatch.setattr(sampler_mod, "_load_underlyings", _REAL_LOAD_UNDERLYINGS)
+    return _REAL_LOAD_UNDERLYINGS
+
+
+def _capture_real_loader() -> object:
+    import forge.enumeration.sampler as sampler_mod
+
+    return sampler_mod._load_underlyings
+
+
+# Captured at conftest import — before any fixture patches the module attr.
+_REAL_LOAD_UNDERLYINGS = _capture_real_loader()
