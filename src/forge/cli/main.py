@@ -2408,6 +2408,13 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         # artifact in {forge_data}/models = normal pre-training state, 0 rows).
         from forge.ranking.shadow import run_shadow_scoring
 
+        # Comparator fix: `composite_score` stores whatever score production ordered
+        # by — under gate-tail mode that is the lane's own value, so evals reading it
+        # as "the incumbent" compare the lane against itself. Record the model-free
+        # §6.2 hygiene composite (prior slot zeroed) as the stable incumbent.
+        def _hygiene_score(report: PreFilterReport) -> float:
+            return ranker.score(report, 0.0)
+
         shadow_count = run_shadow_scoring(
             conn,
             models_dir=forge_db_path.parent / "models",
@@ -2419,6 +2426,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             # robustness artifact was retrained last, so the §8.6 streak (D191/D192)
             # measures the right model. Telemetry only — never changes submissions.
             robustness_target="target_wf_p25",
+            hygiene_scorer=_hygiene_score,
         )
         if shadow_count:
             typer.echo(f"shadow_scores={shadow_count}")

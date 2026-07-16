@@ -98,6 +98,62 @@ def _seed(
         record_verdicts(conn, [_gated_run(config_hash=config_hash, decision=decision)])
 
 
+def _seed_hygiene(
+    conn: duckdb.DuckDBPyConnection,
+    rows: list[tuple[str, float, float, float | None, str]],
+    *,
+    model_id: str = "aaaa1111bbbb2222",
+) -> None:
+    """rows: (config_hash, model_score, composite_score, hygiene_score|None, decision).
+    None hygiene = a row recorded before the comparator fix (column NULL)."""
+    for config_hash, model_score, composite_score, hygiene_score, decision in rows:
+        candidate_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
+            "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
+            [candidate_id, str(uuid.uuid4()), config_hash, _SINCE, "gated"],
+        )
+        conn.execute(
+            "INSERT INTO shadow_scores (forge_candidate_id, model_id, model_score, "
+            "composite_score, hygiene_score, scored_at) VALUES (?, ?, ?, ?, ?, ?)",
+            [candidate_id, model_id, model_score, composite_score, hygiene_score, _SINCE],
+        )
+        record_verdicts(conn, [_gated_run(config_hash=config_hash, decision=decision)])
+
+
+def test_hygiene_incumbent_mode_uses_hygiene_column_on_paired_rows() -> None:
+    """incumbent="hygiene" judges against the model-free §6.2 composite, restricted to
+    rows that carry it (paired window) — rows predating the column are excluded, and
+    the default mode is unchanged (all rows, ranking-score incumbent)."""
+    rows: list[tuple[str, float, float, float | None, str]] = [
+        # composite (ranking score) inverted; hygiene ranks perfectly.
+        ("bbbb000000000001", 0.9, 0.1, 0.9, "component"),
+        ("bbbb000000000002", 0.8, 0.2, 0.8, "component"),
+        ("bbbb000000000003", 0.2, 0.8, 0.2, "reject"),
+        ("bbbb000000000004", 0.1, 0.9, 0.1, "reject"),
+        # pre-column row: NULL hygiene, must not enter the hygiene-mode window.
+        ("bbbb000000000005", 0.7, 0.9, None, "reject"),
+    ]
+    with db_connection() as conn:
+        _seed_hygiene(conn, rows)
+        ranking = evaluate_shadow(conn, since=_SINCE)
+        hygiene = evaluate_shadow(conn, since=_SINCE, incumbent="hygiene")
+
+    assert len(ranking) == 1
+    assert ranking[0].n_decided == 5
+    assert len(hygiene) == 1
+    ev = hygiene[0]
+    assert ev.n_decided == 4
+    assert ev.model_auc == pytest.approx(1.0)
+    assert ev.incumbent_auc == pytest.approx(1.0)
+    assert ev.auc_margin == pytest.approx(0.0)
+
+
+def test_evaluate_shadow_rejects_unknown_incumbent() -> None:
+    with db_connection() as conn, pytest.raises(ValueError, match="incumbent"):
+        evaluate_shadow(conn, since=_SINCE, incumbent="bogus")
+
+
 def test_perfect_model_beats_inverted_incumbent() -> None:
     rows = [
         ("aaaa000000000001", 0.9, 0.1, "component"),

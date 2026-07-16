@@ -28,13 +28,14 @@ from forge.ranking.model import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from datetime import datetime
     from pathlib import Path
 
     import duckdb
     from crucible_contracts import RegistrySnapshot
 
+    from forge.prefilters.types import PreFilterReport
     from forge.ranking.types import RankedCandidate
 
 _LOG = structlog.get_logger(__name__)
@@ -49,6 +50,7 @@ def run_shadow_scoring(
     batch_id: str,
     scored_at: datetime,
     robustness_target: str | None = None,
+    hygiene_scorer: Callable[[PreFilterReport], float] | None = None,
 ) -> int:
     """Record shadow scores for the batch's submitted candidates; never raises.
 
@@ -56,6 +58,12 @@ def run_shadow_scoring(
     with the daily-retrained cpcv model); ``None`` keeps the original target-blind
     "newest" behavior. The production loop passes ``target_wf_p25`` so the §8.6 streak
     measures the model the quality lane uses (D191/D192).
+
+    ``hygiene_scorer`` records the model-free §6.2 hygiene composite per row
+    (comparator fix): ``composite_score`` stores whatever score production ordered
+    by — under gate-tail mode that is the lane's own value, which turns any eval
+    reading it as "the incumbent" self-referential. ``None`` (pre-fix callers)
+    leaves the column NULL.
     """
     try:
         model = load_latest_model(models_dir)
@@ -86,10 +94,13 @@ def run_shadow_scoring(
                 tail_score = (
                     score_robustness(robustness, features) if robustness is not None else None
                 )
+                hygiene_score = (
+                    hygiene_scorer(candidate.report) if hygiene_scorer is not None else None
+                )
                 conn.execute(
                     "INSERT OR IGNORE INTO shadow_scores (forge_candidate_id, model_id, "
-                    "model_score, composite_score, scored_at, tail_score, tail_model_id) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "model_score, composite_score, scored_at, tail_score, tail_model_id, "
+                    "hygiene_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         str(candidate_id),
                         model.model_id,
@@ -98,6 +109,7 @@ def run_shadow_scoring(
                         scored_at,
                         tail_score,
                         tail_model_id,
+                        hygiene_score,
                     ],
                 )
                 recorded += 1

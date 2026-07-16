@@ -142,6 +142,12 @@ if streak_log_path.exists():
 with db_connection(Path(snap)) as conn:
     cumulative = evaluate_shadow(conn, since=CLEAN_ERA_LABEL_CUT)
     fresh_evals = evaluate_shadow(conn, since=since_fresh)
+    # Comparator fix: the same fresh window judged against the model-free §6.2 hygiene
+    # composite (paired rows only). Under gate-tail mode the legacy incumbent
+    # (composite_score) is the lane's OWN value — self-referential — so the streak
+    # judges on the hygiene incumbent as soon as it carries a qualifying window;
+    # empty until the post-fix daemon populates the column (needs a service restart).
+    fresh_hygiene = evaluate_shadow(conn, since=since_fresh, incumbent="hygiene")
 
 print(f"  [cumulative since {CLEAN_ERA_LABEL_CUT.isoformat()} -- matches manual CLI]")
 for ev in cumulative:
@@ -149,6 +155,11 @@ for ev in cumulative:
 print(f"  [fresh since {since_fresh.isoformat()} -- drives the streak]")
 for ev in fresh_evals:
     print(show(ev))
+print("  [fresh, hygiene incumbent -- judges the streak once populated]")
+for ev in fresh_hygiene:
+    print(show(ev))
+if not fresh_hygiene:
+    print("    (no hygiene-scored rows yet -- column populates after the next restart)")
 
 if not fresh_evals:
     print("  no shadow-scored verdicts decided in the fresh window -- nothing to record")
@@ -158,26 +169,43 @@ if not fresh_evals:
 # and scoring over the last checkpoint. A model trained moments ago has 0 decided.
 dominant = max(fresh_evals, key=lambda e: e.n_decided)
 fresh_decided = sum(e.n_decided for e in fresh_evals)
-verdict = verdict_of(dominant)
-qualifies = fresh_decided >= min_fresh and verdict in ("PASS", "FAIL")
+hygiene_decided = sum(e.n_decided for e in fresh_hygiene)
+dominant_hygiene = max(fresh_hygiene, key=lambda e: e.n_decided) if fresh_hygiene else None
+# Judge on the hygiene incumbent when its window is data-sufficient on its own terms;
+# otherwise the legacy ranking-score incumbent (and say which in `margin_source`).
+use_hygiene = (
+    dominant_hygiene is not None
+    and hygiene_decided >= min_fresh
+    and verdict_of(dominant_hygiene) in ("PASS", "FAIL")
+)
+judged = dominant_hygiene if use_hygiene else dominant
+judged_decided = hygiene_decided if use_hygiene else fresh_decided
+verdict = verdict_of(judged)
+qualifies = judged_decided >= min_fresh and verdict in ("PASS", "FAIL")
 
 record = {
     "ts": utc_now().isoformat(),
     "window_since": since_fresh.isoformat(),
-    "dominant_model": dominant.model_id,
-    "fresh_decided": fresh_decided,
-    "n_positive": dominant.n_positive,
-    "model_auc": dominant.model_auc,
-    "incumbent_auc": dominant.incumbent_auc,
-    "auc_margin": dominant.auc_margin,
+    "dominant_model": judged.model_id,
+    "fresh_decided": judged_decided,
+    "n_positive": judged.n_positive,
+    "model_auc": judged.model_auc,
+    "incumbent_auc": judged.incumbent_auc,
+    "auc_margin": judged.auc_margin,
     "verdict": verdict,
     "qualifies": qualifies,
     "n_models_fresh": len(fresh_evals),
+    # Comparator provenance: which incumbent judged this row, plus both margins for
+    # continuity (the legacy view keeps the pre-fix series comparable).
+    "margin_source": "hygiene" if use_hygiene else "ranking",
+    "ranking_auc_margin": dominant.auc_margin,
+    "hygiene_auc_margin": dominant_hygiene.auc_margin if dominant_hygiene else None,
+    "hygiene_fresh_decided": hygiene_decided,
     # P1.3 calibration telemetry (tracks drift across checkpoints; gates no live behavior).
-    "model_ece": dominant.model_ece,
-    "model_max_ce": dominant.model_max_ce,
-    "model_ece_platt": dominant.model_ece_platt,
-    "calibration_verdict": shadow_calibration_verdict(dominant, max_ce_criterion=CAL_CRIT),
+    "model_ece": judged.model_ece,
+    "model_max_ce": judged.model_max_ce,
+    "model_ece_platt": judged.model_ece_platt,
+    "calibration_verdict": shadow_calibration_verdict(judged, max_ce_criterion=CAL_CRIT),
 }
 with streak_log_path.open("a") as fh:
     fh.write(json.dumps(record) + "\n")
@@ -194,16 +222,17 @@ for line in reversed([ln for ln in streak_log_path.read_text().splitlines() if l
     else:
         break
 
-tail = "" if qualifies else f"  (NOT counted: fresh={fresh_decided}<{min_fresh} or verdict={verdict})"
+tail = "" if qualifies else f"  (NOT counted: fresh={judged_decided}<{min_fresh} or verdict={verdict})"
 print(
-    f"daily-ranker-eval: dominant={dominant.model_id} verdict={verdict} "
-    f"fresh_decided={fresh_decided} -> consecutive PASS streak = {streak}/3{tail}"
+    f"daily-ranker-eval: dominant={judged.model_id} verdict={verdict} "
+    f"incumbent={record['margin_source']} "
+    f"fresh_decided={judged_decided} -> consecutive PASS streak = {streak}/3{tail}"
 )
 # P1.3 calibration readout (the floor-relevant co-primary; telemetry only).
-mce = "n/a" if dominant.model_max_ce is None else f"{dominant.model_max_ce:.3f}"
-plt = "n/a" if dominant.model_ece_platt is None else f"{dominant.model_ece_platt:.3f}"
+mce = "n/a" if judged.model_max_ce is None else f"{judged.model_max_ce:.3f}"
+plt = "n/a" if judged.model_ece_platt is None else f"{judged.model_ece_platt:.3f}"
 print(
-    f"daily-ranker-eval: calibration ece={dominant.model_ece:.4f} max_ce={mce} "
+    f"daily-ranker-eval: calibration ece={judged.model_ece:.4f} max_ce={mce} "
     f"ece_platt={plt} verdict={record['calibration_verdict']} (max_ce<={CAL_CRIT})"
 )
 PY

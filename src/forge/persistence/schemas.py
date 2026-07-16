@@ -175,6 +175,13 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     # live DB picks them up at the next service restart.
     "ALTER TABLE shadow_scores ADD COLUMN IF NOT EXISTS tail_score DOUBLE",
     "ALTER TABLE shadow_scores ADD COLUMN IF NOT EXISTS tail_model_id VARCHAR(64)",
+    # Comparator fix — the model-free §6.2 hygiene composite (prior slot zeroed),
+    # recorded next to `composite_score` because that column stores whatever score the
+    # production ranker ordered by: under gate-tail mode (P1.1) that is the lane's own
+    # value, so evals reading it as "the incumbent" compare the lane against itself.
+    # This column is the stable incumbent across lane-mode flips. NULL for rows recorded
+    # before the fix / before the daemon restart that activates it.
+    "ALTER TABLE shadow_scores ADD COLUMN IF NOT EXISTS hygiene_score DOUBLE",
 )
 
 TABLE_NAMES: Final[frozenset[str]] = frozenset(

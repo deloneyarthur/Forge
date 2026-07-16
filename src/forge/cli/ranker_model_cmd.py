@@ -243,6 +243,10 @@ def cmd_eval(
 
     with db_connection(forge_db) as conn:
         evaluations = evaluate_shadow(conn, since=cut)
+        # Comparator fix: the same window judged against the model-free §6.2 hygiene
+        # composite (paired rows only) — the incumbent that stays stable across
+        # lane-mode flips. Empty until the post-fix daemon populates the column.
+        hygiene_evaluations = evaluate_shadow(conn, since=cut, incumbent="hygiene")
         # P3.2 (B6) score-distribution drift: the `--since` window vs the honest-era baseline.
         from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
         from forge.ranking.evaluation import shadow_score_samples
@@ -289,6 +293,25 @@ def cmd_eval(
             for lo, n, mean, rate in ev.calibration
         )
         typer.echo(f"  reliability: {cal}")
+
+    if hygiene_evaluations:
+        typer.echo("hygiene incumbent (model-free §6.2 composite; paired rows only):")
+        for ev in hygiene_evaluations:
+            if ev.auc_margin is None:
+                typer.echo(f"  model={ev.model_id} decided={ev.n_decided} — INSUFFICIENT")
+                continue
+            typer.echo(
+                f"  model={ev.model_id} decided={ev.n_decided} "
+                f"auc model={ev.model_auc:.3f} hygiene={ev.incumbent_auc:.3f} "
+                f"margin={ev.auc_margin:+.3f} "
+                f"criterion(+{_AUC_MARGIN_CRITERION:.2f})="
+                f"{shadow_auc_verdict(ev, auc_margin_criterion=_AUC_MARGIN_CRITERION)}"
+            )
+    else:
+        typer.echo(
+            "hygiene incumbent: no hygiene-scored rows in window "
+            "(column populates after the next service restart)"
+        )
 
 
 @ranker_model_app.command("eval-robustness")

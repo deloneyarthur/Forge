@@ -328,6 +328,14 @@ The recalibrator's *application* to the live `P` is deferred to the gate-tail fl
 re-derivation (P1.1) — recalibrating the `P` that fills the §6.2 prior slot would change
 the composite sort.
 
+**Hygiene-incumbent block** — a second per-model readout judged against
+`shadow_scores.hygiene_score`, the **model-free §6.2 hygiene composite** (prior slot zeroed),
+restricted to rows that carry it (paired). Why: `composite_score` stores whatever score
+production ordered by, so under gate-tail mode (P1.1) the legacy "incumbent" is the lane's
+own value — self-referential. The hygiene column is the incumbent that stays stable across
+lane-mode flips; it is NULL for rows recorded before the fix (populates after the next
+service restart), and the block prints a placeholder line until then.
+
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `--forge-db` | path | yaml | Forge DB path (use a `/tmp` snapshot of live). |

@@ -172,23 +172,39 @@ def _calibration(labels: list[int], scores: list[float]) -> tuple[CalibrationRow
     return tuple(rows)
 
 
+# Incumbent column per evaluation mode (comparator fix). "ranking" reads
+# `composite_score` — whatever score production ordered by, which under gate-tail
+# mode (P1.1) is the lane's OWN value, making lane-vs-incumbent reads self-referential.
+# "hygiene" reads the model-free §6.2 hygiene composite (prior slot zeroed) recorded
+# by the fixed shadow recorder — stable across lane-mode flips; rows predating the
+# column are excluded so both sides are computed on the same (paired) rows.
+_INCUMBENT_COLUMNS = {"ranking": "composite_score", "hygiene": "hygiene_score"}
+
+
 def evaluate_shadow(
-    conn: duckdb.DuckDBPyConnection, *, since: datetime
+    conn: duckdb.DuckDBPyConnection, *, since: datetime, incumbent: str = "ranking"
 ) -> tuple[ShadowEvaluation, ...]:
-    """One evaluation per model_id over verdicts decided in the window."""
+    """One evaluation per model_id over verdicts decided in the window.
+
+    ``incumbent`` picks the comparison score (see ``_INCUMBENT_COLUMNS``); the default
+    preserves the historical behavior."""
+    column = _INCUMBENT_COLUMNS.get(incumbent)
+    if column is None:
+        msg = f"unknown incumbent {incumbent!r} (expected one of {sorted(_INCUMBENT_COLUMNS)})"
+        raise ValueError(msg)
     cut = since
     if cut.tzinfo is not None:
         cut = cut.astimezone(UTC).replace(tzinfo=None)
     rows = conn.execute(
-        """
-        SELECT ss.model_id, ss.model_score, ss.composite_score,
+        f"""
+        SELECT ss.model_id, ss.model_score, ss.{column},
                v.decision, v.gate_results
         FROM shadow_scores ss
         JOIN submissions s ON ss.forge_candidate_id = s.forge_candidate_id
         JOIN verdicts v ON v.config_hash = s.config_hash
-        WHERE v.decided_at >= ?
+        WHERE v.decided_at >= ? AND ss.{column} IS NOT NULL
         ORDER BY ss.model_id, ss.forge_candidate_id, v.crucible_run_id
-        """,
+        """,  # noqa: S608 — column interpolated from the fixed mapping above, never input
         [cut],
     ).fetchall()
 

@@ -1389,3 +1389,42 @@ No code, no grammar byte, no daemon touch. v35 awaits the operator verdict on `4
 6. **§5 (folded):** the ve-floor decision point re-anchored to **`funnel --compare v32 v35 --hypothesis vol_event`** (~1 day) — the v33 stamp lived only ~5.3h before v34/v35 superseded it, so the agreed v32-vs-v33 read can never mature. Early directional signal: component conversion 7.6% → 11.1%. Floor stands until the read. Memory updated.
 
 **Outbound (held for carry):** `PROMPT_CRUCIBLE_V36_DEPLOYED.md` (deploy + funnel ask + the universe-boundary confound flag) and `PROMPT_CRUCIBLE_COHORT_FOLLOWUPS_RESPONSE.md` (the §4 answer + staging receipts). **v37 build awaits operator go** (`docs/proposals/v37-cohort-followups.md`). Related: [[D282]], [[D278]], [[D276]], [[D270]], [[D119]], Q50.
+
+## D284 — 2026-07-16 — Shadow-eval comparator fix: `hygiene_score` column records the model-free §6.2 composite — the gate-tail flip had silently turned the eval clocks' "incumbent" into the lane's own score
+
+**Finding (max-effort audit of the F3 margin slide, +0.35→+0.06 over 07-09→07-16):**
+`rank_batch` stores the ORDERING score in `RankedCandidate.composite_score`
+(`queue.py`: `composite = prior if gate_tail_ordering else ranker.score(...)`), and
+`run_shadow_scoring` records that as `shadow_scores.composite_score`. Since the gate-tail
+flip (2026-07-06T20:26:50Z, D252) every shadow row's "composite" is therefore the
+GATE-TAIL value, not the §6.2 composite — and every eval that reads `composite_score` as
+"the incumbent" became self-referential. Verified in data: spearman(stored composite,
+tail_score) jumped ~0 → +0.6–0.9 on post-flip ranked rows; the §8.6 streak's
+`incumbent_top_k_mean` equals the rewire streak's `gate_top_k_mean` exactly, every day.
+
+**Decomposition of the F3 slide (none of it is model decay):** (1) incumbent identity
+change — the gate-tail score is a stronger baseline vs component labels (AUC 0.52–0.65
+vs the old composite's 0.43–0.57); onset lagged the flip to ~07-12 because the streak
+buckets by DECISION time (verdict latency). (2) P-range restriction — the hard P≥0.02
+gate truncates the ranked cohort (median P 0.036 vs holdout 0.0007); pooled post-flip
+model AUC: ranked 0.737 vs **holdout 0.801** (n=5,812, 13 pos) ≈ pre-flip 0.828 —
+unconditional skill intact. (3) Stream concentration + mix — newer grammar cohorts read
+lower AUC (v24–v27 0.75–0.78 → v35/v36 0.62–0.64) with P-score IQR halved (0.052→0.024)
+and MR share 11%→42% (F3 reads MR 0.625 vs trend 0.739) while positive rates HOLD ~5%:
+a deliberately narrower, better stream is intrinsically harder to separate within.
+Expect the legacy F3 margin to keep compressing toward the 0.05 bar — an artifact, not
+a revert signal.
+
+**Fix (this increment, TDD):** `shadow_scores.hygiene_score` (idempotent ALTER) records
+the model-free §6.2 hygiene composite — `ranker.score(report, 0.0)`, prior slot zeroed —
+per submitted row (`run_shadow_scoring(hygiene_scorer=...)`, wired in `main.py` at the
+existing telemetry call site; ranking/submission byte-identical, invariants green).
+`evaluate_shadow(incumbent="hygiene")` judges model-vs-hygiene on paired (non-NULL)
+rows; `ranker-model eval` prints the hygiene block; the daily F3 streak judges on the
+hygiene incumbent as soon as its fresh window qualifies (≥150), recording
+`margin_source` + both margins (`ranking_auc_margin`, `hygiene_auc_margin`) for
+continuity. Until the next operator-gated restart the column stays NULL and the streak
+falls back to `margin_source="ranking"` (verified against a live snapshot).
+
+**Interim guidance:** judge F3 skill on holdout-only pooled AUC, not the streak margin.
+Related: [[D252]], [[D193]], [[D132]]; the §8.6 clock retirement is D285.

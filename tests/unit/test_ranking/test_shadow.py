@@ -138,6 +138,7 @@ def test_shadow_scores_table_created_by_ensure_schema() -> None:
         "scored_at",
         "tail_score",
         "tail_model_id",
+        "hygiene_score",
     }
 
 
@@ -165,6 +166,51 @@ def test_records_scores_for_submitted_candidates(tmp_path: Path) -> None:
     assert len(model_id) == 16
     assert 0.0 <= model_score <= 1.0
     assert composite_score == 0.7
+
+
+def test_hygiene_score_recorded_when_scorer_passed(tmp_path: Path) -> None:
+    """The comparator fix: a hygiene scorer records the model-free §6.2 composite
+    per row, giving the eval clocks an incumbent that is stable across lane-mode
+    flips (under gate-tail the ranking score is the lane's own value)."""
+    models_dir = _toy_model_dir(tmp_path)
+    candidate = _candidate(composite=0.7)
+    batch_id = str(uuid.uuid4())
+    with db_connection() as conn:
+        _insert_submission(conn, batch_id=batch_id, config_hash=candidate.report.config.config_hash)
+        recorded = run_shadow_scoring(
+            conn,
+            models_dir=models_dir,
+            candidates=[candidate],
+            registry=_REGISTRY,
+            batch_id=batch_id,
+            scored_at=_SCORED_AT,
+            hygiene_scorer=lambda _report: 0.42,
+        )
+        rows = conn.execute("SELECT hygiene_score FROM shadow_scores").fetchall()
+
+    assert recorded == 1
+    assert rows[0][0] == pytest.approx(0.42)
+
+
+def test_hygiene_score_null_without_scorer(tmp_path: Path) -> None:
+    """No hygiene scorer (pre-fix callers, historical rows) -> NULL, not a fabricated 0."""
+    models_dir = _toy_model_dir(tmp_path)
+    candidate = _candidate(composite=0.7)
+    batch_id = str(uuid.uuid4())
+    with db_connection() as conn:
+        _insert_submission(conn, batch_id=batch_id, config_hash=candidate.report.config.config_hash)
+        recorded = run_shadow_scoring(
+            conn,
+            models_dir=models_dir,
+            candidates=[candidate],
+            registry=_REGISTRY,
+            batch_id=batch_id,
+            scored_at=_SCORED_AT,
+        )
+        rows = conn.execute("SELECT hygiene_score FROM shadow_scores").fetchall()
+
+    assert recorded == 1
+    assert rows[0][0] is None
 
 
 def test_shadow_scoring_rolls_back_and_never_raises_on_failure(
