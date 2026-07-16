@@ -1,5 +1,13 @@
 # Proposal: v36 — exit-duration prior concentration: time_stop n_bars for trend swing_long → U[8,10]; MR swing_mid → U[8,15]
 
+> **SCOPING ANSWERED (2026-07-15, `FORGE_v36_scoping_response_2026-07-15.md`): readings
+> 1+2 CONFIRMED as stated (strong forms; n_bars=5 measured actively harmful, -0.382
+> p25-proxy vs +0.161 at 8 — zero floor mass intended; [6,7] = unsampled interpolation).
+> Scoping call 1 VETOED on cohort hygiene, not merits: capitulation keeps U[5,15] at
+> BOTH buckets until the v34-vs-v35 capitulation pane is read (~50/day emission needs a
+> few hundred configs for the fair trial; they will re-open [8,15] inheritance in that
+> read's relay). "Build on." — build proceeds; deploy stays operator-gated.**
+
 Status: **SCOPING — operator-gated grammar bump; nothing ships off this doc.**
 Date: 2026-07-15. Source: `FORGE_exit_duration_priors_2026-07-15.md` (prior-concentration
 ask, same class as the resid_vix / nfp-cpi relays; evidence
@@ -57,8 +65,9 @@ relative_value / volatility_event / event_momentum time_stops all stay param-les
 
 `_build_exits` gains a `bucket` parameter (already in scope at the call site,
 `sampler.py:940`); the D270 tail-draw pattern extends to a scoped range table —
-resolution order: (MR, swing_mid) → U[8,15]; else capitulation directional → U[5,15]
-(the swing_short leg); else (trend, swing_long) → U[8,10]; else no emission. The extra
+resolution order per the veto: capitulation directional → U[5,15] (BOTH buckets, checked
+first); else (MR, swing_mid) → U[8,15]; else (trend, swing_long) → U[8,10]; else no
+emission. The extra
 `randint` is drawn AFTER the standard exit draws, only on scoped paths. Two new
 constants (`_TREND_SWING_LONG_TIME_STOP_NBARS_RANGE`, `_MR_SWING_MID_TIME_STOP_NBARS_RANGE`).
 No rule surface: `rules:` text, predicates, and pools all untouched — emission-side only

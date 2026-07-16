@@ -232,6 +232,26 @@ _CAPITULATION_TIME_STOP_NBARS_RANGE: tuple[int, int] = (5, 15)
 # (1 x horizon 15 td → swing_short; 2/3/4 keep the probe's swing_mid).
 _CAPITULATION_K_MULTIPLIERS: tuple[int, ...] = (1, 2, 3, 4)
 
+# D282 (v36) — exit-duration prior concentration (Crucible
+# FORGE_exit_duration_priors_2026-07-15, scoping confirmed in
+# FORGE_v36_scoping_response_2026-07-15). Crucible's exit registry defaults
+# time_stop n_bars to 5; before v36 only the capitulation directional ever
+# emitted it. Their probes: (1) trend swing_long — the day-5 timer takes
+# 84-88% of exits and CUTS WINNERS (time_stop-bucket win-rate 0.45->0.74 with
+# longer holds); n_bars=10 improves cpcv 6/6, wf 5/6 AND maxDD inside their
+# declared [3,10] box. Do NOT extend past 10: n=21 buys cpcv by re-opening
+# the tail (comp0 maxDD -44%). (2) MR swing_mid — the [5,15] box is right but
+# the floor is actively harmful (-0.382 p25-proxy at 5 vs +0.161 at 8;
+# plateau 8-20, peak 12); zero floor mass intended ([6,7] is unsampled
+# interpolation against a known-bad floor). Scoped to EXACTLY these two
+# (hypothesis x bucket) cells — every other time_stop carrier keeps the
+# param-less exit ("do not touch other buckets on this evidence"). The
+# capitulation directional is VETOED OUT (cohort hygiene: the v35 bare-drop
+# pane accumulates at ~50/day and must not split its chassis mid-trial) and
+# keeps D270's U[5,15] at BOTH buckets until the v34-vs-v35 pane is read.
+_TREND_SWING_LONG_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 10)
+_MR_SWING_MID_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 15)
+
 # D276 (v33) — resid_vix CONFIRMED-region concentration (Crucible
 # FORGE_resid_vix_region_followup_2026-07-13, first seen 07-15 in the
 # late-relay batch): three PIPELINE-NATIVE residual_momentum configs pass the
@@ -937,7 +957,7 @@ def sample_config(
 
     selector = _build_selector(space, hypothesis, bucket, rng)
     sizer = _build_sizer(space, mode, rng)
-    exits = _build_exits(space, hypothesis, rng, directional_id=directional_id)
+    exits = _build_exits(space, hypothesis, rng, directional_id=directional_id, bucket=bucket)
 
     config_name = f"forge_{hypothesis}_{bucket}_{rng.getrandbits(32):08x}"
 
@@ -1553,12 +1573,34 @@ def _build_sizer(
     )
 
 
+def _time_stop_nbars_range(
+    hypothesis: str,
+    directional_id: str | None,
+    bucket: str | None,
+) -> tuple[int, int] | None:
+    """The scoped time_stop ``n_bars`` sampling box, or None for the
+    param-less exit (Crucible's registry default 5).
+
+    Resolution order matters: the capitulation directional resolves FIRST —
+    its D270 box survives at BOTH buckets (the v36 scoping response vetoed
+    MR-swing_mid inheritance until the v34-vs-v35 pane is read), so it must
+    not fall through to the (mean_reversion, swing_mid) cell."""
+    if directional_id == _CAPITULATION_DIRECTIONAL_ID:
+        return _CAPITULATION_TIME_STOP_NBARS_RANGE
+    if hypothesis == _MR_HYPOTHESIS and bucket == "swing_mid":
+        return _MR_SWING_MID_TIME_STOP_NBARS_RANGE
+    if hypothesis == "trend_continuation" and bucket == "swing_long":
+        return _TREND_SWING_LONG_TIME_STOP_NBARS_RANGE
+    return None
+
+
 def _build_exits(
     space: SearchSpace,
     hypothesis: str,
     rng: random.Random,
     *,
     directional_id: str | None = None,
+    bucket: str | None = None,
 ) -> tuple[ExitSpec, ...]:
     """§3.5 E1 mandatory + §3.5 S5 multi-exit composition (D071).
 
@@ -1596,15 +1638,17 @@ def _build_exits(
     # Preserve order, deduplicate (E1 / required_always / optional may overlap).
     deduped = list(dict.fromkeys(ids))
     exits = tuple(ExitSpec(id=eid, params=_exit_params(eid, rng)) for eid in deduped)
-    # D270 (v31): the capitulation directional's time_stop samples `n_bars`
-    # (probe hold 10 td, sweep 5-15) — Crucible's exit registry defaults n_bars
-    # to 5 and Forge has never emitted it, so an unscoped emission would move
+    # D270 (v31) / D282 (v36): scoped time_stop `n_bars` emission. Crucible's
+    # exit registry defaults n_bars to 5, so an UNSCOPED emission would move
     # EVERY hypothesis's hold (the D169 "cross-hypothesis dirties the mr slice"
-    # concern). The extra randint is drawn AFTER the standard exit draws and
-    # only on this directional — every other path consumes rng identically
-    # (hard rule #6).
-    if directional_id == _CAPITULATION_DIRECTIONAL_ID and any(e.id == "time_stop" for e in exits):
-        low, high = _CAPITULATION_TIME_STOP_NBARS_RANGE
+    # concern) — the range table in `_time_stop_nbars_range` names exactly the
+    # cells with evidence: capitulation U[5,15] (D270, veto-frozen), MR
+    # swing_mid U[8,15], trend swing_long U[8,10]. The extra randint is drawn
+    # AFTER the standard exit draws and only on scoped paths — every other
+    # path consumes rng identically (hard rule #6).
+    nbars_range = _time_stop_nbars_range(hypothesis, directional_id, bucket)
+    if nbars_range is not None and any(e.id == "time_stop" for e in exits):
+        low, high = nbars_range
         n_bars = rng.randint(low, high)
         exits = tuple(
             ExitSpec(id=e.id, params={"n_bars": n_bars}) if e.id == "time_stop" else e

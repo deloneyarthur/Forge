@@ -1700,21 +1700,30 @@ _COHORT_TREND = "trend_continuation"
 # D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
 # underlying draw on (nearly) every position, and gamma_flip left the MR/trend
 # regime pools; relational splits between the goldens are preserved (asserted).
+# D282 (v36): re-pinned — TWO composed shifts. (a) The scoped time_stop n_bars
+# draw consumes an extra word on the SHARED enumeration stream (rejected
+# attempts included) from the first scoped attempt — licensing verified
+# mechanically per variant (old-behavior monkeypatch vs new code under the
+# SAME universe: first divergence == first scoped attempt, index 5 here;
+# intermediate positions may heal via _randbelow rejection variance).
+# (b) Crucible's 2026-07-16T08:27:54Z July tier export (-FCX/WBD/WDC/VIX/
+# BKNG/XLY/XLB, +APH/MDT) landed mid-deploy and moved underlying draws —
+# the Q50 live-export coupling, second environment hit in two days.
 _COHORT_GOLDEN_PRE_REFACTOR = [
     "dc125d8f4e014630",
     "4710371b04fac3d0",
-    "7c80c5ef34eb9736",
+    "41a6490720e28408",
     "174df1ffb521246b",
     "d4719affe73e6187",
-    "9844b82ddceb82d5",
-    "15b5daf88aa8ea6d",
-    "61ef630a7cdd878e",
-    "83a5fa4ec72188f5",
-    "227c8bfc1deb305f",
-    "358b69c99a36daf9",
-    "626ce742d2a8c980",
-    "6ef2a11f3c11b95e",
-    "51737ab3d1d303d2",
+    "5f24952395537021",
+    "766ce2e829e37b6e",
+    "d86bdb1ea24708e8",
+    "984a82a4a1ece90a",
+    "8df00579f3560af0",
+    "f24bb37927105256",
+    "321c2ab518dda26a",
+    "93143e12c13eda9c",
+    "39e700b1a50041d6",
     "3a3f40a4cddf33d0",
 ]
 
@@ -1911,22 +1920,27 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
 # underlying draw on (nearly) every position, and gamma_flip left the MR/trend
 # regime pools; relational splits between the goldens are preserved (asserted).
+# D282 (v36): re-pinned — TWO composed shifts (see the cohort golden's D282
+# note): the scoped n_bars attempts here are 2 & 5 (licensing: old-vs-new code
+# under the SAME universe first diverges at attempt 2), and the 07-16 universe
+# export shrink independently moved underlying draws (Q50). none_run ==
+# empty_run re-verified under v36.
 _REGIME_GOLDEN_PRE = [
-    "f24dd5df12658e13",
+    "6bfa51eb7329103c",
     "ade33963ff5205f5",
-    "88cc34e46805731d",
-    "3022000cf80f609e",
-    "2c6b3f5717967ee1",
-    "6ef99e9cebfaf8be",
-    "ef0333e78106091a",
-    "89165f9935585eed",
-    "3421557590814e38",
-    "b9658fd628075142",
-    "711af2058c49e38c",
-    "02477e9120dc498d",
-    "94e01c89b74dee7b",
-    "2e4054a200aca442",
-    "c98be8c7b3f46105",
+    "8d06c6fe4757ddd5",
+    "d7bbe58b9d44d96c",
+    "2b624f2afa4c3c22",
+    "617ffeebf9ccda8b",
+    "313fe9b681c10f94",
+    "9b850879d651a434",
+    "2d3e8e18dd820ded",
+    "c757c989e2a95524",
+    "6d646bed0780ad37",
+    "bde6a02b5bbbaa85",
+    "ef858b680404b71e",
+    "3c5fed6c027d97bd",
+    "bdabe1c70fdd187f",
 ]
 
 
@@ -2146,22 +2160,26 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
 # underlying draw on (nearly) every position, and gamma_flip left the MR/trend
 # regime pools; relational splits between the goldens are preserved (asserted).
+# D282 (v36): re-pinned — scoped n_bars attempts at 2 & 13 (licensing: old-vs-
+# new code under the SAME universe first diverges at attempt 2) + the 07-16
+# universe export shrink (Q50). Under these pins the PRE-vs-DSJ split sits at
+# position 3 (the first eligible trend config), as pre-v36.
 _REGIME_GOLDEN_DSJ_ACTIVE = [
-    "f24dd5df12658e13",
+    "6bfa51eb7329103c",
     "ade33963ff5205f5",
-    "88cc34e46805731d",
-    "bba32f5692adf59f",
-    "41992e48c6fff3f2",
-    "617ffeebf9ccda8b",
-    "313fe9b681c10f94",
-    "32bc15f831790217",
-    "f7c3be8b495a2438",
-    "ca021f125a995cf5",
-    "3a9e2ac7312d02f0",
-    "a27b53944bc14484",
-    "788daa572fcd4b0c",
-    "9ef2c2f3ac8f8b69",
-    "d057acfa6f58918d",
+    "8d06c6fe4757ddd5",
+    "68af2ceaeca546ae",
+    "8b246f11f1401ba8",
+    "42c89c36d9667a8f",
+    "c0d74dad6647d37d",
+    "5db3d6e6cc9179cc",
+    "fee451ce01b630e1",
+    "a8d94323174c6adc",
+    "8e111fbee647ed9e",
+    "c03e10503ac53b9c",
+    "cb0d91fc690e2e5b",
+    "0a893192a5b84c49",
+    "abbd4f45df5a18ca",
 ]
 
 
@@ -2300,22 +2318,25 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
 # underlying draw on (nearly) every position, and gamma_flip left the MR/trend
 # regime pools; relational splits between the goldens are preserved (asserted).
+# D282 (v36): re-pinned — scoped n_bars attempts at 2, 9 & 12 (licensing:
+# first old-vs-new divergence == attempt 2 under the SAME universe) + the
+# 07-16 universe export shrink (Q50).
 _REGIME_GOLDEN_V26_ACTIVE = [
-    "f24dd5df12658e13",
+    "6bfa51eb7329103c",
     "ade33963ff5205f5",
-    "88cc34e46805731d",
-    "d94435bb869d78af",
-    "953673fbbe2e2b72",
-    "d48970b100b35e24",
-    "cadccc6a3e5d4fb5",
-    "f74678a978eb82f3",
-    "f0198cf7715392b9",
-    "9e6edef5333b527d",
-    "0190fdc5b2d16d17",
-    "670afbba496d174f",
-    "621b77149f9a6471",
-    "ad03d88118f83479",
-    "75cbd26f612e923d",
+    "8d06c6fe4757ddd5",
+    "68af2ceaeca546ae",
+    "8b246f11f1401ba8",
+    "42c89c36d9667a8f",
+    "c0d74dad6647d37d",
+    "b8f9352489908472",
+    "ea87585eac26b540",
+    "05c511fff6b980da",
+    "73e9eae21dae69b6",
+    "9bab5b0304e7191c",
+    "4ab710e17ad72e09",
+    "5627651ac026a378",
+    "e603bcafd6443537",
 ]
 
 
@@ -2453,22 +2474,26 @@ def test_d264_new_ids_dormant_without_registry(
 # D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
 # underlying draw on (nearly) every position, and gamma_flip left the MR/trend
 # regime pools; relational splits between the goldens are preserved (asserted).
+# D282 (v36): re-pinned — this slice's first scoped n_bars attempt is position
+# 9 (the resid concentration reshapes the earlier trend positions' buckets;
+# licensing: first old-vs-new divergence == attempt 9 under the SAME universe)
+# + the 07-16 universe export shrink (Q50), which moved earlier positions too.
 _REGIME_GOLDEN_V27_ACTIVE = [
-    "f24dd5df12658e13",
+    "6bfa51eb7329103c",
     "ade33963ff5205f5",
     "5b374a94041abba3",
     "403a8cec4775355a",
     "3e97c520c29c5072",
-    "5d323373c1566c7c",
-    "46f3e65fabc74b50",
-    "a6a838b7d3d3f6c1",
+    "f067fcdeb209c584",
+    "b0ddcf9b2c8297ca",
+    "20474cf2a09dd1eb",
     "fb5e9145393cd567",
-    "9e6edef5333b527d",
-    "42622fd1879f1e3e",
-    "670afbba496d174f",
-    "4581161b11aed8a4",
-    "3a20d5f768f5f188",
-    "0e365d3d80772d79",
+    "2415fb52cd0b5438",
+    "6ee9788b24c34f94",
+    "9a4b64cc038a39f8",
+    "7a88edfbcdac0b97",
+    "8b631f575b995700",
+    "75cbd26f612e923d",
 ]
 
 
@@ -2668,22 +2693,26 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
 # underlying draw on (nearly) every position, and gamma_flip left the MR/trend
 # regime pools; relational splits between the goldens are preserved (asserted).
+# D282 (v36): re-pinned — scoped n_bars attempts at 2, 9 & 12 (same shape as
+# _REGIME_GOLDEN_V26_ACTIVE) + the 07-16 universe export shrink (Q50); the
+# mutual V26/V29 split sits at position 7 under these pins, prefix relation
+# [:3] preserved and asserted.
 _REGIME_GOLDEN_V29_ACTIVE = [
-    "f24dd5df12658e13",
+    "6bfa51eb7329103c",
     "ade33963ff5205f5",
-    "88cc34e46805731d",
-    "623bcda3c4d262da",
-    "953673fbbe2e2b72",
-    "d48970b100b35e24",
-    "cadccc6a3e5d4fb5",
-    "f74678a978eb82f3",
-    "f0198cf7715392b9",
-    "a825b3186251decd",
-    "0190fdc5b2d16d17",
-    "670afbba496d174f",
-    "621b77149f9a6471",
-    "ad03d88118f83479",
-    "75cbd26f612e923d",
+    "8d06c6fe4757ddd5",
+    "68af2ceaeca546ae",
+    "8b246f11f1401ba8",
+    "42c89c36d9667a8f",
+    "c0d74dad6647d37d",
+    "9473b2354f914bfd",
+    "ea87585eac26b540",
+    "05c511fff6b980da",
+    "73e9eae21dae69b6",
+    "9bab5b0304e7191c",
+    "61be7f02f5f7453d",
+    "c62cab0f1a4fe7c4",
+    "59f10afe89ab9c28",
 ]
 
 
@@ -2810,22 +2839,40 @@ def test_d270_momentum_never_anchors_trend(grammar: Grammar, registry: RegistryS
 def test_d270_non_momentum_time_stop_params_unchanged(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """The n_bars emission is scoped to the capitulation directional ONLY —
-    every other hypothesis/directional keeps the bare time_stop (engine
-    default 5), so the champion MR slice is untouched (the D169 concern)."""
+    """The n_bars emission is scoped to exactly the evidenced cells — D270's
+    premise ("capitulation ONLY") widened by v36/D282 to the range table:
+    capitulation U[5,15] (both buckets, veto-frozen), MR swing_mid U[8,15],
+    trend swing_long U[8,10]. Every OTHER hypothesis/bucket keeps the bare
+    time_stop (engine default 5), so the untouched slices stay untouched
+    (the D169 concern, now cell-scoped)."""
     reg = _v31_registry(registry)
     space = build_search_space(grammar, reg)
-    checked = 0
+    checked_bare = 0
+    checked_scoped = 0
     for seed in range(400):
         cfg = sample_config(space, reg, random.Random(seed))
         directional = next(s for s in cfg.signals if s.role == "directional")
         if directional.indicators == ("momentum",):
             continue
+        scoped_range = None
+        if cfg.hypothesis == "mean_reversion" and cfg.dte_bucket == "swing_mid":
+            scoped_range = (8, 15)
+        elif cfg.hypothesis == "trend_continuation" and cfg.dte_bucket == "swing_long":
+            scoped_range = (8, 10)
         for ex in cfg.exits:
-            if ex.id == "time_stop":
-                checked += 1
-                assert ex.params == {}, (directional.indicators, ex.params)
-    assert checked > 0, "no non-momentum time_stop draws sampled"
+            if ex.id != "time_stop":
+                continue
+            if scoped_range is None:
+                checked_bare += 1
+                assert ex.params == {}, (cfg.hypothesis, cfg.dte_bucket, ex.params)
+            else:
+                checked_scoped += 1
+                n_bars = ex.params.get("n_bars")
+                assert isinstance(n_bars, int), (cfg.hypothesis, cfg.dte_bucket, ex.params)
+                low, high = scoped_range
+                assert low <= n_bars <= high, (cfg.hypothesis, cfg.dte_bucket, ex.params)
+    assert checked_bare > 0, "no bare time_stop draws sampled"
+    assert checked_scoped > 0, "no scoped time_stop draws sampled"
 
 
 def test_d270_v29_golden_byte_identical_without_momentum(
@@ -2854,22 +2901,27 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # D278 (v34): re-pinned — the BKNG/BRK.B untradeable-name exclusion shifts the
 # underlying draw on (nearly) every position, and gamma_flip left the MR/trend
 # regime pools; relational splits between the goldens are preserved (asserted).
+# D282 (v36): re-pinned — scoped n_bars attempts at 2 & 12 (the capitulation
+# path itself is byte-identical: same U[5,15] range, same draw count — the
+# veto-frozen D270 box) + the 07-16 universe export shrink (Q50); the mutual
+# V29/V31 split sits at position 13 under these pins, prefix relation [:3]
+# preserved and asserted.
 _REGIME_GOLDEN_V31_ACTIVE = [
-    "f24dd5df12658e13",
+    "6bfa51eb7329103c",
     "ade33963ff5205f5",
-    "88cc34e46805731d",
-    "5bbebce1e3c478e1",
-    "953673fbbe2e2b72",
-    "d48970b100b35e24",
-    "0ebd05bbc1df42f1",
-    "f74678a978eb82f3",
-    "f0198cf7715392b9",
-    "64b462591be049c9",
-    "0190fdc5b2d16d17",
-    "670afbba496d174f",
-    "621b77149f9a6471",
-    "ad03d88118f83479",
-    "75cbd26f612e923d",
+    "8d06c6fe4757ddd5",
+    "68af2ceaeca546ae",
+    "8b246f11f1401ba8",
+    "42c89c36d9667a8f",
+    "c0d74dad6647d37d",
+    "9473b2354f914bfd",
+    "ea87585eac26b540",
+    "05c511fff6b980da",
+    "73e9eae21dae69b6",
+    "9bab5b0304e7191c",
+    "61be7f02f5f7453d",
+    "01956de8589578ac",
+    "59f10afe89ab9c28",
 ]
 
 
