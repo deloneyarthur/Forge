@@ -1076,7 +1076,7 @@ says "trailing percentile rank." The docstring also states it shares semantics w
   lesson (reconcile metric definition before mapping cross-system thresholds) stands in
   `grammar-change.md`'s pending list.
 
-## 2026-07-15 — Q50 — Cold-start goldens depend on LIVE export files (`_UNIVERSE_EXPORT_DIR` resolved at import, defeating `_isolated_home`) — **MEDIUM (latent golden fragility; coverage half fixed D274, universe half open)**
+## 2026-07-15 — Q50 — Cold-start goldens depend on LIVE export files (`_UNIVERSE_EXPORT_DIR` resolved at import, defeating `_isolated_home`) — **CLOSED 2026-07-16 (D286/v37: option (a) shipped — conftest autouse pin `_pinned_universe` on the frozen 07-16 snapshot + `real_universe_loader` re-bind; goldens re-pinned once more, environment-matched)**
 
 `sampler._UNIVERSE_EXPORT_DIR` is expanded at module IMPORT time, before the `_isolated_home`
 autouse fixture patches `Path.home()` — so both lru-cached loaders that read it bypass test
