@@ -1100,6 +1100,15 @@ it, and re-baseline goldens against the fallback universe (same re-pin, plus pro
 documented here). Any golden re-baseline must be its own commit with the trigger recorded
 (hard rule #6 discipline). Related: D274, D272, D078/D033, `_isolated_home` (tests/conftest.py).
 
+**2026-07-16 ESCALATION — the universe half bit exactly as predicted, MID-DEPLOY (D282).**
+Crucible's July tier export (`universe_tickers_2026-07-16T082754Z.json`, −7 names +APH/MDT,
+pre-announced in their cohort-read relay §2) landed 17 minutes before the v36 deploy preflight and
+broke all 9 goldens at position 0. Goldens re-pinned a second time that day (licensing harness
+re-run environment-matched). **Resolution chosen: option (a)**, staged as v37 build item 3
+(`docs/proposals/v37-cohort-followups.md`) — conftest autouse pin on `_load_underlyings` (the D274
+shape), loader/fingerprint tests re-bind the real loader, goldens re-pin once more under the frozen
+tuple. Q50 CLOSES when v37 ships.
+
 ## 2026-07-15 — Q51 — `test_held_out_platt_reduces_ece_vs_raw` flaky in full-suite runs (DuckDB scan-order-dependent even/odd Platt split) — **LOW (test flake; diagnostic lane only)**
 
 Failed once (of 3 full-suite runs) during the D273 deploy preflights; passes in isolation and in its

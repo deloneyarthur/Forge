@@ -1,5 +1,7 @@
 # Proposal: v36 — exit-duration prior concentration: time_stop n_bars for trend swing_long → U[8,10]; MR swing_mid → U[8,15]
 
+> **STATUS (2026-07-16): APPROVED + BUILT + DEPLOYED 2026-07-16T08:49:57Z ([[D282]], commit `3f2ca88`) — operator "deploy it"; both items shipped as scoped below, with the capitulation veto folded (see the scoping-response banner). The v35→v36 boundary also carries Crucible's July universe shrink (landed mid-deploy — Q50).**
+
 > **SCOPING ANSWERED (2026-07-15, `FORGE_v36_scoping_response_2026-07-15.md`): readings
 > 1+2 CONFIRMED as stated (strong forms; n_bars=5 measured actively harmful, -0.382
 > p25-proxy vs +0.161 at 8 — zero floor mass intended; [6,7] = unsampled interpolation).
