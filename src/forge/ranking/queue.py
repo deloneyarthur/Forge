@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     from forge.prefilters.types import PreFilterReport
     from forge.ranking.arm_floor import Arm
+    from forge.ranking.experiment_cells import ExperimentCell
     from forge.ranking.scorer import Ranker
 
 
@@ -61,6 +62,7 @@ def rank_batch(
     mature_arms: AbstractSet[Arm] | None = None,
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
     gate_tail_ordering: bool = False,
+    experiment_cells: AbstractSet[ExperimentCell] | None = None,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
 
@@ -117,6 +119,7 @@ def rank_batch(
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
+        experiment_cells=experiment_cells,
     )
 
 
@@ -178,6 +181,7 @@ def rank_batch_with_holdout(
     mature_arms: AbstractSet[Arm] | None = None,
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
     gate_tail_ordering: bool = False,
+    experiment_cells: AbstractSet[ExperimentCell] | None = None,
 ) -> tuple[list[RankedCandidate], list[RankedCandidate]]:
     """P3.3 (B7) exploration holdout: rank-select the top ``n - holdout_n`` as usual, then draw
     ``holdout_n`` at RANDOM from the survivors ranking did NOT pick — configs that bypass the
@@ -200,6 +204,7 @@ def rank_batch_with_holdout(
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
+        experiment_cells=experiment_cells,
     )
     selected_hashes = {c.report.config.config_hash for c in selected}
     pool = [c for c in scored if c.report.config.config_hash not in selected_hashes]

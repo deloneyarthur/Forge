@@ -1501,3 +1501,33 @@ evidence + first-batch audit in STATUS. The restart ALSO activates D284's
 batch) — the F3 streak's hygiene incumbent starts accruing from decided verdicts on
 those rows (~1–2 days). Related: [[D283]], [[D278]], [[D276]], [[D119]], [[D274]],
 [[D284]], Q50 (CLOSES at this deploy).
+
+## D287 — 2026-07-16 — Experiment-cell selection floor: the hard P-gate starved the resid x vix arm AT SELECTION after D286 fixed its draw — pinned (directional, regime) cells now get reserved batch slots (the D119/D136 principle at the ranking layer)
+
+**Finding (first two v37 batches):** ranked-lane resid submissions ran 14 hurst / 0 vix
+(p≈0.006% under the now-uniform generation coin) while batch 2's single vix-resid config
+arrived via the exploration HOLDOUT — generation fixed, selection still starving the arm.
+Offline diagnosis (enumerate 6k + live P/tail models): generation balanced (31/32), but
+only **16% of vix-resid clear the P≥0.02 hard gate vs 87% of hurst-resid** (median P
+0.011 vs 0.033) — the F3 model, trained on history where hurst carried every resid
+config, gates the experimental arm out at eligibility; below-floor priors pin to 0.0 and
+are unreachable for the greedy fill. Tail ordering adds only mild secondary skew. The
+D136 arm floor cannot help: its key is (role, indicator) — `("regime_filter",
+"vix_term_slope")` matured within days of v27, and even young it wouldn't scope to the
+resid pair.
+
+**Change (operator "lets do 2"; TDD):** `forge/ranking/experiment_cells.py` —
+`EXPERIMENT_CELLS = {("residual_momentum", "vix_term_slope")}` +
+`EXPERIMENT_CELL_SLOTS = 4` (~2% of a batch; same order as hurst's organic ~7) +
+`config_cell()`. Diversifier gains reservation phase 0b (`_reserve_experiment_cells`,
+sorted/deterministic, same §6.3 greedy `_take`, members-already-selected counted, empty
+pool reserves nothing so generation-side starvation stays visible); threaded through
+`rank_batch`/`rank_batch_with_holdout`; production wired in `main.py` `_rank_kwargs` +
+a per-batch journal audit line `experiment_cell_floor: {...}`. `None` default keeps
+every legacy path byte-identical (asserted). The `_select_top_n_floored` phases 0/0b
+extracted to helpers (PLR limits). VERSIONLESS ranking change (no grammar edit — the
+D193/D252 precedent), deploy ritual still applies.
+
+**Terms:** hand-pinned, retires on Crucible's relay when the two-arm read concludes —
+never from learned feedback. If more experiment cells appear later, add to the constant.
+Related: [[D286]], [[D276]], [[D136]], [[D119]], [[D103]].

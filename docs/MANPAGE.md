@@ -201,6 +201,16 @@ slots (the holdout REPLACES rank slots — total submitted stays ≤ batch_size,
 so evals can split biased-vs-unbiased. Consumed by `forge.cli.main._resolve_exploration_holdout_frac` →
 `rank_batch_with_holdout`. Activation is an operator-gated submission-mix change (deploy ritual + the D220 hold).
 
+**Experiment-cell selection floor (D287)** — `forge.ranking.experiment_cells.EXPERIMENT_CELLS`
+(hand-pinned constants, currently `{(residual_momentum, vix_term_slope)}`) reserves
+`EXPERIMENT_CELL_SLOTS` (4) of each batch's ranked slots per pinned (directional, regime) cell,
+via a diversifier reservation phase (same greedy rule). WHY: under gate-tail the hard P floor
+pinned the resid x vix arm to 0.0 (16% eligible vs hurst's 87% — the F3 model learned from
+hurst-carried history), starving the two-arm EXPERIMENT at selection after v37/D286 fixed its
+generation draw — the D119/D136 "learned systems must not bias an experiment" principle at the
+selection layer. Per-batch audit line in the journal: `experiment_cell_floor: {...}`. The pin
+retires on Crucible's relay (when the two-arm read concludes), never from learned feedback.
+
 ```
 # One real batch, persisted:
 forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db --batch-size 200

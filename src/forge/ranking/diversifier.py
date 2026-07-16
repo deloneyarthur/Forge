@@ -20,6 +20,7 @@ from forge.ranking.arm_floor import (
     ARM_FLOOR_SLOTS_PER_ARM,
     extract_arms,
 )
+from forge.ranking.experiment_cells import EXPERIMENT_CELL_SLOTS, config_cell
 from forge.ranking.signal_key import content_key
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from crucible_contracts import StrategyConfig
 
     from forge.ranking.arm_floor import Arm
+    from forge.ranking.experiment_cells import ExperimentCell
     from forge.ranking.types import RankedCandidate
 
 
@@ -71,6 +73,8 @@ def select_top_n(
     mature_arms: AbstractSet[Arm] | None = None,
     arm_floor_slots: int = ARM_FLOOR_SLOTS_PER_ARM,
     arm_floor_batch_fraction: float = ARM_FLOOR_BATCH_FRACTION,
+    experiment_cells: AbstractSet[ExperimentCell] | None = None,
+    experiment_cell_slots: int = EXPERIMENT_CELL_SLOTS,
 ) -> list[RankedCandidate]:
     """Greedy DPP-style selection of `n` candidates from `candidates`.
 
@@ -106,6 +110,15 @@ def select_top_n(
     survivor carries a young arm, nothing is reserved (generation-side
     starvation stays visible in the funnel). `None` (default) keeps the
     legacy paths byte-identical.
+
+    ``experiment_cells`` (D287) reserves up to ``experiment_cell_slots`` of the
+    `n` slots per pinned (directional indicator, regime indicator) cell — a
+    hand-pinned EXPERIMENT the learned lane must not starve at selection (the
+    hard P-gate pins the resid x vix arm to composite 0.0, unreachable for the
+    greedy fill; the D119/D136 principle at this layer). Reservation is by the
+    same greedy rule over the cell's members; no members → nothing reserved
+    (generation-side starvation stays visible). `None` (default) keeps the
+    legacy paths byte-identical.
     """
     if n < 0:
         msg = f"n must be >= 0; got {n}"
@@ -113,7 +126,7 @@ def select_top_n(
     if n == 0 or not candidates:
         return []
 
-    if min_per_hypothesis > 0 or mature_arms is not None:
+    if min_per_hypothesis > 0 or mature_arms is not None or experiment_cells:
         return _select_top_n_floored(
             candidates,
             n,
@@ -123,6 +136,8 @@ def select_top_n(
             mature_arms=mature_arms,
             arm_floor_slots=arm_floor_slots,
             arm_floor_batch_fraction=arm_floor_batch_fraction,
+            experiment_cells=experiment_cells,
+            experiment_cell_slots=experiment_cell_slots,
         )
 
     # Default-path fast variant: precompute signal-key sets once per
@@ -214,6 +229,59 @@ def _young_arm_pools(
     return pools
 
 
+def _reserve_young_arms(
+    candidates: Sequence[RankedCandidate],
+    mature_arms: AbstractSet[Arm],
+    arm_floor_slots: int,
+    reservation_cap: int,
+    selected_idx: list[int],
+    take: Callable[[Sequence[int], int], None],
+    n: int,
+) -> None:
+    """Phase 0 of ``_select_top_n_floored`` (D136): young-arm reservation.
+    Arms in sorted order; a candidate selected for one young arm counts toward
+    every young arm it carries, so overlapping-arm candidates don't
+    double-spend the cap."""
+    arms_by_candidate = [extract_arms(c.report.config) for c in candidates]
+    reserved_total = 0
+    for arm, pool in sorted(_young_arm_pools(arms_by_candidate, mature_arms).items()):
+        if reserved_total >= reservation_cap or len(selected_idx) >= n:
+            return
+        already = sum(1 for sidx in selected_idx if arm in arms_by_candidate[sidx])
+        want = min(arm_floor_slots - already, reservation_cap - reserved_total)
+        if want <= 0:
+            continue
+        before = len(selected_idx)
+        take(pool, want)
+        reserved_total += len(selected_idx) - before
+
+
+def _reserve_experiment_cells(
+    candidates: Sequence[RankedCandidate],
+    experiment_cells: AbstractSet[ExperimentCell],
+    experiment_cell_slots: int,
+    selected_idx: list[int],
+    take: Callable[[Sequence[int], int], None],
+    n: int,
+) -> None:
+    """Phase 0b of ``_select_top_n_floored`` (D287): reserve up to
+    ``experiment_cell_slots`` slots per pinned cell, in sorted (deterministic)
+    order. Members already selected (e.g. by the arm floor) count toward the
+    cell's slots so reservations don't double-spend; an empty member pool
+    reserves nothing (generation-side starvation stays visible)."""
+    cell_by_candidate = [config_cell(c.report.config) for c in candidates]
+    for cell in sorted(experiment_cells):
+        if len(selected_idx) >= n:
+            return
+        pool = [idx for idx, c in enumerate(cell_by_candidate) if c == cell]
+        if not pool:
+            continue
+        already = sum(1 for sidx in selected_idx if cell_by_candidate[sidx] == cell)
+        want = experiment_cell_slots - already
+        if want > 0:
+            take(pool, want)
+
+
 def _select_top_n_floored(
     candidates: Sequence[RankedCandidate],
     n: int,
@@ -224,11 +292,13 @@ def _select_top_n_floored(
     mature_arms: AbstractSet[Arm] | None = None,
     arm_floor_slots: int = ARM_FLOOR_SLOTS_PER_ARM,
     arm_floor_batch_fraction: float = ARM_FLOOR_BATCH_FRACTION,
+    experiment_cells: AbstractSet[ExperimentCell] | None = None,
+    experiment_cell_slots: int = EXPERIMENT_CELL_SLOTS,
 ) -> list[RankedCandidate]:
-    """Greedy selection with the per-arm (D136) and per-hypothesis (D103)
-    floors.
+    """Greedy selection with the per-arm (D136), experiment-cell (D287) and
+    per-hypothesis (D103) floors.
 
-    Three phases, all using the same §6.3 greedy rule (highest
+    Four phases, all using the same §6.3 greedy rule (highest
     ``composite_score * (1 - max_similarity_to_selected)``, strict-``>``
     tie-break so earlier candidates win):
 
@@ -238,6 +308,11 @@ def _select_top_n_floored(
          for candidates carrying that arm (counting candidates already
          selected for it via another arm), capped at
          ``int(n * arm_floor_batch_fraction)`` reservations total.
+      0b. **Experiment-cell reservation (D287)** — for each pinned cell in
+         sorted order, greedily reserve up to ``experiment_cell_slots`` slots
+         for candidates occupying exactly that (directional, regime) cell —
+         model-independent coverage for a hand-pinned experiment the hard
+         P-gate would otherwise pin to 0.0 (unreachable for the fill).
       1. **Hypothesis floor (D103)** — for each hypothesis in sorted order,
          greedily reserve up to ``min_per_hypothesis`` of its candidates (or
          all of them if fewer), scored against the running global selection so
@@ -295,23 +370,23 @@ def _select_top_n_floored(
             selected_idx.append(best_idx)
             selected_set.add(best_idx)
 
-    # Phase 0 (D136) — young-arm reservation. Arms in sorted order; a
-    # candidate selected for one young arm counts toward every young arm it
-    # carries, so overlapping-arm candidates don't double-spend the cap.
+    # Phase 0 (D136) — young-arm reservation.
     if mature_arms is not None and arm_floor_slots > 0:
-        reservation_cap = int(n * arm_floor_batch_fraction)
-        arms_by_candidate = [extract_arms(c.report.config) for c in candidates]
-        reserved_total = 0
-        for arm, pool in sorted(_young_arm_pools(arms_by_candidate, mature_arms).items()):
-            if reserved_total >= reservation_cap or len(selected_idx) >= n:
-                break
-            already = sum(1 for sidx in selected_idx if arm in arms_by_candidate[sidx])
-            want = min(arm_floor_slots - already, reservation_cap - reserved_total)
-            if want <= 0:
-                continue
-            before = len(selected_idx)
-            _take(pool, want)
-            reserved_total += len(selected_idx) - before
+        _reserve_young_arms(
+            candidates,
+            mature_arms,
+            arm_floor_slots,
+            int(n * arm_floor_batch_fraction),
+            selected_idx,
+            _take,
+            n,
+        )
+
+    # Phase 0b (D287) — pinned experiment-cell reservation.
+    if experiment_cells:
+        _reserve_experiment_cells(
+            candidates, experiment_cells, experiment_cell_slots, selected_idx, _take, n
+        )
 
     by_hyp: dict[str, list[int]] = {}
     for idx, cand in enumerate(candidates):

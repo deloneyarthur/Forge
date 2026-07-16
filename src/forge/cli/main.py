@@ -1904,6 +1904,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     from forge.persistence.registry_loader import load_registry
     from forge.prefilters import load_calibration
     from forge.ranking import Ranker, load_ranker_config, rank_batch
+    from forge.ranking.experiment_cells import EXPERIMENT_CELLS, config_cell
     from forge.submission import (
         BatchContext,
         check_rate_limit,
@@ -2281,6 +2282,12 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         "verdict_scorer": verdict_scorer,
         # P1.1 — gate-tail mode: rank by the gate-tail value directly (hard gate).
         "gate_tail_ordering": _gate_tail_ordering,
+        # D287 — pinned experiment cells get reserved slots at selection: the
+        # hard P-gate pinned the resid x vix arm to 0.0 (16% eligible vs hurst's
+        # 87%) and starved the two-arm sweep at ranking after D286 fixed the
+        # draw. Model-independent coverage, the D119/D136 principle; the pin
+        # retires on Crucible's relay (forge.ranking.experiment_cells).
+        "experiment_cells": EXPERIMENT_CELLS,
     }
     # P3.3 (B7) — exploration holdout: reserve a seeded random fraction of the batch for
     # configs that BYPASS the learned ranking (unbiased labels for F3 / the wf_p25 lane /
@@ -2318,6 +2325,13 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         _holdout_hashes = frozenset()
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
+    # D287 — per-batch audit line for the pinned experiment cells: how many
+    # submitted configs occupy each pinned (directional, regime) cell.
+    _cell_counts = {
+        f"{d}x{r}": sum(1 for c in ranked if config_cell(c.report.config) == (d, r))
+        for d, r in sorted(EXPERIMENT_CELLS)
+    }
+    typer.echo(f"experiment_cell_floor: {_cell_counts}")
     # D065: complete per-hypothesis funnel — sampler_attempts (input to
     # prefilter) + ranked_top_n_by_hypothesis (output of ranker). With
     # D064's prefilter_rejections_by_hypothesis line in the middle, the
