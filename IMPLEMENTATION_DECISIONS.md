@@ -1531,3 +1531,33 @@ D193/D252 precedent), deploy ritual still applies.
 **Terms:** hand-pinned, retires on Crucible's relay when the two-arm read concludes —
 never from learned feedback. If more experiment cells appear later, add to the constant.
 Related: [[D286]], [[D276]], [[D136]], [[D119]], [[D103]].
+
+## D288 — 2026-07-16 — v38: trend swing_long exit-CLASS mix shift — the time_stop optional draw drops 0.5 → 0.15 in that cell only (Crucible census: exit class orders the conversion surface; timers convert at 0.43x chandelier-only)
+
+**Relay:** `FORGE_trend_swinglong_exit_mix_2026-07-16.md` — companion to the v36
+duration prior (COMPOSES: mix share vs duration-given-carried). Their weekly-census
+read (n=45,850 decided trend/swing_long/xsect, 07-02→07-16): chandelier-only 39.1%
+component rate > other-discretionary 30.7% > timer-carrying 16.9%, monotone,
+replicating in the confluence stratum and at swing_mid; 46% of the cell carried a
+timer. **Verified on OUR verdicts before building** (all strata, same window,
+n=50,906): 46.4% / 21.6% / 32.0% shares and 15.1% / 35.5% / 27.5% component rates —
+the mechanism is exactly our S5 draw (time_stop = the lone trend optional at p=0.5;
+chandelier = half the required_from_set pick → predicted 50%/25%).
+
+**Change (TDD, operator "deploy when complete"):** `_optional_exit_pick_p()` — the S5
+optional-additions Bernoulli, 0.5 everywhere except (trend_continuation, swing_long,
+time_stop) → **0.15** (`_TREND_SWING_LONG_TIME_STOP_PICK_P`). One knob:
+chandelier-only rises mechanically (0.5 × 0.85 ≈ 42%; emission proof 46.9% at n=96)
+and trailing_atr (D236: not refuted) keeps its required-pick share. NOT 0: their
+census window mostly predates the v36 U[8,10] prior, so the surviving ~15% keeps
+feeding the funnel's read of it (their §2 explicitly keeps the prior for remaining
+draws — verified: all surviving carriers emit n_bars ∈ [8,10]). rng consumption
+identical on every path (one random() per optional) — unscoped cells byte-identical
+(hard rule #6); MR's timer is a required_from_set pick, structurally untouched
+(tested). "Do not touch other buckets": swing_mid verified unchanged (48.0% timer).
+
+**Goldens:** 6 of 7 re-pinned via the environment-matched harness (OLD code reproduced
+every constant exactly; first divergences verified as trend swing_long exit draws —
+PRE@2, V27@11); the cohort golden (seed 4242) hosts no scoped flip and is untouched.
+v37→v38 bump + archive + test pin in the deploy down-window. Related: [[D282]],
+[[D286]], [[D236]], [[D169]].

@@ -1955,22 +1955,28 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # first divergence is a single-name draw — position 0's BMY maps identically
 # by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
 # Relational splits re-asserted by the tests below.
+# D288 (v38): re-pinned — the trend swing_long time_stop optional draw drops
+# to p=0.15 (exit-mix relay), so scoped configs flip their timer pick and the
+# skipped n_bars randint shifts downstream draws. Licensing harness
+# environment-matched: OLD code reproduced every constant exactly; each first
+# divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
+# cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
 _REGIME_GOLDEN_PRE = [
     "6bfa51eb7329103c",
     "704bd0ae2ae8ebc4",
-    "8d06c6fe4757ddd5",
-    "d7bbe58b9d44d96c",
-    "2b624f2afa4c3c22",
-    "617ffeebf9ccda8b",
-    "3d0ac225cbcd0a26",
-    "56e6a793104491be",
-    "0628984763d514ab",
-    "c757c989e2a95524",
-    "f6ff4f6ec4bd71a9",
-    "bde6a02b5bbbaa85",
-    "58b675ee45b27670",
-    "3ac2ebb7b47e0085",
-    "bdabe1c70fdd187f",
+    "b3f02590d839b983",
+    "74fce9a3c05d2130",
+    "2c6b3f5717967ee1",
+    "783aa9246ae91418",
+    "ef0333e78106091a",
+    "2f7e1b26d108758c",
+    "8635310ad5cf97a9",
+    "ea87585eac26b540",
+    "05c511fff6b980da",
+    "46855ad3cd256da9",
+    "9bab5b0304e7191c",
+    "2e4054a200aca442",
+    "e26cfc7734b1eb1e",
 ]
 
 
@@ -2200,22 +2206,28 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # first divergence is a single-name draw — position 0's BMY maps identically
 # by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
 # Relational splits re-asserted by the tests below.
+# D288 (v38): re-pinned — the trend swing_long time_stop optional draw drops
+# to p=0.15 (exit-mix relay), so scoped configs flip their timer pick and the
+# skipped n_bars randint shifts downstream draws. Licensing harness
+# environment-matched: OLD code reproduced every constant exactly; each first
+# divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
+# cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
 _REGIME_GOLDEN_DSJ_ACTIVE = [
     "6bfa51eb7329103c",
     "704bd0ae2ae8ebc4",
-    "8d06c6fe4757ddd5",
-    "68af2ceaeca546ae",
-    "8b246f11f1401ba8",
-    "905ea76a10f7c8ce",
-    "cbc0f93dbf3631e3",
-    "5db3d6e6cc9179cc",
-    "fee451ce01b630e1",
-    "836ae20b650be520",
-    "592d2ea41ec1870a",
-    "2b6ce44e8d06338d",
-    "84e4afc7fa2566cd",
-    "fcad61c25fad3d32",
-    "abbd4f45df5a18ca",
+    "b3f02590d839b983",
+    "d7bbe58b9d44d96c",
+    "2b624f2afa4c3c22",
+    "617ffeebf9ccda8b",
+    "3d0ac225cbcd0a26",
+    "56e6a793104491be",
+    "0628984763d514ab",
+    "c757c989e2a95524",
+    "f6ff4f6ec4bd71a9",
+    "bde6a02b5bbbaa85",
+    "58b675ee45b27670",
+    "3ac2ebb7b47e0085",
+    "d057acfa6f58918d",
 ]
 
 
@@ -2363,22 +2375,28 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # first divergence is a single-name draw — position 0's BMY maps identically
 # by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
 # Relational splits re-asserted by the tests below.
+# D288 (v38): re-pinned — the trend swing_long time_stop optional draw drops
+# to p=0.15 (exit-mix relay), so scoped configs flip their timer pick and the
+# skipped n_bars randint shifts downstream draws. Licensing harness
+# environment-matched: OLD code reproduced every constant exactly; each first
+# divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
+# cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
 _REGIME_GOLDEN_V26_ACTIVE = [
     "6bfa51eb7329103c",
     "704bd0ae2ae8ebc4",
-    "8d06c6fe4757ddd5",
-    "68af2ceaeca546ae",
-    "8b246f11f1401ba8",
-    "905ea76a10f7c8ce",
-    "cbc0f93dbf3631e3",
-    "b8f9352489908472",
-    "ea87585eac26b540",
-    "05c511fff6b980da",
-    "46855ad3cd256da9",
-    "9bab5b0304e7191c",
-    "4ab710e17ad72e09",
-    "e26cfc7734b1eb1e",
-    "e603bcafd6443537",
+    "b3f02590d839b983",
+    "893126571e3e8cd1",
+    "1cac2460cc947750",
+    "d48970b100b35e24",
+    "131b1c374370685d",
+    "a69fcde1ebd3a041",
+    "f0198cf7715392b9",
+    "28732ba139c413b0",
+    "0f369fa617bd667d",
+    "b8510ea54237fd60",
+    "7a88edfbcdac0b97",
+    "0f6c9737b34d7901",
+    "2a959b6cc8a25d59",
 ]
 
 
@@ -2526,6 +2544,12 @@ def test_d264_new_ids_dormant_without_registry(
 # first divergence is a single-name draw — position 0's BMY maps identically
 # by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
 # Relational splits re-asserted by the tests below.
+# D288 (v38): re-pinned — the trend swing_long time_stop optional draw drops
+# to p=0.15 (exit-mix relay), so scoped configs flip their timer pick and the
+# skipped n_bars randint shifts downstream draws. Licensing harness
+# environment-matched: OLD code reproduced every constant exactly; each first
+# divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
+# cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
 _REGIME_GOLDEN_V27_ACTIVE = [
     "6bfa51eb7329103c",
     "704bd0ae2ae8ebc4",
@@ -2538,7 +2562,7 @@ _REGIME_GOLDEN_V27_ACTIVE = [
     "aff3d95820756635",
     "28732ba139c413b0",
     "0f369fa617bd667d",
-    "dda3641fd58ac73a",
+    "88494d6871f83ed7",
     "7a88edfbcdac0b97",
     "0f6c9737b34d7901",
     "2a959b6cc8a25d59",
@@ -2751,22 +2775,28 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # first divergence is a single-name draw — position 0's BMY maps identically
 # by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
 # Relational splits re-asserted by the tests below.
+# D288 (v38): re-pinned — the trend swing_long time_stop optional draw drops
+# to p=0.15 (exit-mix relay), so scoped configs flip their timer pick and the
+# skipped n_bars randint shifts downstream draws. Licensing harness
+# environment-matched: OLD code reproduced every constant exactly; each first
+# divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
+# cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
 _REGIME_GOLDEN_V29_ACTIVE = [
     "6bfa51eb7329103c",
     "704bd0ae2ae8ebc4",
-    "8d06c6fe4757ddd5",
-    "68af2ceaeca546ae",
-    "8b246f11f1401ba8",
-    "905ea76a10f7c8ce",
-    "cbc0f93dbf3631e3",
-    "9473b2354f914bfd",
-    "ea87585eac26b540",
-    "05c511fff6b980da",
-    "46855ad3cd256da9",
-    "9bab5b0304e7191c",
-    "61be7f02f5f7453d",
-    "76aef8db4e57771a",
-    "59f10afe89ab9c28",
+    "b3f02590d839b983",
+    "276966d84a4bfc9b",
+    "1cac2460cc947750",
+    "d48970b100b35e24",
+    "131b1c374370685d",
+    "a69fcde1ebd3a041",
+    "f0198cf7715392b9",
+    "a88f86b1373855ae",
+    "0f369fa617bd667d",
+    "b8510ea54237fd60",
+    "7a88edfbcdac0b97",
+    "0f6c9737b34d7901",
+    "2a959b6cc8a25d59",
 ]
 
 
@@ -2966,22 +2996,28 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # first divergence is a single-name draw — position 0's BMY maps identically
 # by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
 # Relational splits re-asserted by the tests below.
+# D288 (v38): re-pinned — the trend swing_long time_stop optional draw drops
+# to p=0.15 (exit-mix relay), so scoped configs flip their timer pick and the
+# skipped n_bars randint shifts downstream draws. Licensing harness
+# environment-matched: OLD code reproduced every constant exactly; each first
+# divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
+# cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
 _REGIME_GOLDEN_V31_ACTIVE = [
     "6bfa51eb7329103c",
     "704bd0ae2ae8ebc4",
-    "8d06c6fe4757ddd5",
-    "68af2ceaeca546ae",
-    "8b246f11f1401ba8",
-    "905ea76a10f7c8ce",
-    "cbc0f93dbf3631e3",
-    "9473b2354f914bfd",
-    "ea87585eac26b540",
-    "05c511fff6b980da",
-    "46855ad3cd256da9",
-    "9bab5b0304e7191c",
-    "61be7f02f5f7453d",
-    "b09bcb5c1212cc90",
-    "59f10afe89ab9c28",
+    "b3f02590d839b983",
+    "bb4c5aa07280e2bb",
+    "1cac2460cc947750",
+    "d48970b100b35e24",
+    "6909638964f7109b",
+    "a69fcde1ebd3a041",
+    "f0198cf7715392b9",
+    "5e9a85b8de5bfbb8",
+    "d683090d7a5b4bf1",
+    "2e131c06df11c77c",
+    "51f4f94249953537",
+    "16f4c50c626a8b28",
+    "2a959b6cc8a25d59",
 ]
 
 

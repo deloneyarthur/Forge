@@ -252,6 +252,25 @@ _CAPITULATION_K_MULTIPLIERS: tuple[int, ...] = (1, 2, 3, 4)
 _TREND_SWING_LONG_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 10)
 _MR_SWING_MID_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 15)
 
+# D288 (v38) — exit-CLASS mix shift for trend swing_long (Crucible
+# FORGE_trend_swinglong_exit_mix_2026-07-16; COMPOSES with the v36 duration
+# prior above — mix share vs duration-given-carried, two knobs on different
+# axes). Their weekly-census read (n=45,850 decided in the cell, 07-02→07-16;
+# reproduced on our verdicts to ~1pp before building): exit class orders the
+# whole conversion surface — chandelier-only 39.1% component rate >
+# other-discretionary 30.7% > timer-carrying 16.9% (monotone; replicates in
+# the confluence stratum and at swing_mid) — yet 46% of the cell carried a
+# timer via the p=0.5 optional draw. One knob: the time_stop optional
+# Bernoulli drops to 0.15 in THIS CELL ONLY; chandelier-only rises
+# mechanically (0.5 required-pick x 0.85 no-timer ≈ 42%) and trailing_atr
+# (D236: not refuted, kept alongside) keeps its required-pick share. 0.15
+# (not 0): their census window mostly PREDATES the v36 U[8,10] prior, so the
+# surviving timer draws keep feeding the funnel's read of that prior. Every
+# other (hypothesis, bucket) keeps 0.5 — "do not touch other buckets on this
+# evidence" (MR's timer is a required_from_set pick, structurally untouched).
+_TREND_SWING_LONG_TIME_STOP_PICK_P: float = 0.15
+_OPTIONAL_EXIT_PICK_P_DEFAULT: float = 0.5
+
 # D276 (v33) — resid_vix CONFIRMED-region concentration (Crucible
 # FORGE_resid_vix_region_followup_2026-07-13, first seen 07-15 in the
 # late-relay batch): three PIPELINE-NATIVE residual_momentum configs pass the
@@ -1609,6 +1628,18 @@ def _time_stop_nbars_range(
     return None
 
 
+def _optional_exit_pick_p(hypothesis: str, bucket: str | None, exit_id: str) -> float:
+    """The Bernoulli p for one §3.5 S5 optional-additions exit draw.
+
+    0.5 everywhere except cells with census evidence (D288/v38): trend
+    swing_long carries time_stop at 0.43x the chandelier-only conversion, so
+    its mix share drops to 0.15 — the OUTER lever composing with the v36
+    U[8,10] duration prior, which the surviving draws keep."""
+    if hypothesis == "trend_continuation" and bucket == "swing_long" and exit_id == "time_stop":
+        return _TREND_SWING_LONG_TIME_STOP_PICK_P
+    return _OPTIONAL_EXIT_PICK_P_DEFAULT
+
+
 def _build_exits(
     space: SearchSpace,
     hypothesis: str,
@@ -1647,8 +1678,15 @@ def _build_exits(
     if required_set:
         ids.append(rng.choice(required_set))
     optional_pool = space.s5_optional_additions_by_hypothesis[hypothesis]
-    # Each optional independently picked with p=0.5, then truncated to K.
-    picked_optional = [opt for opt in optional_pool if rng.random() < 0.5]
+    # Each optional independently picked (p=0.5 default; D288 scopes the
+    # trend swing_long time_stop draw to 0.15), then truncated to K. The rng
+    # consumption is identical on every path — one random() per optional —
+    # so unscoped cells stay byte-identical (hard rule #6).
+    picked_optional = [
+        opt
+        for opt in optional_pool
+        if rng.random() < _optional_exit_pick_p(hypothesis, bucket, opt)
+    ]
     ids.extend(picked_optional[:_K_MAX_OPTIONAL])
     # Preserve order, deduplicate (E1 / required_always / optional may overlap).
     deduped = list(dict.fromkeys(ids))
