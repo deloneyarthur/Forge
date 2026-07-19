@@ -470,12 +470,15 @@ def test_s5_forbidden_for_trend_includes_hard_profit_target(
     assert "hard_profit_target" in space.s5_forbidden_by_hypothesis["trend_continuation"]
 
 
-def test_s5_required_volatility_event_has_both_iv_crush_and_event_passed(
+def test_s5_required_volatility_event_has_iv_crush_and_time_stop(
     space: SearchSpace,
 ) -> None:
+    """D290 (v39): time_stop replaced event_passed_exit as the required ve hold
+    (the fallback-mode truncation; Crucible's 07-19 close-out)."""
     required = space.s5_required_by_hypothesis["volatility_event"]
     assert "iv_crush_exit" in required
-    assert "event_passed_exit" in required
+    assert "time_stop" in required
+    assert "event_passed_exit" not in required
 
 
 # ---------------------------------------------------------------------------

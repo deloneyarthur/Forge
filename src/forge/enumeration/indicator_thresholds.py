@@ -486,10 +486,23 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     # volatility_event DIRECTIONAL via C2 (iv_structure); the second
     # medium-horizon ve anchor (A2 → full Q28 lift). Regime use deliberately
     # None (the R1-sibling gate question stays open, as with iv_minus_rv).
+    # D290 (v39): directional floor loosened x1.3 (0.01 -> 0.0077) — Crucible's
+    # honest ve chassis entry sits at 0.0181 = the stock threshold loosened x1.3,
+    # worth +0.21 cpcv; we widen the sampled axis to reach that region and keep
+    # the 0.04 ceiling (sample, never pin).
     "iv_term_slope": IndicatorThresholdSpec(
-        directional_range=(0.01, 0.04),
+        directional_range=(0.0077, 0.04),
         regime_range=None,
         op_directional=">",
+    ),
+    # D290 (v39): the ve index-tape veto (Crucible 07-19 close-out). Regime-role
+    # only (it rides the S3 veto slot); op ">" with threshold in [-0.03, -0.02]
+    # = "enter only while the reference tape is NOT already breaking". The
+    # reference/window template knobs are sampled at the veto site in sampler.py.
+    "ref_trailing_return": IndicatorThresholdSpec(
+        directional_range=None,
+        regime_range=(-0.03, -0.02),
+        op_regime=">",
     ),
     # option_momentum: ACTIVATED v19 (D138) as a trend_continuation directional
     # (smart_money pinned to trend's C2 families). PERCENTILE-ONLY by design —

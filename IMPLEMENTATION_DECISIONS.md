@@ -1603,3 +1603,45 @@ ghost-era measure; clean-cache re-validation = **0.40, real but marginal, no sol
 promotion case** (sleeve route reopens only with diverse honest supply). Outbound
 held for carry: `PROMPT_CRUCIBLE_VE_PROGRAM_RESPONSE.md`. Related: [[D169]],
 [[D168]], [[D257]], [[D236]], [[D128]], [[D287]].
+
+## D290 — 2026-07-19 — v39 BUILT+DEPLOYED: ve exit-schema repair (event_passed OUT, time_stop U[4,7] required), ref_trailing_return veto SAMPLING, iv_term_slope x1.3 loosening + the ve ghost-label training cut (operator "approved, build v39 and deploy when complete")
+
+Implements `docs/proposals/v39-ve-program.md` (the D289 triage's staging; Crucible
+`FORGE_ve_program_relay_2026-07-19.md` asks #2/#3 + §1/§6 actioning). All TDD.
+
+1. **ve exit schema (S5 set edit, the D236/D257 precedent — operator-approved
+   explicitly):** ve `required_always` = (iv_crush_exit, time_stop);
+   event_passed_exit REMOVED and FORBIDDEN (it always ran their fallback mode — we
+   never emitted `event_indicator` — a hard cut at entry+n_bars; with a timer present
+   true-event mode fires 0/68). `_time_stop_nbars_range` gains (volatility_event, *)
+   → U[4,7] (their sweep: ~5 sweet spot; 13/16/21 crater 0.81/0.42/0.29). The
+   D169 `_EVENT_PASSED_NBARS_LADDER` + its `_exit_params` branch RETIRED (tombstone).
+2. **ref_trailing_return ve veto (SAMPLED, never pinned):**
+   `_VE_REGIME_VETO_INDICATORS` + the "volatility_event" pool in search_space
+   (registry-gated dormancy, D258 convention; live registry serves it — macro,
+   market-wide); threshold table entry regime_range=(-0.03, -0.02) op ">";
+   `_sample_veto_params` merges reference ∈ {SPY, QQQ} + window ∈ [3,10] on this
+   id's path only. Rides the generic ~0.5 veto-share draw with the per-id C1 macro
+   guard. signal_horizon entry added (gate-only, the market_realized_vol precedent).
+   NB `check-activations` cannot probe a regime-role id ([UNCHK] expected); liveness
+   evidence = Crucible's own certified probe runs (the honest recipe's veto, 96317de).
+3. **iv_term_slope directional floor 0.01 → 0.0077** (x1.3 loosening; +0.21 cpcv on
+   their honest chassis; ceiling 0.04 kept; sampled never pinned).
+4. **ve ghost-label cut (versionless companion):** `VE_GHOST_LABEL_CUT = 2026-07-18`
+   + `is_ve_ghost_label()` in rejection_weights; enforced at every trainer choke
+   point — `_iter_hypothesis_outcomes` (hypothesis weights), `_component_rate_sums`
+   (all D105/D106 weighters), trade_rate_priors, `build_dataset` (F3 + tail
+   training), `compute_mature_arms` (arm maturity). 34,273 ghost ve verdicts / 657
+   fictional components (~10% of positive labels) stop feeding the learners.
+
+**Emission proof (live registry, 4k configs):** ve 784: event_passed 0, time_stop
+784/784 with n_bars uniform {4:189, 5:191, 6:182, 7:222}; veto share 48%
+(SPY 192 / QQQ 188); iv_term_slope min 0.0080 (loosened floor reached), max 0.0393;
+all hypotheses reachable. **NOT built (their honesty block):** genome ports,
+stabilization filters, veto pins; the ve floor + D287 protections untouched.
+
+**Goldens:** all 7 re-pinned environment-matched (OLD code reproduced every constant
+exactly; every first divergence = a ve config carrying the new exit stack; two
+cross-golden prefix asserts tightened to the new mutual split at position 1 — the
+position-0 ve config's rng shifted). Full suite 1999 green. Related: [[D289]],
+[[D169]], [[D168]], [[D257]], [[D236]], [[D128]], [[D287]].

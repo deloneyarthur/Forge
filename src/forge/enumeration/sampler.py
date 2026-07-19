@@ -271,6 +271,17 @@ _MR_SWING_MID_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 15)
 _TREND_SWING_LONG_TIME_STOP_PICK_P: float = 0.15
 _OPTIONAL_EXIT_PICK_P_DEFAULT: float = 0.5
 
+# D290 (v39) — the ve hold (Crucible's 07-19 ve close-out). time_stop is now the
+# REQUIRED ve hold (event_passed_exit is out of the schema — it always ran their
+# FALLBACK mode, a hard cut at entry+n_bars, truncating every ve hold; the
+# v22/D169 ladder put 60% of ve batches in the cratered region). Their sweep:
+# sweet spot around 5; 13/16/21 bars crater (cpcv 0.81/0.42/0.29) -> U[4,7],
+# both buckets.
+_VE_TIME_STOP_NBARS_RANGE: tuple[int, int] = (4, 7)
+_REF_TRAILING_RETURN_ID: str = "ref_trailing_return"
+_REF_TRAILING_RETURN_REFERENCES: tuple[str, ...] = ("SPY", "QQQ")
+_REF_TRAILING_RETURN_WINDOW_RANGE: tuple[int, int] = (3, 10)
+
 # D276 (v33) — resid_vix CONFIRMED-region concentration (Crucible
 # FORGE_resid_vix_region_followup_2026-07-13, first seen 07-15 in the
 # late-relay batch): three PIPELINE-NATIVE residual_momentum configs pass the
@@ -791,6 +802,21 @@ def _config_has_veto_family_indicator(
     return any(ind in family_ids for sig in signals for ind in sig.indicators)
 
 
+def _sample_veto_params(veto_id: str, rng: random.Random) -> dict[str, object]:
+    """Threshold params for the S3 veto slot, plus per-id template knobs.
+
+    D290 (v39): ref_trailing_return carries reference/window template knobs
+    beyond the threshold — SAMPLED per Crucible's honesty block (the
+    parameterization is knife-edged: variants span cpcv 1.27-1.55; two crossed
+    1.5 and were deliberately NOT adopted). Drawn only on this id's path —
+    other veto draws consume rng identically (hard rule #6)."""
+    params = sample_threshold_params(veto_id, "regime_filter", rng)
+    if veto_id == _REF_TRAILING_RETURN_ID:
+        params["reference"] = rng.choice(_REF_TRAILING_RETURN_REFERENCES)
+        params["window"] = rng.randint(*_REF_TRAILING_RETURN_WINDOW_RANGE)
+    return params
+
+
 def sample_config(
     space: SearchSpace,
     registry: RegistrySnapshot,
@@ -1104,7 +1130,7 @@ def sample_config(
                 type="threshold",
                 role="regime_filter",
                 indicators=(veto_id,),
-                params=sample_threshold_params(veto_id, "regime_filter", rng),
+                params=_sample_veto_params(veto_id, rng),
             )
         )
 
@@ -1625,6 +1651,9 @@ def _time_stop_nbars_range(
         return _MR_SWING_MID_TIME_STOP_NBARS_RANGE
     if hypothesis == "trend_continuation" and bucket == "swing_long":
         return _TREND_SWING_LONG_TIME_STOP_NBARS_RANGE
+    # D290 (v39): the required ve hold, both buckets (their sweep's sweet spot).
+    if hypothesis == "volatility_event":
+        return _VE_TIME_STOP_NBARS_RANGE
     return None
 
 
@@ -1992,7 +2021,10 @@ def _sample_pre_earnings_setup_params(rng: random.Random) -> dict[str, object]:
 # DISJOINT from the Lever B mr gate (one v22 bump, two slices). `time_stop` is NOT
 # widened here (cross-hypothesis → would dirty the mr slice; and it masks a widened
 # event_passed past 5 anyway — Ask 4) — deferred to a follow-on.
-_EVENT_PASSED_NBARS_LADDER: tuple[int, ...] = (3, 5, 8, 13, 21)
+# D290 (v39): _EVENT_PASSED_NBARS_LADDER RETIRED — event_passed_exit left the ve
+# schema (its only carrier). The ladder always ran Crucible's FALLBACK mode (we
+# never emitted `event_indicator`), so it widened a truncation, not a hold —
+# the wound behind the v21->v22 ve conversion collapse (D289).
 
 
 def _exit_params(exit_id: str, rng: random.Random) -> dict[str, object]:
@@ -2007,8 +2039,6 @@ def _exit_params(exit_id: str, rng: random.Random) -> dict[str, object]:
     """
     if exit_id == "trailing_atr":
         return {"activate_after_gain_pct": round(rng.uniform(0.30, 0.50), 2)}
-    if exit_id == "event_passed_exit":
-        return {"n_bars_after_entry": rng.choice(_EVENT_PASSED_NBARS_LADDER)}
     if exit_id == "chandelier_exit":
         # D236 (v23, §2.7): Crucible's chandelier template reads `atr_multiplier`
         # from the exit params (the D138 option_momentum / D169 event_passed

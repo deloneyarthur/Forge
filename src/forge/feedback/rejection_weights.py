@@ -71,6 +71,9 @@ def _iter_hypothesis_outcomes(
         hyp = cfg.get("hypothesis") if isinstance(cfg, dict) else None
         if not isinstance(hyp, str):
             continue
+        # D290: ghost-era ve labels are fiction — never learn from them.
+        if is_ve_ghost_label(hyp, gr.decision.decided_at):
+            continue
         yield hyp, gr
 
 
@@ -395,6 +398,33 @@ _COVERAGE_UNVERIFIED_MARK: str = "coverage_unverified"
 # guard refuses it).
 CLEAN_ERA_LABEL_CUT: datetime = datetime(2026, 6, 10, 17, 17, 13, tzinfo=UTC)
 
+# D290 (the v39 companion) — the ve ghost-label cut. Crucible's 2026-07-19 ve
+# close-out: 23/25 stored-cpcv ve components were GHOSTS (their
+# put_wall/gex/vex/cex staleness blind spot, fixed their-side 2026-07-18), and
+# 34,273 ve verdicts / 657 fictional components sit inside OUR clean-era
+# training window — ~10% of all positive labels. Their §6 ask: treat pre-07-18
+# ve stored scores as unrankable. `volatility_event` rows decided before this
+# cut are excluded from EVERY learned trainer (hypothesis weights, the
+# D105/D106 component-rate weighters, trade-rate priors, the ranker dataset,
+# arm-floor maturity) — the CLEAN_ERA precedent scoped to one hypothesis.
+# Non-ve rows and post-cut ve rows are untouched.
+VE_GHOST_LABEL_CUT: datetime = datetime(2026, 7, 18, 0, 0, 0, tzinfo=UTC)
+
+_VE_GHOST_HYPOTHESIS = "volatility_event"
+
+
+def is_ve_ghost_label(hypothesis: str | None, decided_at: datetime) -> bool:
+    """True iff this (hypothesis, decided_at) label falls under the ve ghost cut.
+
+    Naive timestamps are UTC by repo convention (the verdicts/export era is
+    uniform post-D117)."""
+    if hypothesis != _VE_GHOST_HYPOTHESIS:
+        return False
+    decided = decided_at
+    if decided.tzinfo is None:
+        decided = decided.replace(tzinfo=UTC)
+    return decided < VE_GHOST_LABEL_CUT
+
 
 def _values_readable(gated_run: GatedRun) -> bool:
     """D124 key 1: False when the run was decided before the cost-floor cut.
@@ -526,6 +556,9 @@ def _component_rate_sums[K](
             continue
         cfg = json.loads(config_json_raw) if isinstance(config_json_raw, str) else config_json_raw
         if not isinstance(cfg, dict):
+            continue
+        # D290: ghost-era ve labels are fiction — never learn from them.
+        if is_ve_ghost_label(cfg.get("hypothesis"), gr.decision.decided_at):
             continue
         key = key_of(cfg)
         if key is None:

@@ -110,9 +110,11 @@ _TEMPLATES: tuple[_Template, ...] = (
         # ETF-compatible.
         regime_indicator="days_to_fomc",
         regime_params={"threshold": 7},
+        # D290 (v39): time_stop replaced event_passed_exit as the required ve
+        # hold (the fallback-mode truncation; Crucible's 07-19 close-out).
         extra_required_exits=(
             ExitSpec(id="iv_crush_exit"),
-            ExitSpec(id="event_passed_exit"),
+            ExitSpec(id="time_stop"),
         ),
         valid_dte_buckets=("swing_short",),
     ),

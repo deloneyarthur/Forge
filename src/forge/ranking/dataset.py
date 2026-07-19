@@ -24,6 +24,7 @@ from crucible_contracts.models import GateResult
 from forge.feedback.rejection_weights import (
     CLEAN_ERA_LABEL_CUT,
     honest_regime_coverage_row,
+    is_ve_ghost_label,
 )
 from forge.ranking.features import extract_features
 
@@ -125,6 +126,10 @@ def build_dataset(
     feature_names: set[str] = set()
     for run_id, config_hash, decision, decided_at, gate_results_json, config_json in rows:
         config = StrategyConfig.model_validate_json(config_json)
+        # D290: ghost-era ve labels are fiction (Crucible 07-19 close-out) —
+        # they never enter the training frame.
+        if is_ve_ghost_label(config.hypothesis, decided_at):
+            continue
         gate_results = parse_gate_results(gate_results_json)
         features = extract_features(config, registry).as_dict()
         feature_names.update(features)

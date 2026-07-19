@@ -134,11 +134,17 @@ _S5_HYPOTHESIS_EXITS: dict[str, dict[str, tuple[str, ...]]] = {
         "optional_additions": ("time_stop",),
         "forbidden": (),
     },
+    # D290 (v39): event_passed_exit REMOVED from ve — Crucible's 07-19 close-out:
+    # we emitted it with no `event_indicator` (always their FALLBACK mode = a hard
+    # cut at entry+n_bars), truncating every ve hold; with a timer present the
+    # true-event mode fires 0/68 anyway (decoration). time_stop is now the
+    # REQUIRED ve hold (sampler emits n_bars ~ U[4,7], their sweet spot; 13/16/21
+    # bars crater at cpcv 0.81/0.42/0.29). iv_crush_exit unchanged.
     "volatility_event": {
-        "required_always": ("iv_crush_exit", "event_passed_exit"),
+        "required_always": ("iv_crush_exit", "time_stop"),
         "required_from_set": (),  # 2-element AND already exhausted by required_always
-        "optional_additions": ("time_stop",),
-        "forbidden": (),
+        "optional_additions": (),
+        "forbidden": ("event_passed_exit",),
     },
     "tail_hedge": {
         # tail_hedge is filtered at the sampler via D066's OVERLAY_ONLY_HYPOTHESES;
@@ -315,6 +321,17 @@ _R2_TREND_CONTINUATION_REGIME_INDICATORS = (
 # FORGE_days_since_jump_indicator_2026-07-08). Empty in the search space until the
 # registry serves the id → dormant + byte-identical cold path (hard rule #6).
 _R2_TREND_VOLATILITY_VETO_INDICATORS = ("days_since_jump",)
+# §3.5 S3 (D290, v39) — ref_trailing_return index-tape VETO for volatility_event.
+# Crucible's 07-19 close-out: the honest ve chassis's one validated protective
+# lever is "skip entries while the index tape is already breaking"
+# (ref_trailing_return(reference, window) > threshold; MECHANISM validated
+# ex-2020 +0.218, PARAMETERIZATION knife-edged → SAMPLED, never pinned). Same
+# S3 shape as the dsj/ivol vetoes: an ADDITIONAL regime gate ANDed on the ve
+# primary; family `macro` (live registry, verified 2026-07-19), so the per-ID C1
+# guard skips it when the config already carries a macro indicator. Empty in
+# the search space until the registry serves the id → dormant + byte-identical
+# cold path (hard rule #6).
+_VE_REGIME_VETO_INDICATORS = ("ref_trailing_return",)
 # §3.5 S3 (D263, v26) — ivol name-selection VETO for mean_reversion. Like the dsj
 # veto above, an ADDITIONAL regime gate that ANDs on top of the mandatory MR
 # regime gate (R1) — S3 permits ">= 1" regime gate; R1 stays satisfied by the

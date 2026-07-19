@@ -49,6 +49,7 @@ from forge.grammar.custom_predicates import (
     _R2_TREND_VOLATILITY_VETO_INDICATORS,
     _R3_EVENT_PROXIMITY_INDICATORS,
     _S5_HYPOTHESIS_EXITS,
+    _VE_REGIME_VETO_INDICATORS,
     _X1_VOL_TARGET_INDICATOR,
     _X2_KELLY_INDICATOR,
 )
@@ -272,6 +273,9 @@ def build_search_space(
                 sorted(set(_R2_TREND_VOLATILITY_VETO_INDICATORS) & registry_ids)
             ),
             "mean_reversion": tuple(sorted(set(_MR_REGIME_VETO_INDICATORS) & registry_ids)),
+            # D290 (v39): the ve index-tape veto (ref_trailing_return) — same
+            # registry-gated dormancy as the trend/MR pools.
+            "volatility_event": tuple(sorted(set(_VE_REGIME_VETO_INDICATORS) & registry_ids)),
         }
     )
     # D263 (v26) / D266 (v29): the veto family per ID, read from registry

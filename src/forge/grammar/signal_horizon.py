@@ -158,6 +158,12 @@ _SIGNAL_HORIZON_TABLE: dict[str, int] = {
     # consults this; the entry satisfies the thresholdable-coverage invariant
     # honestly (the vix_term_slope/market_state precedent).
     "market_realized_vol": 1,
+    # D290 (v39): reference underlying's short trailing return (the ve
+    # index-tape veto; window 3-10 sessions is a spot tape read). Gate-only
+    # (no directional range), so S4 never consults this; the entry satisfies
+    # the thresholdable-coverage invariant honestly (the market_realized_vol
+    # precedent).
+    "ref_trailing_return": 1,
     # ----- flow / calendar (event proximity — near-instant reads) -----
     "put_call_flow": 5,
     "days_to_earnings": 5,

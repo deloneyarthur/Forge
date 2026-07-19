@@ -188,7 +188,8 @@ def test_s5_trend_with_hard_profit_target_fails() -> None:
 
 
 def test_s5_volatility_event_requires_both_exits() -> None:
-    """volatility_event requires both iv_crush_exit AND event_passed_exit."""
+    """volatility_event requires both iv_crush_exit AND time_stop (D290/v39:
+    event_passed_exit is OUT — the fallback-mode truncation — and FORBIDDEN)."""
     cfg = grammar_valid_baseline(
         hypothesis="volatility_event",
         signals=(
@@ -211,12 +212,12 @@ def test_s5_volatility_event_requires_both_exits() -> None:
             ExitSpec(id="earnings_exit"),
             ExitSpec(id="liquidity_exit"),
             ExitSpec(id="iv_crush_exit"),
-            # event_passed_exit missing
+            # time_stop missing
         ),
     )
     result = evaluate(_predicate("exits_match_hypothesis"), cfg, _registry())
     assert not result.passed
-    assert "event_passed_exit" in result.detail
+    assert "time_stop" in result.detail
 
 
 # ---------------------------------------------------------------------------
@@ -248,13 +249,13 @@ def test_d071_volatility_event_missing_required_always_fails() -> None:
             ExitSpec(id="earnings_exit"),
             ExitSpec(id="liquidity_exit"),
             ExitSpec(id="iv_crush_exit"),
-            # event_passed_exit missing — required_always
+            # time_stop missing — required_always (D290/v39)
         ),
     )
     result = evaluate(_predicate("exits_match_hypothesis"), cfg, _registry())
     assert not result.passed
     assert "required_always" in result.detail
-    assert "event_passed_exit" in result.detail
+    assert "time_stop" in result.detail
 
 
 def test_d071_foreign_exit_fails() -> None:

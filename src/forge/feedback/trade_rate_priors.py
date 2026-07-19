@@ -31,6 +31,8 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from forge.feedback.rejection_weights import is_ve_ghost_label
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -196,6 +198,8 @@ def compute_trade_rate_priors(
         return {}
 
     trades_by_hash = {gr.run.config_hash: int(gr.run.trade_count) for gr in gated_runs}
+    # D290: the ve ghost-label cut needs the decision time per hash.
+    decided_by_hash = {gr.run.config_hash: gr.decision.decided_at for gr in gated_runs}
     family_by_indicator = {ind.id: ind.family for ind in registry.indicators}
 
     # LEFT JOIN so submissions without a batch_summaries row (legacy / orphan)
@@ -219,6 +223,9 @@ def compute_trade_rate_priors(
         if extracted is None:
             continue
         hypothesis, dte_bucket, directional_indicator = extracted
+        # D290: ghost-era ve labels are fiction — never learn trade rates from them.
+        if is_ve_ghost_label(hypothesis, decided_by_hash[config_hash]):
+            continue
         family = family_by_indicator.get(directional_indicator)
         if family is None:
             continue

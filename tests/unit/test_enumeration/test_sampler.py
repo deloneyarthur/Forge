@@ -1278,20 +1278,15 @@ def test_pick_regime_biases_mean_reversion_toward_rv_rank() -> None:
     assert rv > 2 * iv  # rv_rank ranging-weighted (3.0) vs iv_rank (1.0) → ~3x; uniform would tie
 
 
-def test_exit_params_event_passed_samples_widened_ladder() -> None:
-    """D169 (v22): _exit_params emits event_passed_exit.n_bars_after_entry sampled
-    from the Crucible-recommended loosening ladder {3, 5, 8, 13, 21} (was inert →
-    Crucible's runtime default 3). The fresh wider-threshold cohort is the [[D168]]
-    fair test of the time-cut suspect."""
-    from forge.enumeration.sampler import _EVENT_PASSED_NBARS_LADDER, _exit_params
+def test_exit_params_event_passed_retired() -> None:
+    """D290 (v39): the D169 ladder is RETIRED — event_passed_exit left the ve
+    schema (its only carrier; it always ran Crucible's fallback mode, a hard
+    cut at entry+n_bars — the wound behind the v21->v22 ve conversion
+    collapse, D289). _exit_params emits nothing for it."""
+    from forge.enumeration.sampler import _exit_params
 
-    seen: set[object] = set()
-    for s in range(200):
-        params = _exit_params("event_passed_exit", random.Random(s))
-        assert set(params) == {"n_bars_after_entry"}
-        assert params["n_bars_after_entry"] in _EVENT_PASSED_NBARS_LADDER
-        seen.add(params["n_bars_after_entry"])
-    assert seen == set(_EVENT_PASSED_NBARS_LADDER)  # the full ladder is reachable
+    for s in range(50):
+        assert _exit_params("event_passed_exit", random.Random(s)) == {}
 
 
 def test_exit_params_other_exits_unchanged() -> None:
@@ -1634,7 +1629,8 @@ def test_v18_ve_draws_iv_term_slope_directional(
             continue
         seen += 1
         assert d.params["op"] == ">", cfg.name
-        assert 0.01 <= d.params["threshold"] <= 0.04, cfg.name
+        # D290 (v39): the floor is the x1.3-loosened 0.0077 (was 0.01).
+        assert 0.0077 <= d.params["threshold"] <= 0.04, cfg.name
         if cfg.dte_bucket == "swing_mid":
             seen_swing_mid += 1
         else:
@@ -1733,6 +1729,11 @@ _COHORT_TREND = "trend_continuation"
 # first divergence is a single-name draw — position 0's BMY maps identically
 # by index). The resid 50/50 coin touches only fixtures serving resid (v27+).
 # Relational splits re-asserted by the tests below.
+# D290 (v39): re-pinned — the ve exit-schema fix (event_passed_exit OUT,
+# time_stop REQUIRED with n_bars U[4,7]) changes every ve config's exit draws.
+# Licensing harness environment-matched: OLD code reproduced every constant
+# exactly; every first divergence is a volatility_event config carrying the
+# new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _COHORT_GOLDEN_PRE_REFACTOR = [
     "dc125d8f4e014630",
     "4710371b04fac3d0",
@@ -1742,13 +1743,13 @@ _COHORT_GOLDEN_PRE_REFACTOR = [
     "df028f4253e1a090",
     "766ce2e829e37b6e",
     "40941d81eaa3feb0",
-    "984a82a4a1ece90a",
-    "8df00579f3560af0",
-    "f24bb37927105256",
-    "321c2ab518dda26a",
-    "93143e12c13eda9c",
-    "639fdbf61e8a45c3",
-    "3a3f40a4cddf33d0",
+    "cc406814c09170c0",
+    "4722c7b2d1f2663e",
+    "c406d1c3fb948b32",
+    "c924a45f1c779bd3",
+    "22570e7669147c46",
+    "3ad3d204548141c3",
+    "531dbdce040fc1d9",
 ]
 
 
@@ -1961,22 +1962,27 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # environment-matched: OLD code reproduced every constant exactly; each first
 # divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
 # cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
+# D290 (v39): re-pinned — the ve exit-schema fix (event_passed_exit OUT,
+# time_stop REQUIRED with n_bars U[4,7]) changes every ve config's exit draws.
+# Licensing harness environment-matched: OLD code reproduced every constant
+# exactly; every first divergence is a volatility_event config carrying the
+# new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_PRE = [
-    "6bfa51eb7329103c",
-    "704bd0ae2ae8ebc4",
-    "b3f02590d839b983",
-    "74fce9a3c05d2130",
-    "2c6b3f5717967ee1",
-    "783aa9246ae91418",
-    "ef0333e78106091a",
-    "2f7e1b26d108758c",
-    "8635310ad5cf97a9",
-    "ea87585eac26b540",
-    "05c511fff6b980da",
-    "46855ad3cd256da9",
-    "9bab5b0304e7191c",
-    "2e4054a200aca442",
-    "e26cfc7734b1eb1e",
+    "35bfad64f349a45d",
+    "fcf4ece6428c6a88",
+    "dc031877bc52cbb0",
+    "d03b4b2aec3c9828",
+    "afb7be1ec13f7837",
+    "2e98f3e17831cd1c",
+    "07c3c23bc6442075",
+    "5db3d6e6cc9179cc",
+    "3da8926aba415ede",
+    "836ae20b650be520",
+    "71f91a64617d8bb6",
+    "2b6ce44e8d06338d",
+    "e5731f91c607d173",
+    "92dd0416c616ee6c",
+    "2a959b6cc8a25d59",
 ]
 
 
@@ -2212,22 +2218,27 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # environment-matched: OLD code reproduced every constant exactly; each first
 # divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
 # cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
+# D290 (v39): re-pinned — the ve exit-schema fix (event_passed_exit OUT,
+# time_stop REQUIRED with n_bars U[4,7]) changes every ve config's exit draws.
+# Licensing harness environment-matched: OLD code reproduced every constant
+# exactly; every first divergence is a volatility_event config carrying the
+# new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_DSJ_ACTIVE = [
-    "6bfa51eb7329103c",
-    "704bd0ae2ae8ebc4",
-    "b3f02590d839b983",
-    "d7bbe58b9d44d96c",
-    "2b624f2afa4c3c22",
-    "617ffeebf9ccda8b",
-    "3d0ac225cbcd0a26",
-    "56e6a793104491be",
-    "0628984763d514ab",
-    "c757c989e2a95524",
-    "f6ff4f6ec4bd71a9",
-    "bde6a02b5bbbaa85",
-    "58b675ee45b27670",
-    "3ac2ebb7b47e0085",
-    "d057acfa6f58918d",
+    "35bfad64f349a45d",
+    "6de5e037efe419a9",
+    "17d0cbbdeddb4f8e",
+    "a9cc12bc7d7456cb",
+    "827d1f8b6e7d8313",
+    "783aa9246ae91418",
+    "ef0333e78106091a",
+    "52ba895294e3c104",
+    "8635310ad5cf97a9",
+    "ea87585eac26b540",
+    "05c511fff6b980da",
+    "ea0fcd64724b65d5",
+    "b8510ea54237fd60",
+    "1a170cce949bf875",
+    "185d1f8b1beaffce",
 ]
 
 
@@ -2243,7 +2254,9 @@ def test_d258_dsj_active_cold_start_golden(grammar: Grammar, registry: RegistryS
     assert active == _REGIME_GOLDEN_DSJ_ACTIVE
     # the served registry legitimately shifts the sequence vs dormant (D258)
     assert active != _REGIME_GOLDEN_PRE
-    assert active[:3] == _REGIME_GOLDEN_PRE[:3]  # split begins at the first eligible trend config
+    # D290 (v39): mutual split moved to position 1 — position 0 is a ve config
+    # whose rng consumption changed under the new exit schema.
+    assert active[:1] == _REGIME_GOLDEN_PRE[:1]
 
 
 # ---------------------------------------------------------------------------
@@ -2381,22 +2394,27 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # environment-matched: OLD code reproduced every constant exactly; each first
 # divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
 # cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
+# D290 (v39): re-pinned — the ve exit-schema fix (event_passed_exit OUT,
+# time_stop REQUIRED with n_bars U[4,7]) changes every ve config's exit draws.
+# Licensing harness environment-matched: OLD code reproduced every constant
+# exactly; every first divergence is a volatility_event config carrying the
+# new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V26_ACTIVE = [
-    "6bfa51eb7329103c",
-    "704bd0ae2ae8ebc4",
-    "b3f02590d839b983",
-    "893126571e3e8cd1",
-    "1cac2460cc947750",
-    "d48970b100b35e24",
-    "131b1c374370685d",
-    "a69fcde1ebd3a041",
-    "f0198cf7715392b9",
-    "28732ba139c413b0",
-    "0f369fa617bd667d",
-    "b8510ea54237fd60",
-    "7a88edfbcdac0b97",
-    "0f6c9737b34d7901",
-    "2a959b6cc8a25d59",
+    "35bfad64f349a45d",
+    "6de5e037efe419a9",
+    "17d0cbbdeddb4f8e",
+    "a9cc12bc7d7456cb",
+    "827d1f8b6e7d8313",
+    "783aa9246ae91418",
+    "a61a67713ec5f065",
+    "5a7b944409a1ef9d",
+    "9abbcb8b872a454b",
+    "5fd6cec6863fef28",
+    "afe32ec5fb9ba9f2",
+    "98cfb0c43b93f815",
+    "3d791059aec77d4f",
+    "185d1f8b1beaffce",
+    "e603bcafd6443537",
 ]
 
 
@@ -2550,22 +2568,27 @@ def test_d264_new_ids_dormant_without_registry(
 # environment-matched: OLD code reproduced every constant exactly; each first
 # divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
 # cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
+# D290 (v39): re-pinned — the ve exit-schema fix (event_passed_exit OUT,
+# time_stop REQUIRED with n_bars U[4,7]) changes every ve config's exit draws.
+# Licensing harness environment-matched: OLD code reproduced every constant
+# exactly; every first divergence is a volatility_event config carrying the
+# new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V27_ACTIVE = [
-    "6bfa51eb7329103c",
-    "704bd0ae2ae8ebc4",
-    "5b374a94041abba3",
-    "403a8cec4775355a",
-    "37c98654d1c3322b",
-    "65ddcd7e5c8faf42",
-    "de4b912adc249490",
-    "55c250b06c8403df",
-    "aff3d95820756635",
-    "28732ba139c413b0",
+    "35bfad64f349a45d",
+    "16acd3e4a21aa833",
+    "17d0cbbdeddb4f8e",
+    "a9cc12bc7d7456cb",
+    "d7f9a3f7c58dea33",
+    "4f17ab52f24af119",
+    "131b1c374370685d",
+    "0f51c9d2d074d85f",
+    "a05184e7878bd154",
+    "0daba8a56a06f801",
     "0f369fa617bd667d",
     "88494d6871f83ed7",
-    "7a88edfbcdac0b97",
-    "0f6c9737b34d7901",
-    "2a959b6cc8a25d59",
+    "1a170cce949bf875",
+    "e8a11ba9d2de8c66",
+    "e603bcafd6443537",
 ]
 
 
@@ -2581,7 +2604,8 @@ def test_d264_resid_vix_active_cold_start_golden(
     active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
     assert active == _REGIME_GOLDEN_V27_ACTIVE
     assert active != _REGIME_GOLDEN_V26_ACTIVE  # widened trend pools shift the sequence
-    assert active[:2] == _REGIME_GOLDEN_V26_ACTIVE[:2]  # split at the first eligible trend config
+    # D290 (v39): mutual split moved to position 1 (ve rng shift; see above).
+    assert active[:1] == _REGIME_GOLDEN_V26_ACTIVE[:1]
     # at least one config in this slice actually carries a v27 id
     assert any(
         any(
@@ -2781,22 +2805,27 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # environment-matched: OLD code reproduced every constant exactly; each first
 # divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
 # cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
+# D290 (v39): re-pinned — the ve exit-schema fix (event_passed_exit OUT,
+# time_stop REQUIRED with n_bars U[4,7]) changes every ve config's exit draws.
+# Licensing harness environment-matched: OLD code reproduced every constant
+# exactly; every first divergence is a volatility_event config carrying the
+# new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V29_ACTIVE = [
-    "6bfa51eb7329103c",
-    "704bd0ae2ae8ebc4",
-    "b3f02590d839b983",
-    "276966d84a4bfc9b",
-    "1cac2460cc947750",
-    "d48970b100b35e24",
-    "131b1c374370685d",
-    "a69fcde1ebd3a041",
-    "f0198cf7715392b9",
-    "a88f86b1373855ae",
-    "0f369fa617bd667d",
-    "b8510ea54237fd60",
-    "7a88edfbcdac0b97",
-    "0f6c9737b34d7901",
-    "2a959b6cc8a25d59",
+    "35bfad64f349a45d",
+    "6de5e037efe419a9",
+    "17d0cbbdeddb4f8e",
+    "a9cc12bc7d7456cb",
+    "827d1f8b6e7d8313",
+    "5bff8afe0e681c48",
+    "2e1537e2064bc024",
+    "5a7b944409a1ef9d",
+    "9abbcb8b872a454b",
+    "5fd6cec6863fef28",
+    "c08ff8d0e80991f5",
+    "98cfb0c43b93f815",
+    "3d791059aec77d4f",
+    "185d1f8b1beaffce",
+    "59f10afe89ab9c28",
 ]
 
 
@@ -2943,6 +2972,8 @@ def test_d270_non_momentum_time_stop_params_unchanged(
             scoped_range = (8, 15)
         elif cfg.hypothesis == "trend_continuation" and cfg.dte_bucket == "swing_long":
             scoped_range = (8, 10)
+        elif cfg.hypothesis == "volatility_event":
+            scoped_range = (4, 7)  # D290 (v39): the required ve hold, both buckets
         for ex in cfg.exits:
             if ex.id != "time_stop":
                 continue
@@ -3002,22 +3033,27 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # environment-matched: OLD code reproduced every constant exactly; each first
 # divergence verified as a trend swing_long exit draw (PRE@2, V27@11). The
 # cohort golden (seed 4242) is untouched — its slice hosts no scoped flip.
+# D290 (v39): re-pinned — the ve exit-schema fix (event_passed_exit OUT,
+# time_stop REQUIRED with n_bars U[4,7]) changes every ve config's exit draws.
+# Licensing harness environment-matched: OLD code reproduced every constant
+# exactly; every first divergence is a volatility_event config carrying the
+# new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V31_ACTIVE = [
-    "6bfa51eb7329103c",
-    "704bd0ae2ae8ebc4",
-    "b3f02590d839b983",
-    "bb4c5aa07280e2bb",
-    "1cac2460cc947750",
-    "d48970b100b35e24",
-    "6909638964f7109b",
-    "a69fcde1ebd3a041",
-    "f0198cf7715392b9",
-    "5e9a85b8de5bfbb8",
-    "d683090d7a5b4bf1",
-    "2e131c06df11c77c",
-    "51f4f94249953537",
-    "16f4c50c626a8b28",
-    "2a959b6cc8a25d59",
+    "35bfad64f349a45d",
+    "6de5e037efe419a9",
+    "17d0cbbdeddb4f8e",
+    "a9cc12bc7d7456cb",
+    "827d1f8b6e7d8313",
+    "5bff8afe0e681c48",
+    "8a3b6f5f304cf162",
+    "5a7b944409a1ef9d",
+    "9abbcb8b872a454b",
+    "5fd6cec6863fef28",
+    "c08ff8d0e80991f5",
+    "98cfb0c43b93f815",
+    "686b0a59f4fac904",
+    "4f74071aa6d40159",
+    "5d717dac70ae85be",
 ]
 
 

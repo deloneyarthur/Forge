@@ -29,7 +29,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT
+from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
 
 if TYPE_CHECKING:
     import duckdb
@@ -84,15 +84,23 @@ def compute_mature_arms(
     if cut.tzinfo is not None:
         # DuckDB TIMESTAMP columns are naive-UTC by repo convention.
         cut = cut.astimezone(UTC).replace(tzinfo=None)
+    # D290: ghost-era ve verdicts (Crucible 07-19 close-out) must not mature an
+    # arm — a ve arm's "the learner has seen it" count would be counted on
+    # fiction. Same cut as every other trainer (rejection_weights.VE_GHOST_LABEL_CUT).
+    ve_cut = VE_GHOST_LABEL_CUT.astimezone(UTC).replace(tzinfo=None)
     rows = conn.execute(
         """
         SELECT s.config_json, COUNT(*)
         FROM verdicts v
         JOIN submissions s ON v.config_hash = s.config_hash
         WHERE v.decided_at >= ?
+          AND NOT (
+            json_extract_string(s.config_json, '$.hypothesis') = 'volatility_event'
+            AND v.decided_at < ?
+          )
         GROUP BY s.config_json
         """,
-        [cut],
+        [cut, ve_cut],
     ).fetchall()
     counts: Counter[Arm] = Counter()
     for config_json, n in rows:
