@@ -1,5 +1,19 @@
 # Forge — Status
 
+## 2026-07-19 — GRAMMAR v38 → v39 DEPLOYED 2026-07-19T20:28:48Z (D290, commit `50a0337`): ve exit-schema repair + ref_trailing_return veto sampling + iv_term_slope loosening + the ve ghost-label training cut. First-batch audit pending
+
+**Operator "approved, build v39 and deploy when complete."** All four items TDD'd and live:
+
+- **ve exits (S5 set edit, explicitly approved):** event_passed_exit OUT (required→forbidden; it always ran Crucible's fallback mode — a hard cut at entry+n_bars — and the v22/D169 ladder put 60% of ve batches in the cratered region); **time_stop required with n_bars ~ U[4,7]**. The D169 ladder retired with a tombstone.
+- **ref_trailing_return ve veto:** SAMPLED never pinned (threshold U[-0.03,-0.02] op ">", reference {SPY,QQQ}, window [3,10]); rides the generic ~0.5 veto share with the per-id C1 macro guard; registry-gated dormancy; horizon entry added. `check-activations` can't probe a regime-role id ([UNCHK] expected) — liveness evidence is Crucible's own certified probe runs.
+- **iv_term_slope floor 0.01 → 0.0077** (×1.3 loosening, ceiling kept).
+- **ve ghost-label cut (versionless companion):** `VE_GHOST_LABEL_CUT=2026-07-18` enforced at ALL five trainer choke points (hypothesis weights via `_iter_hypothesis_outcomes`, the D105/D106 weighters via `_component_rate_sums`, trade_rate_priors, `build_dataset` (F3+tail), `compute_mature_arms`) — the 34,273 ghost ve verdicts / 657 fictional components (~10% of positive labels) stop feeding the learners; first de-ghosted F3/tail fit at the next 05:00 timer.
+- **Emission proof (live registry, 4k):** ve 784 — event_passed 0, time_stop 784/784 n_bars uniform {4..7}, veto 48% SPY/QQQ balanced, iv_term_slope floor reached (0.0080); all hypotheses reachable. **Goldens:** 7/7 re-pinned environment-matched (every first divergence = a ve config on the new stack; two cross-golden prefix asserts tightened to the new mutual split @1).
+- **Ritual:** preflight 1999 green → stop 20:25:11Z → v39 bump + header + archive + test pin in the down-window → uncontended **1999 green** → commit `50a0337` → start 20:28:48Z (PID 1411117, NRestarts=0; journal: v39, `registry_hash=a20cdb27dfb92b25`, manual_bump, clean reconcile, zero tracebacks).
+- **First batch `f74d10a8` (20:53Z) audit:** v39 stamp ×200, 0 failed; 15 ve configs — **event_passed 0/15, time_stop 15/15 with n_bars {4:3, 5:6, 6:2, 7:4}** — items 1+3 fully in-spec; D287 cell floor held.
+- **WATCH — ref_trailing_return veto INERT (their writer):** 0/15 submitted ve carry it; ve `predicted_activations` rejections 1–7/batch (v38) → **182** (v39). Direct writer probe: market_realized_vol → 934 activation dates, **ref_trailing_return → 0** — their evaluator computes it (96317de) but the writer's activation path doesn't serve it (the D254 class; OUR prefilter catches carriers pre-submission, so Crucible sees no dead configs). Cost ≈ 48% of ve enumeration drawn-then-killed (~177/batch of 369 ve attempts ≈ 3.5% of total). SELF-HEALING when they wire the writer — no Forge action; fallback = pull the pool dormant (small bump) if their wiring is far off. Flagged in the relay with the probe evidence.
+- Relay `PROMPT_CRUCIBLE_VE_PROGRAM_RESPONSE.md` updated with the deploy addendum + the writer-activation ask (funnel: `--compare v38 v39 --hypothesis volatility_event`).
+
 ## 2026-07-19 — ve program relay TRIAGED (D289, docs-only): their §3 bug CONFIRMED in our emission; §5.1/§5.4/§6 ANSWERED with data; **v39 staged, awaiting operator go** (`docs/proposals/v39-ve-program.md`)
 
 **Relay `FORGE_ve_program_relay_2026-07-19.md`:** 23/25 stored-cpcv ve components were GHOSTS (their put_wall/gex/vex/cex staleness blind spot, fixed v3→v4). Key triage results, all verified:
