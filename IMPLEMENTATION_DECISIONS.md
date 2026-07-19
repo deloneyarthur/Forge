@@ -1561,3 +1561,45 @@ every constant exactly; first divergences verified as trend swing_long exit draw
 PRE@2, V27@11); the cohort golden (seed 4242) hosts no scoped flip and is untouched.
 v37→v38 bump + archive + test pin in the deploy down-window. Related: [[D282]],
 [[D286]], [[D236]], [[D169]].
+
+## D289 — 2026-07-19 — ve program relay TRIAGED: their §3 bug CONFIRMED in our emission (fallback-mode event_passed, required in every ve config; the v22/D169 ladder put 60% of ve batches in the cratered region); §5.1 + §5.4 ANSWERED with data; v39 staged (operator-gated). Docs-only
+
+**Relay:** `FORGE_ve_program_relay_2026-07-19.md` (their 3-day ve program close-out:
+23/25 stored-cpcv ve components were GHOSTS — a data-provenance bug on
+put_wall/gex/vex/cex staleness scanning, fixed their-side v3→v4 c86bfcc).
+
+1. **§3 CONFIRMED:** ve `required_always = (iv_crush_exit, event_passed_exit)`;
+   `_exit_params` emits NO `event_indicator` → every ve config ever submitted ran
+   their FALLBACK mode (hard cut at entry+n_bars). D169 (v22, 2026-06-15) began
+   sampling the ladder {3,5,8,13,21} — built in good faith off the D168 "loosen early
+   time-cuts" fair-test, but under fallback semantics it widened a truncation, not a
+   hold, and put 60% of every ve batch at n_bars ∈ {8,13,21} = their sweep's cratered
+   region (time_stop 13/16/21 → cpcv 0.81/0.42/0.29).
+2. **§5.1 ANSWERED (archive + DB):** v22's ve-cell delta was EXACTLY the D169 ladder
+   (v21↔v22 archive diff; D167 is MR-only). Our funnel: ve conversion v21 5.9% →
+   v22 0.7% → 0.0–0.4% v24+; the ep≥8 share goes 0% → 60% at the same boundary and
+   never moves again. Levels ghost-caveated both sides; the cliff timing is the
+   evidence.
+3. **§5.4 ANSWERED (DB + code):** AMD ve-supply peaked 39% at v20 (ghost-yield era,
+   v19–v21 ~20–39%), ~2% since v22; current v33+ ve supply near-uniform (top name
+   3%). `factor_cell_discounts` is DORMANT — the sampler accepts it, production never
+   passes it.
+4. **§6 ANSWERED (code):** Forge persists no put_wall/gex/vex/cex — the feature cache
+   is a live client to their writer socket, rebuilt per iteration; their re-key
+   reaches us automatically. The REAL Forge-side exposure is training labels:
+   **34,273 ve verdicts / 657 "components" decided in [2026-06-10, 2026-07-18) ≈ 10%
+   of all positive labels** feeding F3/tail/yield-map/name-weight/trade-rate
+   trainers. Fix staged as the ve ghost-label cut (v39 item 4).
+5. **Staged (`docs/proposals/v39-ve-program.md`, operator-gated):** ve exit-schema
+   fix (event_passed OUT of the ve set — an S5 set edit, D236/D257 precedent, flagged;
+   time_stop required with U[4,7]), ref_trailing_return veto SAMPLING (registry-live,
+   macro family, no contracts gap; params sampled never pinned per their honesty
+   block), iv_term_slope ×1.3 loosening, the ghost-label cut. NOT built: genome
+   ports, stabilization filters, veto pins (their honesty block); the ve floor holds
+   (their #5).
+
+**Memory corrected:** the ve orthogonality pillar — mixed-book PBO 0.178 was a
+ghost-era measure; clean-cache re-validation = **0.40, real but marginal, no solo
+promotion case** (sleeve route reopens only with diverse honest supply). Outbound
+held for carry: `PROMPT_CRUCIBLE_VE_PROGRAM_RESPONSE.md`. Related: [[D169]],
+[[D168]], [[D257]], [[D236]], [[D128]], [[D287]].

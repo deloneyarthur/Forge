@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-07-19 — ve program relay TRIAGED (D289, docs-only): their §3 bug CONFIRMED in our emission; §5.1/§5.4/§6 ANSWERED with data; **v39 staged, awaiting operator go** (`docs/proposals/v39-ve-program.md`)
+
+**Relay `FORGE_ve_program_relay_2026-07-19.md`:** 23/25 stored-cpcv ve components were GHOSTS (their put_wall/gex/vex/cex staleness blind spot, fixed v3→v4). Key triage results, all verified:
+
+- **§3 (the bug):** every ve config carries `event_passed_exit` (required_always) with NO `event_indicator` → always their FALLBACK mode = hard cut at entry+n_bars. Our v22/D169 ladder {3,5,8,13,21} put **60% of every ve batch in the cratered region** — and our funnel shows the cliff exactly there: ve conversion v21 5.9% → v22 0.7% → ~0 (v24+), archive-verified the ladder was the ONLY v22 ve-cell change. This answers their §5.1.
+- **§5.4:** AMD ve-dominance was ghost-yield era (39% at v20, ~20% v19–v21) and already dispersed (~2% since v22; v33+ top name 3%). `factor_cell_discounts` is DORMANT (sampler accepts, production never passes).
+- **§6:** no Forge-side cache to re-key (feature reads = live client to their writer, per-iteration). REAL exposure = training labels: **34,273 ve verdicts / 657 fictional components in [06-10, 07-18) ≈ 10% of all positive labels** feeding F3/tail/yield/name-weight trainers → ve ghost-label cut staged (v39 item 4).
+- **Memory pillar corrected:** ve mixed-book PBO 0.178 → clean re-validation **0.40** (real-but-marginal; NO solo promotion case).
+- **v39 staged (operator-gated; includes an S5 set edit — D236/D257 precedent, needs explicit approval):** (1) ve exits: event_passed_exit OUT, time_stop required with n_bars U[4,7]; (2) `ref_trailing_return` veto SAMPLING (registry-live, macro; threshold U[-0.03,-0.02], window [3,10], ref {SPY,QQQ} — never pinned); (3) iv_term_slope ×1.3 loosening; (4) the ghost-label cut. NOT building: genome ports / stabilization filters / veto pins (their honesty block). Floor holds (their #5).
+- Outbound held for carry: `PROMPT_CRUCIBLE_VE_PROGRAM_RESPONSE.md` (the §5.1 table + §5.4/§6 answers + staging).
+
 ## 2026-07-16 — GRAMMAR v37 → v38 DEPLOYED 2026-07-16T23:22:27Z (D288, commit `c827783`): trend swing_long exit-mix shift — time_stop optional draw 0.5→0.15 in that cell only. First batch `ab8a8acc` (23:50Z) IN-SPEC: swing_long timer 2/12 (17%) / chandelier-only 5/12 (42%), swing_mid 45% untouched, surviving timers n_bars {10, 9} ∈ U[8,10], v38 stamp ×200, D287 cell floor held (4 resid x vix)
 
 **Relay:** `FORGE_trend_swinglong_exit_mix_2026-07-16.md` (composes with the v36 duration prior — mix share vs duration-given-carried). **Verified on OUR verdicts pre-build** (n=50,906, all strata, same window): timer 46.4% share / 15.1% component rate, chandelier-only 21.6% / 35.5%, other 32.0% / 27.5% — the monotone ordering their census reported, ~1pp off their xsect-only numbers. Mechanism = exactly our S5 draw (time_stop the lone trend optional at p=0.5; chandelier half the required 50/50 pick).
