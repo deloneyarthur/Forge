@@ -927,6 +927,10 @@ forge/
 
 ## 12. Implementation phases
 
+> **HISTORICAL (banner added 2026-07-20, D300, operator-approved):** every phase below is
+> COMPLETE (handoffs in `_archive/PHASE_*_HANDOFF.md`); the estimates and deliverable lists are
+> the original 2026-05 planning record, kept verbatim. Live state lives in `STATUS.md`.
+
 Five phases. Estimated 6-10 weeks at part-time (~4 hrs/day), 4-6 weeks full-time.
 
 ### Phase 0 — Bootstrap (3-5 days)
@@ -1040,6 +1044,11 @@ Forge respects `worker_mem_limit_mb` from Crucible's `runtime.yaml` shared confi
 ---
 
 ## 14. Decision log
+
+> **HISTORICAL (banner added 2026-07-20, D300, operator-approved):** the design-time
+> (2026-05-13) decision table, kept verbatim and closed. Post-design decisions live in
+> `IMPLEMENTATION_DECISIONS.md` (repo root); a design-level supersession would go to
+> `docs/DECISIONS.md`.
 
 Append-only. Major design decisions documented here for the implementing agent.
 

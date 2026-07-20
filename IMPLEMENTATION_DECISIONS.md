@@ -2039,3 +2039,48 @@ Suite: test_ranking + test_cli + invariants 545 green mid-build; full-scope
 gates re-run at commit (see STATUS). ruff + mypy --strict clean.
 Related: [[D287]], [[D136]], [[D119]], [[D276]], [[D286]], [[D291]],
 [[D292]], [[D295]], [[D207]].
+
+## D300 — 2026-07-20 — Bucket C closed (operator, in-session AskUserQuestion): DESIGN §12/§14 HISTORICAL banners, 2 stale docs archived (the last D248-manifest doc stragglers), quality-lane-rewire proposal status CORRECTED (it was ADOPTED at D252 — the doc still said "build in progress"), meta-king publisher ask queued for the next relay, test consolidation declined
+
+The cleanup review's discussion bucket, all four questions answered in-session:
+
+1. **DESIGN.md §12/§14 banners (operator "Add banners"):** one HISTORICAL
+   banner atop each — §12's phases are complete (future-tense estimates kept
+   verbatim as the planning record), §14 is the closed design-time table.
+   Normative content untouched.
+2. **Historical docs (operator "Archive 2, keep 1"):**
+   `docs/handoffs/PROMPT_FORGE_NEXT_ACTIONS.md` +
+   `docs/reviews/2026-06-14-sunday.md` → `_archive/` (both double-bannered
+   point-in-time snapshots; the last two doc stragglers from the D248
+   needs-owner manifest); both now-empty dirs removed — every `docs/handoffs/`
+   reference in the tree points at ../Crucible's dir, not ours.
+   `docs/STRATEGY_GENERATION_STATE.md` KEPT per the architecture.md taxonomy
+   row (deliberate stale-bannered reference).
+3. **Quality-lane rewire — STATUS CORRECTION, no scheduling needed:** the
+   review carried it as "an unexecuted design"; WRONG — the flip shipped at
+   D252 (07-06, `FORGE_QUALITY_RANK_MODE=gate-tail` + floor 0.02 on the unit,
+   verified live) and the proposal doc's "Status: build in progress" line was
+   the stale artifact. Corrected to ADOPTED. Evidence attached: the re-wire
+   clock is 21/21 qualifying checkpoints (daily deltas +0.60..+0.75 vs the
+   +0.05 criterion; latest 07-20 Δ+0.636, fresh_decided 543), and the F3
+   streak now runs on the hygiene incumbent (margin_source=hygiene), i.e. the
+   D284 self-switch fired. Also fixed: `docs/DECISIONS.md` no longer mirrors a
+   D-number (the "(latest D200)" volatile-fact violation).
+4. **Meta-king publisher (operator "Line in next relay"):** Crucible's
+   `crucible-meta-king-publisher.timer` still publishes daily for the arm
+   Forge retired at D190 — a one-line "still wanted?" ask rides the NEXT
+   outbound relay (standing watch below; no new root file).
+5. **Test consolidation (operator "Leave as-is"):** the
+   test_sampler.py-vs-per-version-file overlap is load-bearing regression
+   history; no action, revisit only if suite runtime becomes a problem.
+
+**Surfaced for a future bucket-B pass (NOT executed):** the D248 needs-owner
+manifest (STATUS 07-0x block) still lists pre-authorized/dead items beyond
+what D295-D298 cleared: the ve `|move|` flag path (D235 pre-authorized
+removal), `compute_hypothesis_reward_weights` (superseded D105),
+`is_percentile_emitting` (never wired), pytest-cov config (never invoked),
+MANPAGE kill-switch spelling + `FORGE_F3_RANKER` env omission, straddle
+proposal missing its resolution banner.
+
+Docs-only + two `git mv`; daemon untouched. Related: [[D295]], [[D297]],
+[[D298]], [[D252]], [[D285]], [[D248]].

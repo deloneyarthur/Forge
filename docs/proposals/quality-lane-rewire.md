@@ -1,6 +1,9 @@
 # Quality-lane re-wire: gate-then-tail (two-part `E[wf_p25 | clears]`)
 
-Status: **shadow-first build in progress** (operator-gated; flip deferred to a streak clear).
+Status: **ADOPTED — live in production since 2026-07-06** (D252 flipped
+`FORGE_QUALITY_RANK_MODE=gate-tail` on the unit, floor 0.02; D285 made the re-wire clock the
+adoption guard; every daily checkpoint since has qualified — this line was stale
+"build in progress" until the D300 doc sweep). The design rationale below is kept as written.
 Supersedes the multiplicative wiring of the wf_p25 quality lane ([[tail-aware-ranker.md]],
 D191–D193). Ranking-only; hard rules #1/#3/#5/#6 intact.
 

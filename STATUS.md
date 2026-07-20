@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-07-20 (close, later⁴) — Bucket C CLOSED (D300, docs-only): DESIGN §12/§14 HISTORICAL banners, 2 stale docs archived (last D248-manifest doc stragglers), **quality-lane-rewire proposal status CORRECTED — it was ADOPTED at D252, the doc was stale** (re-wire clock 21/21 qualifying, latest Δ+0.636; F3 streak on the hygiene incumbent), DECISIONS.md volatile-fact fix, test consolidation declined. The three-bucket cleanup review (D295–D298, D300) is fully dispatched
+
+**Operator answered all four bucket-C questions in-session** (full record: [[D300]]). **STANDING WATCH — next outbound relay carries:** the meta-king publisher ask (their `crucible-meta-king-publisher.timer` still runs daily; Forge's arm retired D190 — still wanted?). Surfaced-not-executed (future bucket-B pass, from the D248 manifest): ve `|move|` flag path (D235 pre-authorized), `compute_hypothesis_reward_weights` (D105-superseded), `is_percentile_emitting` (never wired), pytest-cov config, 2 cheap MANPAGE doc bugs, straddle-proposal banner.
+
 ## 2026-07-20 (close, later³) — D299 SHIPPED (code, no restart): campaign registry + region-carriage audit — Theme 1 of the post-promotion process review. The D287 experiment-cell pin now DERIVES from `forge/ranking/campaigns.py` (byte-identical, pinned by test); new CLI `forge campaigns list|audit`; Themes 2–5 drafted as operator-gated proposals in `docs/proposals/`
 
 **Operator: "Let's draft them all up. Let's implement Theme 1"** (the post-promotion process-improvement brainstorm: the loop that produced both promotions — discover → verify-on-our-verdicts → concentrate → guarantee carriage → funnel read — becomes a named, auditable object instead of bespoke pins + watch lines).
