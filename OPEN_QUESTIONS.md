@@ -1140,3 +1140,5 @@ lives — arguably the right home by the D278 principle "the mechanism is
 Crucible-measured per-name against THEIR chain data"); (c) drop — the capital
 side is the operator's and the shadow already detects it. Parked until their
 answer; the reference-NAV declaration itself is an operator choice.
+
+**↳ ANSWERED 2026-07-20 (same day, `FORGE_v42_ack_and_answers_2026-07-20.md`): shape (b), narrowed to an ANNOTATION.** The check lives Crucible-side at queue time next to the row-45 liquidity preflight (chain truth already in hand; (a) declined — no new cross-system surface for a LOW item). It will be an exported annotation (`min_contracts_at_reference_nav` on the verdict surface), NOT a reject — fractional sizing at engine capital is legitimate research; a non-statistical reject-class is not added quietly. **Build is gated on the OPERATOR declaring the reference NAV** (ties to the live-deposit decision); until then shape (c) is the operating truth — the shadow detects. Nothing Forge-side; Q52 stays open only as the operator-NAV tickler.

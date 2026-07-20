@@ -1885,3 +1885,30 @@ executed and remain staged for separate decisions.
 **Daemon untouched** (nothing removed is imported by production code; no
 restart). Suite impact: only the three retired-script tests leave the count.
 Related: [[D202]], [[D241]], [[D242]], [[D294]].
+
+## D296 — 2026-07-20 — v42 ack relay CLOSED (docs-only): exposure ledger reproduces to the digit; xsect HOLDS at tier=2 by their direct answer (tier=0 charges the widest x1.5 class — a standing don't-emit until per-name spread charging ships); Q52 = their queue-time annotation, gated on the operator's reference NAV; fold retirement verified survived
+
+`FORGE_v42_ack_and_answers_2026-07-20.md`. No build; three records:
+
+1. **v42 verified in their stream** (158 decided in the first hours); the v41
+   exposure ledger reproduces exactly — 58 tier=3 xsect (cost-handicapped
+   dupes, funnel-isolated by the version split) + 80 single-name true-tier
+   stamps (working as intended, accumulating).
+2. **STANDING DIRECTIVE — do NOT emit tier=0 on xsect:** tier=0 charges the
+   tier-3 derivation (base x1.5, deliberately the WIDEST class for
+   conservative union-scope diagnostics). Emitting it would deflate every new
+   xsect config's metrics by ~the ablation delta (trend lost 0.206 WF at
+   1.5x) for ZERO informational gain and break funnel comparability. The
+   endgame is PER-NAME spread charging (their deferred §20 item) — when it
+   ships the stamp becomes attribution-only and tier=0 is free honesty;
+   THEY will say the word and it rides a bump. (Do not re-derive "tier=0 is
+   more honest" and propose it before then.) Softener noted: the CBOE
+   far-OTM supplement now folds real bid/ask into canonical chain reads, so
+   the synthetic spread table shrinks over time.
+3. **Q52 ANSWERED** (shape (b), annotation-not-reject, operator-NAV-gated —
+   see the Q52 addendum). **Fold retirement VERIFIED survived on our side:**
+   the retired-shape export (18:42:45Z: tier_2=20/tier_3=94) landed BEFORE
+   our v42 restart — the 19:41Z daemon booted on it with the 118 union
+   intact via the tiered reader. Pre-adoption code would have collapsed the
+   pool to 24 at that restart; the D293 sequencing did its job.
+Related: [[D294]], [[D293]], [[D292]].
