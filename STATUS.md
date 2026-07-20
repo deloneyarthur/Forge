@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-07-20 (evening) — GRAMMAR v40 → v41 DEPLOYED 2026-07-20T18:13:22Z (D293, commit `a587296`): tier unpin LIVE — contracts 1.32.0 adopted with wiring, true-tier stamping, 15% xsect tier-3 exploration share, ASML/COST rider. First batch `b9e00eff` IN-SPEC. **Adoption CONFIRMED in the relay addendum — Crucible may retire the export fold**
+
+**Operator "go on building and deploying v41"** (the D292 staging). All TDD; full suite **2008 green** twice (pre-window + uncontended).
+
+- **Change set live:** (1) `_load_underlyings` → `load_universe_tiers_from_export` via one shared cache (`_load_universe_tiers_cached`; the pre-v41 `cache_clear` contract survives via an alias — the dual-cache draft poisoned cross-test state and was rejected); (2) `_stamp_tier` drawn LAST — single-name = true-tier lookup, xsect = tier=3 at `_XSECT_TIER3_SHARE=0.15` with empty-set dormancy BEFORE rng (D258 convention), relative_value keeps 2; (3) `universe_fingerprint` folds the tier split (H-3); (4) ASML/COST join the structural exclusion (v37 terms; row-45 cross-check requested); (5) contracts pin 1.31.0 → 1.32.0 — adopted WITH wiring, unlike the D267/D271 pin-only precedents.
+- **Test surface:** `UNIVERSE_TIER3_SNAPSHOT_2026_07_20` (94 names ⊂ the 07-16 union) + the conftest tier pin (third leg of the D274 pattern) + 5 new tests. **Goldens 7/7 re-pinned environment-matched** — onset = the first POOL-TAPPING config (cohort positions 0-1 are relative_value and survive byte-identical; everything else moves at 0 via the 118→116 pool shift, the v37 signature).
+- **Ritual:** stop 18:08:37Z → v41 bump + archive + pin test in the down-window → uncontended 2008 green → commit `a587296` (hooks; one formatter round-trip) → start 18:13:22Z (PID 2832927, NRestarts=0; journal: v41, `registry_hash=b3277da2af738788` unchanged — the boundary is ours, manual_bump, zero tracebacks; window ~4.7 min).
+- **First batch `b9e00eff` (18:42:14Z) audit: IN-SPEC** — v41 ×200, 0 failed; single-name tiers {3: 41, 2: 8}, **zero mis-stamps**; xsect 151 configs, 28 tier=3 (18.5%, in band at n=151) — the tier-3 xsect cells pass prefilters on the first batch; ASML/COST absent; D287 floor held (4).
+- **Relay `PROMPT_CRUCIBLE_TIER_UNPIN_RESPONSE.md` updated with the deploy addendum: ADOPTION CONFIRMED — the fold is no longer load-bearing for us; funnel signatures at the boundary spelled out (new tier=3 xsect cells; config_hash break on tier-3-name single-name genomes; ASML/COST vanish; fingerprint step).** Watches: xsect tier-3 prefilter carriage over the next batches (report like ref_trailing_return); their fold retirement; v39→v40 MR read ~07-22/23 (unaffected); ve v38→v39 official read tomorrow.
+
 ## 2026-07-20 (later) — Tier-unpin reply TRIAGED (D292, docs-only): **THE 2-LEG PROMOTED — second portfolio ever, first via the auto-campaign lane**; our tier-3 claim CORRECTED (folded tier_2 key — drawn all along; the pin is the STAMP, the cost is xsect); contracts 1.32.0 verified; **v41 STAGED, awaiting operator go**
 
 **Relay `FORGE_tier_unpin_and_promote_2026-07-20.md`** (their D291 reply). Everything verified before recording (D292):
