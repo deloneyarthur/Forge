@@ -102,12 +102,9 @@ class PermutationTestCalibration:
     #                         statistic. Changes the config population → operator-flip +
     #                         prereg (docs/tasks/feedback-change.md). Absent → legacy.
     forward_return_mode: str = "single_day"
-    # P1-2a (strategy-audit): a vol-appropriate null for `volatility_event`. Those configs
-    # profit from the MAGNITUDE of the move (long-straddle payoff), not signed drift, so the
-    # signed forward-return test wrongly rejects them. When True (and forward_return_mode is
-    # cumulative_trading), ve configs are tested on |cumulative forward move| (real and null),
-    # while every other family stays on signed returns. False (default) → byte-identical.
-    volatility_event_absolute_move: bool = False
+    # (The P1-2a `volatility_event_absolute_move` knob lived here until D301 —
+    # prereg e1a43ba8 was refuted + thesis-inverted, DROPPED at D235; the flag
+    # was never On in production. Git history has the path.)
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,7 +338,6 @@ def load_calibration(path: Path) -> Calibration:
             forward_return_mode=_validate_forward_return_mode(
                 pt.get("forward_return_mode", "single_day")
             ),
-            volatility_event_absolute_move=bool(pt.get("volatility_event_absolute_move", False)),
         ),
         auto_tune=AutoTuneCalibration(
             enabled=bool(_require(at, "auto_tune", "enabled")),

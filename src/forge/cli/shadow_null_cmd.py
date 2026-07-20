@@ -69,23 +69,20 @@ def _resolve_out(out: Path | None, config: Path) -> Path:
     return load_forge_config(config).db_path.parent / "shadow_null" / "shadow_null.jsonl"
 
 
-def _collect_tri_null_rows(
+def _collect_dual_null_rows(
     configs: list[StrategyConfig],
     ctx_prod: FilterContext,
     ctx_cumulative: FilterContext,
-    ctx_corrected: FilterContext,
-) -> tuple[list[tuple[str, bool, bool, bool]], int, int, int]:
-    """Score permutation_test under THREE nulls for each config that reaches it:
-    A = production (single_day, signed); B = cumulative_trading, signed (flip-1);
-    C = cumulative_trading + ve |move| (flip-1 AND flip-2).
+) -> tuple[list[tuple[str, bool, bool]], int, int, int]:
+    """Score permutation_test under TWO nulls for each config that reaches it:
+    A = production (whatever `prefilter.yaml` sets); B = cumulative_trading (flip-1).
+    (The FLIP-2 ve |move| arm C was removed at D301 — dropped at D235.)
 
     Returns ``(rows, reached_total, unavailable, socket_skips)`` where each row is
-    ``(hypothesis, a_passed, b_passed, c_passed)``. Only configs reaching the last
-    filter get a row — a config rejected earlier can't be changed by the null. B and
-    C differ ONLY for `volatility_event` (|move| is family-scoped), so non-ve configs
-    take ``c := b`` for free (one fewer re-score). All three contexts share the
-    feature cache (reusing the battery prefetch) and the rng_factory (identical
-    shuffles — only the null construction moves a verdict).
+    ``(hypothesis, a_passed, b_passed)``. Only configs reaching the last filter get
+    a row — a config rejected earlier can't be changed by the null. Both contexts
+    share the feature cache (reusing the battery prefetch) and the rng_factory
+    (identical shuffles — only the null construction moves a verdict).
 
     The live writer socket is shared with the daemon and can drop a connection
     mid-run (broken pipe). The Crucible client reconnects on its next call, so a
@@ -100,7 +97,7 @@ def _collect_tri_null_rows(
 
     filters = default_filters()
     perm_filter = PermutationTestFilter()
-    rows: list[tuple[str, bool, bool, bool]] = []
+    rows: list[tuple[str, bool, bool]] = []
     reached_total = 0
     unavailable = 0
     socket_skips = 0
@@ -114,16 +111,11 @@ def _collect_tri_null_rows(
             if pt_a is None:
                 continue
             b_passed = perm_filter.apply(cfg, ctx_cumulative).passed
-            c_passed = (
-                perm_filter.apply(cfg, ctx_corrected).passed
-                if cfg.hypothesis == "volatility_event"
-                else b_passed
-            )
         except FeatureCacheUnavailableError:
             socket_skips += 1
             continue
         reached_total += 1
-        rows.append((cfg.hypothesis, pt_a.passed, b_passed, c_passed))
+        rows.append((cfg.hypothesis, pt_a.passed, b_passed))
     return rows, reached_total, unavailable, socket_skips
 
 
@@ -160,7 +152,6 @@ def cmd_run(
     from forge.prefilters import SyntheticFeatureCache, load_calibration
     from forge.prefilters.shadow_null import (
         ShadowNullRecord,
-        corrected_null_calibration,
         cumulative_only_calibration,
         summarize_shadow_null,
         summary_payload,
@@ -180,7 +171,6 @@ def cmd_run(
     registry = load_registry(allow_demo_fallback=synthetic_cache)
     calibration = load_calibration(prefilter_yaml)
     cumulative = cumulative_only_calibration(calibration)  # flip-1 (848a1f67)
-    corrected = corrected_null_calibration(calibration)  # flip-1 + flip-2 (e1a43ba8)
     seed_hierarchy = SeedHierarchy(seed)
 
     if synthetic_cache:
@@ -208,10 +198,9 @@ def cmd_run(
         calibration=calibration,
         rng_factory=seed_hierarchy.rng,
     )
-    # Every context shares the cache (reusing the battery prefetch) and rng_factory —
+    # Both contexts share the cache (reusing the battery prefetch) and rng_factory —
     # only the null construction differs, so each re-score draws identical shuffles.
     ctx_cumulative = replace(ctx_prod, calibration=cumulative)
-    ctx_corrected = replace(ctx_prod, calibration=corrected)
 
     typer.echo(
         f"grammar_version={grammar.grammar_version} "
@@ -226,24 +215,18 @@ def cmd_run(
     if callable(batch_prefetch):
         batch_prefetch(configs)
 
-    rows, reached_total, unavailable, socket_skips = _collect_tri_null_rows(
-        configs, ctx_prod, ctx_cumulative, ctx_corrected
+    rows, reached_total, unavailable, socket_skips = _collect_dual_null_rows(
+        configs, ctx_prod, ctx_cumulative
     )
     # flip-1 (848a1f67, all families): production A -> cumulative B.
     flip1 = summarize_shadow_null(
-        ShadowNullRecord(hypothesis=h, prod_passed=a, corr_passed=b) for (h, a, b, _c) in rows
-    )
-    # flip-2 (e1a43ba8, ve |move|, marginal ON TOP of cumulative): B -> C. Non-ve
-    # families show net 0 by construction (|move| is ve-scoped), isolating the ve effect.
-    flip2 = summarize_shadow_null(
-        ShadowNullRecord(hypothesis=h, prod_passed=b, corr_passed=c) for (h, _a, b, c) in rows
+        ShadowNullRecord(hypothesis=h, prod_passed=a, corr_passed=b) for (h, a, b) in rows
     )
     typer.echo(
         f"\n-- shadow-null: {reached_total} configs reached permutation_test "
         f"({unavailable} data_unavailable, {socket_skips} socket-blip skipped) --"
     )
     _print_table(flip1, label="FLIP-1 cumulative_trading (848a1f67): prod -> cumulative")
-    _print_table(flip2, label="FLIP-2 ve |move| (e1a43ba8): cumulative -> +ve|move| (ve only)")
 
     pt = calibration.permutation_test
     record: dict[str, object] = {
@@ -258,13 +241,11 @@ def cmd_run(
         "socket_skips": socket_skips,
         "prod_null": {
             "forward_return_mode": pt.forward_return_mode,
-            "volatility_event_absolute_move": pt.volatility_event_absolute_move,
             "forward_horizon_days": pt.forward_horizon_days,
             "n_permutations": pt.n_permutations,
             "p_value_threshold": pt.p_value_threshold,
         },
         "flip1_cumulative_trading": summary_payload(flip1),
-        "flip2_ve_absolute_move": summary_payload(flip2),
     }
     out_path = _resolve_out(out, config)
     out_path.parent.mkdir(parents=True, exist_ok=True)

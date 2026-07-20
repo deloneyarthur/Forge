@@ -1,13 +1,15 @@
 """Shadow-count of the permutation-test null correction. Strategy-audit P1-2.
 
-Two flag-OFF null corrections are teed up for the §5.3.7 permutation_test
-(prereg 848a1f67 `cumulative_trading`, prereg e1a43ba8 `volatility_event`
-|move|). Before flipping either, the operator wants a *shadow-count*: run the
-filter over the same live feature-cache data under BOTH the production null and
-the corrected null, and see — per signal family — how survival actually moves.
-The correction can only change the verdict AT permutation_test (the last, most
-expensive filter); the set of configs that *reach* it is identical either way
-(filters 1..8 don't read the null), so this is a clean within-population A/B.
+Built for the two flag-OFF null corrections teed up for the §5.3.7
+permutation_test: prereg 848a1f67 `cumulative_trading` (FLIP-1 — since shipped
+to production, D224/D226) and prereg e1a43ba8 `volatility_event` |move|
+(FLIP-2 — refuted + thesis-inverted, DROPPED at D235; its arm was removed at
+D301, git history has it). The shadow-count runs the filter over the same live
+feature-cache data under both the production null and a corrected null and
+reports, per signal family, how survival actually moves. The correction can
+only change the verdict AT permutation_test (the last, most expensive filter);
+the set of configs that *reach* it is identical either way (filters 1..8 don't
+read the null), so this is a clean within-population A/B.
 
 This module is the pure aggregator: it takes one `ShadowNullRecord` per config
 that reached the filter (its pass/fail under each null) and rolls them up into a
@@ -33,38 +35,19 @@ if TYPE_CHECKING:
 
 
 def cumulative_only_calibration(production: Calibration) -> Calibration:
-    """The FLIP-1 arm (prereg 848a1f67): `forward_return_mode="cumulative_trading"`
-    with `volatility_event_absolute_move` still OFF.
+    """The FLIP-1 arm (prereg 848a1f67): `forward_return_mode="cumulative_trading"`.
 
-    This is the intermediate the operator lands on after flipping cumulative_trading
-    but BEFORE the ve |move| flip. Keeping ve on signed returns here lets the
-    shadow-count attribute the two sequenced flips apart: flip-1 = this arm vs
-    production (all families); flip-2 = the fully-corrected arm vs this one (ve only,
-    since |move| is family-scoped). Non-null sections are identity."""
+    Every other section is left identical, which is what makes the shadow-count a
+    clean A/B: filters 1..8 read only the untouched sections, so the set of configs
+    reaching permutation_test is the same under every calibration, and none of these
+    are ever persisted — the daemon keeps loading whatever `prefilter.yaml` sets.
+    (The `corrected_null_calibration` FLIP-2 arm — ve |move| on top of this — was
+    removed at D301; dropped at D235.)"""
     cumulative_pt = replace(
         production.permutation_test,
         forward_return_mode="cumulative_trading",
     )
     return replace(production, permutation_test=cumulative_pt)
-
-
-def corrected_null_calibration(production: Calibration) -> Calibration:
-    """The FULLY-CORRECTED arm: BOTH teed-up permutation_test null knobs ON —
-    `forward_return_mode="cumulative_trading"` (prereg 848a1f67) and
-    `volatility_event_absolute_move=True` (prereg e1a43ba8).
-
-    Every other section is left identical, which is what makes the shadow-count a
-    clean A/B: filters 1..8 read only the untouched sections, so the set of configs
-    reaching permutation_test is the same under every calibration, and none of these
-    are ever persisted — the daemon keeps loading the single_day default from
-    `prefilter.yaml`.
-    """
-    corrected_pt = replace(
-        production.permutation_test,
-        forward_return_mode="cumulative_trading",
-        volatility_event_absolute_move=True,
-    )
-    return replace(production, permutation_test=corrected_pt)
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,7 +215,6 @@ __all__ = [
     "FamilyShadowDelta",
     "ShadowNullRecord",
     "ShadowNullSummary",
-    "corrected_null_calibration",
     "cumulative_only_calibration",
     "summarize_shadow_null",
     "summary_payload",

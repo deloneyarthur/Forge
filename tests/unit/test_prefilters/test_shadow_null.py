@@ -17,7 +17,6 @@ from forge.prefilters.calibration import load_calibration
 from forge.prefilters.shadow_null import (
     FamilyShadowDelta,
     ShadowNullRecord,
-    corrected_null_calibration,
     cumulative_only_calibration,
     summarize_shadow_null,
 )
@@ -127,58 +126,33 @@ def test_family_delta_rejects_negative_flip_counts() -> None:
         FamilyShadowDelta(hypothesis="x", reached=2, pass_prod=1, pass_corr=0, gained=-1, lost=0)
 
 
-def test_corrected_null_flips_only_the_two_null_knobs() -> None:
+def test_cumulative_only_flips_only_the_null_knob() -> None:
     from dataclasses import replace
 
-    # Test the builders on a KNOWN single_day base — decoupled from the live config, which
-    # ships `cumulative_trading` since the D237 flip. The builder's contract (flip ONLY the two
-    # null knobs, leave every other section identity) is what this guards.
+    # Test the builder on a KNOWN single_day base — decoupled from the live config, which
+    # ships `cumulative_trading` since the D237 flip. The builder's contract (flip ONLY the
+    # null mode, leave every other section identity) is what this guards. (The flip-2
+    # `corrected_null_calibration` builder was removed at D301 — dropped at D235.)
     base = load_calibration(_REPO_ROOT / "config" / "prefilter.yaml")
     prod = replace(
         base,
         permutation_test=replace(
             base.permutation_test,
             forward_return_mode="single_day",
-            volatility_event_absolute_move=False,
         ),
     )
-    corrected = corrected_null_calibration(prod)
-    # The two teed-up corrections are ON.
-    assert corrected.permutation_test.forward_return_mode == "cumulative_trading"
-    assert corrected.permutation_test.volatility_event_absolute_move is True
-    # Nothing else about the null moved (horizon / n_permutations / threshold).
-    assert (
-        corrected.permutation_test.forward_horizon_days
-        == prod.permutation_test.forward_horizon_days
-    )
-    assert corrected.permutation_test.n_permutations == prod.permutation_test.n_permutations
-    assert corrected.permutation_test.p_value_threshold == prod.permutation_test.p_value_threshold
-    # Every OTHER filter section is untouched (identity), so the population that
-    # reaches permutation_test is identical under both calibrations.
-    assert corrected.signal_density == prod.signal_density
-    assert corrected.expected_trade_count == prod.expected_trade_count
-    assert corrected.predicted_activations == prod.predicted_activations
-    assert corrected.novelty == prod.novelty
-    assert corrected.signal_correlation == prod.signal_correlation
-    assert corrected.regime_exposure == prod.regime_exposure
-    assert corrected.auto_tune == prod.auto_tune
-    # The constructed base is single_day + ve-absolute-off (the pre-flip null the builders
-    # correct from); the live config now ships cumulative_trading (D237).
-    assert prod.permutation_test.forward_return_mode == "single_day"
-    assert prod.permutation_test.volatility_event_absolute_move is False
-
-
-def test_cumulative_only_is_flip1_alone() -> None:
-    # The flip-1 (848a1f67) arm: cumulative mode ON, ve |move| still OFF — so the
-    # ve family stays on signed returns and flip-1 vs flip-2 can be attributed apart.
-    prod = load_calibration(_REPO_ROOT / "config" / "prefilter.yaml")
     b = cumulative_only_calibration(prod)
     assert b.permutation_test.forward_return_mode == "cumulative_trading"
-    assert b.permutation_test.volatility_event_absolute_move is False
-    # It differs from the fully-corrected arm ONLY by the ve |move| knob.
-    c = corrected_null_calibration(prod)
-    assert c.permutation_test.volatility_event_absolute_move is True
-    assert b.permutation_test.forward_return_mode == c.permutation_test.forward_return_mode
-    # Non-null sections untouched.
+    # Nothing else about the null moved (horizon / n_permutations / threshold).
+    assert b.permutation_test.forward_horizon_days == prod.permutation_test.forward_horizon_days
+    assert b.permutation_test.n_permutations == prod.permutation_test.n_permutations
+    assert b.permutation_test.p_value_threshold == prod.permutation_test.p_value_threshold
+    # Every OTHER filter section is untouched (identity), so the population that
+    # reaches permutation_test is identical under both calibrations.
     assert b.signal_density == prod.signal_density
+    assert b.expected_trade_count == prod.expected_trade_count
+    assert b.predicted_activations == prod.predicted_activations
+    assert b.novelty == prod.novelty
+    assert b.signal_correlation == prod.signal_correlation
     assert b.regime_exposure == prod.regime_exposure
+    assert b.auto_tune == prod.auto_tune

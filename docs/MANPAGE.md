@@ -102,19 +102,17 @@ forge check-activations --indicators sma_slope,ad_slope   # [INERT] both → exi
 
 ### forge shadow-null run
 
-Shadow-count the two teed-up permutation-test (§5.3.7) null corrections **before flipping
-either** (strategy-audit P1-2). Runs the §5.2 battery over the LIVE feature cache and scores
-`permutation_test` under THREE nulls on the very same configs — A = production (single_day,
-signed), B = `cumulative_trading` signed (**FLIP-1**, prereg 848a1f67), C = `cumulative_trading`
-+ `volatility_event` |move| (**FLIP-2**, prereg e1a43ba8) — and prints a per-family survival-delta
-table for EACH sequenced flip (`gained` = before-FAIL → after-PASS, `lost` = the reverse; `net`
-= after − before). FLIP-1's effect is B vs A (all families); FLIP-2's marginal effect is C vs B,
-non-zero ONLY for `volatility_event` (|move| is family-scoped), so the two flips are attributed
-apart, not conflated. Submits nothing, never writes `prefilter.yaml`, leaves the daemon untouched
-— a read-only telemetry pass. The set of configs reaching the last filter is identical under all
-three nulls, so it's a clean within-population A/B; the per-family **delta** is the decision
+Shadow-count a permutation-test (§5.3.7) null correction (strategy-audit P1-2). Runs the §5.2
+battery over the LIVE feature cache and scores `permutation_test` under TWO nulls on the very
+same configs — A = production (whatever `prefilter.yaml` ships), B = `cumulative_trading`
+(**FLIP-1**, prereg 848a1f67, since shipped to production) — and prints a per-family
+survival-delta table (`gained` = before-FAIL → after-PASS, `lost` = the reverse; `net` = after −
+before). (The FLIP-2 ve |move| arm — prereg e1a43ba8 — was refuted and dropped at D235; its code
+path was removed at D301.) Submits nothing, never writes `prefilter.yaml`, leaves the daemon
+untouched — a read-only telemetry pass. The set of configs reaching the last filter is identical
+under both nulls, so it's a clean within-population A/B; the per-family **delta** is the decision
 signal, absolute rates are diagnostic (fixed seed, empty priors). Appends one JSONL record per run
-(keys `flip1_cumulative_trading` / `flip2_ve_absolute_move`, each with `per_family` + `totals`).
+(key `flip1_cumulative_trading` with `per_family` + `totals`).
 
 | Option | Type | Default | Description |
 |---|---|---|---|

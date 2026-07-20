@@ -1,7 +1,7 @@
 """Smoke tests for `forge shadow-null run` (P1-2).
 
 The command is thin: enumerate -> battery under the production null -> re-score
-permutation_test under the corrected null -> per-family survival table + a JSONL
+permutation_test under the flip-1 null -> per-family survival table + a JSONL
 telemetry record. These run on `--synthetic-cache` so they're hermetic (no writer
 socket) and fast; the survival numbers are meaningless noise (as the command warns)
 but the wiring, table shape, JSONL record, and determinism are what's asserted.
@@ -27,9 +27,9 @@ def test_shadow_null_runs_and_writes_jsonl(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.stdout
     assert "cache=synthetic" in result.stdout
     assert "reached permutation_test" in result.stdout
-    # Both sequenced-flip tables print.
+    # The flip-1 table prints (the flip-2 arm was removed at D301).
     assert "FLIP-1 cumulative_trading" in result.stdout
-    assert "FLIP-2 ve |move|" in result.stdout
+    assert "FLIP-2" not in result.stdout
     assert "TOTAL" in result.stdout
 
     assert out.exists()
@@ -41,15 +41,11 @@ def test_shadow_null_runs_and_writes_jsonl(tmp_path: Path) -> None:
 
     live = load_calibration(Path(__file__).resolve().parents[3] / "config" / "prefilter.yaml")
     assert record["prod_null"]["forward_return_mode"] == live.permutation_test.forward_return_mode
-    # Both flips are recorded with per_family + totals.
-    for flip in ("flip1_cumulative_trading", "flip2_ve_absolute_move"):
-        t = record[flip]["totals"]
-        # Net-delta identity holds at the totals level.
-        assert t["net_delta"] == t["pass_corr"] - t["pass_prod"] == t["gained"] - t["lost"]
-    # flip-2 (|move|) is family-scoped to volatility_event: every OTHER family nets 0.
-    for fam in record["flip2_ve_absolute_move"]["per_family"]:
-        if fam["hypothesis"] != "volatility_event":
-            assert fam["net_delta"] == 0
+    # flip-1 is recorded with per_family + totals; the flip-2 key is gone (D301).
+    t = record["flip1_cumulative_trading"]["totals"]
+    # Net-delta identity holds at the totals level.
+    assert t["net_delta"] == t["pass_corr"] - t["pass_prod"] == t["gained"] - t["lost"]
+    assert "flip2_ve_absolute_move" not in record
 
 
 def test_shadow_null_table_is_deterministic_for_same_seed(tmp_path: Path) -> None:
