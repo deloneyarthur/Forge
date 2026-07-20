@@ -1912,3 +1912,25 @@ Related: [[D202]], [[D241]], [[D242]], [[D294]].
    intact via the tiered reader. Pre-adoption code would have collapsed the
    pool to 24 at that restart; the D293 sequencing did its job.
 Related: [[D294]], [[D293]], [[D292]].
+
+## D297 — 2026-07-20 — Dead-code retirement: the capitulation elevated-vol override (rv_rank ">" [50,80]) + its two orphaned constants removed from `sampler.py` — unreachable since the v35 bare-drop (D280); byte-identical, versionless
+
+The cleanup review's one RETIRE-NOW-LICENSED code finding (bucket B, operator
+"Let's look at B"). D280/v35 emptied the capitulation arm's regime pool in
+`_compatible_regimes` (bare-drop), so `_regime_signal_params`'s D270 branch —
+which required (mean_reversion x momentum-directional x rv_rank-regime) and
+consumed one `rng.uniform` when it fired — became unreachable: no regime is
+ever drawn for that directional, and `_regime_signal_params` has exactly one
+call site (the regime_filter construction path). Unreachability verified on
+both legs before removal; `_CAPITULATION_REGIME_ID` /
+`_CAPITULATION_RV_RANK_GATE_RANGE` had zero readers outside the dead branch
+(grep src+tests+scripts). Removed: the 2 constants + the 16-line branch;
+tombstone comments left at both sites (the D276 resid comment references "the
+D270 pattern" and still resolves). Submitted v31-lineage rows keep their
+stored specs — interpretability lives in the DB + git history, not live code.
+
+**Rule #6 proof (versionless → must be cold-start byte-identical):**
+`tests/unit/test_enumeration` + `tests/invariants` = 582 green including all
+cold-start goldens un-re-pinned; ruff + mypy --strict clean. Daemon untouched
+(running process holds the old import; next natural restart loads identical
+behavior). Related: [[D280]], [[D270]], [[D295]].

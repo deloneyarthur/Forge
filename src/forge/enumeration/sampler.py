@@ -222,11 +222,10 @@ _CAPITULATION_DIRECTIONAL_ID: str = "momentum"
 # BARE-DROP (no regime gate; R1 per-directional exemption, operator-approved
 # OPEN_PROPOSALS `4d35a046` on Crucible's 2026-07-15 adjudication: the [50,80]
 # kernel-unit gate bound harmfully — 69/69 decided dead, median 4 OOS trades —
-# and NO replacement gate ships: market_rv x drop co-fires 2x/8.4y). The two
-# constants below are retained for the submitted v31 lineage's
-# interpretability; the emission path no longer reads them.
-_CAPITULATION_REGIME_ID: str = "rv_rank"
-_CAPITULATION_RV_RANK_GATE_RANGE: tuple[float, float] = (50.0, 80.0)
+# and NO replacement gate ships: market_rv x drop co-fires 2x/8.4y). The v31
+# gate constants (rv_rank, [50, 80]) and the elevated-vol override in
+# `_regime_signal_params` were unreachable from v35 and removed at D297
+# (git history has them; submitted v31-lineage rows keep their stored specs).
 _CAPITULATION_LOOKBACK_RANGE: tuple[int, int] = (3, 10)
 _CAPITULATION_TIME_STOP_NBARS_RANGE: tuple[int, int] = (5, 15)
 # D280 (v35): the swing_short rider — k gains 1 for this directional only
@@ -2060,22 +2059,10 @@ def _regime_signal_params(
     # side (op "<"); the indicator_thresholds default ">" is R2's trend side.
     if hypothesis == "mean_reversion" and regime_id == "hurst":
         params["op"] = "<"
-    # D270 (v31): the capitulation family's gate fires on the ELEVATED-vol
-    # side — rv_rank op ">" in [50, 80], the D107 "opposite side" pattern
-    # scoped one level tighter (per-DIRECTIONAL, not per-hypothesis: the
-    # champion MR's calm "<" side is untouched on every other directional).
-    # R1 accepts it as written (op-agnostic by the documented D107 convention).
-    # The extra uniform re-draws the table's calm-side threshold into the
-    # elevated band — a NEW path (momentum was never emittable pre-v31), so
-    # no pre-v31 sequence consumes differently.
-    if (
-        hypothesis == "mean_reversion"
-        and directional_id == _CAPITULATION_DIRECTIONAL_ID
-        and regime_id == _CAPITULATION_REGIME_ID
-    ):
-        low, high = _CAPITULATION_RV_RANK_GATE_RANGE
-        params["op"] = ">"
-        params["threshold"] = round(rng.uniform(low, high), 4)
+    # D270 (v31) → D280 (v35): the capitulation elevated-vol override (rv_rank
+    # op ">" re-drawn into [50, 80], the first per-DIRECTIONAL switch) lived
+    # here until the v35 bare-drop emptied the arm's regime pool in
+    # `_compatible_regimes` — unreachable since v35, removed at D297.
     # D276 (v33): the resid_vix confirmed-region gate bands, per-DIRECTIONAL
     # (the D270 pattern — every other pairing keeps the table's ranges). The
     # extra uniform re-draws the table's threshold into the converter
