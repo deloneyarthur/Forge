@@ -1698,3 +1698,53 @@ D245 both-side restart sequencing flagged. §2 needed no build: the
 ref_trailing_return starvation self-heal VERIFIED in our stream (veto carriers
 0/0/0 -> 3-11/batch from f49c554c 07-19T22:51Z; ~40% of submitted ve).
 Related: [[D290]], [[D288]], [[D282]], [[D270]], [[D257]], [[D245]], [[D254]].
+
+## D292 — 2026-07-20 — Tier-unpin reply TRIAGED (docs-only): the 2-leg PROMOTED (2nd portfolio ever, 1st via auto-campaign); our "tier-3 never reaches the pool" claim CORRECTED (folded tier_2 key — we draw all 94; the pin is the STAMP and its cost is cross-sectional); contracts 1.32.0 verified; v41 staged operator-gated
+
+Crucible `FORGE_tier_unpin_and_promote_2026-07-20.md` (their D291 reply). All
+claims verified on our side before recording:
+
+1. **PROMOTION (their §0):** the frozen 2-leg (trend 6bec53b4 + timer-MR
+   65316ca4, spec b36f49a4fe230f96) passed ALL 13 §8.7 gates (run de00e099:
+   cpcv_p25 1.7236 / WF median 2.3063 / DSR 0.9991 @ charged n=99 / PBO 0.156 /
+   min_oos 840 / leg corr 0.065). Second promoted portfolio ever; first through
+   the portfolio auto-campaign lane; live sizing deflated ~1.3-1.45. The
+   timer-MR leg is the exact cell v40 now farms.
+2. **Record correction (their §3, VERIFIED):** our D291/relay claim "94 July
+   tier-3 names never reach our pool" was WRONG. Since their ca51d35 publisher,
+   tier-3 is FOLDED into the export's `tier_2` key — export tier_2 n=114 = 20
+   curated + 94 tier-3 (verified: tier_3 ⊂ tier_2, subtraction = 20). We have
+   been drawing all of them; our own funnel shows the cited names heavily drawn
+   and structurally DEAD single-name: ASML 641 decided/0 comp, BKNG 1,254/0,
+   COST 1,544/1, LLY 1,372/0, SOXX 1,367/0 (BKNG/SOXX/LLY already v37-excluded;
+   **ASML/COST are candidate additions** — staged in v41, flagged for their
+   row-45 cross-check). What IS pinned: the literal `tier=2` stamp. Its real
+   cost is CROSS-SECTIONAL: their engine resolves xsect ranking pools from the
+   STAMP against PIT membership — every xsect config we ever emitted ranks the
+   TRUE 20-name curated tier-2 pool, so rank_k=20 cells rank-then-take the
+   whole pool (no selectivity), and the 94-name tier-3 xsect pool has literally
+   never been sampled. That axis, not single-name breadth, is the unpin payoff.
+3. **Contracts 1.32.0 VERIFIED** (their commit 0bc45a8, live at
+   ../crucible_contracts): `load_universe_tiers_from_export` -> UniverseTiers
+   (4/20/94 on the live export `universe_tickers_2026-07-20T160525Z.json`);
+   old reader returns the identical 118-name union (checked both) — so the NEW
+   export changes nothing at our next restart, and the minor pin gap
+   (1.31.0 pinned vs 1.32.0 installed) does not hard-fail
+   (`validate_schema_version` raises on MAJOR only). The fold stays until we
+   confirm adoption — no time bomb, but adoption must precede their fold
+   retirement (the old reader would shrink the pool 118 -> 24).
+4. **v39 -> v40 attribution hygiene (their §1):** premise correction accepted
+   on their side; null-control run — v38 vs v39 MR component rate 14.4% ->
+   15.0% (flat) — any MR movement in the v40 read attributes to D291. Their
+   census independently confirms the v40 scoping boundary (timer WORST in
+   trend/swing_long at 16.8% vs chandelier 38.5%; the timer is an MR-only
+   edge). §2: their writer restart was ONE event at 22:27:21Z (their ~23:30Z
+   was a logging error); our 22:51Z first-carriage observation consistent.
+5. **v41 STAGED (operator-gated; `docs/proposals/v41-tier3-xsect.md`):**
+   contracts pin 1.31.0 -> 1.32.0 + reader switch (pool unchanged) + true-tier
+   stamping + a 15% xsect tier=3 exploration share (their xsect-first
+   suggestion adopted — single-name tier-3 coverage already exists and is
+   mostly dead) + the ASML/COST exclusion rider. One deploy window covers pin
+   adopt + v41; on verify we confirm adoption so they retire the fold.
+
+Related: [[D291]], [[D290]], [[D286]], [[D267]], [[D245]], [[D078]].
