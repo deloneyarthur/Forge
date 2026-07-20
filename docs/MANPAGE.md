@@ -425,7 +425,7 @@ shadow lane before any `ranker.yaml` change. fable-audit learned-systems P1.4/B2
 ### forge healthcheck
 
 Reports whether the daemon is alive AND productive, then exits 0 (OK) / 1 (WARN) / 2
-(CRITICAL). Twelve checks: **service** (`systemctl is-active forge.service`), **loop** (newest
+(CRITICAL). The checks: **service** (`systemctl is-active forge.service`), **loop** (newest
 `--- loop iteration` journal line — catches a wedged-but-active process), **submission**
 (newest `submitted=N` line + the latest `blocked:` reason — catches a chronically-stalled
 pipeline, e.g. a Crucible stall, and points upstream), **backup**/**model** freshness (a
@@ -446,7 +446,10 @@ thresholds tunable via `--inbox-reject-window-hours`/`--inbox-reject-warn`/`--in
 and **tmp_headroom** (D259: `/tmp` free space as a multiple of the forge.db size — WARN below
 `--tmp-warn-ratio` (5×), CRITICAL below `--tmp-critical-ratio` (3.5×); catches the CAUSE of the
 2026-07-09 stall — the daily ranker-eval's `cp forge.db /tmp/…` fails on a full /tmp and the
-F3/wf_p25 models silently stale until the `model` check CRITs ~2 days later).
+F3/wf_p25 models silently stale until the `model` check CRITs ~2 days later), and
+**campaign carriage** (D302: the daily campaign-audit JSONL row — WARN when a farming
+campaign is STARVED at selection (the D287 class) or the audit row has gone stale;
+OK-with-note before the first 05:00 fire).
 Authoritative list: the `check_*` calls in
 `src/forge/cli/healthcheck_cmd.py`. Reads the journal + filesystem +
 version + the ranker-eval clocks — no DB snapshot.
@@ -522,6 +525,25 @@ tripwire). Read-only; snapshot the live DB first (RW-lock pitfall).
 ```
 forge campaigns list
 cp ~/forge_data/forge.db /tmp/snap.db && forge campaigns audit --forge-db /tmp/snap.db --days 7
+```
+
+### forge yield-audit
+
+The standing dead-cell detector (D302, Theme 4 of the post-promotion process review). Runs the
+census-class yield reads locally over decided verdicts: **dead names** (≥ `--min-name-n`, default
+500, decided with ZERO conversions — the ASML/COST class) and **cold cells**
+((hypothesis × dte_bucket) at ≥ `--min-cell-n`, default 1000, converting below 0.25× the
+hypothesis baseline). Honesty guards built in: the ve ghost-label cut (pre-07-18 ve rows are
+never evidence), the clean-era `--since` default, farming-campaign hypotheses exempt from cell
+flags (a young concentrated sweep looks exactly like a dead cell), already-excluded names
+reported for retire-review but never re-flagged, and zero-baseline hypotheses skipped.
+**Detection only — writes nothing.** Dead names render a STAGED RIDER DRAFT (v34/v37 frozen-list
+terms) for the operator to lift into a grammar-bump proposal after a prereg (D207) and Crucible
+row-45 cross-check. Caveat before acting: cross-check flags against the CURRENT universe —
+names no longer drawn save nothing. Always exit 0. Snapshot the live DB first.
+
+```
+cp ~/forge_data/forge.db /tmp/snap.db && forge yield-audit --forge-db /tmp/snap.db
 ```
 
 ### forge prereg
@@ -620,8 +642,12 @@ file), evaluates the live shadow models, and appends one JSON row to EACH of two
 verdict streak `~/forge_data/ranker_eval/streak.jsonl` (hygiene-incumbent-judged once populated,
 D284) and the gate-then-tail re-wire streak `~/forge_data/ranker_eval/rewire_streak_wfp25.jsonl`
 (the §8.6 tail streak was retired 2026-07-16, D285) — both judged
-on a fresh per-checkpoint window. Deterministic (no LLM, hard rule #5); telemetry-only — never
-touches grammar/weights/config/ranking. Trap-cleans the snapshot + staging on every exit. No args.
+on a fresh per-checkpoint window. D302 adds a final non-fatal block: the campaign
+region-carriage audit (`forge.ranking.campaign_audit`) appends one row to
+`~/forge_data/ranker_eval/campaign_audit.jsonl`; the healthcheck's `campaign carriage` check
+WARNs on a starved campaign or a stale file. Deterministic (no LLM, hard rule #5);
+telemetry-only — never touches grammar/weights/config/ranking. Trap-cleans the snapshot +
+staging on every exit. No args.
 
 ```
 scripts/daily_ranker_eval.sh        # or: systemctl --user start forge-ranker-eval.service

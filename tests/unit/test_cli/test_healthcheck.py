@@ -246,3 +246,39 @@ def test_learning_drift_levels() -> None:
     assert check_learning_drift([0.50, 0.52, 0.51, 0.20], **kw).level is Level.WARN
     # Short history (< min_history) skips the regression check -> no false alarm.
     assert check_learning_drift([0.9, 0.2], **kw).level is Level.OK
+
+
+def test_campaign_carriage_levels() -> None:
+    """D302 (Theme 5c): the daily campaign-audit JSONL row -> healthcheck.
+
+    Missing file/rows is OK-with-note (the wiring is new; the freshness WARN
+    covers a timer that stops writing AFTER the first row). Starved campaigns
+    and stale rows WARN."""
+    from forge.cli.healthcheck_cmd import check_campaign_carriage
+
+    fresh_ts = (_NOW - timedelta(hours=5)).isoformat()
+    stale_ts = (_NOW - timedelta(hours=40)).isoformat()
+
+    # No rows yet -> OK (informational note, not a nag).
+    result = check_campaign_carriage(None, _NOW)
+    assert result.level is Level.OK
+    assert "no campaign-audit rows" in result.message
+
+    # Fresh row, nothing starved -> OK.
+    healthy = {"ts": fresh_ts, "starved": [], "results": [{"name": "a", "starved": False}]}
+    assert check_campaign_carriage(healthy, _NOW).level is Level.OK
+
+    # Fresh row with a starved campaign -> WARN, names in the message.
+    starved = {"ts": fresh_ts, "starved": ["resid-vix-two-arm"], "results": []}
+    result = check_campaign_carriage(starved, _NOW)
+    assert result.level is Level.WARN
+    assert "resid-vix-two-arm" in result.message
+
+    # Stale row -> WARN even when nothing is starved.
+    old = {"ts": stale_ts, "starved": [], "results": []}
+    result = check_campaign_carriage(old, _NOW)
+    assert result.level is Level.WARN
+    assert "stale" in result.message
+
+    # Unparseable/missing ts -> WARN (cannot trust freshness).
+    assert check_campaign_carriage({"starved": []}, _NOW).level is Level.WARN

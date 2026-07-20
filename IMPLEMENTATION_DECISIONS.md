@@ -2178,3 +2178,59 @@ splits on **registry_hash** (grammar stays v42).
 appended to RELAYS.md but left uncommitted with the rest of that in-flight work.
 
 Related: [[D258]], [[D245]], [[D190]], [[D276]], [[D299]], [[D300]].
+
+## D302 — 2026-07-20 — Themes 2–5 execution round 1: `forge yield-audit` (the standing dead-cell detector — first run flags 30 dead names), campaign-audit wired into the 05:00 timer + healthcheck, RELAYS.md ledger, corr-to-book ask drafted as a held relay. (Number reserved via RELAYS.md before the concurrent D303 landed — file order is chronological, not numeric)
+
+**Operator "Let's continue to the next themes"** (after the D299 Theme 1 build).
+Executed the buildable, non-operator-gated halves; everything that ships an
+exclusion, carries a new ask, or touches the production write path stays gated.
+
+1. **Theme 4 — `forge/feedback/yield_audit.py` + `forge yield-audit` (TDD, 15
+   tests).** Census-class yield reads on OUR verdicts: dead names (≥500
+   decided, zero conversions — the ASML/COST class) + cold cells
+   ((hypothesis × dte_bucket) ≥1000 decided converting <0.25× the hypothesis
+   baseline). Guards: ve ghost-label cut (imported from
+   `rejection_weights.VE_GHOST_LABEL_CUT`), clean-era `since` default,
+   farming-campaign hypotheses exempt from cell flags (the registry is the
+   allowlist — a young sweep looks exactly like a dead cell), already-excluded
+   names (imported from the sampler's frozen list, single source of truth)
+   reported for retire-review but never re-flagged, zero-baseline hypotheses
+   skipped. DETECTION ONLY — writes nothing; dead names print a STAGED RIDER
+   DRAFT (v34/v37 terms) with the prereg step in it. **First live run
+   (snapshot, 346,904 decided rows since clean era, 33,467 ghost rows cut):
+   30 dead names at 0 conversions (AAL/ADBE/AMZN/ARKK/…/XOM, 513–1,139
+   decided each ≈ 21k wasted decided verdicts) + 1 cold cell
+   (event_momentum × swing_mid 0/1,359; NB hypothesis baseline is 0.0009 —
+   arguably a hypothesis-level story) + all 8 frozen-list names at 0
+   conversions (retire-review input).** CAVEAT flagged in MANPAGE + the
+   proposal: cross-check dead names against the CURRENT universe before
+   staging (July-shrink departures save nothing). Verdict-decision literals
+   confirmed live: component/reject/promote.
+2. **Theme 5c — campaign carriage into ops.** `daily_ranker_eval.sh` gains a
+   final non-fatal block appending one row/day to
+   `~/forge_data/ranker_eval/campaign_audit.jsonl` (exact block dry-run
+   verified against a live snapshot: ratios 1.379/1.062/1.273, none starved);
+   `forge healthcheck` gains `check_campaign_carriage` (WARN on starved
+   campaigns — the D287 class — or a stale row; OK-with-note before the first
+   fire; missing-ts WARNs). Timer picks the script up at the next 05:00 fire
+   (D285 precedent) — NO restart needed; the healthcheck change is
+   CLI-only.
+3. **Theme 5b — `RELAYS.md`** (root): one-row-per-live-relay ledger
+   (state/awaiting/D-ref), maintained at triage time. Adopted by a concurrent
+   session within the hour (their D303 row) — the coordination gap it filled
+   was real.
+4. **Theme 3 — `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md`** drafted and HELD:
+   additive per-gated-config corr-vs-promoted-book scalar, telemetry-first /
+   prereg'd-feature-second our side, honesty blocks included. Carrying it is
+   the operator's call (new-initiative ask, unlike response relays).
+5. **Theme 2 — NOT built this round** (the proposal stands): 2b (cold-start
+   floor generalization) is NOT byte-identical → wants its own deploy window;
+   2a (ordinal targets) is the big model change and should follow 2c's label
+   provenance. Sequencing unchanged: 2c → 2b → 2a/2d.
+
+Gates: yield-audit 13+2 tests, healthcheck 15 (incl. the new levels test),
+affected scope 732 green mid-build; full suite + mypy --strict + ruff at
+commit. MANPAGE (yield-audit section, healthcheck + daily-eval sections),
+architecture.md (feedback/ + cli/ rows), proposal status headers updated same
+commit. Related: [[D299]], [[D287]], [[D290]], [[D207]], [[D286]], [[D295]],
+[[D298]], [[D303]].

@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-07-20 (close, later⁸) — D302 SHIPPED (code + ops, no restart): Themes 2–5 round 1 — `forge yield-audit` dead-cell detector (FIRST RUN FLAGS 30 DEAD NAMES ≈21k wasted decided verdicts), campaign-audit wired into the 05:00 timer + a new healthcheck check, `RELAYS.md` ledger, corr-to-book contracts ask drafted+HELD. Theme 2 deliberately deferred (needs a deploy window)
+
+**Operator "Let's continue to the next themes."** Buildable halves executed; operator gates untouched. NB the D-number race is now routine: D302 was reserved via RELAYS.md before the concurrent D303 landed — ledger file order is chronological, not numeric.
+
+- **`forge yield-audit` (Theme 4, TDD 15 tests):** dead names (≥500 decided / 0 conversions) + cold cells (≥1000, <0.25× hypothesis baseline) with ALL the honesty guards (ghost-cut, clean-era window, farming-campaign exemption via the D299 registry, frozen-list names to retire-review, zero-baseline skip). Detection only, writes nothing; prints a staged v34/v37-terms rider draft ending in the prereg step. **First live run: 30 dead names (AAL, ADBE, AMZN, ARKK, BSX, DIA, DVN, EEM, EFA, GE, INTC, KO, LRCX, LUV, MS, MSFT, NEM, NKE, PEP, TXN, UNG, UPS, VZ, WFC, XBI, XLF, XLI, XLP, XLV, XOM — 513–1,139 decided each), 1 cold cell (event_momentum × swing_mid 0/1,359 vs baseline 0.0009 — arguably hypothesis-level), all 8 frozen-list names at 0 conversions.** OPERATOR DECISION AVAILABLE: prereg + stage the rider on the next bump — but cross-check against the CURRENT universe first (July-shrink departures save nothing), and their row-45 cross-check per the drafted terms.
+- **Ops wiring (Theme 5c):** `daily_ranker_eval.sh` appends `campaign_audit.jsonl` daily (block dry-run verified on a live snapshot: ratios 1.379 / 1.062 / 1.273, none starved); `forge healthcheck` gains `campaign carriage` (WARN on starved/stale; OK-note before the first fire). Activates at the next 05:00 fire — no restart, no daemon touch.
+- **`RELAYS.md` (Theme 5b):** live-relay ledger, one row each, maintained at triage time. A concurrent session adopted it within the hour (their D303 row).
+- **Corr-to-book (Theme 3): `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` HELD** — additive per-gated-config corr-vs-book scalar, telemetry-first; carrying is YOUR call (new-initiative ask). Companion: `docs/proposals/corr-to-book-feedback.md`.
+- **Theme 2 NOT built** (deliberate): 2b cold-start floor generalization is not byte-identical → own deploy window; 2a ordinal targets follows 2c label provenance. `docs/proposals/learned-target-and-label-integrity.md` stands with sequencing 2c → 2b → 2a/2d.
+- Gates: full suite at commit (below), mypy --strict clean, ruff clean; MANPAGE/architecture/proposal-status updated same commit. Watches unchanged (v39→v40 MR read ~07-22/23; ve read ~07-21; prereg `098ea730` resolves ≤07-21).
+
 ## 2026-07-20 (close, later⁷) — EV de-registration ACK'd (D303, docs-only, no build): Crucible retires `expected_value_estimator` → the §3.5 X2 kelly chain goes DORMANT automatically at their next registry publish (per-batch reload + `samplable_sizer_modes` filter, D258 class). Our funnel independently corroborates their NO-GO; one ledger flag relayed back
 
 Triage of `FORGE_ev_deregistration_and_api_withdrawal_2026-07-20.md` → response

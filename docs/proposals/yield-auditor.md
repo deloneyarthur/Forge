@@ -1,6 +1,12 @@
 # Proposal: standing yield auditor — self-serve dead-cell detection (Theme 4)
 
-Status: **BRAINSTORM DRAFT — operator-gated; nothing ships off this doc.**
+Status: **DETECTOR BUILT (D302, 2026-07-20)** — `forge yield-audit` ships the
+read-only detection half (dead names + cold cells, all guards below, prints a
+staged rider draft, writes nothing). Still operator-gated: shipping any
+exclusion, the weekly-timer wiring, and OPEN_PROPOSALS auto-staging. First
+live run flagged 30 dead names (~21k decided verdicts since the clean era at
+zero conversions) + 1 cold cell — CAVEAT: cross-check flags against the
+CURRENT universe before acting (names no longer drawn save nothing).
 Date: 2026-07-20. Source: post-promotion process-improvement review.
 Relates to: hard rule #4 (auto-tightening may ship without approval;
 loosening may not), [[D207]] (preregistration discipline), [[D286]]/[[D293]]

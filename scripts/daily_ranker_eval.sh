@@ -368,4 +368,49 @@ print(
 )
 PY
 
+# --- campaign region-carriage audit (D302, Theme 5c) ---------------------------
+# One JSONL row per day: per-campaign ranked-vs-holdout carriage over the last 7d
+# (forge.ranking.campaign_audit — the D287 selection-starvation detector). The
+# healthcheck's `campaign carriage` check WARNs on a starved campaign or a stale
+# file. Read-only on the snapshot; non-fatal so the streak sections above are
+# never blocked by it.
+echo "daily-ranker-eval: campaign carriage audit"
+uv run python - "$SNAP" "$OUT_DIR/campaign_audit.jsonl" <<'PY' || echo "daily-ranker-eval: campaign audit failed -- continuing" >&2
+import json
+import sys
+from pathlib import Path
+
+from forge.core.clock import utc_now
+from forge.persistence.db import db_connection
+from forge.ranking.campaign_audit import audit_carriage
+
+snap, out = sys.argv[1], Path(sys.argv[2])
+with db_connection(snap) as conn:
+    results, unauditable = audit_carriage(conn, now=utc_now())
+
+row = {
+    "ts": utc_now().isoformat(),
+    "starved": [r.name for r in results if r.starved],
+    "unauditable": unauditable,
+    "results": [
+        {
+            "name": r.name,
+            "ranked_members": r.ranked_members,
+            "holdout_members": r.holdout_members,
+            "ranked_total": r.ranked_total,
+            "holdout_total": r.holdout_total,
+            "carriage_ratio": r.carriage_ratio,
+            "starved": r.starved,
+            "decisions": dict(r.decisions),
+        }
+        for r in results
+    ],
+}
+with out.open("a") as fh:
+    fh.write(json.dumps(row) + "\n")
+for r in results:
+    ratio = "n/a" if r.carriage_ratio is None else f"{r.carriage_ratio:.3f}"
+    print(f"daily-ranker-eval: campaign {r.name} ratio={ratio} starved={r.starved}")
+PY
+
 echo "daily-ranker-eval: done"

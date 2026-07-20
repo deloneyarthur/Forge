@@ -38,6 +38,7 @@ from forge.cli.prereg_cmd import prereg_app
 from forge.cli.ranker_model_cmd import ranker_model_app
 from forge.cli.shadow_null_cmd import shadow_null_app
 from forge.cli.status_cmd import cmd_status
+from forge.cli.yield_audit_cmd import cmd_yield_audit
 from forge.core.logging import configure_logging
 from forge.version import __version__
 
@@ -2864,6 +2865,7 @@ app.command("feedback")(cmd_feedback)
 app.command("healthcheck")(cmd_healthcheck)
 app.command("status")(cmd_status)
 app.command("alpha-budget")(cmd_alpha_budget)
+app.command("yield-audit")(cmd_yield_audit)
 app.add_typer(campaigns_app, name="campaigns")
 app.add_typer(grammar_app, name="grammar")
 app.add_typer(prereg_app, name="prereg")

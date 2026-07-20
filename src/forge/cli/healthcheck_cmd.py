@@ -455,6 +455,54 @@ def check_hypothesis_weights_fallback(journal: JournalState) -> HealthResult:
     )
 
 
+def check_campaign_carriage(
+    latest: dict[str, object] | None,
+    now: datetime,
+    *,
+    stale_warn_hours: float = 30.0,
+) -> HealthResult:
+    """D302 (Theme 5c): surface the daily campaign region-carriage audit.
+
+    The daily eval appends one JSONL row (``campaign_audit.jsonl``); a starved
+    campaign there means the selection layer is eating a farming region (the
+    D287 class) — WARN with the names so the operator runs `forge campaigns
+    audit` for the detail. A stale row WARNs too (the audit silently stopping
+    is itself the failure this check exists to catch). No rows yet is OK with
+    a note — the wiring is new and the first 05:00 fire may not have happened.
+    """
+    label = "campaign carriage"
+    if latest is None:
+        return HealthResult(
+            label, Level.OK, "campaign carriage: no campaign-audit rows yet (first 05:00 fire)"
+        )
+    ts_raw = latest.get("ts")
+    try:
+        ts = datetime.fromisoformat(str(ts_raw))
+    except (TypeError, ValueError):
+        return HealthResult(label, Level.WARN, "campaign carriage: latest row has no parseable ts")
+    age_hours = (now - ts).total_seconds() / 3600.0
+    if age_hours > stale_warn_hours:
+        return HealthResult(
+            label,
+            Level.WARN,
+            f"campaign carriage stale: last audit row {age_hours:.0f}h ago",
+        )
+    starved = latest.get("starved")
+    if isinstance(starved, list) and starved:
+        names = ", ".join(str(n) for n in starved)
+        return HealthResult(
+            label,
+            Level.WARN,
+            f"campaigns STARVED at selection (D287 class): {names} — "
+            "run `forge campaigns audit` on a snapshot for detail",
+        )
+    results = latest.get("results")
+    n_audited = len(results) if isinstance(results, list) else 0
+    return HealthResult(
+        label, Level.OK, f"campaign carriage ok ({n_audited} campaigns audited, none starved)"
+    )
+
+
 def check_registry_unknown_family(journal: JournalState) -> HealthResult:
     """D261: the registry loader dropped an indicator whose `family` Literal is unknown to
     Forge's installed contracts — a Crucible family added to a live registry snapshot ahead
@@ -524,6 +572,20 @@ def _read_metric_series(path: Path, metric_key: str) -> list[float]:
         if isinstance(value, (int, float)):
             out.append(float(value))
     return out
+
+
+def _read_last_json_line(path: Path) -> dict[str, object] | None:
+    """The newest JSONL record in ``path``, or None (missing/empty/corrupt tail)."""
+    if not path.is_file():
+        return None
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    if not lines:
+        return None
+    try:
+        rec = json.loads(lines[-1])
+    except json.JSONDecodeError:
+        return None
+    return rec if isinstance(rec, dict) else None
 
 
 def _gather_journal(window_hours: float) -> JournalState | None:
@@ -725,6 +787,12 @@ def cmd_healthcheck(
             critical_below=_TAIL_CRITICAL_BELOW,
             regression_delta=drift_regression_delta,
         )
+    )
+    # D302 (Theme 5c): the daily campaign region-carriage audit row — a starved
+    # farming campaign (the D287 selection-starvation class) or a silently
+    # stopped audit both WARN here.
+    results.append(
+        check_campaign_carriage(_read_last_json_line(eval_dir / "campaign_audit.jsonl"), now)
     )
     if journal is not None:
         results.append(check_hypothesis_weights_fallback(journal))

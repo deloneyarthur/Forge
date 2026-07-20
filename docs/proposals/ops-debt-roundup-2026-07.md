@@ -1,6 +1,10 @@
 # Proposal: ops-debt roundup, post-promotion (Theme 5)
 
-Status: **BRAINSTORM DRAFT — operator-gated; nothing ships off this doc.**
+Status: **PARTIALLY EXECUTED (D302, 2026-07-20)** — 5b DONE (`RELAYS.md`,
+adopted by a concurrent session same-day), 5c DONE (campaign-audit row in the
+daily eval + the healthcheck `campaign carriage` check; activates at the next
+05:00 fire, no restart needed). 5a (duckdb write batching) and the 5d watches
+remain open; 5a stays operator-gated (production write path + restart).
 Date: 2026-07-20. Source: post-promotion process-improvement review.
 Relates to: memory `pipeline-performance-audit-2026-07` +
 `fable-audit/pipeline-performance/` (the committed plan), [[D295]] (cleanup
