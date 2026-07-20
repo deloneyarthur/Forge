@@ -2084,3 +2084,40 @@ proposal missing its resolution banner.
 
 Docs-only + two `git mv`; daemon untouched. Related: [[D295]], [[D297]],
 [[D298]], [[D252]], [[D285]], [[D248]].
+
+## D301 — 2026-07-20 — Bucket B round 2 (the D248 needs-owner manifest cleared): ve `|move|` flag path removed (D235 pre-authorized), `compute_hypothesis_reward_weights` + `_run_reward` + 3 weight constants removed (D105-superseded), `is_percentile_emitting` removed (never wired), pytest-cov retired; the 3 doc bugs were already fixed
+
+Operator "ready for it" on the follow-up list D300 surfaced. Everything
+verified dead/licensed before cutting; full suite **2006 green** post-removal,
+mypy --strict clean repo-wide, ruff clean. Daemon untouched (no restart; none
+of it is reachable in production).
+
+1. **ve `|move|` flag path** (D235: "stays in the tree as dead-but-inert, or
+   can be removed in a later cleanup" — prereg `e1a43ba8ee14` refuted +
+   thesis-inverted; the flag was never On in production, grep-verified):
+   `volatility_event_absolute_move` field + YAML parse out of
+   `prefilters/calibration.py`; the `absolute=` branch + `ve_absolute` + the
+   details key out of `prefilters/permutation_test.py`;
+   `corrected_null_calibration` (the FLIP-2 arm) out of
+   `prefilters/shadow_null.py`; `forge shadow-null run` reduced tri-null →
+   dual-null (the `flip2_ve_absolute_move` JSONL key and FLIP-2 table are
+   gone — flip-1 vs production remains). MANPAGE section rewritten. Historical
+   records (preregistrations.jsonl, ledgers) untouched.
+2. **`compute_hypothesis_reward_weights`** + its private `_run_reward` + the
+   three D101 weight constants (TRADE_PRODUCTION/GATE_PROGRESS/SHARPE):
+   superseded by the D105 component-rate lane; zero production callers.
+   KEPT: `_sharpe_reward` + `DEFAULT_TRADE_FLOOR` (live in
+   `_component_run_reward`). The anti-Goodhart comparison test now asserts
+   the NEW estimand only (the OLD half is documented in its docstring);
+   `_gated_run_graded` retained (the D103 frozen-rv tests build runs with it).
+3. **`is_percentile_emitting`**: built for the D073 threshold proposer, which
+   never wired it and was itself deleted at D298 — doubly dead.
+4. **pytest-cov + [tool.coverage.*]**: never invoked (no --cov anywhere);
+   removed from dev extras + pyproject; uv.lock re-resolved.
+5. **Already fixed by prior sessions (manifest stale, no action):** the
+   MANPAGE kill-switch spelling, the `FORGE_F3_RANKER` MANPAGE mention, the
+   straddle proposal's REFUTED banner. **Declined:** `TABLE_NAMES` relocate
+   (fine where it is; used by test_persistence).
+
+The D248 needs-owner manifest is now fully dispatched (items done across
+D295/D298/D300/D301). Related: [[D235]], [[D248]], [[D105]], [[D298]].

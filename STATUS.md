@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-07-20 (close, later⁵) — Bucket B round 2 DONE (D301): the D248 needs-owner manifest CLEARED — ve `|move|` path removed (D235 pre-authorized; shadow-null now dual-null, `flip2` JSONL key gone), D094/D101 reward lane removed (D105-superseded), `is_percentile_emitting` removed, pytest-cov retired. Full suite 2006 green, mypy/ruff clean, daemon untouched
+
+**Operator "ready for it."** Full record: [[D301]]. All three manifest doc bugs turned out already fixed; `TABLE_NAMES` relocate declined. With D295–D301 the entire post-promotion cleanup review is dispatched — no staged cleanup items remain. Standing watch unchanged: next outbound relay carries the meta-king publisher ask.
+
 ## 2026-07-20 (close, later⁴) — Bucket C CLOSED (D300, docs-only): DESIGN §12/§14 HISTORICAL banners, 2 stale docs archived (last D248-manifest doc stragglers), **quality-lane-rewire proposal status CORRECTED — it was ADOPTED at D252, the doc was stale** (re-wire clock 21/21 qualifying, latest Δ+0.636; F3 streak on the hygiene incumbent), DECISIONS.md volatile-fact fix, test consolidation declined. The three-bucket cleanup review (D295–D298, D300) is fully dispatched
 
 **Operator answered all four bucket-C questions in-session** (full record: [[D300]]). **STANDING WATCH — next outbound relay carries:** the meta-king publisher ask (their `crucible-meta-king-publisher.timer` still runs daily; Forge's arm retired D190 — still wanted?). Surfaced-not-executed (future bucket-B pass, from the D248 manifest): ve `|move|` flag path (D235 pre-authorized), `compute_hypothesis_reward_weights` (D105-superseded), `is_percentile_emitting` (never wired), pytest-cov config, 2 cheap MANPAGE doc bugs, straddle-proposal banner.
