@@ -2234,3 +2234,58 @@ commit. MANPAGE (yield-audit section, healthcheck + daily-eval sections),
 architecture.md (feedback/ + cli/ rows), proposal status headers updated same
 commit. Related: [[D299]], [[D287]], [[D290]], [[D207]], [[D286]], [[D295]],
 [[D298]], [[D303]].
+
+## D304 — 2026-07-20 — Housekeeping answers TRIAGED (docs-only + one live probe): timer repurposed-not-meta-king (watch closed permanently), sma_slope/ad_slope WIRED + re-probe GO (v24 trend adoption real), the DSR relay was ANSWERED 07-08 all along (our D295 "held" label corrected; Q3 basis corrections recorded; the `search_n_trials` follow-up = a 12-day dropped ball, build pending), resid×vix two-arm read CLOSED (D287/D299 floor retirement licensed)
+
+**Inbound `FORGE_housekeeping_answers_2026-07-20.md`** (their reply to
+`PROMPT_CRUCIBLE_HOUSEKEEPING_ASKS.md`, same day). Every claim verified before
+recording:
+
+1. **Ask 1 (meta-king timer): KEEP — name-only staleness.** The unit was
+   repurposed 2026-06-26 (their §20) and now publishes the structural
+   yield-map + WF-percentile refit-sample feeds for QuantIQ's dashboard — a
+   live consumer. Rename rides their next deploy-touching change. The D300
+   standing watch is closed PERMANENTLY ("you can stop asking").
+2. **Ask 2 (sma_slope/ad_slope): WIRED.** Their live-writer verification:
+   sma_slope 378/614 / ad_slope 456/614 bars firing on SPY; our 07-07 report
+   was correct at the time and became the cited motivation for their §20
+   registry-drift guard (the same guard that made ref_trailing_return a
+   1-restart fix). **Forge re-probe RUN (their green light, D254 ritual):
+   `check-activations` GO — sma_slope max 537 / ad_slope max 440 across
+   SPY/AAPL/MSFT/NVDA.** The v24 trend adoption carries for real; the
+   `predicted_activations` prefilter passes carriers organically from here
+   (no Forge change). Do-NOT-pull confirmed. Relay closed + verified.
+3. **DSR: answered 2026-07-08 all along** — their
+   `FORGE_alpha_budget_dsr_ANSWERS_2026-07-08.md` (commit `dffbb83`; the file
+   later left their working tree, which is why the D295 sweep found no answer
+   doc — recap re-verified against their git history, full text read).
+   Corrections of record: **Q3** — deflation is on the DAILY SR with n =
+   daily-return count (not trade count; the ≈1-trade/day xsect coincidence
+   explained our 0.011 anchor fit), E[max] uses analytic 1/sqrt(n−1) at SR=0
+   (not cross-trial dispersion), skew/kurt (plain) live in σ_obs only. **Q1**
+   — n_trials = slot-scoped distinct DECIDED config count (hypothesis ×
+   dte_bucket × xsect-vs-named). **Q2 (their operator, 07-08)** — no standing
+   per-run DSR flip (future flip = pre-announced feedback-era boundary), and
+   **Forge owes `search_n_trials` population**: per-slot cumulative distinct
+   configs at submit time (per-submission sweep size acceptable as a
+   conservative proxy; never global-campaign). That follow-up sat unactioned
+   12 days — the F4 "unset is honest" settlement note masked the newer
+   operator decision. **Build pending operator go** (hash-excluded field per
+   contracts 1.19.0 — no idempotency impact). **Q4** — shipped as contracts
+   1.27.0 (we adopted at v25/07-09; `measurement_basis` has been in every
+   export row since — our basis analyses can drop the value-drift inference).
+   Memory pillar corrected (T=trades → daily-n; "awaits carry" → answered).
+4. **FYI back — the resid×vix two-arm read is CLOSED** (satellite route dead
+   on BOTH chassis: 07-16 pure_sue175 + 07-20 promoted-2-leg batteries, both
+   shortlists EMPTY; measured trade-off = decorrelation XOR the 2022 bear
+   block). **The D287/D299 `resid-vix-two-arm` campaign's `retire_on`
+   condition has FIRED** — retirement = status flip farming → retired in
+   `ranking/campaigns.py` (drops the cell from `active_selection_cells()`),
+   effective at the next restart. REOPENING CONDITION (recorded): a BOTH-AXES
+   config from their 07-13 ask (vix-gate WF conversion + hurst-gate cpcv in
+   one genome) — note C1/R2 makes a two-regime-gate genome inexpressible
+   today (the Q46 multi-gate class). Build pending operator go.
+
+RELAYS.md rows updated (HOUSEKEEPING answered same-day; SMA_SLOPE answered +
+verified; ALPHA_BUDGET_DSR answered-07-08 mislabel corrected). Daemon
+untouched. Related: [[D300]], [[D254]], [[D287]], [[D299]], [[D207]].

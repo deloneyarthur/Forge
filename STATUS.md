@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-07-20 (close, later⁹) — Housekeeping answers TRIAGED (D304, docs + one live probe): meta-king timer = repurposed, watch closed FOREVER; **sma_slope/ad_slope WIRED — re-probe GO (537/440 max activations), the v24 trend adoption finally carries**; DSR relay was answered 07-08 all along (Q3 basis corrected: daily-n not T=trades; **Forge owes `search_n_trials`, 12-day dropped ball**); **resid×vix two-arm read CLOSED their side → the D287/D299 campaign's retire_on FIRED**. Two builds await operator go
+
+**Inbound `FORGE_housekeeping_answers_2026-07-20.md`, every claim verified (their deleted answers file re-read from their git `dffbb83`).** Full record: [[D304]]. RELAYS.md updated (3 rows → answered). Pending operator go: (1) `resid-vix-two-arm` campaign status flip farming→retired in `campaigns.py` (licensed by the fired retire_on; effective next restart; reopening condition = their standing BOTH-AXES ask, today inexpressible under C1/R2 — the Q46 class); (2) the `search_n_trials` population build (per-slot cumulative at submit; hash-excluded, no idempotency impact). Prereg `098ea730d5f2` still resolves ≤07-21.
+
 ## 2026-07-20 (close, later⁸) — D302 SHIPPED (code + ops, no restart): Themes 2–5 round 1 — `forge yield-audit` dead-cell detector (FIRST RUN FLAGS 30 DEAD NAMES ≈21k wasted decided verdicts), campaign-audit wired into the 05:00 timer + a new healthcheck check, `RELAYS.md` ledger, corr-to-book contracts ask drafted+HELD. Theme 2 deliberately deferred (needs a deploy window)
 
 **Operator "Let's continue to the next themes."** Buildable halves executed; operator gates untouched. NB the D-number race is now routine: D302 was reserved via RELAYS.md before the concurrent D303 landed — ledger file order is chronological, not numeric.
