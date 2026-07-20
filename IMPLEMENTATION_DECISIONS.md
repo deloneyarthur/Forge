@@ -2289,3 +2289,25 @@ recording:
 RELAYS.md rows updated (HOUSEKEEPING answered same-day; SMA_SLOPE answered +
 verified; ALPHA_BUDGET_DSR answered-07-08 mislabel corrected). Daemon
 untouched. Related: [[D300]], [[D254]], [[D287]], [[D299]], [[D207]].
+
+## D305 — 2026-07-20 — `resid-vix-two-arm` campaign RETIRED (operator "Retire now" on the fired retire_on): status flip farming → retired in `ranking/campaigns.py`; the derived D287 selection floor is now EMPTY; effective at the next restart
+
+The pre-agreed condition (D287: "retire on Crucible's relay"; D299 carried it
+into the registry as `retire_on="Crucible's relay closing the two-arm read"`)
+FIRED via `FORGE_housekeeping_answers_2026-07-20` (D304 item 4). Change: the
+`Campaign` dataclass gains a generic `retired_note` field (the
+`converted_note` pattern); the resid-vix row flips to `retired` with the
+closure + reopening condition recorded in-place (BOTH-AXES genome from their
+07-13 ask — inexpressible under C1/R2 today, the Q46 class; their ask stays
+standing). The row is RETAINED (audit trail), the cell stays on it; the
+derived `EXPERIMENT_CELLS` is now empty → diversifier phase 0b reserves
+nothing; `EXPERIMENT_CELL_SLOTS` falls back to the D287 default constant.
+Generation-side resid supply (v33 concentrated sweep + v37 coin) is
+grammar-owned and deliberately untouched.
+
+TDD: the load-bearing derivation test flipped FIRST (red for the expected
+reasons: status + missing field) → registry edit → green. ranking 307 +
+campaigns-CLI + invariants 125 green; ruff + mypy --strict clean. **Takes
+effect at the next daemon restart** (operator chose retire-without-restart;
+until then phase 0b keeps reserving 4 slots/batch for the concluded cell —
+harmless). Related: [[D304]], [[D299]], [[D287]].

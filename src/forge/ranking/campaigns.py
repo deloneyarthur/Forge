@@ -67,6 +67,8 @@ class Campaign:
     selection_slots: int = 0
     member: Callable[[Mapping[str, Any]], bool] | None = field(default=None)
     converted_note: str | None = None
+    # Set when status flips to "retired": what closed it + what would reopen it.
+    retired_note: str | None = None
 
 
 def config_cell_from_json(config: Mapping[str, Any]) -> ExperimentCell | None:
@@ -211,17 +213,29 @@ def _is_mr_timer_member(config: Mapping[str, Any]) -> bool:
 CAMPAIGNS: tuple[Campaign, ...] = (
     Campaign(
         name="resid-vix-two-arm",
-        status="farming",
+        status="retired",
         origin=(
             "Crucible probe residual_momentum x vix_term_slope (first WF-gate "
             "pass ever, 07-11) + their two-arm supply ask"
         ),
-        decision_refs=("v27/D264", "v33/D276", "v37/D286", "D287"),
+        decision_refs=("v27/D264", "v33/D276", "v37/D286", "D287", "D305"),
         opened="2026-07-11",
         funnel_read="Crucible's two-arm read (vix_term_slope vs hurst resid arms)",
         retire_on="Crucible's relay closing the two-arm read",
         selection_cell=("residual_momentum", "vix_term_slope"),
         selection_slots=4,
+        retired_note=(
+            "RETIRED 2026-07-20 (D305): the retire_on condition fired — "
+            "FORGE_housekeeping_answers_2026-07-20 closed the two-arm read "
+            "(satellite route dead on BOTH chassis: 07-16 pure_sue175 + 07-20 "
+            "promoted-2-leg batteries, shortlists EMPTY; measured trade-off = "
+            "decorrelation XOR the 2022 bear block). REOPENING CONDITION: a "
+            "BOTH-AXES config from their 07-13 ask (vix-gate WF conversion + "
+            "hurst-gate cpcv in one genome) — inexpressible under C1/R2 today "
+            "(the Q46 multi-gate class); their ask remains standing. "
+            "Generation-side resid supply (v33 concentrated sweep, v37 coin) "
+            "is grammar-owned and untouched by this selection-floor retire."
+        ),
     ),
     Campaign(
         name="mr-timer-duration",

@@ -38,25 +38,41 @@ def test_registry_validates() -> None:
     validate_registry(CAMPAIGNS)
 
 
-def test_d287_pin_derives_byte_identical() -> None:
-    """THE load-bearing test: the derived selection floor equals the D287 pin.
+def test_d287_floor_retired_no_active_cells() -> None:
+    """THE load-bearing test: the derived selection floor reflects the registry.
 
-    If this moves, the production diversifier's phase 0b reservation moves —
-    that requires its own D-entry, not a registry edit side-effect.
+    D287→D299 history: the resid x vix pin derived byte-identical until D305,
+    when Crucible's 2026-07-20 housekeeping relay CLOSED the two-arm read
+    (both chassis shortlists empty) — the campaign's pre-agreed `retire_on`
+    condition — and the campaign flipped farming→retired. The derived floor
+    is now EMPTY (phase 0b reserves nothing); slots fall back to the D287
+    default. If this moves again, that requires its own D-entry.
     """
     from forge.ranking.experiment_cells import EXPERIMENT_CELL_SLOTS, EXPERIMENT_CELLS
 
-    assert frozenset({("residual_momentum", "vix_term_slope")}) == EXPERIMENT_CELLS
-    assert EXPERIMENT_CELL_SLOTS == 4
-    assert active_selection_cells(CAMPAIGNS) == EXPERIMENT_CELLS
-    assert active_selection_slots(CAMPAIGNS) == EXPERIMENT_CELL_SLOTS
+    assert frozenset() == EXPERIMENT_CELLS
+    assert EXPERIMENT_CELL_SLOTS == DEFAULT_SELECTION_SLOTS
+    assert frozenset() == active_selection_cells(CAMPAIGNS)
+    assert active_selection_slots(CAMPAIGNS) == DEFAULT_SELECTION_SLOTS
 
 
-def test_seed_registry_names_unique_and_farming() -> None:
+def test_resid_vix_campaign_retired_with_record() -> None:
+    """The D305 retirement is a status flip, not a deletion: the campaign row
+    stays (audit trail + the reopening condition on record)."""
+    by_name = {c.name: c for c in CAMPAIGNS}
+    resid = by_name["resid-vix-two-arm"]
+    assert resid.status == "retired"
+    assert resid.selection_cell == ("residual_momentum", "vix_term_slope")
+    assert resid.retired_note is not None
+    assert "BOTH-AXES" in resid.retired_note
+
+
+def test_seed_registry_names_unique_and_present() -> None:
     names = [c.name for c in CAMPAIGNS]
     assert len(names) == len(set(names))
     # The three seed campaigns as of D299. Extending the registry is expected;
-    # renaming/dropping a seed silently is not (each retire is a D-entry).
+    # renaming/dropping a seed silently is not (each retire is a D-entry —
+    # resid-vix-two-arm retired at D305, row retained).
     assert {"resid-vix-two-arm", "mr-timer-duration", "ve-exit-repair"} <= set(names)
 
 
@@ -239,7 +255,9 @@ def test_resid_vix_seed_carries_the_d287_cell() -> None:
     campaign = _seed("resid-vix-two-arm")
     assert campaign.selection_cell == ("residual_momentum", "vix_term_slope")
     assert campaign.selection_slots == 4
-    assert campaign.status == "farming"
+    # D305: retired (the two-arm read closed) — the cell stays on the row as
+    # the historical record, but derives into no active floor.
+    assert campaign.status == "retired"
 
 
 def test_ve_seed_is_hypothesis_wide() -> None:

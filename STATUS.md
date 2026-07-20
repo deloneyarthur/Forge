@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-07-20 (close, later¹⁰) — `resid-vix-two-arm` campaign RETIRED (D305, operator "Retire now"): status flip in `campaigns.py`, derived D287 floor now EMPTY (phase 0b reserves nothing), reopening condition on record (their standing BOTH-AXES ask — Q46-class, inexpressible today). Effective at the NEXT RESTART; until then the 4-slot reservation runs harmlessly. ranking 307 + invariants 125 green
+
+Full record: [[D305]]. The `search_n_trials` build (per-slot cumulative, operator-approved same session) is next — lands as D306, also next-restart-effective; the two ride one restart window together.
+
 ## 2026-07-20 (close, later⁹) — Housekeeping answers TRIAGED (D304, docs + one live probe): meta-king timer = repurposed, watch closed FOREVER; **sma_slope/ad_slope WIRED — re-probe GO (537/440 max activations), the v24 trend adoption finally carries**; DSR relay was answered 07-08 all along (Q3 basis corrected: daily-n not T=trades; **Forge owes `search_n_trials`, 12-day dropped ball**); **resid×vix two-arm read CLOSED their side → the D287/D299 campaign's retire_on FIRED**. Two builds await operator go
 
 **Inbound `FORGE_housekeeping_answers_2026-07-20.md`, every claim verified (their deleted answers file re-read from their git `dffbb83`).** Full record: [[D304]]. RELAYS.md updated (3 rows → answered). Pending operator go: (1) `resid-vix-two-arm` campaign status flip farming→retired in `campaigns.py` (licensed by the fired retire_on; effective next restart; reopening condition = their standing BOTH-AXES ask, today inexpressible under C1/R2 — the Q46 class); (2) the `search_n_trials` population build (per-slot cumulative at submit; hash-excluded, no idempotency impact). Prereg `098ea730d5f2` still resolves ≤07-21.
