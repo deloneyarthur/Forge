@@ -20,6 +20,10 @@ from forge.ranking.arm_floor import (
     ARM_FLOOR_SLOTS_PER_ARM,
     extract_arms,
 )
+from forge.ranking.cell_floor import (
+    CELL_FLOOR_BATCH_FRACTION,
+    CELL_FLOOR_SLOTS_PER_CELL,
+)
 from forge.ranking.experiment_cells import EXPERIMENT_CELL_SLOTS, config_cell
 from forge.ranking.signal_key import content_key
 
@@ -75,6 +79,9 @@ def select_top_n(
     arm_floor_batch_fraction: float = ARM_FLOOR_BATCH_FRACTION,
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
     experiment_cell_slots: int = EXPERIMENT_CELL_SLOTS,
+    mature_cells: AbstractSet[ExperimentCell] | None = None,
+    cell_floor_slots: int = CELL_FLOOR_SLOTS_PER_CELL,
+    cell_floor_batch_fraction: float = CELL_FLOOR_BATCH_FRACTION,
 ) -> list[RankedCandidate]:
     """Greedy DPP-style selection of `n` candidates from `candidates`.
 
@@ -119,6 +126,15 @@ def select_top_n(
     same greedy rule over the cell's members; no members → nothing reserved
     (generation-side starvation stays visible). `None` (default) keeps the
     legacy paths byte-identical.
+
+    ``mature_cells`` (D307) activates the YOUNG-cell exploration floor — the
+    D287 lesson generalized: any (directional, regime) cell NOT in the set is
+    young and gets up to ``cell_floor_slots`` reserved slots (capped at
+    ``int(n * cell_floor_batch_fraction)`` total, sorted-cell order), so a
+    novel pair cannot be starved at selection even when both its arms are
+    individually mature. Cells in ``experiment_cells`` are SKIPPED here —
+    the hand pin (phase 0b) is the override with its own slot count. `None`
+    (default) keeps the legacy paths byte-identical.
     """
     if n < 0:
         msg = f"n must be >= 0; got {n}"
@@ -126,7 +142,12 @@ def select_top_n(
     if n == 0 or not candidates:
         return []
 
-    if min_per_hypothesis > 0 or mature_arms is not None or experiment_cells:
+    if (
+        min_per_hypothesis > 0
+        or mature_arms is not None
+        or experiment_cells
+        or mature_cells is not None
+    ):
         return _select_top_n_floored(
             candidates,
             n,
@@ -138,6 +159,9 @@ def select_top_n(
             arm_floor_batch_fraction=arm_floor_batch_fraction,
             experiment_cells=experiment_cells,
             experiment_cell_slots=experiment_cell_slots,
+            mature_cells=mature_cells,
+            cell_floor_slots=cell_floor_slots,
+            cell_floor_batch_fraction=cell_floor_batch_fraction,
         )
 
     # Default-path fast variant: precompute signal-key sets once per
@@ -282,6 +306,43 @@ def _reserve_experiment_cells(
             take(pool, want)
 
 
+def _reserve_young_cells(
+    candidates: Sequence[RankedCandidate],
+    mature_cells: AbstractSet[ExperimentCell],
+    pinned_cells: AbstractSet[ExperimentCell],
+    cell_floor_slots: int,
+    reservation_cap: int,
+    selected_idx: list[int],
+    take: Callable[[Sequence[int], int], None],
+    n: int,
+) -> None:
+    """Phase 0c of ``_select_top_n_floored`` (D307): young-cell reservation.
+
+    Mirrors the D136 arm phase one granularity down: cells in sorted
+    (deterministic) order, members already selected count toward the cell's
+    slots, total reservations capped. ``pinned_cells`` (the experiment-cell
+    hand pins, phase 0b) are skipped — the pin is the override with its own
+    slot count, never double-served. Cell-less configs (bare-drop) are never
+    floor-eligible."""
+    cell_by_candidate = [config_cell(c.report.config) for c in candidates]
+    pools: dict[ExperimentCell, list[int]] = {}
+    for idx, cell in enumerate(cell_by_candidate):
+        if cell is None or cell in mature_cells or cell in pinned_cells:
+            continue
+        pools.setdefault(cell, []).append(idx)
+    reserved_total = 0
+    for cell, pool in sorted(pools.items()):
+        if reserved_total >= reservation_cap or len(selected_idx) >= n:
+            return
+        already = sum(1 for sidx in selected_idx if cell_by_candidate[sidx] == cell)
+        want = min(cell_floor_slots - already, reservation_cap - reserved_total)
+        if want <= 0:
+            continue
+        before = len(selected_idx)
+        take(pool, want)
+        reserved_total += len(selected_idx) - before
+
+
 def _select_top_n_floored(
     candidates: Sequence[RankedCandidate],
     n: int,
@@ -294,6 +355,9 @@ def _select_top_n_floored(
     arm_floor_batch_fraction: float = ARM_FLOOR_BATCH_FRACTION,
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
     experiment_cell_slots: int = EXPERIMENT_CELL_SLOTS,
+    mature_cells: AbstractSet[ExperimentCell] | None = None,
+    cell_floor_slots: int = CELL_FLOOR_SLOTS_PER_CELL,
+    cell_floor_batch_fraction: float = CELL_FLOOR_BATCH_FRACTION,
 ) -> list[RankedCandidate]:
     """Greedy selection with the per-arm (D136), experiment-cell (D287) and
     per-hypothesis (D103) floors.
@@ -313,6 +377,12 @@ def _select_top_n_floored(
          for candidates occupying exactly that (directional, regime) cell —
          model-independent coverage for a hand-pinned experiment the hard
          P-gate would otherwise pin to 0.0 (unreachable for the fill).
+      0c. **Young-cell reservation (D307)** — when ``mature_cells`` is
+         provided: for each YOUNG cell present among the candidates (not
+         mature, not hand-pinned in 0b), in sorted order, greedily reserve up
+         to ``cell_floor_slots`` slots, capped at
+         ``int(n * cell_floor_batch_fraction)`` reservations total — the
+         D287 protection made automatic.
       1. **Hypothesis floor (D103)** — for each hypothesis in sorted order,
          greedily reserve up to ``min_per_hypothesis`` of its candidates (or
          all of them if fewer), scored against the running global selection so
@@ -386,6 +456,19 @@ def _select_top_n_floored(
     if experiment_cells:
         _reserve_experiment_cells(
             candidates, experiment_cells, experiment_cell_slots, selected_idx, _take, n
+        )
+
+    # Phase 0c (D307) — young-cell reservation (the D287 lesson generalized).
+    if mature_cells is not None and cell_floor_slots > 0:
+        _reserve_young_cells(
+            candidates,
+            mature_cells,
+            experiment_cells or frozenset(),
+            cell_floor_slots,
+            int(n * cell_floor_batch_fraction),
+            selected_idx,
+            _take,
+            n,
         )
 
     by_hyp: dict[str, list[int]] = {}

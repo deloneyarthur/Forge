@@ -2340,3 +2340,56 @@ immediately), (b) a deliberate pre-announced flip with a boundary timestamp
 recommended against — under-deflates by design). The relay also carries the
 sma_slope re-probe GO confirm + the resid-vix floor-retirement notice.
 RELAYS.md row added. Related: [[D304]], [[D305]], [[D245]].
+
+## D307 — 2026-07-20 — Decision round on the D302 items (operator walk-through): corr-to-book CARRIED; the 30-name rider APPROVED ("Ship all 30") → prereg `44a4e08aef4f` + v43 staged; Theme 2b young-cell floor BUILT flag-OFF (`FORGE_YOUNG_CELL_FLOOR`) awaiting its activation window
+
+**Operator: "Let's walk through the decisions — I carried corr-to-book already
+to Crucible."** Three decisions closed; two builds/stagings executed. (D306
+was taken concurrently — the search_n_trials interaction relay.)
+
+1. **Corr-to-book: CARRIED by the operator** — RELAYS.md flipped to
+   `carried`; next move is theirs (additive field / decline); the telemetry
+   build starts only on a yes.
+2. **30-name rider: APPROVED "Ship all 30."** Decision homework run first:
+   (a) universe cross-check — ALL 30 still in the 2026-07-20T184245Z export
+   (DIA t1; AMZN/GE/MS/MSFT/XOM t2; 24 t3), the waste is ongoing; (b) draw
+   rate — 3,092 single-name submissions in the trailing 7d = 4.7% of the
+   stream (cf. the EV retirement's 6.2%); (c) the 8→38 frozen-list growth
+   (32% of the union) flagged explicitly and accepted. Prereg
+   `44a4e08aef4f` registered BEFORE any code (cohort cut 2026-07-21T00:00);
+   **`docs/proposals/v43-dead-name-rider.md` staged** — ships as its own bump
+   or rides the next Crucible-driven bump (candidate: the v39→v40 MR read
+   ~07-22/23); build happens IN the deploy window per the house pattern
+   (goldens re-pin, emission proof, first-batch audit, deploy relay with the
+   row-45 cross-check request).
+3. **Theme 2b: BUILT flag-OFF (operator "Build now, deploy separately").**
+   `forge/ranking/cell_floor.py` — `compute_mature_cells` mirrors the D136
+   arm-floor query one granularity down ((directional, regime) cell via
+   `config_cell_from_json`, honest-era ≥25 verdicts, ve ghost rows never
+   mature a cell); diversifier **phase 0c** `_reserve_young_cells` (sorted
+   cells, ≤2 slots each, cap 10% of batch, double-spend-safe via the
+   `already` count, hand-pinned experiment cells EXEMPT — the pin is the
+   override with its own slot count, never double-served; cell-less bare
+   configs never floor); queue threading; main wiring behind
+   `FORGE_YOUNG_CELL_FLOOR` (default off → `mature_cells=None` → every path
+   byte-identical, REBOOT-SAFE — pinned by test_none_mature_cells_is_
+   byte_identical + the 4 flag tests). Journal line when active:
+   `cell_floor: mature_cells=N`. WHY: the D287 pathology generalized — the
+   arm-floor key (role, indicator_id) cannot protect a novel PAIR whose arms
+   are individually mature; with `resid-vix-two-arm` retired (D305) the
+   derived pin set is empty and this floor is what protects the NEXT
+   campaign's cell on day one, automatically. **Activation = its own
+   operator window** (flip the env on forge.service + restart + first-batch
+   audit + a young-cell count read), deliberately SEPARATE from the v43
+   bump so neither boundary carries two changes (the v35→v36 lesson).
+
+Known scoping choice (documented in the diversifier docstring): young-cell
+reservation order is sorted-deterministic like the arm floor — a fixed order
+biases the same cells when over-subscribed; acceptable at the D136 precedent,
+revisit with a seeded rotation (own D-entry) if the first activation reads
+show over-subscription.
+
+Suite: cell_floor 10 + flag 4 + ranking scope 321 green mid-build; full suite
++ mypy --strict + ruff at commit. MANPAGE (env-flag block + D299 note),
+architecture.md, proposal status headers updated same commit.
+Related: [[D302]], [[D299]], [[D287]], [[D136]], [[D305]], [[D207]], [[D290]].

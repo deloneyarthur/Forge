@@ -1,6 +1,10 @@
 # Proposal: learned-target upgrade + label integrity as a standing system (Theme 2)
 
-Status: **BRAINSTORM DRAFT — operator-gated; nothing ships off this doc.**
+Status: **2b BUILT flag-OFF (D307, 2026-07-20)** — `forge.ranking.cell_floor`
++ diversifier phase 0c behind `FORGE_YOUNG_CELL_FLOOR` (default off,
+byte-identical, reboot-safe); activation = an operator deploy window (flip
+the service env + restart + first-batch audit). 2a / 2c / 2d remain drafts —
+operator-gated; nothing else ships off this doc.
 Date: 2026-07-20. Source: post-promotion process-improvement review (the 2-leg
 promotion retro + the first de-ghosted retrain read).
 Relates to: [[D287]] (selection starvation), [[D290]] (ghost-label cut), [[D284]]

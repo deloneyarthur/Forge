@@ -208,6 +208,18 @@ hurst-carried history), starving the two-arm EXPERIMENT at selection after v37/D
 generation draw — the D119/D136 "learned systems must not bias an experiment" principle at the
 selection layer. Per-batch audit line in the journal: `experiment_cell_floor: {...}`. The pin
 retires on Crucible's relay (when the two-arm read concludes), never from learned feedback.
+D299 moved the pin's home to the campaign registry (`forge.ranking.campaigns`) — the constants
+here DERIVE from farming campaigns, pinned byte-identical by test.
+
+**Env kill-switch — `FORGE_YOUNG_CELL_FLOOR`** (D307, Theme 2b): default `off` — must be exactly
+`on` to activate the YOUNG-cell exploration floor (diversifier phase 0c): any (directional,
+regime) cell with < 25 honest-era verdicts (`forge.ranking.cell_floor`, ghost-cut applied) gets
+≤ 2 reserved slots per batch, capped at 10% of the batch, hand-pinned campaign cells exempt —
+the D287 protection made automatic so a novel pair cannot be starved at selection even when both
+its arms are individually mature (the arm-floor keying gap that forced the D287 hand pin).
+`off`/unset → `mature_cells=None` → **byte-identical** (reboot-safe before the activation
+window). Activation is an operator-gated deploy (flip the env on `forge.service` + restart);
+journal line when active: `cell_floor: mature_cells=N …`.
 
 ```
 # One real batch, persisted:

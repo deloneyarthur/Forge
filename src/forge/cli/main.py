@@ -952,6 +952,29 @@ def _load_mature_arms(forge_db_path: Path) -> frozenset[tuple[str, str]] | None:
         return compute_mature_arms(conn)
 
 
+def _load_mature_cells(forge_db_path: Path) -> frozenset[tuple[str, str]] | None:
+    """D307 (Theme 2b) — mature (directional, regime) CELLS for the young-cell
+    exploration floor (the D287 lesson generalized: a novel pair can be
+    starved at selection even when both arms are individually mature).
+
+    FLAG-GATED OFF: ``FORGE_YOUNG_CELL_FLOOR`` must be exactly "on" — anything
+    else returns ``None`` (phase 0c inactive, selection byte-identical). The
+    operator flips the env on the service unit at the activation window; until
+    then a reboot onto this code changes nothing. Mirrors ``_load_mature_arms``
+    for the DB-unavailable no-op posture."""
+    import os
+
+    from forge.persistence.db import db_connection
+    from forge.ranking.cell_floor import compute_mature_cells
+
+    if os.environ.get("FORGE_YOUNG_CELL_FLOOR", "off") != "on":
+        return None
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return None
+    with db_connection(forge_db_path) as conn:
+        return compute_mature_cells(conn)
+
+
 def _load_bucket_weights(
     forge_db_path: Path,
     current_grammar_version: str | None = None,
@@ -2177,6 +2200,16 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             f"(young arms reserved <=2 slots, cap 10% of batch)"
         )
 
+    # D307 (Theme 2b) — young-cell floor, FLAG-GATED OFF (FORGE_YOUNG_CELL_FLOOR).
+    # None = phase 0c inactive, selection byte-identical (the deploy window flips
+    # the service env). When on, the journal line makes the maturity read visible.
+    mature_cells = _load_mature_cells(forge_db_path)
+    if mature_cells is not None:
+        typer.echo(
+            f"cell_floor: mature_cells={len(mature_cells)} "
+            f"(young cells reserved <=2 slots, cap 10% of batch; pinned cells exempt)"
+        )
+
     # D149 — F3 wiring: prior_promotion_proximity := P(component). Build the verdict
     # scorer from the latest model unless the kill-switch is set; rank_batch falls back
     # to the legacy Jaccard prior when it is None. Criterion MET (verdict streak 4/4,
@@ -2290,6 +2323,8 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         # draw. Model-independent coverage, the D119/D136 principle; the pin
         # retires on Crucible's relay (forge.ranking.experiment_cells).
         "experiment_cells": EXPERIMENT_CELLS,
+        # D307 — young-cell floor (FORGE_YOUNG_CELL_FLOOR; None = byte-identical).
+        "mature_cells": mature_cells,
     }
     # P3.3 (B7) — exploration holdout: reserve a seeded random fraction of the batch for
     # configs that BYPASS the learned ranking (unbiased labels for F3 / the wf_p25 lane /

@@ -63,6 +63,7 @@ def rank_batch(
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
     gate_tail_ordering: bool = False,
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
+    mature_cells: AbstractSet[ExperimentCell] | None = None,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
 
@@ -120,6 +121,7 @@ def rank_batch(
         floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
         experiment_cells=experiment_cells,
+        mature_cells=mature_cells,
     )
 
 
@@ -182,6 +184,7 @@ def rank_batch_with_holdout(
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
     gate_tail_ordering: bool = False,
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
+    mature_cells: AbstractSet[ExperimentCell] | None = None,
 ) -> tuple[list[RankedCandidate], list[RankedCandidate]]:
     """P3.3 (B7) exploration holdout: rank-select the top ``n - holdout_n`` as usual, then draw
     ``holdout_n`` at RANDOM from the survivors ranking did NOT pick — configs that bypass the
@@ -205,6 +208,7 @@ def rank_batch_with_holdout(
         floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
         experiment_cells=experiment_cells,
+        mature_cells=mature_cells,
     )
     selected_hashes = {c.report.config.config_hash for c in selected}
     pool = [c for c in scored if c.report.config.config_hash not in selected_hashes]
