@@ -156,13 +156,10 @@ def prior_mean(*, alpha: float = DEFAULT_ALPHA, beta: float = DEFAULT_BETA) -> f
 # ---------------------------------------------------------------------------
 
 DEFAULT_TRADE_FLOOR: int = 1
-# D101 — the three reward weights sum to 1.0 so reward stays in [0, 1]
-# (apply_exploration_floor's semantics unchanged). Split was 0.6/0.4 (D094,
-# trade/gate only); D101 reseats it to seat the Sharpe term — gate_progress is a
-# generic, Sharpe-blind pass-fraction, the exact axis the gate fails on.
-DEFAULT_TRADE_PRODUCTION_WEIGHT: float = 0.5
-DEFAULT_GATE_PROGRESS_WEIGHT: float = 0.2
-DEFAULT_SHARPE_WEIGHT: float = 0.3
+# (The D101 three-weight graded reward — DEFAULT_TRADE_PRODUCTION_WEIGHT /
+# DEFAULT_GATE_PROGRESS_WEIGHT / DEFAULT_SHARPE_WEIGHT, consumed by
+# `_run_reward` + `compute_hypothesis_reward_weights` — was removed at D301;
+# superseded by the D105 component-rate lane. Git history has it.)
 # Sharpe normalization (D101): linear ramp from FLOOR (0 reward) to CEILING
 # (full reward) of `walk_forward_sharpe_median` — CEILING = the §8.7
 # WF-Sharpe-median gate threshold (2.0), so the term rewards proximity to
@@ -201,65 +198,8 @@ def _sharpe_reward(gated_run: GatedRun, *, traded: bool) -> float:
     return max(0.0, min(1.0, (float(raw) - DEFAULT_SHARPE_FLOOR) / span))
 
 
-def _run_reward(
-    gated_run: GatedRun,
-    *,
-    trade_floor: int,
-    trade_production_weight: float,
-    gate_progress_weight: float,
-    sharpe_weight: float,
-) -> float:
-    """Graded reward in [0, 1] for one gated run (see the module section above)."""
-    if gated_run.decision.decision == "promote":
-        return 1.0
-    traded = gated_run.run.trade_count >= trade_floor
-    gates = gated_run.decision.gate_results
-    gate_fraction = sum(1 for g in gates.values() if g.passed) / len(gates) if gates else 0.0
-    return (
-        trade_production_weight * (1.0 if traded else 0.0)
-        + gate_progress_weight * gate_fraction
-        + sharpe_weight * _sharpe_reward(gated_run, traded=traded)
-    )
-
-
-def compute_hypothesis_reward_weights(
-    db: duckdb.DuckDBPyConnection,
-    gated_runs: Sequence[GatedRun],
-    *,
-    alpha: float = DEFAULT_ALPHA,
-    beta: float = DEFAULT_BETA,
-    trade_floor: int = DEFAULT_TRADE_FLOOR,
-    trade_production_weight: float = DEFAULT_TRADE_PRODUCTION_WEIGHT,
-    gate_progress_weight: float = DEFAULT_GATE_PROGRESS_WEIGHT,
-    sharpe_weight: float = DEFAULT_SHARPE_WEIGHT,
-) -> dict[str, float]:
-    """Per-hypothesis Beta-smoothed mean of a graded multi-class reward.
-
-    Generalizes `compute_hypothesis_weights`: each gated run contributes a
-    reward in [0, 1] (trade-production + gate-progress + Sharpe-proximity,
-    promotion = 1.0)
-    rather than a binary promoted flag, so the enumerator keeps a gradient
-    even when nothing has promoted. Same join semantics, same empty -> `{}`
-    cold-start contract, and the same determinism property (hard rule #6:
-    a pure function of the `submissions` table + the `gated_runs` snapshot).
-    """
-    if not gated_runs:
-        return {}
-    acc: dict[str, list[float]] = {}  # hypothesis → [total, reward_sum]
-    for hyp, gr in _iter_hypothesis_outcomes(db, gated_runs):
-        bucket = acc.setdefault(hyp, [0.0, 0.0])
-        bucket[0] += 1.0
-        bucket[1] += _run_reward(
-            gr,
-            trade_floor=trade_floor,
-            trade_production_weight=trade_production_weight,
-            gate_progress_weight=gate_progress_weight,
-            sharpe_weight=sharpe_weight,
-        )
-    return {
-        hyp: (alpha + reward_sum) / (alpha + beta + total)
-        for hyp, (total, reward_sum) in acc.items()
-    }
+# (`_run_reward` + `compute_hypothesis_reward_weights` removed at D301 —
+# see the constants note above.)
 
 
 # ---------------------------------------------------------------------------
@@ -1411,15 +1351,12 @@ __all__ = [
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
     "DEFAULT_EXPLORATION_FLOOR",
-    "DEFAULT_GATE_PROGRESS_WEIGHT",
     "DEFAULT_ORTHOGONAL_YIELD_MIN_DISCOUNT",
     "DEFAULT_ORTHOGONAL_YIELD_STRENGTH",
     "DEFAULT_SHARPE_CEILING",
     "DEFAULT_SHARPE_FLOOR",
     "DEFAULT_SHARPE_METRIC",
-    "DEFAULT_SHARPE_WEIGHT",
     "DEFAULT_TRADE_FLOOR",
-    "DEFAULT_TRADE_PRODUCTION_WEIGHT",
     "FEEDBACK_GATED_RUNS_LIMIT",
     "apply_exploration_floor",
     "apply_orthogonal_family_floor",
@@ -1427,7 +1364,6 @@ __all__ = [
     "compute_hypothesis_bucket_weights",
     "compute_hypothesis_component_weights",
     "compute_hypothesis_directional_bucket_weights",
-    "compute_hypothesis_reward_weights",
     "compute_hypothesis_weights",
     "compute_orthogonal_yield_discounts",
     "compute_relative_value_regime_weights",

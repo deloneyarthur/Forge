@@ -736,23 +736,8 @@ def is_threshold_skippable(indicator_id: str, role: str = "directional") -> bool
 _PERCENTILE_WINDOW = 252
 
 
-def is_percentile_emitting(indicator_id: str, role: str = "directional") -> bool:
-    """True if `(indicator_id, role)` emits a PERCENTILE threshold under v6.
-
-    Percentile-eligible pairs (D099) emit `use_percentile=True` + a `threshold`
-    in [0, 1] instead of an absolute value. Exposed so the native-unit
-    auto-tightening path (D073) and the threshold proposer can stay out of
-    percentile space — a native-unit tightening is meaningless for a [0, 1]
-    percentile (and the loader's baseline check would reject it anyway).
-    """
-    spec = _INDICATOR_THRESHOLD_TABLE.get(indicator_id)
-    if spec is None or spec.is_skip:
-        return False
-    if role == "directional":
-        return spec.directional_percentile_range is not None
-    if role == "regime_filter":
-        return spec.regime_percentile_range is not None
-    return False
+# (`is_percentile_emitting` removed at D301 — built for the D073 threshold
+# proposer, which never wired it and was itself deleted at D298.)
 
 
 def _percentile_params(
@@ -841,7 +826,6 @@ def sample_threshold_params(  # noqa: PLR0911 — one return per (role, percenti
 
 __all__ = [
     "IndicatorThresholdSpec",
-    "is_percentile_emitting",
     "is_threshold_skippable",
     "sample_threshold_params",
 ]

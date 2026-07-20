@@ -19,7 +19,6 @@ import random
 from pathlib import Path
 
 from forge.enumeration.indicator_thresholds import (
-    is_percentile_emitting,
     is_threshold_skippable,
     sample_threshold_params,
 )
@@ -79,25 +78,6 @@ def test_out_of_scope_indicators_stay_absolute() -> None:
         params = sample_threshold_params(ind, "regime_filter", random.Random(0))
         if params:
             assert "use_percentile" not in params, (ind, params)
-
-
-def test_is_percentile_emitting_matches_scope() -> None:
-    assert is_percentile_emitting("rsi_2", "directional")
-    assert is_percentile_emitting("rsi_14", "directional")
-    assert is_percentile_emitting("adx", "regime_filter")
-    assert is_percentile_emitting("hurst", "regime_filter")
-    # rsi_2 has a regime_range but is NOT percentile-emitting as a regime gate.
-    assert not is_percentile_emitting("rsi_2", "regime_filter")
-    # adx/hurst are regime-only (trend_strength family is in no directional pool).
-    assert not is_percentile_emitting("adx", "directional")
-    # dealer_positioning directional is excluded (shared with volatility_event).
-    assert not is_percentile_emitting("call_wall_distance_pct", "directional")
-    # already-rank indicators stay raw.
-    assert not is_percentile_emitting("rv_rank", "regime_filter")
-    assert not is_percentile_emitting("iv_rank", "regime_filter")
-    # unknown / skip indicators are never percentile-emitting.
-    assert not is_percentile_emitting("definitely_not_real_xyz", "directional")
-    assert not is_percentile_emitting("atr", "directional")
 
 
 def test_percentile_threshold_in_unit_interval_across_seeds() -> None:
@@ -197,9 +177,9 @@ def test_option_momentum_emits_percentile_only() -> None:
 
 def test_option_momentum_not_skippable_despite_no_absolute_range() -> None:
     """The percentile-only support: a directional with a percentile range but no
-    absolute range is samplable (not skippable) and percentile-emitting."""
+    absolute range is samplable (not skippable); its percentile emission is
+    asserted by the sampling test above."""
     assert not is_threshold_skippable("option_momentum", "directional")
-    assert is_percentile_emitting("option_momentum", "directional")
     # No regime range AND no regime percentile range -> still skippable as a gate.
     assert is_threshold_skippable("option_momentum", "regime_filter")
 

@@ -39,7 +39,6 @@ from forge.feedback.rejection_weights import (
     component_prior_mean,
     compute_hypothesis_bucket_weights,
     compute_hypothesis_component_weights,
-    compute_hypothesis_reward_weights,
     compute_underlying_class_weights,
 )
 from forge.persistence.db import db_connection
@@ -199,9 +198,10 @@ def test_anti_goodhart_component_class_beats_heavy_trader(tmp_path: Path) -> Non
     relative_value-like class: 20/20 runs trade, ZERO components.
     volatility_event-like class: 15/20 zero-trade, but 1 component.
 
-    The OLD trade-production reward (D094/D101) ranks the heavy trader on top —
-    that is the live Goodhart (rv weighted 0.567 at 0.7-1.0% yield vs vol_event
-    0.169 at 3.9-9.7%). The component-rate weights must rank them the other way.
+    The OLD trade-production reward (D094/D101, `compute_hypothesis_reward_weights`
+    — removed at D301) ranked the heavy trader on top — that was the live Goodhart
+    (rv weighted 0.567 at 0.7-1.0% yield vs vol_event 0.169 at 3.9-9.7%). The
+    component-rate weights must rank them the other way.
     """
     with db_connection(tmp_path / "forge.db") as conn:
         gated: list[GatedRun] = []
@@ -235,12 +235,9 @@ def test_anti_goodhart_component_class_beats_heavy_trader(tmp_path: Path) -> Non
         new = compute_hypothesis_component_weights(
             conn, gated, hypotheses=("relative_value", "volatility_event")
         )
-        old = compute_hypothesis_reward_weights(conn, gated)
 
-    # OLD estimand: heavy trader on top (the Goodhart this family fixes).
-    assert old["relative_value"] > old["volatility_event"]
-
-    # NEW estimand: the component class wins, normalized to 1.0.
+    # The component class wins, normalized to 1.0 (the removed D094/D101 reward
+    # estimand ranked the heavy trader on top — the Goodhart this family fixes).
     assert new["volatility_event"] == pytest.approx(1.0)
     assert new["relative_value"] < new["volatility_event"]
     # Exact math: posterior = (alpha + sum(reward)) / (alpha + beta + n).
