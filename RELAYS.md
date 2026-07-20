@@ -14,8 +14,9 @@ ops-debt item 5b).
 | `PROMPT_CRUCIBLE_ALPHA_BUDGET_DSR.md` | → | answered (was answered 2026-07-08 all along — their `dffbb83`; the D295 "held" label was OUR mislabel, corrected D304) | archive candidate; Forge owes the Q2 follow-up (`search_n_trials` population, per-slot semantics) | D304 |
 | `PROMPT_CRUCIBLE_COMBINED_RELAY_RESPONSE.md` | → | held | carry; archive after the v39→v40 MR read (~07-22/23) | D291/D295 |
 | `PROMPT_CRUCIBLE_EV_DEREGISTRATION_RESPONSE.md` | → | held (NEW 07-20) | carry (the ACK takes effect on carry); archive after their deletion publishes + kelly dormancy verified in a batch | D303 |
-| `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` | → | held (NEW 07-20) | **operator go** — new-initiative ask, not a response | D302 |
+| `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` | → | carried (07-20, operator) | their answer (additive field / decline); telemetry build follows only on a yes | D302 |
 | `PROMPT_CRUCIBLE_FUNDAMENTAL_VALUE_PRECHECK.md` | → | held (since 06-28) | operator relay decision | crucible-handoff |
+| `PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md` | → | held (NEW 07-20) | carry — BLOCKS the search_n_trials build (their Q2 "populate + no flip" contradicts their binding `_verdict_from_gates` predicate; their (a)/(b)/(c) choice needed) | D306 |
 | `PROMPT_CRUCIBLE_HOUSEKEEPING_ASKS.md` | → | answered (same-day: their `FORGE_housekeeping_answers_2026-07-20.md`) | archive candidate next sweep; all three asks closed (timer repurposed-not-meta-king — permanently answered, stop asking; sma_slope wired; DSR was answered 07-08) | D300/D304 |
 | `PROMPT_CRUCIBLE_PATHC_DEBIT_VERTICAL_SIZING.md` | → | parked | Path C is parked (operator 06-15); refresh before any resume | D152 |
 | `PROMPT_CRUCIBLE_SECTOR_ETF_XSECT_PRECHECK.md` | → | held (since 07-12) | operator relay decision (companion research = D269 DON'T-BUILD) | D269 |

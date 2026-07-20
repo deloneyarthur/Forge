@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-07-20 (close, later¹¹) — `search_n_trials` build HELD at verification (D306, docs-only): **their Q2 "populate + no flip" contradicts their own gate code** — `deflated_sharpe.passed` binds the component verdict via `_verdict_from_gates`, so stamping slot counts (~46k) would flip the component stream to reject = the standing-gate flip + feedback-era boundary they deferred. Interaction relay drafted+held (`PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md`, asks their (a)/(b)/(c)); today's unset→n_trials=1 behavior continues
+
+Full record: [[D306]]. The D245 both-sides class caught pre-build this time, not post-wedge. The relay also carries the sma_slope re-probe GO + the resid-vix floor-retirement notice. **Open restart window when convenient: D305 (floor retirement) is committed and rides the next restart** — nothing else queued for it.
+
 ## 2026-07-20 (close, later¹⁰) — `resid-vix-two-arm` campaign RETIRED (D305, operator "Retire now"): status flip in `campaigns.py`, derived D287 floor now EMPTY (phase 0b reserves nothing), reopening condition on record (their standing BOTH-AXES ask — Q46-class, inexpressible today). Effective at the NEXT RESTART; until then the 4-slot reservation runs harmlessly. ranking 307 + invariants 125 green
 
 Full record: [[D305]]. The `search_n_trials` build (per-slot cumulative, operator-approved same session) is next — lands as D306, also next-restart-effective; the two ride one restart window together.

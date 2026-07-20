@@ -2311,3 +2311,32 @@ campaigns-CLI + invariants 125 green; ruff + mypy --strict clean. **Takes
 effect at the next daemon restart** (operator chose retire-without-restart;
 until then phase 0b keeps reserving 4 slots/batch for the concluded cell —
 harmless). Related: [[D304]], [[D299]], [[D287]].
+
+## D306 — 2026-07-20 — `search_n_trials` build HELD at the verification gate (docs-only): their Q2 "populate + no flip, no boundary" is contradicted by their own live gate code — populating would flip the component stream to reject (a de-facto standing-gate flip + feedback-era boundary). Interaction relay drafted; build waits on their (a)/(b)/(c)
+
+The operator approved the per-slot-cumulative build (D304 follow-up) this
+session; pre-build verification killed the premise:
+
+- `_dsr_gate` (`../Crucible/src/optbt/data/_runner_gates.py`) deflates the
+  LIVE per-run DSR by `max(search_n_trials or 1, selection_n_trials or 1)`
+  and emits `deflated_sharpe` with `passed = dsr > _MIN_DEFLATED_SHARPE`.
+- `_verdict_from_gates` grants `component` only when the ONLY failures are
+  WF/CPCV — `deflated_sharpe.passed` is binding inside that predicate.
+- At mature-slot counts (their Q1 example 46,131) the de-facto per-run bar is
+  sharpe_baseline ≥ ~1.25 (their one-off 07-03 charge killed the two
+  transient promotes at 1.06/1.08 on exactly this arithmetic). Typical
+  components sit in that band → stamping would flip the bulk of component
+  verdicts to reject, collapsing the positive-label stream every trainer
+  (F3 / tail / yield / name-weights) labels on. That IS the standing-gate
+  flip and the feedback-era boundary their Q2 explicitly deferred.
+
+**Held per the D245 both-sides-coordination class.** Today's behavior (unset
+→ their n_trials=1) continues. Outbound
+`PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md` (held for carry) asks them
+to pick: (a) unbind per-run DSR from the forge-source component verdict
+(recommended — deflation stays in their post-hoc family lane; we then stamp
+immediately), (b) a deliberate pre-announced flip with a boundary timestamp
+(we condition training windows on it), or (c) capped stamping (listed,
+recommended against — under-deflates by design). The relay also carries the
+sma_slope re-probe GO confirm + the resid-vix floor-retirement notice.
+RELAYS.md row added. Related: [[D304]], [[D305]], [[D245]].
