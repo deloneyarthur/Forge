@@ -1827,3 +1827,61 @@ touches nothing) and only the cohort golden re-pins (first divergence = its
 first rank-combiner config, position 12). The xsect share test superseded in
 place (`test_xsect_stamps_tier2_since_v42`). Full suite 2008 green twice.
 Related: [[D293]], [[D292]], [[D291]], [[D267]], [[D169]].
+
+## D295 — 2026-07-20 — Post-promotion cleanup sweep #3 (docs/ops only, zero code-behavior change): 33 answered root relays archived, 4 completed one-off scripts retired, STATUS.md rotated (May–June blocks → `_archive/`), 7 stale May Q-headers bannered, forge_data leftovers cleared
+
+Operator-directed ("lets do A") after a four-survey cleanup review of the whole
+repo (root files, src dead code, scripts/ops, docs/tests) run post-first-auto-
+campaign-promotion. Everything here is the review's zero-risk bucket; code
+retirements (the orphaned capitulation rv_rank branch, the D287 cell-pin
+retire-on-relay, the auto_tune re-arm-or-delete decision) were deliberately NOT
+executed and remain staged for separate decisions.
+
+1. **Root relay sweep #3 (the D202 pattern; root PROMPT count 44 → 10 + 1
+   research note):** 33 answered/superseded relays moved to `_archive/` — all
+   deploy/funnel relays ≤ v38, the answered response/receipt/ack/bug set
+   (capitulation, census, cohort-followups, exit-duration, dsj, ivol thread,
+   earnings-manifest pair, generation-discipline thread, cache-poisoning
+   report, winning-burst FYI, market-rv ask), the v22-era
+   `PROMPT_PROMOTION_STRATEGY_HANDOFF.md` ("Promotions to date: ZERO"), and two
+   stale never-sent drafts whose premises are dead: `GEN_LEVERS_VALIDATION`
+   (argues from pre-first-promotion) and `VOLEVENT_GATE_CLASS_EVIDENCE`
+   (premise = ghost-era ve PBO 0.107, re-litigated by their 07-19 close-out).
+   KEPT in root (live/held): TIER_UNPIN + XSECT_CORRECTION (current cycle),
+   VE_PROGRAM + COMBINED_RELAY (one more cycle — v39/v40 funnel reads pending),
+   ALPHA_BUDGET_DSR + STALE_VOLUME (prereg `098ea730` resolves ≤07-21),
+   SMA_SLOPE (Crucible-side fix unverified), FUNDAMENTAL_VALUE_PRECHECK (held
+   live), PATHC_DEBIT_VERTICAL_SIZING (parked with Path C),
+   SECTOR_ETF_XSECT_PRECHECK + `SECTOR_VOL_MECHANISM_RESEARCH.md` (operator
+   call pending — companion research was a D269 DON'T-BUILD).
+2. **Scripts retired (the D241 pattern — deleted, recoverable from git
+   history, MANPAGE note updated):** `backfill_verdicts.py` (D111 completed),
+   `migrate_verdicts_decided_at.py` (D117 completed),
+   `requeue_high_value_configs.py` (one-off recovery, completed),
+   `probe_option_momentum_min_months.py` + `probe_results/` (Q39 resolved at
+   v19/D138). Their three dedicated integration tests removed with them
+   (`test_backfill_verdicts.py`, `test_migrate_verdicts_decided_at.py`,
+   `test_requeue_high_value_configs.py` — they tested completed one-time
+   migrations). `docs/tasks/investigate-live.md` pointer annotated.
+3. **STATUS.md rotated (the D242 ledger pattern):** 2026-05-29 → 2026-06-29
+   blocks (incl. the Phase-0 scaffolding/session log) moved verbatim to
+   `_archive/STATUS_2026-05_2026-06.md`; live file 2,522 → 756 lines with a
+   pointer at the bottom.
+4. **OPEN_QUESTIONS hygiene:** Q7/Q8/Q11/Q12/Q15/Q16/Q17 carried closure text
+   in their bodies since May–June but never got header banners — banners added
+   (no content changed). The scary "BLOCKING PHASE 1/2" headers no longer read
+   as open.
+5. **forge_data leftovers:** top-level `king_submissions.db` deleted
+   (byte-identical to `archive/king_retired_20260619/` copy, cmp-verified;
+   `NEW_BOX_TRANSFER.md` already said don't carry it);
+   `backfill_source_gated_runs_20260609.json` (46M, the completed D117
+   migration's input) moved into `~/forge_data/archive/`.
+6. **Committed alongside (not sweep content):** `fable-audit/reliability/`
+   (untracked since 07-06 — OPEN P0/P1 findings REL-1..21, the opposite of
+   cruft) + the README index row; the daemon's 07-18 OPEN_PROPOSALS append
+   (two PENDING gate-failure-concentration tighten proposals — the proposer
+   woke post-promotion; operator review pending, NOT decided here).
+
+**Daemon untouched** (nothing removed is imported by production code; no
+restart). Suite impact: only the three retired-script tests leave the count.
+Related: [[D202]], [[D241]], [[D242]], [[D294]].

@@ -53,7 +53,8 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
 - `decided_at` eras: exports published AFTER 2026-06-09T22:55Z emit tz-aware UTC (Crucible
   fixed storage + export end-to-end, D117); on-disk export files from before then carry
   naive LOCAL values (mixed eras — do not trust them without the +7h correction). The
-  `verdicts` table was repaired once via `scripts/migrate_verdicts_decided_at.py`; rows
+  `verdicts` table was repaired once via `scripts/migrate_verdicts_decided_at.py` (script
+  retired 2026-07-20, D295 — recoverable from git history); rows
   written after the fix are correct at ingest.
 - **Cost-floor value era: hard-cut at `2026-06-09T22:52:57Z`** (Crucible-confirmed exact
   restart; their "~23:09" STATUS note is the deploy-sequence tail). WF/CPCV/Sharpe **values**

@@ -591,39 +591,6 @@ forge grammar revert --to-version v3 --initials AJ --forge-db ~/forge_data/forge
 
 Run via `.venv/bin/python scripts/NAME.py` from the Forge repo root.
 
-### backfill_verdicts.py
-
-One-time catch-up for the `verdicts` table (D111): ingest a gated-runs export
-snapshot through the production `record_verdicts` path so the current rolling
-window survives before it rolls off. Idempotent (PK `crucible_run_id`). Run
-while `forge.service` is STOPPED (single-writer DB) — slot into the deploy
-stop-window.
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `--export-json` | path | newest in `~/optbt_data/exports` | Specific export snapshot. |
-| `--forge-db` | path | `~/forge_data/forge.db` | Forge DB (service stopped). |
-| `--dry-run` | flag | off | Report would-insert count; write nothing. |
-
-```
-.venv/bin/python scripts/backfill_verdicts.py --dry-run
-```
-
-### migrate_verdicts_decided_at.py
-
-One-time repair of mixed-era `verdicts.decided_at` values (D117): rows ingested
-before Crucible's 2026-06-09T22:55Z decided_at fix carry stale naive-local
-timestamps (+7h late). Sets matched rows from the corrected tz-aware export;
-shifts rolled-off rows +7h only when they provably equal the pre-fix snapshot
-value (idempotent — cannot double-shift). Run while `forge.service` is STOPPED.
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `--export-json` | path | newest in `~/optbt_data/exports` | Corrected (post-fix) export. |
-| `--prefix-snapshot` | path | `~/forge_data/backfill_source_gated_runs_20260609.json` | Pre-fix snapshot the backfill ingested. |
-| `--forge-db` | path | `~/forge_data/forge.db` | Forge DB (service stopped). |
-| `--dry-run` | flag | off | Report per-class counts; write nothing. |
-
 ### propose_threshold_tightenings.py
 
 Walk the latest `gated_runs_*.json` export, cross-reference config hashes against
@@ -645,27 +612,6 @@ after to pick up new ranges.
 
 ```
 .venv/bin/python scripts/propose_threshold_tightenings.py --dry-run
-```
-
-### requeue_high_value_configs.py
-
-One-off recovery: re-queue historically valuable configs whose past results were
-confounded by infrastructure bugs. Filters by current `grammar_version`.
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `--forge-db` | path | `~/forge_data/forge.db` | Submissions DB. |
-| `--inbox-dir` | path | `~/optbt_data/inbox` | Write destination. |
-| `--processed-dir` | path | `~/optbt_data/inbox/processed` | Source archive. |
-| `--top-n` | int | `50` | Top-N by recent submission. |
-| `--include-tail-hedge` | flag | on | Include all `tail_hedge` configs. |
-| `--include-relative-value` | flag | on | Include all `relative_value` configs. |
-| `--grammar-yaml` | path | `config/grammar.yaml` | For version filter. |
-| `--skip-grammar-filter` | flag | off | Bypass the version filter. |
-| `--dry-run` | flag | off | Print only. |
-
-```
-.venv/bin/python scripts/requeue_high_value_configs.py --top-n 100 --dry-run
 ```
 
 ### daily_ranker_eval.sh
@@ -728,9 +674,9 @@ bumps `grammar_version` and archives the prior version. The second keeps
 | Script | What it is |
 |---|---|
 | `tail_verified_alignment.py` | Live tracking tool (D155): re-runnable verified-coverage alignment monitor for the tail-aware model — tail_score vs P(component) on the verified slice, run against a `/tmp` DB snapshot. |
-| `probe_option_momentum_min_months.py` | One-shot historical probe: Q39 `option_momentum` `min_months` × percentile activation sweep against the live feature cache. |
 
 Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
+Retired 2026-07-20 (D295 post-promotion sweep; recoverable from git history, tests removed with them): `backfill_verdicts.py` (D111 one-time catch-up, completed), `migrate_verdicts_decided_at.py` (D117 one-time era repair, completed), `requeue_high_value_configs.py` (one-off recovery, completed), `probe_option_momentum_min_months.py` (Q39 one-shot probe + its `probe_results/` output; Q39 resolved at v19/D138).
 
 ---
 

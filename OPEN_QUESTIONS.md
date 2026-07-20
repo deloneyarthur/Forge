@@ -7,7 +7,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-## 2026-05-13 — Q7 — Grammar fields missing from `crucible_contracts.StrategyConfig` — **HIGH SEVERITY, BLOCKING PHASE 1**
+## 2026-05-13 — Q7 — Grammar fields missing from `crucible_contracts.StrategyConfig` — **HIGH SEVERITY, BLOCKING PHASE 1** — **RESOLVED 2026-05-13 (contracts v1.2.0, D007/D008; header banner added in the D295 sweep)**
 
 **Question:** The §3.5 grammar rules reference fields that do not exist on `crucible_contracts.StrategyConfig` / `SignalSpec`. How should these be carried?
 
@@ -62,7 +62,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-## 2026-05-13 — Q8 — §3.5 R2 + C1 are jointly unsatisfiable under v1 family vocabulary — **HIGH SEVERITY, BLOCKING PHASE 2**
+## 2026-05-13 — Q8 — §3.5 R2 + C1 are jointly unsatisfiable under v1 family vocabulary — **HIGH SEVERITY, BLOCKING PHASE 2** — **RESOLVED 2026-05-13 (contracts v1.4.0 `trend_strength`, D019; header banner added in the D295 sweep)**
 
 **Question:** §3.5 R2 ("trend_continuation strategies must include `adx` or `hurst` as a regime gate") combined with §3.5 C1 ("no duplicate indicator families in one strategy") and the contracts v1.1–1.3 family list (no `trend_strength`) creates a contradiction: any trend_continuation strategy with a trend-family directional plus adx/hurst as regime gate violates C1, because adx/hurst would also need to be `trend` family. The Phase 1 fixture (`tests/fixtures/strategy_configs.py`) worked around this by classifying adx/hurst as `volatility`, which is semantically false and was flagged inline + in D018's surface-item.
 
@@ -108,7 +108,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-## 2026-05-13 — Q11 — v1 go-live paused; Crucible Phase 9 v2 is the real prerequisite — **HIGH SEVERITY**
+## 2026-05-13 — Q11 — v1 go-live paused; Crucible Phase 9 v2 is the real prerequisite — **HIGH SEVERITY** — **RESOLVED 2026-05-13 (Crucible Phase 9 v2 closed gaps 3/4/5; header banner added in the D295 sweep)**
 
 **Question:** First v1 go-live attempt (this session) surfaced three stacked gaps between Forge's emitted configs and Crucible's current runtime, with no honest path forward until Crucible's Phase 9 v2 lands. How does v1 go-live actually achieve closed-loop operation?
 
@@ -149,7 +149,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-## 2026-05-13 — Q12 — Indicator-vocabulary divergence between Forge demo registry and Crucible runtime — **HIGH SEVERITY**
+## 2026-05-13 — Q12 — Indicator-vocabulary divergence between Forge demo registry and Crucible runtime — **HIGH SEVERITY** — **RESOLVED 2026-05-14 (Crucible Phase 9 v3 + contracts v1.8.0 export reads; header banner added in the D295 sweep)**
 
 **Question:** After Phase 9 v2 re-processed the 2 stranded Forge configs, both failed with `Unknown indicator: 'iv_rank'` (mean_reversion run) and `Unknown indicator: 'expected_value_estimator'` (regime_arbitrage run). Forge's enumerator is sourcing from an in-Forge stub registry (`forge.enumeration._demo_registry`) that advertises indicators Crucible's runtime doesn't implement. How does the system reach indicator-vocabulary parity for v1 go-live?
 
@@ -234,7 +234,7 @@ Alternatives rejected:
 
 ---
 
-## 2026-05-19 — Q15 — `trend_continuation` blocked by registry family mismatch on `adx`/`hurst` — **HIGH SEVERITY**
+## 2026-05-19 — Q15 — `trend_continuation` blocked by registry family mismatch on `adx`/`hurst` — **HIGH SEVERITY** — **RESOLVED 2026-05-19 (Crucible `e298138` family split verified live; header banner added in the D295 sweep)**
 
 **Question:** Why does the `trend_continuation` hypothesis produce zero sampler attempts in production despite D067's 5% exploration floor and D037's 2% stratified rotation? Iter 36 telemetry (D064 `prefilter_rejections_by_hypothesis:`):
 
@@ -268,7 +268,7 @@ Forge has historically expected `adx`/`hurst` to live in a separate `trend_stren
 
 ---
 
-## 2026-05-20 — Q16 — `expected_trades` pre-filter measures indicator activations, not trades — **HIGH SEVERITY**
+## 2026-05-20 — Q16 — `expected_trades` pre-filter measures indicator activations, not trades — **HIGH SEVERITY** — **RESOLVED 2026-05-20 (D076 empirical-prior filter; header banner added in the D295 sweep)**
 
 **Question:** Why does the `expected_trades` filter (`src/forge/prefilters/expected_trades.py`) reject 0 / 16,253 configs while 77% of submitted configs produce 0 trades in Crucible? Diagnostic across 1,213 distinct gated runs (decided 2026-05-15 → 2026-05-20):
 
@@ -320,7 +320,7 @@ The mental model conflates "indicator-would-fire times" with "trades the strateg
 
 ---
 
-## 2026-05-20 — Q17 — `pairs_zscore` and `expected_value_estimator` show >93% zero-trade rate — Q14 follow-up status — **HIGH SEVERITY**
+## 2026-05-20 — Q17 — `pairs_zscore` and `expected_value_estimator` show >93% zero-trade rate — Q14 follow-up status — **HIGH SEVERITY** — **RESOLVED/STALE 2026-06-25 (pre-fix cohort, D210; header banner added in the D295 sweep)**
 
 > **✅ RESOLVED / STALE 2026-06-25 ([[D210]]).** The 96–98.7% zero-trade was a PRE-FIX cohort — Crucible's
 > pairs-loading bug (each run reached only 1–5 of 37 pairs), fixed in `4f5271f`; D098 cold-start then
