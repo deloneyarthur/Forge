@@ -1747,8 +1747,8 @@ _COHORT_GOLDEN_PRE_REFACTOR = [
     "5ae87eef8e30261b",
     "f7ea923ed1c9af0a",
     "219cedfd0ce11930",
-    "0aa532254dd24bb7",
-    "1a15a3e846e924aa",
+    "7e521fe9ac484bef",
+    "f32b391819e7feec",
     "2c77822f6dab10b8",
 ]
 

@@ -274,20 +274,22 @@ _TREND_SWING_LONG_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 10)
 _MR_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 12)
 _MR_TIME_STOP_REQUIRED_PICK_P: float = 0.65
 
-# D292 (v41) — the tier unpin (Crucible FORGE_tier_unpin_and_promote_2026-07-20;
-# contracts 1.32.0). The engine resolves an xsect config's ranking pool from
-# the STAMP against PIT membership — every pre-v41 xsect config ranked the
-# TRUE 20-name curated tier-2 pool (rank_k=20 = take-everything, zero
-# selectivity); the 94-name tier-3 xsect pool had never been sampled. v41:
-# xsect draws stamp tier=3 at this share (inside their 10-20% band,
-# xsect-first per their suggestion — single-name tier-3 coverage already
-# exists); single-name configs stamp the underlying's TRUE tier (attribution;
-# no engine change on that path). Supply diversification, NOT a promotion
-# thesis (both sides' framing: their breadth ablation is champion-specific
-# and flat; the xsect-pool selectivity point is the one place it could be
-# more). Export-gated dormancy: empty tier-3 set -> no draw, everything
-# stamps 2 (byte-identical to pre-v41 within a config).
-_XSECT_TIER3_SHARE: float = 0.15
+# D292 (v41) / D294 (v42) — the tier stamp. v41 shipped a 15% xsect tier=3
+# exploration share on their relay's "never-sampled tier-3 xsect pool"
+# framing; their SAME-DAY ledger correction (FORGE_xsect_union_correction_
+# 2026-07-20) retracted it: the composable xsect template ranks the ALL-TIER
+# union by construction (`_ALL_TIERS = (1,2,3)` + the bulk superset; the
+# promoted trend leg trades 89 underlyings incl. tier-1 and 66 outside
+# curated 1+2) — the stamp's ONLY engine effect on an xsect config is the
+# FillModel SPREAD-TABLE class (tier=3 charges tier_3_base x 1.5). So the
+# v41 share bought duplicate books at strictly worse charged costs; v42
+# DROPPED it (xsect stamps the calibrated tier=2 constant again; 58 such
+# configs were emitted in the ~5h window). The single-name TRUE-tier stamp
+# STANDS (their words: a tier-3 single-name charged tier-2 spreads was
+# mispriced-cheap — v41 fixed a real cost bug). A future xsect tier=0 stamp
+# (explicit union scope, contracts 1.33.0 `ge=0`) waits on their §20 engine
+# pin + an explicit ask — relayed as a question, never guessed at.
+# (v41's `_XSECT_TIER3_SHARE = 0.15` retired here — tombstone per D169.)
 
 # D288 (v38) — exit-CLASS mix shift for trend swing_long (Crucible
 # FORGE_trend_swinglong_exit_mix_2026-07-16; COMPOSES with the v36 duration
@@ -465,25 +467,18 @@ def _tier3_symbols() -> frozenset[str]:
 _load_underlyings.cache_clear = _load_universe_tiers_cached.cache_clear  # type: ignore[attr-defined]
 
 
-def _stamp_tier(
-    underlying: str | None,
-    combiner: CombinerSpec,
-    rng: random.Random,
-) -> int:
-    """D292 (v41): the config's `tier` stamp — the engine's pool selector for
-    xsect configs, pure attribution for single-name.
+def _stamp_tier(underlying: str | None, combiner: CombinerSpec) -> int:
+    """D292 (v41) / D294 (v42): the config's `tier` stamp — the FillModel
+    spread-table class (their ledger correction: it is NOT a pool selector;
+    xsect ranks the all-tier union regardless).
 
-    Drawn LAST (inside config construction, after every signal/veto draw) so
-    activation shifts nothing within the config. rng is consumed ONLY on the
-    xsect path when tier-3 is served — single-name is a pure lookup, and the
-    empty-set dormancy short-circuits before rng.random() (the D258 empty-pool
-    convention; hard rule #6). relative_value (underlying None, confluence
-    combiner) keeps the literal 2 — pairs legs are Crucible-resolved and the
-    stamp is inert there."""
+    Single-name = the underlying's TRUE tier (pure lookup, no rng — a tier-3
+    name charged tier-2 spreads was mispriced-cheap; the v41 fix STANDS).
+    Xsect = the calibrated tier=2 constant (v42 dropped v41's tier=3 share:
+    same union book at 1.5x charged spreads was a strict handicap).
+    relative_value (underlying None, confluence combiner) keeps the literal 2
+    — pairs legs are Crucible-resolved and the stamp is inert there."""
     if combiner.type == "cross_sectional_rank":
-        tier3 = _tier3_symbols()
-        if tier3 and rng.random() < _XSECT_TIER3_SHARE:
-            return 3
         return 2
     if underlying is not None and underlying in _tier3_symbols():
         return 3
@@ -1238,7 +1233,7 @@ def sample_config(
         hypothesis=hypothesis,  # type: ignore[arg-type]
         dte_bucket=bucket,  # type: ignore[arg-type]
         underlying=underlying,
-        tier=_stamp_tier(underlying, combiner, rng),
+        tier=_stamp_tier(underlying, combiner),
         signals=tuple(signals),
         combiner=combiner,
         selector=selector,

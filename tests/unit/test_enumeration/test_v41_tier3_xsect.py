@@ -10,21 +10,26 @@ so every xsect config ever emitted ranked the TRUE 20-name curated tier-2 pool
 (rank_k=20 = take-everything) and the 94-name tier-3 xsect pool has never been
 sampled.
 
-The v41 change set under test:
+The v41 change set under test, as CORRECTED by v42/D294 (Crucible
+``FORGE_xsect_union_correction_2026-07-20.md``, ledger-verified: xsect has
+ALWAYS ranked the all-tier union — the stamp's only engine effect on an xsect
+config is the FillModel spread-table class, so v41's tier=3 xsect share bought
+duplicate books at 1.5x charged spreads and is DROPPED):
   * single-name configs stamp the underlying's TRUE tier (3 for tier-3 names,
-    2 otherwise) — attribution fix, engine behavior unchanged for single-name;
-  * cross-sectional (rank-combiner) configs stamp ``tier=3`` at p=0.15 (their
-    10-20% band, xsect-first per their suggestion) — the engine then ranks the
-    tier-3 PIT pool; the other ~85% keep the true-tier-2 pool as today;
-  * export-gated dormancy: an empty tier-3 set (old-shape export / D033
-    fallback) short-circuits BEFORE any rng draw — everything stamps 2;
+    2 otherwise) — attribution + honest spread class (a tier-3 single-name
+    charged tier-2 spreads was mispriced-cheap; STANDS per the correction);
+  * cross-sectional (rank-combiner) configs stamp ``tier=2`` unconditionally
+    again (the calibrated status-quo cost class; no rng consumed — v42
+    reverted the v41 Bernoulli same-day on the upstream correction);
   * rider: ASML + COST join the structurally-untradeable exclusion (our
-    funnel: 641 decided/0 components and 1,544/1 — the v37 dead-cell class).
+    funnel: 641 decided/0 components and 1,544/1; their row-45/census read
+    CONFIRMS — ASML 100% wf-zero, COST 91% — the rider STANDS).
 """
 
 from __future__ import annotations
 
 import random
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -88,25 +93,25 @@ def test_v41_single_name_stamps_true_tier(grammar: Grammar, registry: RegistrySn
     assert seen_t2 >= 50, f"too few tier-2 single-name draws: {seen_t2}"
 
 
-def test_v41_xsect_tier3_share(grammar: Grammar, registry: RegistrySnapshot) -> None:
-    """Rank-combiner configs stamp tier=3 at ~0.15; the rest keep tier=2."""
+def test_xsect_stamps_tier2_since_v42(grammar: Grammar, registry: RegistrySnapshot) -> None:
+    """v42/D294: every rank-combiner config stamps tier=2 — the v41 tier=3
+    share bought the SAME union book at 1.5x charged spreads (their ledger
+    correction) and was dropped same-day."""
     xsect = [
         c
         for c in _sample(grammar, registry, n_seeds=3000, rank_share=1.0)
         if c.combiner.type == "cross_sectional_rank"
     ]
     assert len(xsect) >= 300, f"too few xsect draws: {len(xsect)}"
-    assert all(c.tier in (2, 3) for c in xsect)
-    share = sum(1 for c in xsect if c.tier == 3) / len(xsect)
-    assert 0.10 < share < 0.20, f"xsect tier-3 share {share:.3f} not ~0.15"
+    assert all(c.tier == 2 for c in xsect), Counter(c.tier for c in xsect)
 
 
 def test_v41_tier_dormant_without_tiered_export(
     grammar: Grammar, registry: RegistrySnapshot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Empty tier-3 set (old-shape export / D033 fallback) → everything stamps
-    tier=2 and the xsect share draw is short-circuited (export-gated dormancy,
-    the D258 empty-pool convention)."""
+    tier=2 (single-name lookup finds no members; xsect is constant-2 since
+    v42)."""
     import forge.enumeration.sampler as sampler_mod
 
     monkeypatch.setattr(sampler_mod, "_tier3_symbols", frozenset)

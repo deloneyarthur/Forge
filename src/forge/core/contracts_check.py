@@ -147,7 +147,12 @@ from crucible_contracts import (
 # contract — and REQUIRED before Crucible retires the transition fold, which would shrink the
 # flattened read 118 -> 24), true-tier stamping + the xsect tier-3 exploration share ride the
 # tiered view. The deploy relay carries the adoption confirmation that licenses fold retirement.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.32.0"
+# 1.33.0 (2026-07-20, Crucible 150e368): `StrategyConfig.tier` widens ge=1 -> ge=0 (tier=0 = the
+# explicit all-eligible union scope, their §20 universe-union-ranking pin — the fix for the
+# emergent-pool defect their xsect correction disclosed). PURELY PERMISSIVE for Forge (we emit
+# 2/3 single-name, constant 2 on xsect since v42/D294 — never 0; stamping 0 waits on their §20
+# engine pin + an explicit ask). Pin-only adopt riding the v42 bump per the D262/D267 discipline.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.33.0"
 
 
 def check_contracts_version() -> str:

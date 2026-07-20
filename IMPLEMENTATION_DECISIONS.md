@@ -1784,3 +1784,46 @@ relative_value and survive untouched, everything else moves at 0 via the
 Deploy + first-batch audit in STATUS. The deploy relay addendum carries the
 ADOPTION CONFIRMATION that licenses their fold retirement.
 Related: [[D292]], [[D291]], [[D286]], [[D278]], [[D267]], [[D262]], [[D078]].
+
+## D294 — 2026-07-20 — v42 BUILT+DEPLOYED: xsect-union correction — the v41 tier=3 xsect share DROPPED (their same-day ledger retraction: xsect always ranked the all-tier union; the stamp is a SPREAD-COST class), single-name true-tier + ASML/COST STAND, contracts pin 1.33.0
+
+Crucible `FORGE_xsect_union_correction_2026-07-20.md` — a ledger-verified
+retraction of their own tier-unpin relay's §3 framing, which D292/D293 adopted.
+Corrected truth: the composable xsect template ranks the ALL-TIER union by
+construction (`_ALL_TIERS = (1,2,3)` + bulk superset; the promoted trend leg
+trades 89 underlyings incl. tier-1 and 66 outside curated 1+2; QuantIQ's D417
+"ranks 48 names" smoke was the missed tell). The tier stamp's ONLY engine
+effect on an xsect config is the FillModel spread-table class (tier=3 charges
+tier_3_base x 1.5). Therefore:
+
+1. **v41's 15% xsect tier=3 share DROPPED** (`_stamp_tier` xsect branch =
+   constant 2, no rng; `_XSECT_TIER3_SHARE` tombstoned). It bought duplicate
+   books at strictly worse charged costs — 58 such configs emitted in the ~5h
+   v41 window (b9e00eff 28, 9d8d642e 30); grammar_version splits them.
+2. **Single-name TRUE-tier stamp STANDS** (their words: a tier-3 single-name
+   charged tier-2 spreads was mispriced-cheap — v41 fixed a real cost bug).
+3. **ASML/COST rider STANDS** — their row-45/census read confirms (ASML n=375
+   100% wf-zero; COST n=1,166 91% wf-zero, med OOS 5).
+4. **Contracts pin 1.32.0 -> 1.33.0** (their 150e368: StrategyConfig.tier
+   ge=0 — tier=0 = explicit union scope, their §20 fix for the emergent-pool
+   defect the correction disclosed). Purely permissive; Forge never emits 0.
+   The exact-match pin test was RED at triage (installed 1.33.0) — the D267
+   forcing function working; adopted riding this bump. An xsect tier=0 stamp
+   is a QUESTION in the relay (waits on their §20 engine pin + an explicit
+   ask), never guessed at.
+5. **Their relabeled ablation recorded:** the deltas measure COST sensitivity
+   — trend 6bec53b4 is spread-cost SENSITIVE (dWF -0.206 at 1.5x), timer-MR
+   65316ca4 is FLAT (11-bar holds amortize entry costs — a gate-relevant
+   robustness datum for the promoted book).
+6. **QuantIQ D418 rider ask logged (Q51, LOW):** a generation-time
+   expected_trades-under-integer-floor check at a declared reference NAV
+   (the trend leg's 0.0075 fixed_risk = $187.50/trade at $25K NAV vs
+   $530-6,000/contract). Needs a per-contract premium estimate at emission —
+   a data-source question relayed back before any build.
+
+**Goldens:** verify clean under v41 code; under v42 the six regime goldens are
+BYTE-IDENTICAL (their sequences host no xsect draws — the removed Bernoulli
+touches nothing) and only the cohort golden re-pins (first divergence = its
+first rank-combiner config, position 12). The xsect share test superseded in
+place (`test_xsect_stamps_tier2_since_v42`). Full suite 2008 green twice.
+Related: [[D293]], [[D292]], [[D291]], [[D267]], [[D169]].
