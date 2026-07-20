@@ -2121,3 +2121,60 @@ of it is reachable in production).
 
 The D248 needs-owner manifest is now fully dispatched (items done across
 D295/D298/D300/D301). Related: [[D235]], [[D248]], [[D105]], [[D298]].
+
+## D303 — 2026-07-20 — EV-estimator de-registration ACK'd (docs-only, no build): the X2 kelly chain goes dormant at their publish; our funnel independently corroborates the NO-GO (1/12,652 components, 30d); one ledger flag back (25 EV components all-time, latest 07-15 — their "zero gated" looks stale)
+
+**Trigger:** Crucible relay `FORGE_ev_deregistration_and_api_withdrawal_2026-07-20.md` —
+ask to de-register `expected_value_estimator` (family smart_money, EV-as-sizing NO-GO
+their §20 `ev-sizing-p1-nogo`), plus two FYIs (optbt.* API withdrawal; 29/73
+registry-vs-grammar drift).
+
+**Verification (all their claims checked against our tree + DB snapshot):**
+
+1. **The id is load-bearing but self-retiring.** §3.5 X2
+   (`kelly_requires_expected_value_estimator`) makes EV the required chain feature of
+   `fractional_kelly` — one of three uniform sizer-mode draws (~1/3 of enumeration).
+   `search_space._build_sizer_mode_views` only admits a mode to
+   `samplable_sizer_modes` when its X-requirement is in the registry, and the daemon
+   calls `load_registry()` per batch (`_run_one_iteration`) — so the id vanishing from
+   the snapshot auto-drops the mode within one batch. D258-class export-gated
+   dormancy: no code change, no bump, X2 rule text untouched (vacuously satisfied;
+   its alias clause anticipates a successor id).
+2. **Emission today:** last 7d 4,934/79,400 submissions carry EV (6.2%); last one
+   21:13:41Z. All-time 31,054 (29,799 via kelly; the ~1.2k delta = the pre-v15
+   EV-confluence rank era their relay calls output-neutral). No campaign/cohort
+   references it (campaigns.py clean; the 07-07 winning-cohort injection had exactly
+   1, decided).
+3. **Our funnel corroborates the NO-GO** (30d): EV-carrying 12,652 decided → 1
+   component / 0 promote (rest of stream ~9.8% non-reject); median trades 13 vs 431;
+   zero-trade 27.9% vs 1.1%. The kelly third of the draw stream is our worst standing
+   allocation — the deletion is a free stream-quality lift (v33-class dead-cell
+   retirement, delivered by their registry).
+4. **Ledger flag (relayed):** their "zero promoted/gated/portfolio configs on disk"
+   is wrong-or-stale on GATED: 25 EV-carrying components all-time (06-04 → 07-15),
+   latest `606eea73a5b81609` (v33, 07-15T16:04Z, 128 trades, GM MR, EV via the X2
+   chain). Doesn't change the ack; they should re-scan the gated window pre-deletion.
+5. **F3/training robustness:** `ranking/features.py` is string-keyed
+   (`family_by_id.get(id, 'unknown')`, sizer-mode one-hot); historical EV rows
+   featurize unchanged post-deregistration. No Forge reader of their
+   `meta_king_oracle` features (arm retired D190; dovetails with the D300 housekeeping
+   publisher-timer ask).
+6. **FYI 2 (optbt):** zero Python `optbt.*` imports in Forge (only `~/optbt_data`
+   filesystem paths). Boundary question relayed: if the retirement ever renames the
+   data root, that's a contracts/layout coordination item.
+7. **FYI 3 (drift):** spot-checks agree (vol_of_vol/skew_25d/butterfly_25d/donchian/
+   atr_pct/yang_zhang_vol: 0 grammar hits; no threshold-table entries for the
+   long-premium five). The long-premium set recorded as candidate inventory for
+   future signal-add work (operator-gated; not a commitment).
+
+**Response:** `PROMPT_CRUCIBLE_EV_DEREGISTRATION_RESPONSE.md` (untracked, operator
+carries; the ack takes effect on carry). Sequencing request in it: publish the
+id-less snapshot at/before engine deletion + confirm in-flight EV configs fail soft
+(D245 wedge-class scar). Funnel-attribution note: the mode-share redistribution
+splits on **registry_hash** (grammar stays v42).
+
+**Numbering note:** D302 is reserved by the operator's in-flight ops-debt session
+(RELAYS.md cites it; file untracked at triage time). A row for the new relay was
+appended to RELAYS.md but left uncommitted with the rest of that in-flight work.
+
+Related: [[D258]], [[D245]], [[D190]], [[D276]], [[D299]], [[D300]].

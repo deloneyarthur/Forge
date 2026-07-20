@@ -1,5 +1,28 @@
 # Forge — Status
 
+## 2026-07-20 (close, later⁷) — EV de-registration ACK'd (D303, docs-only, no build): Crucible retires `expected_value_estimator` → the §3.5 X2 kelly chain goes DORMANT automatically at their next registry publish (per-batch reload + `samplable_sizer_modes` filter, D258 class). Our funnel independently corroborates their NO-GO; one ledger flag relayed back
+
+Triage of `FORGE_ev_deregistration_and_api_withdrawal_2026-07-20.md` → response
+`PROMPT_CRUCIBLE_EV_DEREGISTRATION_RESPONSE.md` (held; **the ACK takes effect when the
+operator carries it** — on their ack they delete the vertical + 13F plumbing). Full record:
+[[D303]]. The numbers: `fractional_kelly` = 1/3 of uniform sizer-mode draws → 6.2% of
+last-7d submissions (4,934/79,400, last at 21:13Z today); 30d funnel for EV-carrying:
+**1 component / 12,652 decided** (rest of stream ~9.8% non-reject), median 13 vs 431
+trades, 27.9% vs 1.1% zero-trade — the deletion frees our worst standing third of the
+draw stream at zero cost (no code change, no bump; X2 rule text untouched, vacuously
+satisfied). **Ledger flag relayed:** their "zero gated configs reference the id" misses
+our 25 all-time EV components (latest `606eea73a5b81609`, v33, 07-15) — re-scan asked
+pre-deletion. Sequencing asked: id-less snapshot publishes at/before engine deletion;
+in-flight EV configs must fail SOFT (D245 wedge scar). FYI 2 (optbt.* withdrawal)
+confirmed — zero Python imports here, `~/optbt_data` paths are layout not API (root-rename
+boundary question relayed). FYI 3 (29/73 drift) recorded; the long-premium five
+(vol_of_vol, skew_25d, butterfly_25d, realized_skew, iv_vs_index) noted as candidate
+signal-add inventory (operator-gated). **Post-carry watch: verify kelly dormancy in the
+first batch after their deletion publish (`sizer=fractional_kelly` share → 0; split funnel
+reads on registry_hash, grammar stays v42).** NB D302 reserved by the in-flight ops-debt
+session (RELAYS.md); this entry took D303; the new relay's row appended to RELAYS.md
+(left uncommitted with that in-flight work).
+
 ## 2026-07-20 (close, later⁶) — Outbound relay DRAFTED, held for carry: `PROMPT_CRUCIBLE_HOUSEKEEPING_ASKS.md` (meta-king publisher ask + sma_slope writer-status ask + re-flag of the 07-08 charged-DSR relay — carry BOTH files together). The D300 standing watch is discharged into it
 
 Docs-only. The relay bundles every queued cross-system loose end that does NOT depend on their pending reads; receipts/answers to the ve v38→v39 read (~07-21) and the v39→v40 MR read (~07-22/23) will be their own response relays when they land. **Reminder-clock: prereg `098ea730d5f2` (honest standard-basis wall ≤1.479) resolves ≤2026-07-21 — measure + resolve tomorrow; its outcome rides the next read-response.** Held-relay send/park calls still open (operator): FUNDAMENTAL_VALUE_PRECHECK (live door), SECTOR_ETF_XSECT_PRECHECK (recommend archive — D269 DON'T-BUILD), PATHC sizing (strategic, rides the Path-C reopen question).
