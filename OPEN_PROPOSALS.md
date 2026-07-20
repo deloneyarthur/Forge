@@ -1049,3 +1049,51 @@ proposal_yaml: |
   # v35: capitulation bare-drop — R1 per-directional gate exemption for
   # 'momentum' (MR host); drop the rv_rank pin; NO replacement gate.
   # Optional rider: swing_short next to swing_mid for this directional.
+---
+proposal_id: b6ede416-d745-4cf9-aae8-ca036e46a6f6
+status: PENDING
+proposed_at: '2026-07-18T05:29:32.827876+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 199 of all rejected candidates failed `cpcv_sharpe_p25` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  trigger: gate_failure_concentration
+  target: cpcv_sharpe_p25
+  failure_count: 199
+  failure_rate: 1.0
+  sample_size: 199
+  confidence: 0.77425
+  counterfactual_rejection_rate: 1.0
+  counterfactual_promoted_count: 1
+  counterfactual_phase: 1_binary_safety_floor
+  counterfactual_note: 'phase-1 binary safety floor: rejection_rate is a worst-case
+    assumption (1.0 if any recent promotion, 0.0 otherwise), not a per-strategy measurement.
+    Implements draft Enhancement 8 phase 1.'
+proposal_yaml: |
+  # Proposed tightening — pre-filter for cpcv_sharpe_p25
+  # Triggered by failure_rate=1.00
+---
+proposal_id: a64d0be2-3f0c-41fc-87c2-ed9f1f3d67b5
+status: PENDING
+proposed_at: '2026-07-18T05:29:32.827876+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 197 of all rejected candidates failed `walk_forward_sharpe_median` (99%);
+  propose tightening the pre-filter that catches this earlier.
+evidence:
+  trigger: gate_failure_concentration
+  target: walk_forward_sharpe_median
+  failure_count: 197
+  failure_rate: 0.9899497487437185
+  sample_size: 197
+  confidence: 0.7727499999999999
+  counterfactual_rejection_rate: 1.0
+  counterfactual_promoted_count: 1
+  counterfactual_phase: 1_binary_safety_floor
+  counterfactual_note: 'phase-1 binary safety floor: rejection_rate is a worst-case
+    assumption (1.0 if any recent promotion, 0.0 otherwise), not a per-strategy measurement.
+    Implements draft Enhancement 8 phase 1.'
+proposal_yaml: |
+  # Proposed tightening — pre-filter for walk_forward_sharpe_median
+  # Triggered by failure_rate=0.99
