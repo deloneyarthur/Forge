@@ -5,7 +5,7 @@ sessions, written as durable records so a later agent (e.g. Opus) can execute th
 without re-deriving the findings. All were taken against the same snapshot: HEAD `ceeefa4`
 plus the uncommitted D216 working-tree changes. (A fifth folder, `code-complete-retirement/`,
 added 2026-07-06, is a conditional plan, not an audit. A sixth, `dependency-structure/`,
-added 2026-07-06 against HEAD `5ac7941`, is a follow-up structural audit.)
+and a seventh, `reliability/`, added 2026-07-06 against HEAD `5ac7941`, are follow-up audits.)
 
 | Folder | Scope | Start at |
 |---|---|---|
@@ -15,6 +15,7 @@ added 2026-07-06 against HEAD `5ac7941`, is a follow-up structural audit.)
 | `strategy-methodology/` | The quant domain content: grammar/§3.5 strategy space, indicator reachability & threshold calibration, prefilter/submission statistical methodology, research-hygiene machinery (alpha budget, prereg, feedback rituals). Includes a measured per-family battery kill table. Workplan P0–P4. | `strategy-methodology/README.md` |
 | `code-complete-retirement/` | **CONDITIONAL plan, 2026-07-06 (trigger NOT met):** if the operator ever declares Forge+Crucible code-complete (development freeze, production keeps running), the prioritized retirement list — P0 grammar-change machinery, P1 flip/experiment apparatus, P2 dormant levers, P3 dev surface, plus the explicit steady-state KEEP line. Do not execute; preconditions in its §0. | `code-complete-retirement/REPORT.md` |
 | `dependency-structure/` | Structural audit, 2026-07-06 (HEAD `5ac7941`): module dependency graph (cycles, god objects, layering) + dead code, duplication clusters with proposed abstractions, >50-line function census. Prioritized workplan P0–P3 in its §8. Re-confirms codebase-quality SRC-M1/M2/M3 at the newer HEAD. | `dependency-structure/REPORT.md` |
+| `reliability/` | Reliability audit, 2026-07-06 (HEAD `5ac7941`): swallowed/ignored/logged-only errors ranked by blast radius, races/TOCTOU/crash-atomicity, resource leaks. Headline: the export-outage blind spot — silent `QueryError` swallows in the reconciler + rate limiter render as the "benign" `blocked: … N% gated` line and disable the D137/D196 guards (same wedge as the D205/D240/D245 incidents) — plus the SIGTERM inbox-vs-DB submit tear. Findings REL-1..21, tiers P0–P3. | `reliability/README.md` |
 
 Each subfolder README carries the rules of engagement (CLAUDE.md hard rules, operator gates,
 production-tree cautions) — read them before executing anything.
