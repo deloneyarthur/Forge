@@ -591,29 +591,6 @@ forge grammar revert --to-version v3 --initials AJ --forge-db ~/forge_data/forge
 
 Run via `.venv/bin/python scripts/NAME.py` from the Forge repo root.
 
-### propose_threshold_tightenings.py
-
-Walk the latest `gated_runs_*.json` export, cross-reference config hashes against
-the `submissions` table, and compute tighter per-(indicator, role) threshold ranges
-from configs that produced ≥10 trades. Writes `config/auto_tightened_thresholds.yaml`
-(tighten-only) and appends loosenings to `OPEN_PROPOSALS.md`. Restart `forge.service`
-after to pick up new ranges.
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `--gated-runs-export` | path | latest in exports-dir | Specific export file. |
-| `--exports-dir` | path | `~/optbt_data/exports` | Dir to scan for latest export. |
-| `--forge-db` | path | `~/forge_data/forge.db` | Submissions DB. |
-| `--out-yaml` | path | `config/auto_tightened_thresholds.yaml` | Output. |
-| `--open-proposals` | path | `OPEN_PROPOSALS.md` | Loosening proposals. |
-| `--high-trade-floor` | int | `10` | Min trades to count as a "trading" config. |
-| `--min-samples` | int | `5` | Min samples per (indicator, role) to propose. |
-| `--dry-run` | flag | off | Print proposals; write nothing. |
-
-```
-.venv/bin/python scripts/propose_threshold_tightenings.py --dry-run
-```
-
 ### daily_ranker_eval.sh
 
 **Bash, not Python** — the `ExecStart` of the `forge-ranker-eval` timer (05:00 daily), runnable by
@@ -677,6 +654,7 @@ bumps `grammar_version` and archives the prior version. The second keeps
 
 Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
 Retired 2026-07-20 (D295 post-promotion sweep; recoverable from git history, tests removed with them): `backfill_verdicts.py` (D111 one-time catch-up, completed), `migrate_verdicts_decided_at.py` (D117 one-time era repair, completed), `requeue_high_value_configs.py` (one-off recovery, completed), `probe_option_momentum_min_months.py` (Q39 one-shot probe + its `probe_results/` output; Q39 resolved at v19/D138).
+Retired 2026-07-20 (D298 — D206 made permanent): `propose_threshold_tightenings.py` + `forge.feedback.threshold_proposer` (D073 threshold-range proposer; the axis measured flat on CPCV-p25, monoculture risk; `auto_tightened_thresholds.yaml` stays empty and the reader/fingerprint stay — determinism-load-bearing).
 
 ---
 

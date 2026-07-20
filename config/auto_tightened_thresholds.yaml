@@ -16,9 +16,12 @@
 #     export (~3 days, all v21/v22, ~76% trend) would entrench the trend
 #     monoculture the pool must diversify away from.
 #
-# Re-enable: run `scripts/propose_threshold_tightenings.py` (writes a fresh
-# `tightenings:` list here) + a deploy. Prior 16-entry content is in git history
-# (commit 85c1df5, pre-D206).
+# PERMANENT (D298, 2026-07-20, operator-approved): the proposer
+# (`scripts/propose_threshold_tightenings.py` + `forge.feedback.threshold_proposer`)
+# is deleted from the tree — re-enabling means restoring both from git history
+# (commit 85c1df5 has the last 16-entry content, pre-D206) + a deploy. This
+# file stays (empty) because `auto_tightenings_fingerprint()` reads it into
+# `enumeration_inputs_hash` (H-3 determinism identity).
 #
 # Loosening proposals still route to OPEN_PROPOSALS.md (hard rule #4).
 

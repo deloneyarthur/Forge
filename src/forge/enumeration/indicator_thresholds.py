@@ -604,8 +604,8 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
 
 # D073 / Phase 3 — auto-tightened threshold overrides.
 #
-# `config/auto_tightened_thresholds.yaml` (written by
-# `scripts/propose_threshold_tightenings.py` from gated_runs outcomes)
+# `config/auto_tightened_thresholds.yaml` (retired-empty since D206; the
+# D073 proposer was deleted at D298 and lives in git history)
 # carries per-(indicator, role) range overrides derived from configs
 # that produced ≥10 trades. The sampler prefers these ranges over the
 # D031 audited defaults ONLY WHEN the proposed range is strictly

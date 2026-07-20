@@ -198,14 +198,10 @@ must point at a mounted off-box target (see `backup_forge_db.sh` in `MANPAGE.md`
 
 ### Tune the generator from real results
 
-After a few hundred new gated runs accumulate, retrain the threshold ranges:
-
-```bash
-cd ~/proj/Forge
-.venv/bin/python scripts/propose_threshold_tightenings.py   # writes config/auto_tightened_thresholds.yaml
-scripts/deploy_preflight.sh                                  # D199 GO/NO-GO gate (tree clean + full suite)
-systemctl --user restart forge.service                       # pick up new ranges (only on GO)
-```
+Threshold-range retraining is RETIRED (D206, made permanent D298 — the axis
+measured flat on CPCV-p25 with monoculture risk; the proposer script lives in
+git history). `config/auto_tightened_thresholds.yaml` stays empty; the sampler
+uses the D031 audited baselines.
 
 Any change that deploys on restart (config edits, new ranges, code) should clear
 `scripts/deploy_preflight.sh` first — it's step 0 of the deploy ritual (`tasks/deploy.md`).

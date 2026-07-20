@@ -1051,7 +1051,7 @@ proposal_yaml: |
   # Optional rider: swing_short next to swing_mid for this directional.
 ---
 proposal_id: b6ede416-d745-4cf9-aae8-ca036e46a6f6
-status: PENDING
+status: REJECTED
 proposed_at: '2026-07-18T05:29:32.827876+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -1073,9 +1073,16 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for cpcv_sharpe_p25
   # Triggered by failure_rate=1.00
+decided_at: '2026-07-20T20:48:53+00:00'
+decided_by: 'operator-directed decline, 2026-07-20 (D298, in-session AskUserQuestion) -- same
+  degenerate gate_failure_concentration class as the 2026-06-24 batch declines: near-100%
+  failure-rate concentration is a property of almost any rejected config, and the
+  counterfactual is the phase-1 binary safety floor (worst-case assumption), not a
+  per-strategy measurement; the prefilter-tightening axis is retired (D206, permanent D298)'
+decision_marker: null
 ---
 proposal_id: a64d0be2-3f0c-41fc-87c2-ed9f1f3d67b5
-status: PENDING
+status: REJECTED
 proposed_at: '2026-07-18T05:29:32.827876+00:00'
 proposal_type: tighten
 target: prefilter_calibration
@@ -1097,3 +1104,10 @@ evidence:
 proposal_yaml: |
   # Proposed tightening — pre-filter for walk_forward_sharpe_median
   # Triggered by failure_rate=0.99
+decided_at: '2026-07-20T20:48:53+00:00'
+decided_by: 'operator-directed decline, 2026-07-20 (D298, in-session AskUserQuestion) -- same
+  degenerate gate_failure_concentration class as the 2026-06-24 batch declines: near-100%
+  failure-rate concentration is a property of almost any rejected config, and the
+  counterfactual is the phase-1 binary safety floor (worst-case assumption), not a
+  per-strategy measurement; the prefilter-tightening axis is retired (D206, permanent D298)'
+decision_marker: null

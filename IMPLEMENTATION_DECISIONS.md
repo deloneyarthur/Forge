@@ -1934,3 +1934,45 @@ stored specs — interpretability lives in the DB + git history, not live code.
 cold-start goldens un-re-pinned; ruff + mypy --strict clean. Daemon untouched
 (running process holds the old import; next natural restart loads identical
 behavior). Related: [[D280]], [[D270]], [[D295]].
+
+## D298 — 2026-07-20 — Bucket B decisions closed (operator, in-session AskUserQuestion): D206 made PERMANENT (threshold proposer deleted), the two 07-18 gate-failure tighten proposals DECLINED, §5.5 auto_tune stays DISARMED (revisit trigger recorded), OPEN_PROPOSALS rotation declined
+
+The cleanup review's bucket-B decision set, all four put to the operator with
+evidence and closed in one session:
+
+1. **D206 → PERMANENT (operator "Delete it").** `forge.feedback.
+   threshold_proposer` + `scripts/propose_threshold_tightenings.py` + `tests/
+   unit/test_feedback/test_threshold_proposer.py` deleted (zero production
+   importers, grep-verified; the D206 evidence stands — flat axis on CPCV-p25,
+   monoculture risk, never re-run since 05-27). KEPT: `config/
+   auto_tightened_thresholds.yaml` (empty) + the `_auto_tightenings()` reader +
+   `auto_tightenings_fingerprint()` — the fingerprint folds into
+   `enumeration_inputs_hash` (H-3) and hashes the VALIDATED set, not file
+   bytes, so the YAML's comment update is identity-safe (verified in code
+   before editing). Docs updated in the same commit: MANPAGE (section removed,
+   retired-line added), HOW-TO (retrain ritual replaced with the tombstone),
+   architecture.md, config/README.md, the YAML header, the
+   indicator_thresholds.py comment.
+2. **07-18 tighten proposals `b6ede416` + `a64d0be2` DECLINED (operator
+   "Decline both").** Recorded in OPEN_PROPOSALS per the 2026-06-24 decline
+   precedent: near-100% failure-rate concentration is a property of almost any
+   rejected config; the counterfactual is the phase-1 binary safety floor, not
+   a measurement; the tightening axis is retired (item 1). NB these came from
+   the §8.4 gate-failure proposer (`feedback/proposer.py`, D034-guarded on
+   promoted_count>0) — NOT the §5.5 auto_tune; the proposer correctly woke
+   post-promotion and stays armed (it only writes proposals).
+3. **§5.5 auto_tune self-apply: KEEP DISARMED** (operator delegated the call;
+   agent ruling). D218's rationale survives the first promotions: the estimand
+   is per-config promotion rate, ≈0 under book-level promotion (2 books /
+   ~430k configs) — re-arming today would emit loosen proposals at degenerate
+   denominators. Deleting would be a DESIGN.md §5.5 deviation for ~70
+   documented lines. REVISIT TRIGGER: when a book-level outcome stream exists
+   to re-key against (several promotions / QuantIQ NAV live), design the
+   book-level estimand or delete then.
+4. **OPEN_PROPOSALS rotation: LEAVE AS-IS** (operator) — cross-system audit
+   trail; QuantIQ's list-proposals parses it; rotation payoff too low for the
+   verification cost today.
+
+Suite: `tests/unit/test_feedback` + enumeration green post-deletion; ruff +
+mypy clean. Daemon untouched (nothing deleted is daemon-imported).
+Related: [[D206]], [[D218]], [[D034]], [[D295]], [[D297]].
