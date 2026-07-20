@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, TypedDict
 import typer
 
 from forge.cli.alpha_budget_cmd import cmd_alpha_budget
+from forge.cli.campaigns_cmd import campaigns_app
 from forge.cli.feedback_cmd import cmd_feedback
 from forge.cli.grammar_cmd import grammar_app
 from forge.cli.healthcheck_cmd import cmd_healthcheck
@@ -2863,6 +2864,7 @@ app.command("feedback")(cmd_feedback)
 app.command("healthcheck")(cmd_healthcheck)
 app.command("status")(cmd_status)
 app.command("alpha-budget")(cmd_alpha_budget)
+app.add_typer(campaigns_app, name="campaigns")
 app.add_typer(grammar_app, name="grammar")
 app.add_typer(prereg_app, name="prereg")
 app.add_typer(ranker_model_app, name="ranker-model")

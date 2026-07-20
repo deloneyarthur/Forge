@@ -18,26 +18,34 @@ verdicts), and even a young arm's reservation is not scoped to the resid pair.
 PINNED BY HAND, like the sampler's D276/D286 pins: cells retire on Crucible's
 relay (when the two-arm read concludes), never from learned feedback. The
 selection mechanics live in ``forge.ranking.diversifier`` (the reservation
-phase); this module owns the pin and cell extraction.
+phase); this module owns cell extraction. D299: the pin's HOME moved to the
+campaign registry (``forge.ranking.campaigns``) — the values here DERIVE from
+it at import and are pinned byte-identical to the D287 constants by test
+(test_campaigns::test_d287_pin_derives_byte_identical).
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from forge.ranking.campaigns import (
+    ExperimentCell,
+    active_selection_cells,
+    active_selection_slots,
+)
+
 if TYPE_CHECKING:
     from crucible_contracts import StrategyConfig
 
-ExperimentCell = tuple[str, str]
-
-# The resid_vix two-arm sweep (D276/v33): vix_term_slope is the WF-conversion
-# carrier and must stay populated for Crucible's arm read. Retire on their relay.
-EXPERIMENT_CELLS: frozenset[ExperimentCell] = frozenset({("residual_momentum", "vix_term_slope")})
+# Derived from the campaign registry: every FARMING campaign with a
+# selection_cell gets floored (D287: the resid_vix two-arm sweep — vix_term_slope
+# is the WF-conversion carrier and must stay populated for Crucible's arm read).
+EXPERIMENT_CELLS: frozenset[ExperimentCell] = active_selection_cells()
 
 # Reserved slots per cell per batch. ~2% of a 200-config batch; sized so the
 # vix arm's submitted supply is the same order as hurst's organic ~7/batch
 # (~50/50-ish mix) without displacing meaningful merit-ranked volume.
-EXPERIMENT_CELL_SLOTS: int = 4
+EXPERIMENT_CELL_SLOTS: int = active_selection_slots()
 
 
 def config_cell(config: StrategyConfig) -> ExperimentCell | None:

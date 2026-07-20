@@ -1976,3 +1976,66 @@ evidence and closed in one session:
 Suite: `tests/unit/test_feedback` + enumeration green post-deletion; ruff +
 mypy clean. Daemon untouched (nothing deleted is daemon-imported).
 Related: [[D206]], [[D218]], [[D034]], [[D295]], [[D297]].
+
+## D299 — 2026-07-20 — Campaign registry + region-carriage audit (Theme 1 of the post-promotion process review): the discover→concentrate→farm loop becomes a first-class object; the D287 experiment-cell pin now DERIVES from it (byte-identical); `forge campaigns list|audit` CLI. Plus 4 brainstorm proposal drafts (Themes 2–5, all operator-gated)
+
+**Context.** Both promotions ever ran the same loop — Crucible-side discovery →
+Forge verification on our own verdicts → grammar concentration → guaranteed
+carriage → funnel read — and each instance was bespoke (a hand-pinned cell, a
+D-entry, watch lines in STATUS.md). Operator: "Let's draft them all up. Let's
+implement Theme 1." This D-entry is the Theme 1 build; Themes 2–5 are DRAFTS
+in `docs/proposals/` (nothing ships off them).
+
+1. **`forge/ranking/campaigns.py` — the registry.** Frozen-dataclass
+   `Campaign` records: name, lifecycle status
+   (candidate/confirmed/farming/converted/retired), origin evidence,
+   decision_refs, opened date (static string — module stays clock-free),
+   funnel_read (the decision the campaign waits on), retire_on, optional
+   hypothesis / selection_cell+slots / explicit `member` predicate over
+   submissions `config_json` dicts (never re-validated through
+   StrategyConfig — audit survives contract drift in old rows), and
+   converted_note. Registry = CODE, edited only with a D-entry (the
+   D276/D286 sampler-pin convention); `validate_registry` makes malformed
+   records an import error. Seeds: `resid-vix-two-arm` (farming; the D287
+   cell, 4 slots), `mr-timer-duration` (farming; member mirrors the
+   sampler's own v40 scoping — MR excl. the momentum/capitulation
+   directional, time_stop n_bars∈[8,12]; converted_note records 65316ca4),
+   `ve-exit-repair` (farming; hypothesis-wide).
+2. **`experiment_cells.py` now derives from the registry** —
+   `EXPERIMENT_CELLS = active_selection_cells()`, `EXPERIMENT_CELL_SLOTS =
+   active_selection_slots()` (uniform-slots enforced; mixed values hard-fail
+   with the "needs a per-cell slot table" message). Diversifier phase 0b,
+   queue.py and main.py wiring UNTOUCHED. **Byte-identical guard:**
+   `test_d287_pin_derives_byte_identical` pins the derived values to the
+   D287 constants exactly — ranking cannot move via a registry edit
+   side-effect. Versionless (D193/D252 class); the running daemon picks the
+   refactor up at the next operator-gated restart with zero behavior change.
+3. **`forge/ranking/campaign_audit.py` + `forge campaigns audit` — the D287
+   failure class as a standing detector.** Per farming campaign over a
+   `--days` window: ranked-lane member share vs holdout-lane member share
+   (the holdout bypasses ranking → unbiased pool-share estimate; the exact
+   tell that caught D287 by hand). STARVED = ranked share < 0.25× holdout
+   share with ≥3 holdout members (strict <, small-n guarded); exit 1 for
+   scripting. Verdict-decision counts per campaign included (temp-table
+   join). Read-only, snapshot convention, `now` is a parameter (rule #8).
+   `forge campaigns list` prints the registry with lifecycle + reads.
+4. **Theme 2–5 drafts** (`docs/proposals/`): `learned-target-and-
+   label-integrity.md` (ordinal gate-tail targets; cold-start floor
+   generalization; label provenance + activation-probe tripwires; young-cell
+   holdout weighting), `corr-to-book-feedback.md` (contracts ask — relay
+   text included, carried ONLY on operator go; D186/D187 boundary argued),
+   `yield-auditor.md` (self-serve dead-cell detection staging exclusion
+   riders into OPEN_PROPOSALS; campaign cells exempt while farming),
+   `ops-debt-roundup-2026-07.md` (duckdb write batching, relay ledger,
+   audit timer wiring, calendar watches).
+
+NOT done here: no restart (operator-gated; the refactor is inert-identical
+until then anyway), no healthcheck/timer wiring for the audit (proposal 5c),
+no retirement of any campaign (each retire = its own D-entry on its read).
+NB: D297/D298 were taken by concurrent same-day sessions (the D295 race
+pattern) — this entry numbered accordingly.
+
+Suite: test_ranking + test_cli + invariants 545 green mid-build; full-scope
+gates re-run at commit (see STATUS). ruff + mypy --strict clean.
+Related: [[D287]], [[D136]], [[D119]], [[D276]], [[D286]], [[D291]],
+[[D292]], [[D295]], [[D207]].

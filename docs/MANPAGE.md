@@ -505,6 +505,27 @@ coordination item, not pre-judged. Snapshot the live DB first (the daemon holds 
 cp ~/forge_data/forge.db /tmp/snap.db && forge alpha-budget --forge-db /tmp/snap.db
 ```
 
+### forge campaigns list / audit
+
+The campaign registry — the discover→concentrate→farm loop as a first-class object (D299).
+`list` prints every registry record (`forge.ranking.campaigns.CAMPAIGNS`): lifecycle status,
+origin evidence, D-refs, the selection floor if any, the funnel read the campaign waits on, and
+its retire condition. The registry is code, edited only with a D-entry (the sampler-pin
+convention); the D287 experiment-cell floor DERIVES from it, pinned byte-identical by test.
+
+`audit` runs the region-carriage check per farming campaign over a `--days` window (default 7):
+ranked-lane member share vs holdout-lane member share. The holdout bypasses ranking, so its share
+is an unbiased estimate of the campaign's share of the passed pool; ranked share below
+0.25× holdout share (with ≥3 holdout members) flags **STARVED** — the D287 failure class
+(generation feeds a region, the learned lane's P-gate eats it at selection). Also prints
+verdict-decision counts for window members. Exit 1 when any campaign is starved (scriptable
+tripwire). Read-only; snapshot the live DB first (RW-lock pitfall).
+
+```
+forge campaigns list
+cp ~/forge_data/forge.db /tmp/snap.db && forge campaigns audit --forge-db /tmp/snap.db --days 7
+```
+
 ### forge prereg
 
 Pre-register a prune/retarget, then confirm it on a *later* cohort (Tier-1a honesty discipline,
