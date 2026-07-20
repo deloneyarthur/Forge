@@ -60,9 +60,16 @@ def _pinned_universe(monkeypatch: pytest.MonkeyPatch) -> None:
     override this default per-test as before.
     """
     import forge.enumeration.sampler as sampler_mod
-    from tests.fixtures.universe_snapshot import UNIVERSE_SNAPSHOT_2026_07_16
+    from tests.fixtures.universe_snapshot import (
+        UNIVERSE_SNAPSHOT_2026_07_16,
+        UNIVERSE_TIER3_SNAPSHOT_2026_07_20,
+    )
 
     monkeypatch.setattr(sampler_mod, "_load_underlyings", lambda: UNIVERSE_SNAPSHOT_2026_07_16)
+    # D292/v41: the tier half of the same pin — `_tier3_symbols` feeds the
+    # true-tier stamp + the xsect tier-3 share, so a live tiered export must
+    # never move test draws either. Tier-dormancy tests override per-test.
+    monkeypatch.setattr(sampler_mod, "_tier3_symbols", lambda: UNIVERSE_TIER3_SNAPSHOT_2026_07_20)
 
 
 @pytest.fixture

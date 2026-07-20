@@ -1748,3 +1748,39 @@ claims verified on our side before recording:
    adopt + v41; on verify we confirm adoption so they retire the fold.
 
 Related: [[D291]], [[D290]], [[D286]], [[D267]], [[D245]], [[D078]].
+
+## D293 — 2026-07-20 — v41 BUILT+DEPLOYED: tier unpin — contracts 1.32.0 adopted with wiring (tiered reader + true-tier stamping + 15% xsect tier-3 exploration share) + the ASML/COST dead-name rider (operator "go on building and deploying v41")
+
+Implements `docs/proposals/v41-tier3-xsect.md` (the D292 triage's staging). All TDD.
+
+1. **Reader switch:** `_load_underlyings` moves to `load_universe_tiers_from_export`
+   via a single shared cache (`_load_universe_tiers_cached`); union identical by
+   contract (verified both readers on the live export). `_tier3_symbols` exposes
+   TRUE tier-3. The pre-v41 `cache_clear` contract survives via an alias onto the
+   one true cache (a dozen test call sites; no stale-split hazard — the dual-cache
+   version poisoned cross-test state and was rejected). `StaleExportError`
+   subclasses `QueryError`, so the fallback catch is unchanged.
+2. **True-tier stamping:** `_stamp_tier(underlying, combiner, rng)` at config
+   construction, drawn LAST — single-name = pure lookup (3 for tier-3 members,
+   2 otherwise); xsect = tier=3 at `_XSECT_TIER3_SHARE=0.15` with the empty-set
+   short-circuit BEFORE rng (export-gated dormancy, D258 convention);
+   relative_value keeps the literal 2 (stamp inert on pairs).
+3. **`universe_fingerprint` folds the tier split** (H-3: emission now depends on
+   membership; empty-tier-3 payload byte-identical to pre-v41 for continuity).
+4. **Exclusion rider:** ASML/COST join `_STRUCTURALLY_UNTRADEABLE_UNDERLYINGS`
+   (our funnel: 641 decided/0 comp, 1,544/1; same terms as v37 — re-admission on
+   their relay, row-45 cross-check requested).
+5. **Contracts pin 1.31.0 → 1.32.0** — adopted WITH wiring (unlike the D267/D271
+   pin-only precedents); required before Crucible retires the transition fold.
+
+**Test surface:** `UNIVERSE_TIER3_SNAPSHOT_2026_07_20` (94 names, all inside the
+07-16 union snapshot) + the conftest tier pin (the D274-pattern third leg);
+5 new tests (true-tier stamp, xsect share, dormancy, exclusion, fingerprint
+split). **Goldens:** 7/7 re-pinned environment-matched (OLD code reproduced every
+constant; onset = the first POOL-TAPPING config — cohort positions 0-1 are
+relative_value and survive untouched, everything else moves at 0 via the
+118→116 pool shift, the v37 signature). Full suite 2008 green.
+
+Deploy + first-batch audit in STATUS. The deploy relay addendum carries the
+ADOPTION CONFIRMATION that licenses their fold retirement.
+Related: [[D292]], [[D291]], [[D286]], [[D278]], [[D267]], [[D262]], [[D078]].

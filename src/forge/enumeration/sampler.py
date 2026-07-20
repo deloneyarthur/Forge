@@ -46,8 +46,9 @@ from crucible_contracts import (
     SignalSpec,
     SizerSpec,
     StrategyConfig,
+    UniverseTiers,
     load_earnings_covered_symbols_from_export,
-    load_universe_tickers_from_export,
+    load_universe_tiers_from_export,
 )
 from crucible_contracts.exceptions import QueryError
 
@@ -273,6 +274,21 @@ _TREND_SWING_LONG_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 10)
 _MR_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 12)
 _MR_TIME_STOP_REQUIRED_PICK_P: float = 0.65
 
+# D292 (v41) — the tier unpin (Crucible FORGE_tier_unpin_and_promote_2026-07-20;
+# contracts 1.32.0). The engine resolves an xsect config's ranking pool from
+# the STAMP against PIT membership — every pre-v41 xsect config ranked the
+# TRUE 20-name curated tier-2 pool (rank_k=20 = take-everything, zero
+# selectivity); the 94-name tier-3 xsect pool had never been sampled. v41:
+# xsect draws stamp tier=3 at this share (inside their 10-20% band,
+# xsect-first per their suggestion — single-name tier-3 coverage already
+# exists); single-name configs stamp the underlying's TRUE tier (attribution;
+# no engine change on that path). Supply diversification, NOT a promotion
+# thesis (both sides' framing: their breadth ablation is champion-specific
+# and flat; the xsect-pool selectivity point is the one place it could be
+# more). Export-gated dormancy: empty tier-3 set -> no draw, everything
+# stamps 2 (byte-identical to pre-v41 within a config).
+_XSECT_TIER3_SHARE: float = 0.15
+
 # D288 (v38) — exit-CLASS mix shift for trend swing_long (Crucible
 # FORGE_trend_swinglong_exit_mix_2026-07-16; COMPOSES with the v36 duration
 # prior above — mix share vs duration-given-carried, two knobs on different
@@ -386,26 +402,21 @@ _FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
     "MSTR",
 )
 
-# Exports directory Crucible publishes to. `load_universe_tickers_from_export`
-# globs `universe_tickers*.json` within it (contracts 1.13.0).
+# Exports directory Crucible publishes to. `load_universe_tiers_from_export`
+# globs `universe_tickers*.json` within it (contracts 1.13.0 flattened;
+# tiered sibling since 1.32.0, D292/v41).
 _UNIVERSE_EXPORT_DIR = Path("~/optbt_data/exports").expanduser()
 
 
 @functools.lru_cache(maxsize=1)
-def _load_underlyings() -> tuple[str, ...]:
-    """D078 / Q23: load Tier 1+2 tickers from Crucible's universe export via the
-    blessed `crucible_contracts.load_universe_tickers_from_export` helper.
-
-    Q23 (audit H-5) closed by contracts 1.13.0: the universe read is now on the
-    `EXPORT_LAYOUT` surface, so this is no longer an uncontracted hard-rule-#2
-    deviation — the prior raw `json.loads` + `universe_uncontracted_read` warning
-    are gone. Falls back to the D033 hardcoded list when the export is absent or
-    empty; a present-but-unparseable export raises `QueryError` (M-13 drift
-    signal), which we log loudly before falling back. Cached for the process
-    lifetime — restart to pick up changes.
-    """
+def _load_universe_tiers_cached() -> UniverseTiers | None:
+    """D292 (v41): the single cached read of Crucible's tiered universe export
+    (`load_universe_tiers_from_export`, contracts 1.32.0). None on an
+    unreadable/stale export (`StaleExportError` subclasses `QueryError` — the
+    same catch the pre-v41 flattened reader effectively had). Cached for the
+    process lifetime — restart to pick up changes."""
     try:
-        tickers = load_universe_tickers_from_export(_UNIVERSE_EXPORT_DIR)
+        return load_universe_tiers_from_export(_UNIVERSE_EXPORT_DIR)
     except QueryError as err:
         # M-13: present-but-unparseable export is a DRIFT signal distinct from
         # the expected "absent" offline case. The helper raises loudly; we log
@@ -416,11 +427,67 @@ def _load_underlyings() -> tuple[str, ...]:
             error=str(err),
             open_question="Q23",
         )
-        tickers = ()
-    if tickers:
-        return tuple(tickers)
+        return None
+
+
+def _load_underlyings() -> tuple[str, ...]:
+    """D078 / Q23: the sampling pool — the tier union from Crucible's universe
+    export, blessed-read via contracts (Q23 closed at 1.13.0; the flattened
+    reader moved to the tiered sibling at 1.32.0, D292/v41 — IDENTICAL union
+    by contract ("two views of one surface"), and required before Crucible
+    retires the transition fold (the flattened reader would shrink the pool
+    118 -> 24 after retirement). Falls back to the D033 hardcoded list when
+    the export is absent/empty or unreadable (logged loudly).
+    """
+    tiers = _load_universe_tiers_cached()
+    if tiers is not None:
+        union = tuple(sorted({*tiers.tier_1, *tiers.tier_2, *tiers.tier_3}))
+        if union:
+            return union
     _logger.info("universe_fallback_hardcoded", n_tickers=len(_FALLBACK_TIER_1_2_UNDERLYINGS))
     return _FALLBACK_TIER_1_2_UNDERLYINGS
+
+
+def _tier3_symbols() -> frozenset[str]:
+    """D292 (v41): TRUE tier-3 membership — feeds the single-name true-tier
+    stamp and gates the xsect tier-3 exploration draw. Empty on old-shape
+    exports and the D033 fallback (export-gated dormancy: everything stamps
+    tier=2 and no rng is consumed, the pre-v41 behavior exactly)."""
+    tiers = _load_universe_tiers_cached()
+    return frozenset(tiers.tier_3) if tiers is not None else frozenset()
+
+
+# Pre-v41 the lru_cache lived on `_load_underlyings` itself, and a dozen call
+# sites (loader/fingerprint tests, the D274-pattern fixtures) clear the
+# universe read via its `cache_clear`. The one true cache is now the shared
+# tiers read above — alias its clear so that contract survives the D292
+# restructure (both derived views invalidate together; no stale-split hazard).
+_load_underlyings.cache_clear = _load_universe_tiers_cached.cache_clear  # type: ignore[attr-defined]
+
+
+def _stamp_tier(
+    underlying: str | None,
+    combiner: CombinerSpec,
+    rng: random.Random,
+) -> int:
+    """D292 (v41): the config's `tier` stamp — the engine's pool selector for
+    xsect configs, pure attribution for single-name.
+
+    Drawn LAST (inside config construction, after every signal/veto draw) so
+    activation shifts nothing within the config. rng is consumed ONLY on the
+    xsect path when tier-3 is served — single-name is a pure lookup, and the
+    empty-set dormancy short-circuits before rng.random() (the D258 empty-pool
+    convention; hard rule #6). relative_value (underlying None, confluence
+    combiner) keeps the literal 2 — pairs legs are Crucible-resolved and the
+    stamp is inert there."""
+    if combiner.type == "cross_sectional_rank":
+        tier3 = _tier3_symbols()
+        if tier3 and rng.random() < _XSECT_TIER3_SHARE:
+            return 3
+        return 2
+    if underlying is not None and underlying in _tier3_symbols():
+        return 3
+    return 2
 
 
 def universe_fingerprint() -> str:
@@ -431,9 +498,15 @@ def universe_fingerprint() -> str:
     `universe_tickers.json` (or changes it) every same-seed reproduction would
     silently diverge (hard rule #6). This folds into `mint_batch_id` +
     `batch_summaries`. `_load_underlyings()` already returns a sorted tuple, so
-    the hash is order-stable.
+    the hash is order-stable. D292 (v41): the tier SPLIT is appended when
+    tier-3 is served — emission now depends on membership, so same-union/
+    different-split must fingerprint differently; the empty-tier-3 payload is
+    byte-identical to pre-v41 (continuity for old-shape exports).
     """
     payload = "|".join(_load_underlyings())
+    tier3 = _tier3_symbols()
+    if tier3:
+        payload += "#t3:" + "|".join(sorted(tier3))
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
@@ -612,8 +685,13 @@ _EARNINGS_CALENDAR_ETF_INCOMPATIBLE: frozenset[str] = frozenset(
 # ≥95%-exact-zero bar); the guard eats them at queue time, so our draws on
 # them are pure wasted budget (~4.4k draws/wk). Same terms: re-admission on
 # their relay; the list retires whole when their liquidity preflight ships.
+# D292 (v41): +ASML/COST — the tier-unpin reply named the tier-3 exemplars
+# "structurally DEAD single-name underlyings"; our own funnel agrees (ASML
+# 641 decided / 0 components, COST 1,544 / 1) — the same dead-cell class,
+# measured on OUR verdicts this time. Same re-admission terms; flagged for
+# their row-45 cross-check in the response relay.
 _STRUCTURALLY_UNTRADEABLE_UNDERLYINGS: frozenset[str] = frozenset(
-    {"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR"}
+    {"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR", "ASML", "COST"}
 )
 
 
@@ -1160,7 +1238,7 @@ def sample_config(
         hypothesis=hypothesis,  # type: ignore[arg-type]
         dte_bucket=bucket,  # type: ignore[arg-type]
         underlying=underlying,
-        tier=2,
+        tier=_stamp_tier(underlying, combiner, rng),
         signals=tuple(signals),
         combiner=combiner,
         selector=selector,

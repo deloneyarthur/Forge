@@ -71,8 +71,10 @@ def test_v34_untradeable_exclusion_applies_to_the_pool_itself() -> None:
     import forge.enumeration.sampler as sampler_mod
 
     # D286 (v37): +SOXX/LLY/GS/MSTR — the row-45 trailing-window guard cohort.
+    # D292 (v41): +ASML/COST — the tier-unpin reply's dead tier-3 exemplars,
+    # confirmed on OUR funnel (641 decided/0 components, 1,544/1).
     assert (
-        frozenset({"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR"})
+        frozenset({"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR", "ASML", "COST"})
         == sampler_mod._STRUCTURALLY_UNTRADEABLE_UNDERLYINGS
     )
 

@@ -141,7 +141,13 @@ from crucible_contracts import (
 # queries.py + formats.py + tests only) → NO-OP for the running daemon; Forge does not call it
 # yet. WIRING the manifest is its OWN operator-gated grammar bump (proposal to follow — it
 # changes underlying-pool emission); this pin is adoption hygiene per the D262/D267 discipline.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.31.0"
+# 1.32.0 (2026-07-20, Crucible 0bc45a8): adds `load_universe_tiers_from_export` + `UniverseTiers`
+# — the tiered universe reader (their D291 reply; tier-3 unpin). ADOPTED WITH WIRING in the same
+# v41 bump (D292): `_load_underlyings` moves off the flattened reader (identical union by
+# contract — and REQUIRED before Crucible retires the transition fold, which would shrink the
+# flattened read 118 -> 24), true-tier stamping + the xsect tier-3 exploration share ride the
+# tiered view. The deploy relay carries the adoption confirmation that licenses fold retirement.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.32.0"
 
 
 def check_contracts_version() -> str:
