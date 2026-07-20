@@ -1119,3 +1119,24 @@ can vary across runs (parallel scans, load-dependent), so the split — and occa
 stable key in the eval query (or sort rows before the split) — deterministic split, unchanged
 semantics; then re-check the test's margin. Production impact: none on submissions (diagnostic
 telemetry); the same scan-order wobble technically touches the LIVE `model_ece_platt` journal number.
+
+## 2026-07-20 — Q52 — QuantIQ D418 rider ask (via Crucible's xsect-union correction relay): generation-time `expected_trades`-under-INTEGER-CONTRACT-floor check at a declared reference NAV — **LOW (their words; detect-at-generation half only)**
+
+The promoted book's paper shadow found contract INDIVISIBILITY bites at small
+NAV: the trend leg's `fixed_risk_pct 0.0075` = $187.50/trade at $25K NAV vs
+~$530–6,000 per in-band contract (fillable-in-top-10 counts: 1 @ $25K / 2 @
+$100K / 2 @ $200K). Backtests' fractional sizing hides the integer floor. The
+ask: flag structurally-unfillable sizing at EMISSION instead of at the shadow.
+
+Why not built yet: the check needs a PER-CONTRACT PREMIUM estimate at
+emission time, and no current prefilter input carries one (`expected_trades`
+consumes activations, not prices; the feature-cache reads we make are
+indicator activations). Options, relayed back as a question before any build:
+(a) Crucible serves a per-name "typical in-band contract premium" surface
+(feature-cache or export) and Forge adds a cheap prefilter
+`min_contracts_at_reference_nav >= 1`; (b) the check lives Crucible-side at
+queue time next to the row-45 liquidity preflight (where chain truth already
+lives — arguably the right home by the D278 principle "the mechanism is
+Crucible-measured per-name against THEIR chain data"); (c) drop — the capital
+side is the operator's and the shadow already detects it. Parked until their
+answer; the reference-NAV declaration itself is an operator choice.
