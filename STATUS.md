@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-07-20 (close, later⁶) — Outbound relay DRAFTED, held for carry: `PROMPT_CRUCIBLE_HOUSEKEEPING_ASKS.md` (meta-king publisher ask + sma_slope writer-status ask + re-flag of the 07-08 charged-DSR relay — carry BOTH files together). The D300 standing watch is discharged into it
+
+Docs-only. The relay bundles every queued cross-system loose end that does NOT depend on their pending reads; receipts/answers to the ve v38→v39 read (~07-21) and the v39→v40 MR read (~07-22/23) will be their own response relays when they land. **Reminder-clock: prereg `098ea730d5f2` (honest standard-basis wall ≤1.479) resolves ≤2026-07-21 — measure + resolve tomorrow; its outcome rides the next read-response.** Held-relay send/park calls still open (operator): FUNDAMENTAL_VALUE_PRECHECK (live door), SECTOR_ETF_XSECT_PRECHECK (recommend archive — D269 DON'T-BUILD), PATHC sizing (strategic, rides the Path-C reopen question).
+
 ## 2026-07-20 (close, later⁵) — Bucket B round 2 DONE (D301): the D248 needs-owner manifest CLEARED — ve `|move|` path removed (D235 pre-authorized; shadow-null now dual-null, `flip2` JSONL key gone), D094/D101 reward lane removed (D105-superseded), `is_percentile_emitting` removed, pytest-cov retired. Full suite 2006 green, mypy/ruff clean, daemon untouched
 
 **Operator "ready for it."** Full record: [[D301]]. All three manifest doc bugs turned out already fixed; `TABLE_NAMES` relocate declined. With D295–D301 the entire post-promotion cleanup review is dispatched — no staged cleanup items remain. Standing watch unchanged: next outbound relay carries the meta-king publisher ask.
