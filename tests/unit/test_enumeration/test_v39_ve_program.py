@@ -186,10 +186,11 @@ def test_v39_iv_term_slope_range_loosened(grammar: Grammar, registry: RegistrySn
 
 def test_v39_other_hypotheses_exits_untouched(grammar: Grammar, registry: RegistrySnapshot) -> None:
     """The ve schema edit must not leak: event_momentum keeps its required
-    time_stop; MR keeps its required-pick timer share ~50%."""
+    time_stop; MR keeps its required-pick timer share (~50% at v39; 0.65 since
+    D291/v40 biased the pick on the combined relay's timer-cell evidence)."""
     space = build_search_space(grammar, registry)
     n_mr_timer = 0
     for seed in range(600):
         mr = sample_config(space, registry, random.Random(seed), forced_hypothesis="mean_reversion")
         n_mr_timer += int("time_stop" in {e.id for e in mr.exits})
-    assert 0.40 < n_mr_timer / 600 < 0.60
+    assert 0.60 < n_mr_timer / 600 < 0.70

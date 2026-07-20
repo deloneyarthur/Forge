@@ -1739,17 +1739,17 @@ _COHORT_GOLDEN_PRE_REFACTOR = [
     "4710371b04fac3d0",
     "41a6490720e28408",
     "174df1ffb521246b",
-    "d4719affe73e6187",
-    "df028f4253e1a090",
-    "766ce2e829e37b6e",
-    "40941d81eaa3feb0",
-    "cc406814c09170c0",
-    "4722c7b2d1f2663e",
-    "c406d1c3fb948b32",
-    "c924a45f1c779bd3",
-    "22570e7669147c46",
-    "3ad3d204548141c3",
-    "531dbdce040fc1d9",
+    "a6b094383f68b1cb",
+    "734b343564c3df3c",
+    "15b5daf88aa8ea6d",
+    "32f37f67d065020b",
+    "1547f8f42ac32036",
+    "31c313af0e1680c2",
+    "39a7dc23b405febd",
+    "219cedfd0ce11930",
+    "ddccdc43f5940ddf",
+    "f32b391819e7feec",
+    "2c77822f6dab10b8",
 ]
 
 
@@ -1972,17 +1972,17 @@ _REGIME_GOLDEN_PRE = [
     "fcf4ece6428c6a88",
     "dc031877bc52cbb0",
     "d03b4b2aec3c9828",
-    "afb7be1ec13f7837",
-    "2e98f3e17831cd1c",
+    "90d2f4da3ec00d94",
+    "f07d5f76dfa1fe4a",
     "07c3c23bc6442075",
-    "5db3d6e6cc9179cc",
-    "3da8926aba415ede",
-    "836ae20b650be520",
-    "71f91a64617d8bb6",
-    "2b6ce44e8d06338d",
-    "e5731f91c607d173",
-    "92dd0416c616ee6c",
-    "2a959b6cc8a25d59",
+    "6acf6590b13a39e8",
+    "dcebd1b0d426deb2",
+    "cb74f62ed45bec10",
+    "3d9d7cdd3214555c",
+    "d7d12d6838934442",
+    "5da966073097805a",
+    "5eac50787c8cae69",
+    "5d717dac70ae85be",
 ]
 
 
@@ -2229,8 +2229,8 @@ _REGIME_GOLDEN_DSJ_ACTIVE = [
     "17d0cbbdeddb4f8e",
     "a9cc12bc7d7456cb",
     "827d1f8b6e7d8313",
-    "783aa9246ae91418",
-    "ef0333e78106091a",
+    "902a11890e2831bc",
+    "46933e3c20ff9061",
     "52ba895294e3c104",
     "8635310ad5cf97a9",
     "ea87585eac26b540",
@@ -2405,16 +2405,16 @@ _REGIME_GOLDEN_V26_ACTIVE = [
     "17d0cbbdeddb4f8e",
     "a9cc12bc7d7456cb",
     "827d1f8b6e7d8313",
-    "783aa9246ae91418",
-    "a61a67713ec5f065",
-    "5a7b944409a1ef9d",
-    "9abbcb8b872a454b",
-    "5fd6cec6863fef28",
-    "afe32ec5fb9ba9f2",
-    "98cfb0c43b93f815",
-    "3d791059aec77d4f",
+    "902a11890e2831bc",
+    "9a3140d1aa0f5e60",
+    "b411474e8d608ad7",
+    "9723815d2cc11d81",
+    "cc706c57e5b55cf5",
+    "f6ff4f6ec4bd71a9",
+    "ea342d9eb8767796",
+    "738b512d6a18e89f",
+    "1a170cce949bf875",
     "185d1f8b1beaffce",
-    "e603bcafd6443537",
 ]
 
 
@@ -2428,10 +2428,12 @@ def test_d263_ivol_active_cold_start_golden(grammar: Grammar, registry: Registry
     active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
     assert active == _REGIME_GOLDEN_V26_ACTIVE
     assert active != _REGIME_GOLDEN_DSJ_ACTIVE  # ivol on MR shifts the sequence
-    # at least one config actually carries the ivol veto in this slice
+    # at least one config actually carries the ivol veto in this slice (the
+    # D291/v40 stream re-pin pushed the first carrier from the 15-window to
+    # position 16 — widened to 25, same reachability claim)
     assert any(
         any("ivol" in s.indicators for s in c.signals)
-        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
+        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=25)
     )
 
 
@@ -2580,12 +2582,12 @@ _REGIME_GOLDEN_V27_ACTIVE = [
     "a9cc12bc7d7456cb",
     "d7f9a3f7c58dea33",
     "4f17ab52f24af119",
-    "131b1c374370685d",
-    "0f51c9d2d074d85f",
-    "a05184e7878bd154",
-    "0daba8a56a06f801",
-    "0f369fa617bd667d",
-    "88494d6871f83ed7",
+    "049e92f012e86368",
+    "1d1ad02e19a83c0a",
+    "c757c989e2a95524",
+    "f6ff4f6ec4bd71a9",
+    "ea342d9eb8767796",
+    "738b512d6a18e89f",
     "1a170cce949bf875",
     "e8a11ba9d2de8c66",
     "e603bcafd6443537",
@@ -2816,16 +2818,16 @@ _REGIME_GOLDEN_V29_ACTIVE = [
     "17d0cbbdeddb4f8e",
     "a9cc12bc7d7456cb",
     "827d1f8b6e7d8313",
-    "5bff8afe0e681c48",
-    "2e1537e2064bc024",
-    "5a7b944409a1ef9d",
-    "9abbcb8b872a454b",
-    "5fd6cec6863fef28",
-    "c08ff8d0e80991f5",
-    "98cfb0c43b93f815",
-    "3d791059aec77d4f",
+    "cc82e3360089be8a",
+    "9a3140d1aa0f5e60",
+    "b411474e8d608ad7",
+    "80f96b1ad32fa5db",
+    "99391b4a30905855",
+    "f6ff4f6ec4bd71a9",
+    "ea342d9eb8767796",
+    "738b512d6a18e89f",
+    "1a170cce949bf875",
     "185d1f8b1beaffce",
-    "59f10afe89ab9c28",
 ]
 
 
@@ -2954,10 +2956,10 @@ def test_d270_non_momentum_time_stop_params_unchanged(
 ) -> None:
     """The n_bars emission is scoped to exactly the evidenced cells — D270's
     premise ("capitulation ONLY") widened by v36/D282 to the range table:
-    capitulation U[5,15] (both buckets, veto-frozen), MR swing_mid U[8,15],
-    trend swing_long U[8,10]. Every OTHER hypothesis/bucket keeps the bare
-    time_stop (engine default 5), so the untouched slices stay untouched
-    (the D169 concern, now cell-scoped)."""
+    capitulation U[5,15] (both buckets, veto-frozen), MR U[8,12] (D291/v40:
+    bucket-wide, narrowed from swing_mid [8,15]), trend swing_long U[8,10].
+    Every OTHER hypothesis/bucket keeps the bare time_stop (engine default 5),
+    so the untouched slices stay untouched (the D169 concern, cell-scoped)."""
     reg = _v31_registry(registry)
     space = build_search_space(grammar, reg)
     checked_bare = 0
@@ -2968,8 +2970,8 @@ def test_d270_non_momentum_time_stop_params_unchanged(
         if directional.indicators == ("momentum",):
             continue
         scoped_range = None
-        if cfg.hypothesis == "mean_reversion" and cfg.dte_bucket == "swing_mid":
-            scoped_range = (8, 15)
+        if cfg.hypothesis == "mean_reversion":
+            scoped_range = (8, 12)  # D291 (v40): the family box, all buckets
         elif cfg.hypothesis == "trend_continuation" and cfg.dte_bucket == "swing_long":
             scoped_range = (8, 10)
         elif cfg.hypothesis == "volatility_event":
@@ -3044,16 +3046,16 @@ _REGIME_GOLDEN_V31_ACTIVE = [
     "17d0cbbdeddb4f8e",
     "a9cc12bc7d7456cb",
     "827d1f8b6e7d8313",
-    "5bff8afe0e681c48",
-    "8a3b6f5f304cf162",
-    "5a7b944409a1ef9d",
-    "9abbcb8b872a454b",
-    "5fd6cec6863fef28",
-    "c08ff8d0e80991f5",
-    "98cfb0c43b93f815",
-    "686b0a59f4fac904",
-    "4f74071aa6d40159",
-    "5d717dac70ae85be",
+    "cc82e3360089be8a",
+    "9a3140d1aa0f5e60",
+    "b411474e8d608ad7",
+    "80f96b1ad32fa5db",
+    "99391b4a30905855",
+    "f6ff4f6ec4bd71a9",
+    "ea342d9eb8767796",
+    "738b512d6a18e89f",
+    "1a170cce949bf875",
+    "185d1f8b1beaffce",
 ]
 
 
@@ -3067,14 +3069,19 @@ def test_d270_capitulation_active_cold_start_golden(
     reg = _v31_registry(registry)
     active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
     assert active == _REGIME_GOLDEN_V31_ACTIVE
-    assert active != _REGIME_GOLDEN_V29_ACTIVE  # widened MR pool shifts the sequence
-    assert active[:3] == _REGIME_GOLDEN_V29_ACTIVE[:3]  # split at the first MR config
+    # The D291/v40 stream re-pin moved the first capitulation genome (and with
+    # it the v29-vs-v31 split) to position 30 — the 15-length goldens now
+    # coincide, so the divergence claim is asserted on a live 40-window pair.
+    reg29 = _v29_registry(registry)
+    s29 = [c.config_hash for c in enumerate_candidates(grammar, reg29, 7777, max_candidates=40)]
+    s31 = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=40)]
+    assert s31 != s29  # widened MR pool shifts the sequence
     carriers = [
         c
-        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=30)
+        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=40)
         if any(s.role == "directional" and s.indicators == ("momentum",) for s in c.signals)
     ]
-    assert carriers, "no capitulation genome in the first 30 draws"
+    assert carriers, "no capitulation genome in the first 40 draws"
 
 
 # ---------------------------------------------------------------------------

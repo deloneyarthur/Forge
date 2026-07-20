@@ -250,7 +250,28 @@ _CAPITULATION_K_MULTIPLIERS: tuple[int, ...] = (1, 2, 3, 4)
 # pane accumulates at ~50/day and must not split its chassis mid-trial) and
 # keeps D270's U[5,15] at BOTH buckets until the v34-vs-v35 pane is read.
 _TREND_SWING_LONG_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 10)
-_MR_SWING_MID_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 15)
+
+# D291 (v40) — the MR timer cell goes first-class (Crucible
+# FORGE_combined_relay_2026-07-20 §1: the timer-MR family CONVERTED — 1,087
+# components/5d, 68 at cpcv>=1.0, head 65316ca4 an 11-bar hold lifting the
+# 2-leg book to 1.7236/2.3407 at honest decorrelation 0.347; duration is the
+# measured decorrelation axis). Reproduced on OUR verdicts before building
+# (decided >= 07-14, MR excl. capitulation): timers n_bars 8-12 convert 15.0%
+# vs 13-15 at 11.9% vs param-less default-5 at 5.3% (worst MR cell, n~5,000).
+# Two knobs, BOTH scoped to mean_reversion excluding the capitulation
+# directional (its v35 bare-drop pane is veto-frozen mid-trial, D282):
+#   * the required_from_set pick biases to time_stop at 0.65 (was uniform 0.5)
+#     — share moves AWAY from target_exit, the direction D257 already
+#     established as safe (share shifting TO target_exit "breaks the book");
+#   * n_bars ~ U[8,12] at ALL MR buckets — v36's swing_mid [8,15] narrows to
+#     the measured family box and the param-less default-5 emission is retired
+#     for MR (supersedes D282's swing_mid-only scoping on the new evidence).
+# NB their relay's "15% timer-share" premise mis-attributes v38 (that 0.15 is
+# trend/swing_long's OPTIONAL draw; MR's timer is a required pick) — corrected
+# in our response relay; the intent (more timer-MR in the converting box) is
+# what ships.
+_MR_TIME_STOP_NBARS_RANGE: tuple[int, int] = (8, 12)
+_MR_TIME_STOP_REQUIRED_PICK_P: float = 0.65
 
 # D288 (v38) — exit-CLASS mix shift for trend swing_long (Crucible
 # FORGE_trend_swinglong_exit_mix_2026-07-16; COMPOSES with the v36 duration
@@ -1644,17 +1665,39 @@ def _time_stop_nbars_range(
     Resolution order matters: the capitulation directional resolves FIRST —
     its D270 box survives at BOTH buckets (the v36 scoping response vetoed
     MR-swing_mid inheritance until the v34-vs-v35 pane is read), so it must
-    not fall through to the (mean_reversion, swing_mid) cell."""
+    not fall through to the MR cell (bucket-wide since D291/v40)."""
     if directional_id == _CAPITULATION_DIRECTIONAL_ID:
         return _CAPITULATION_TIME_STOP_NBARS_RANGE
-    if hypothesis == _MR_HYPOTHESIS and bucket == "swing_mid":
-        return _MR_SWING_MID_TIME_STOP_NBARS_RANGE
+    # D291 (v40): every non-capitulation MR bucket samples the measured family
+    # box U[8,12] — the param-less default-5 emission is retired for MR.
+    if hypothesis == _MR_HYPOTHESIS:
+        return _MR_TIME_STOP_NBARS_RANGE
     if hypothesis == "trend_continuation" and bucket == "swing_long":
         return _TREND_SWING_LONG_TIME_STOP_NBARS_RANGE
     # D290 (v39): the required ve hold, both buckets (their sweep's sweet spot).
     if hypothesis == "volatility_event":
         return _VE_TIME_STOP_NBARS_RANGE
     return None
+
+
+def _pick_required_exit(
+    hypothesis: str,
+    directional_id: str | None,
+    required_set: tuple[str, ...],
+    rng: random.Random,
+) -> str:
+    """The §3.5 S5 required_from_set pick — uniform everywhere except the MR
+    timer cell (D291/v40): non-capitulation mean_reversion draws time_stop at
+    p=0.65, target_exit otherwise. The membership guard deactivates the bias
+    (back to uniform) if the MR required set ever changes shape — the 0.65 is
+    calibrated to exactly the {time_stop, target_exit} pair."""
+    if (
+        hypothesis == _MR_HYPOTHESIS
+        and directional_id != _CAPITULATION_DIRECTIONAL_ID
+        and set(required_set) == {"time_stop", "target_exit"}
+    ):
+        return "time_stop" if rng.random() < _MR_TIME_STOP_REQUIRED_PICK_P else "target_exit"
+    return rng.choice(required_set)
 
 
 def _optional_exit_pick_p(hypothesis: str, bucket: str | None, exit_id: str) -> float:
@@ -1705,7 +1748,7 @@ def _build_exits(
     ids.extend(space.s5_required_always_by_hypothesis[hypothesis])
     required_set = space.s5_required_from_set_by_hypothesis[hypothesis]
     if required_set:
-        ids.append(rng.choice(required_set))
+        ids.append(_pick_required_exit(hypothesis, directional_id, required_set, rng))
     optional_pool = space.s5_optional_additions_by_hypothesis[hypothesis]
     # Each optional independently picked (p=0.5 default; D288 scopes the
     # trend swing_long time_stop draw to 0.15), then truncated to K. The rng

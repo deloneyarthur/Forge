@@ -119,9 +119,12 @@ def test_v38_remaining_swing_long_timers_keep_u810(
         assert params.get("n_bars") in (8, 9, 10), (cfg.name, params)
 
 
-def test_v38_mr_time_stop_untouched(grammar: Grammar, registry: RegistrySnapshot) -> None:
+def test_v38_mr_time_stop_share(grammar: Grammar, registry: RegistrySnapshot) -> None:
     """MR's timer is a required_from_set pick (structurally not an optional
-    draw) — its ~50% share must not move on this evidence."""
+    draw) — v38's evidence did not move it (~50% then). D291 (v40) later biased
+    the pick to 0.65 on the combined relay's timer-cell evidence; this guard
+    now pins THAT level so the v38 optional-draw knob still cannot leak into
+    MR's required pick."""
     space = build_search_space(grammar, registry)
     n_timer = 0
     n = 1500
@@ -131,4 +134,4 @@ def test_v38_mr_time_stop_untouched(grammar: Grammar, registry: RegistrySnapshot
         )
         n_timer += int("time_stop" in _exit_ids(cfg))
     share = n_timer / n
-    assert 0.40 < share < 0.60, f"MR time_stop share moved: {share:.3f}"
+    assert 0.60 < share < 0.70, f"MR time_stop share moved off 0.65: {share:.3f}"

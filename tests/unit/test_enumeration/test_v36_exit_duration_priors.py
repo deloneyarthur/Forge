@@ -113,13 +113,19 @@ def test_v36_trend_other_buckets_keep_the_bare_time_stop(
     assert checked > 0, "no non-swing_long trend time_stop draws sampled"
 
 
-# --- MR swing_mid: U[8,15], zero floor mass --------------------------------------
+# --- MR: v36 shipped swing_mid U[8,15]; D291 (v40) narrowed to U[8,12] and went
+# bucket-wide — the v36-era assertions ([8,15] box, bare swing_short timer) are
+# SUPERSEDED; the family-box behavior itself is owned by test_v40_mr_timer_cell.
+# The floor-mass claim (no n_bars < 8) is v36's surviving invariant.
 
 
-def test_v36_mr_swing_mid_time_stop_in_8_15(grammar: Grammar, registry: RegistrySnapshot) -> None:
+def test_mr_swing_mid_time_stop_in_8_12_since_v40(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
     """Every NON-capitulation MR swing_mid config carrying time_stop samples
-    n_bars in [8,15] — zero floor mass (n_bars=5 measured actively harmful),
-    with both box edges reached across seeds."""
+    n_bars in [8,12] — v36's zero-floor-mass invariant survives; the top edge
+    narrowed 15 -> 12 on D291's measured family box (our funnel: 8-12 converts
+    15.0% vs 13-15 at 11.9%), with both box edges reached across seeds."""
     reg = _v31_registry(registry)
     space = build_search_space(grammar, reg)
     seen_nbars: set[object] = set()
@@ -132,17 +138,18 @@ def test_v36_mr_swing_mid_time_stop_in_8_15(grammar: Grammar, registry: Registry
             continue
         n_bars = ts.get("n_bars")
         assert isinstance(n_bars, int), ts
-        assert 8 <= n_bars <= 15, ts
+        assert 8 <= n_bars <= 12, ts
         seen_nbars.add(n_bars)
     assert seen_nbars, "no MR swing_mid time_stop draws sampled"
-    assert {8, 15} <= seen_nbars, seen_nbars
+    assert {8, 12} <= seen_nbars, seen_nbars
 
 
-def test_v36_mr_swing_short_keeps_the_bare_time_stop(
+def test_mr_swing_short_time_stop_in_family_box_since_v40(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """The ask names swing_mid ONLY: non-capitulation MR swing_short
-    time_stops stay param-less."""
+    """v36 kept swing_short param-less ("swing_mid ONLY"); D291 (v40) retired
+    the bare default-5 emission for MR (worst MR cell, 5.3% conversion) — the
+    U[8,12] family box now applies at every non-capitulation MR bucket."""
     reg = _v31_registry(registry)
     space = build_search_space(grammar, reg)
     checked = 0
@@ -154,7 +161,9 @@ def test_v36_mr_swing_short_keeps_the_bare_time_stop(
         if ts is None:
             continue
         checked += 1
-        assert ts == {}, (cfg.dte_bucket, ts)
+        n_bars = ts.get("n_bars")
+        assert isinstance(n_bars, int), (cfg.dte_bucket, ts)
+        assert 8 <= n_bars <= 12, (cfg.dte_bucket, ts)
     assert checked > 0, "no non-capitulation MR swing_short time_stop draws sampled"
 
 

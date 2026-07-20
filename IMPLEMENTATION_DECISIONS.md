@@ -1645,3 +1645,56 @@ exactly; every first divergence = a ve config carrying the new exit stack; two
 cross-golden prefix asserts tightened to the new mutual split at position 1 — the
 position-0 ve config's rng shifted). Full suite 1999 green. Related: [[D289]],
 [[D169]], [[D168]], [[D257]], [[D236]], [[D128]], [[D287]].
+
+## D291 — 2026-07-20 — v40: MR timer cell goes first-class — required pick weighted to time_stop 0.65 + n_bars U[8,12] bucket-wide (Crucible combined relay: the timer-MR family CONVERTED; operator "let's fix this")
+
+Implements §1 of Crucible `FORGE_combined_relay_2026-07-20.md`. Their evidence:
+the timer-MR cell produced 1,087 components in 5 days (68 at cpcv>=1.0, 20 at
+>=1.2), genome-diverse across n_bars 8-12; head 65316ca4 (11-bar hold) lifts the
+2-leg book to cpcv_p25 1.7236 / WF 2.3407 raw, honest decorrelation 0.347,
+selection PBO 0.156, DSR 0.9993 @ N=85 — duration is the measured decorrelation
+axis. **Their "15% timer-share" premise is a mis-attribution** (v38's 0.15 is
+trend/swing_long's OPTIONAL draw; MR's timer is a required_from_set pick at
+uniform ~50%) — corrected in our response relay; the intent ships.
+
+**Reproduced on OUR verdicts before building** (decided >= 07-14, MR excl.
+capitulation): timer 10.7% vs target_exit 9.9% component rate overall; within
+timers, n_bars 8-12 converts **15.0%** vs 13-15 at 11.9% vs param-less default-5
+at **5.3%** (the worst MR exit cell, n~5,000). Both knobs are evidence-backed on
+both sides of the pipe.
+
+Two changes, BOTH scoped to mean_reversion EXCLUDING the capitulation
+directional (its v35 bare-drop pane stays veto-frozen mid-trial, D282):
+
+1. **Weighted required pick** (`_pick_required_exit`): time_stop at p=0.65
+   (was uniform 0.5 via `rng.choice`); share moves AWAY from target_exit — the
+   direction D257 established as safe (share moving TO target_exit "breaks the
+   book"). A membership guard (`set == {time_stop, target_exit}`) deactivates
+   the bias back to uniform if the MR required set ever changes shape.
+2. **n_bars ~ U[8,12] at ALL MR buckets** (`_MR_TIME_STOP_NBARS_RANGE`):
+   v36's swing_mid U[8,15] narrows to the measured family box and the
+   param-less default-5 emission is retired for MR (supersedes D282's
+   swing_mid-only scoping on the new evidence). Capitulation keeps D270's
+   U[5,15] at both buckets (resolution order unchanged).
+
+**Goldens:** all 7 re-pinned environment-matched (OLD code reproduced every
+constant exactly; every sequence's first divergence = its first mean_reversion
+config — positions 4/4/5/5/6/5/5; non-MR configs at unchanged stream positions
+are byte-identical). The stream re-pin moved two cross-golden landmarks: the
+first ivol-veto carrier to position 16 (d263 scan widened 15 -> 25) and the
+first capitulation genome to position 30 (d270's v29-vs-v31 divergence now
+asserted on a live 40-window pair; the 15-length goldens coincide). Two v36-era
+assertions superseded in place (swing_mid [8,15] -> [8,12]; swing_short bare
+timer -> family box). GRAMMAR.md S5 table also repaired for the MISSED v39 ve
+row (event_passed forbidden / time_stop required — doc drift from D290).
+
+NOT done: §3's tier unpin (the universe read is structurally tier-2-only:
+their tier_1 export = the 4 broad ETFs we exclude by T1.4 design; tier_3 is
+absent from the contracted export shape entirely; `tier=2` hardcoded at config
+construction). That needs a contracts gap fill first — proposed in the response
+relay (tier_3 key in universe_tickers.json + a contracts reader, or blessing
+the new PIT `all_eligible_tickers.parquet` as a contracted surface), with the
+D245 both-side restart sequencing flagged. §2 needed no build: the
+ref_trailing_return starvation self-heal VERIFIED in our stream (veto carriers
+0/0/0 -> 3-11/batch from f49c554c 07-19T22:51Z; ~40% of submitted ve).
+Related: [[D290]], [[D288]], [[D282]], [[D270]], [[D257]], [[D245]], [[D254]].

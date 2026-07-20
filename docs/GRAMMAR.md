@@ -108,7 +108,7 @@ is a "foreign" exit and rejects.
 | `mean_reversion` | — | `time_stop` / `target_exit` | `iv_crush_exit` | — |
 | `regime_arbitrage` | — | `regime_flip_exit` | `time_stop` | — |
 | `relative_value` | — | `convergence_exit` / `zscore_reversion_exit` | `time_stop` | — |
-| `volatility_event` | `iv_crush_exit`, `event_passed_exit` | — | `time_stop` | — |
+| `volatility_event` (v39, D290) | `iv_crush_exit`, `time_stop` | — | — | `event_passed_exit` |
 | `tail_hedge` | `roll_on_schedule_exit` | — | — | `hard_profit_target` |
 | `event_momentum` (v12, D109) | — | `time_stop` | `trailing_atr` / `chandelier_exit` | `hard_profit_target` |
 
@@ -118,9 +118,17 @@ is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.
 D236 (v23): `parabolic_sar_exit` was dropped from the `trend_continuation`
 pool — Crucible's exit sweep found `chandelier_exit` beats it on both the
 CPCV-p25 tail and WF; `chandelier_exit` also samples an `atr_multiplier`
-∈ [2.0, 3.0] tuned trail.)
+∈ [2.0, 3.0] tuned trail. D290 (v39): `event_passed_exit` moved from
+required to FORBIDDEN on `volatility_event` — Forge never emitted an
+`event_indicator`, so it always ran Crucible's fallback mode (a hard cut at
+entry+n_bars) truncating every ve hold; `time_stop` (n_bars ~ U[4,7]) is the
+required hold instead. D291 (v40): the `mean_reversion` required_from_set
+pick is WEIGHTED, not uniform — `time_stop` at p=0.65 (the timer-MR cell
+converts best; sampler policy, the schema sets themselves are unchanged) —
+and MR timer draws sample `n_bars` ~ U[8,12] at every non-capitulation
+bucket.)
 
-**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — a trailing/chandelier stop captures that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — a time stop or target/zscore exit bounds exposure. Volatility-event strategies have a discrete event in mind — exits must reference it (`event_passed_exit`) and the IV collapse (`iv_crush_exit`). `event_momentum` (v12, D109) rides the post-earnings drift, which decays over ~5–20 td: a `time_stop` is the primary exit (the drift window closing), momentum trailing (`trailing_atr`/`chandelier_exit`) optionally lets a strong drift run, and `hard_profit_target` is forbidden — the payoff is convex/positive-skew (long optionality on the drift), the same profile as the vol_event winners. The `required_from_set` choice lets Forge enumerate equivalent exit framings without contradicting the hypothesis; the `K_MAX_OPTIONAL` cap keeps the optional tail from bloating the stack.
+**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — a trailing/chandelier stop captures that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — a time stop or target/zscore exit bounds exposure. Volatility-event strategies have a discrete event in mind — exits reference the IV collapse (`iv_crush_exit`) plus a short required hold (`time_stop`; `event_passed_exit` is forbidden since v39/D290 — with no `event_indicator` emitted it only ever ran the fallback hard cut that truncated every ve hold). `event_momentum` (v12, D109) rides the post-earnings drift, which decays over ~5–20 td: a `time_stop` is the primary exit (the drift window closing), momentum trailing (`trailing_atr`/`chandelier_exit`) optionally lets a strong drift run, and `hard_profit_target` is forbidden — the payoff is convex/positive-skew (long optionality on the drift), the same profile as the vol_event winners. The `required_from_set` choice lets Forge enumerate equivalent exit framings without contradicting the hypothesis; the `K_MAX_OPTIONAL` cap keeps the optional tail from bloating the stack.
 
 **Cost.** Medium. Excludes most internally-inconsistent exit stacks; the surviving candidates have well-shaped exits.
 
