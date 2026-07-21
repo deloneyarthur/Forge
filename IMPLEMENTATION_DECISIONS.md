@@ -2792,3 +2792,112 @@ prereg (v38→v39 pattern). Response `PROMPT_CRUCIBLE_Q46_MULTIGATE_SCOPING.md`
 
 Related: [[D258]], [[D263]], [[D290]], [[D264]], [[D276]], [[D287]], [[D310]],
 [[D313]].
+
+## D315 — 2026-07-21 — Themes 2c + 2d BUILT (operator "Finish Theme 2d + 2c"): label provenance stamped on every new verdict row + the standing writer-activation probe (2c); the young-cell explore quota as a THIRD submission lane, flag-gated (2d). The label-integrity program's cheap layers are in
+
+**2c — label provenance + integrity tripwires:**
+
+1. `verdicts` gains `source_export` + `contracts_version` (idempotent ALTERs;
+   pre-D315 rows NULL). `record_verdicts(..., source_export=)` stamps both;
+   the consumer passes the newest gated export's filename (best-effort mirror
+   of the reader's newest-file pick — a publish race mis-stamps at most one
+   poll, documented). WHY: the ve ghost episode was five weeks of
+   archaeology; the next era cut filters on a recorded column, and — per the
+   v43 ALIVE-flags lesson — can be LANE-aware instead of a date guillotine.
+2. **Standing activation probe**: `daily_ranker_eval.sh` runs
+   `forge check-activations` daily → one row in
+   `~/forge_data/ranker_eval/activation_probe.jsonl` (regex over the
+   [ OK  ]/[INERT]/[UNCHK] lines — format smoke-tested live: sma_slope OK,
+   565 max activations); `forge healthcheck` gains `check_activation_probe`
+   (WARN on inert ids — the ref_trailing_return/D254 drawn-then-killed
+   class — or a stale/dead probe; OK-note before the first fire).
+3. **The Crucible half is a contracts ask**:
+   `PROMPT_CRUCIBLE_CACHE_ERA_STAMP_ASK.md` HELD (operator go) — a
+   cache-era/writer-version stamp on gated exports; additive, tolerant-reader
+   safe.
+
+**2d — young-cell explore quota (flag-gated OFF):**
+`rank_batch_with_exploration` — the exploration engine returning THREE lanes
+(merit / holdout / young); `sample_young_cell_explore` draws up to
+`FORGE_YOUNG_CELL_EXPLORE_SLOTS` (clamp [0,8], default 0 = byte-identical;
+requires the D307/D312 floor's `mature_cells`) seeded-randomly from
+young-cell members of the rank-non-selected survivors, feasibility-checked so
+a short young pool never under-fills the merit lane; `rank_batch_with_holdout`
+is now a thin 2-tuple wrapper (byte-identity pinned by test). Submitter tags
+the lane `selection_mode='young_explore'` — a THIRD literal, deliberately:
+the uniform holdout is the estimand for the ranker-vs-random A/B (prereg
+61837dd2) AND the campaign-audit carriage denominator (D299), so the quota
+must pollute neither (audit now skips young rows entirely; holdout wins the
+tag on overlap). WHY the lane at all: the floor guarantees young cells get
+SUBMITTED; the quota makes them accrue UNBIASED labels faster than the flat
+5% holdout provides — off-policy correctness at the exact place the D287
+pathology lives. rng = `SeedHierarchy(seed).rng("young_cell_explore")`
+(rules #6/#8).
+
+**Activation state:** 2c's timer/healthcheck halves live at the next 05:00
+fire / healthcheck run; the verdict stamping activates at the next daemon
+restart (code-inert until reload). 2d stays FLAG-OFF — recommended flip:
+after the D312 floor's first daily read (tomorrow's 05:00 + campaign-audit
+row), so the floor's boundary stays clean; the flip is
+`Environment=FORGE_YOUNG_CELL_EXPLORE_SLOTS=4` + daemon-reload + restart
+(one window, can carry the 2c stamping activation with it — both are
+selection/telemetry surfaces with no grammar boundary).
+
+NB the day's FOURTH number race: built as D314, renumbered D315 (the
+concurrent Q46 scoping took D314 mid-build). Suite: verdicts 12, healthcheck
+16, young-explore 6, ranking+submission 419 green mid-build; full gates at
+commit. Related: [[D307]], [[D312]], [[D299]], [[D290]], [[D254]], [[D287]],
+[[D111]].
+
+## D315 — 2026-07-21 — Q46 GO received + residual_momentum weight CONFIRMED (docs-only, no build, operator-gated): their "starving" premise RETRACTED (34.5% reproduced at v39), indicator identity confirmed (resid_vix = residual_momentum × vix_term_slope, both registered). Refinement relayed: the confirmed cell ALREADY emits (vix-as-PRIMARY, 150 configs) — v44 uniquely creates the ADJACENT double-gate (price-strength primary × vix SECOND), which reframes their null-control read
+
+**Trigger:** `FORGE_q46_reply_repin_and_go_2026-07-21.md` — Crucible re-split
+their census by grammar_version (our D314 ask-back), reproducing our 34.5%
+live multi-gate at v39, and RETRACTED the "multi-gate starving / C1-R2 can't
+emit more" premise. Confirmed the indicator identity (resid_vix =
+residual_momentum directional × vix_term_slope gate, both registered,
+probe-built, never Forge-generated → "no separate vix-residual id" correct).
+GO on the v44 scope. One completeness ask (§2): confirm residual_momentum sits
+at healthy trend-directional weight so the pilot visits the confirmed cell.
+
+**§2 verification (live submissions ≥2026-07-20):** residual_momentum = 9.8%
+of trend directionals (3rd, after donchian 43.7% / rolling_sharpe 36.3%),
+**100% xsect** (beta-stripped ranker → rank-path only). Healthy — pilot
+visits, doesn't orbit. Ask satisfied.
+
+**The refinement (measured, load-bearing for their read design):** of
+residual_momentum configs, 150 ALREADY carry vix_term_slope as a gate — but
+vix_term_slope can only be an R2 PRIMARY today, so: 66 = vix as sole gate (the
+single-gate confirmed cell, already emitting at scale); 84 = vix primary + dsj
+veto second; **0 = vix co-occurring with a trend-STRENGTH gate.** So the
+confirmed cell (residual_momentum × vix_term_slope) is ALREADY VISITED from
+batch 1 — v44 does NOT open it. What v44 uniquely creates is the DOUBLE-GATE:
+{adx,hurst} price-strength PRIMARY × vix_term_slope SECOND on a
+residual_momentum ranker — the both-axes genome, 0 today, C1-legal (trend +
+trend_strength + macro = 3 disjoint families). Relayed implication: their
++2-week null-control must contrast the NEW double-gate vs the EXISTING
+vix-as-primary single-gate baseline (both carrying residual_momentum), not
+"confirmed cell vs empty" — else the vix-primary supply already in the stream
+contaminates the control arm. Plus a density heads-up (double-gate share ≈
+9.8% × P(trend-strength primary) × 10-15% conditioner = modest; residual_momentum
+directional weight is a separate liftable dial for read power if they need
+more events).
+
+**§1/§3 accepted:** retraction noted; the within-version 1.5× multi-gate lift
+(6.06 vs 4.02 at v38) recorded as an allocation datum (our cohort/regime-gate
+yield weights already price it, no action); scope GO accepted as written
+(one-id pool add, C1 auto-collapse to {adx,hurst}, xsect-first, weighted
+10-15% share, immediate golden re-pin, MR-excluded, conditioner-veto
+mutual-exclusion honoring "max 2").
+
+**Build posture: NOTHING BUILT — operator-gated.** The scope is GO both sides
+but the v44 grammar bump is an operator-gated deploy here; no operator build
+word yet. Flagged the coupling: contracts 1.34.0 (their
+`load_refutations_from_export`) is live on disk, our pin is 1.33.0, the
+exact-match forcing test is RED → v44's deploy suite is blocked until we
+co-adopt 1.34.0 (the natural window, same as v41/v42 rode 1.32.0/1.33.0).
+Response `PROMPT_CRUCIBLE_Q46_GO_CONFIRM.md` (untracked, operator carries).
+
+NB: committed doc-only during the operator's concurrent code build
+(schemas/verdicts/consumer/submitter dirty — untouched, left for their commit).
+Related: [[D314]], [[D264]], [[D276]], [[D287]], [[D305]], [[D310]], [[D313]].
