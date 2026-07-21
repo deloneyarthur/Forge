@@ -2579,8 +2579,19 @@ build + verification below happened live, absorption verified correct):**
    renumbered to D310 — main.py in the absorb commit, the module/test
    docstrings in this one. Third number race of the day.
 
-**Watch:** the journal line flips `dormant` → `stamped` without any Forge
-action once their marker lands in our verdicts; record the first stamped
-batch_id when it does. Until then their gate keeps the n_trials=1 path —
-today's behavior, byte-identical decisions.
+**Watch: FULFILLED same-hour — the stamp armed on the FIRST v43 batch.**
+Their runners rolled the record-not-bind code minutes after the pre-build
+check (earliest marker verdict decided 07-21T01:37:50Z; 134 marker rows by
+02:10Z); the first v43 iteration's reconcile pulled them in, and the batch
+stamped: **`03b33475-369e-4e14-9ad1-fc90f03fd9ac` (02:07:37Z, 200/200
+stamped, min 5,154 / max slot n_trials=108,324)**. The dormant state lasted
+zero batches — the self-gate cost nothing and would have saved the D306
+crater had their roll been slower. Stamp values verified against the module's
+census: the max slot is trend_continuation×swing_mid×**xsect** at exactly
+108,324 (the H1-era xsect slots are the giants — 99,736 mr×swing_mid×xsect,
+63,509 trend×swing_long×xsect; largest named slot: ve×swing_short 55,790);
+zero NULL-combiner rows (no era edge). Downstream expectation now ACTIVE:
+at slot-scale n the recorded (non-binding) DSR sits far under the bar on the
+big-slot rows — `dsr_below_bar` will show up in `failure_buckets` on
+non-reject forge rows, per their heads-up (no Forge reader; extra signal).
 Related: [[D304]], [[D306]], [[D309]], [[D207]], [[D245]], [[D290]].
