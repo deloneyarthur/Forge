@@ -2416,6 +2416,27 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     )
     _t_submit = _time.monotonic()
     with db_connection(forge_db_path) as conn:
+        # D310: populate `search_n_trials` (per-slot cumulative, their Q1
+        # measure) — SELF-GATED on Crucible's record-not-bind deployment
+        # marker appearing in our verdicts. Until the marker is observed,
+        # configs ship unset (their n_trials=1 path): stamping against their
+        # old binding predicate would flip the component stream to reject —
+        # the exact D306 hazard their (a) resolution removed. Hash-excluded
+        # field: idempotency and batch identity are untouched.
+        from forge.submission.search_multiplicity import (
+            crucible_record_not_bind_live,
+            slot_counts,
+            stamp_search_n_trials,
+        )
+
+        if crucible_record_not_bind_live(conn):
+            ranked = stamp_search_n_trials(ranked, slot_counts(conn))
+            _max_n = max((c.report.config.search_n_trials or 0) for c in ranked)
+            typer.echo(
+                f"search_n_trials: stamped {len(ranked)} configs (max slot n_trials={_max_n})"
+            )
+        else:
+            typer.echo("search_n_trials: dormant (their record-not-bind marker unseen; self-arms)")
         # D096: persist the funnel's two upstream stages on the batch_summaries
         # row — `enumerated` (configs run through the battery) and `survived`
         # (configs that passed it), plus the per-hypothesis enumerated split.

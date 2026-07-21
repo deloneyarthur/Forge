@@ -238,3 +238,77 @@ def test_same_seed_is_deterministic(tmp_path: Path) -> None:
         return sorted(p.name for p in inbox.glob("*.json")) if inbox.exists() else []
 
     assert run("a") == run("b")
+
+
+# ---------------------------------------------------------------------------
+# D309 — search_n_trials stamping (self-gated on Crucible's marker)
+# ---------------------------------------------------------------------------
+
+
+def _seed_marker_verdict(forge_db: Path) -> None:
+    """Insert a verdict row carrying Crucible's record-not-bind marker."""
+    import json as _json
+    import uuid as _uuid
+
+    gate_results = _json.dumps(
+        {
+            "deflated_sharpe": {
+                "gate_name": "deflated_sharpe",
+                "passed": True,
+                "value": 1.0,
+                "threshold": 0.0,
+                "detail": "DSR at stamped multiplicity (recorded_not_binding).",
+            }
+        }
+    )
+    with db_connection(forge_db) as conn:
+        conn.execute(
+            "INSERT INTO verdicts VALUES (?, ?, 'reject', '2026-07-21 01:00:00', 5, 'v42', ?,"
+            " '2026-07-21 01:00:00')",
+            [str(_uuid.uuid4()), "0" * 16, gate_results],
+        )
+
+
+def _run_and_read_inbox(tmp_path: Path, forge_db: Path) -> tuple[str, list[dict[str, object]]]:
+    import json as _json
+
+    inbox = tmp_path / "inbox"
+    prefilter_yaml = _permissive_prefilter(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--no-config",
+            "--seed",
+            "0",
+            "--batch-size",
+            "2",
+            "--max",
+            "200",
+            "--forge-db",
+            str(forge_db),
+            "--inbox",
+            str(inbox),
+            "--prefilter-yaml",
+            str(prefilter_yaml),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    configs = [_json.loads(p.read_text(encoding="utf-8")) for p in inbox.glob("*.json")]
+    assert configs
+    return result.stdout, configs
+
+
+def test_search_n_trials_dormant_without_marker(tmp_path: Path) -> None:
+    stdout, configs = _run_and_read_inbox(tmp_path, tmp_path / "forge.db")
+    assert "search_n_trials: dormant" in stdout
+    assert all(c["search_n_trials"] is None for c in configs)
+
+
+def test_search_n_trials_stamps_when_marker_live(tmp_path: Path) -> None:
+    forge_db = tmp_path / "forge.db"
+    _seed_marker_verdict(forge_db)
+    stdout, configs = _run_and_read_inbox(tmp_path, forge_db)
+    assert "search_n_trials: stamped" in stdout
+    values = [c["search_n_trials"] for c in configs]
+    assert all(isinstance(v, int) and v >= 1 for v in values)

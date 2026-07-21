@@ -173,6 +173,16 @@ operator-gated deploy, pre-registered (`forge prereg`, D208) + alpha-budget-char
 D207) + later-cohort-confirmed (§8.4). Revert = drop the env var. Consumed by
 `forge.cli.main._orthogonal_family_floors` → `rejection_weights.apply_orthogonal_family_floor`.
 
+**`search_n_trials` stamping (D310, automatic, self-gated)**: every submitted config is stamped with its
+per-slot cumulative search multiplicity (slot = hypothesis × dte_bucket × xsect-vs-named, counted from
+`submissions`) — the half of Crucible's DSR `n_trials = max(search, selection)` that Forge owes (their
+07-08 Q1/Q2 answers + their (a) record-not-bind resolution). Stamping SELF-ARMS: it begins only once
+Crucible's `recorded_not_binding` marker is observed in a fresh verdict's `deflated_sharpe` detail (their
+deployment signal); until then configs ship unset (their `n_trials=1` path). Journal line per batch:
+`search_n_trials: stamped N configs (max slot n_trials=M)` or `search_n_trials: dormant (…)`. The field is
+hash-excluded (contracts 1.19.0) — idempotency and batch identity untouched. No flag; module
+`forge/submission/search_multiplicity.py`.
+
 **Env kill-switch — `FORGE_F3_RANKER`** (D149): default `on` — the F3 `P(component)` ranker prior (latest
 trained model under `<forge-db-dir>/models`) feeds the §6.2 slot. Set `off`/`0`/`false`/`no` to skip the
 model load entirely and revert scoring to the pre-F3 Jaccard-novelty baseline. Emergency revert lever, the
@@ -502,9 +512,12 @@ forge status
 ### forge alpha-budget
 
 Reports how much statistical search the stream has spent and the search-luck Sharpe hurdle it
-implies (Tier-1a honesty ledger, D207). Forge submits to Crucible's Deflated-Sharpe gate with
-`search_n_trials` unset, so the gate charges `n_trials=1` and never deflates for the breadth of
-the search; this command measures that gap from the per-batch counts already in `batch_summaries`
+implies (Tier-1a honesty ledger, D207). Historically Forge submitted with `search_n_trials`
+unset, so the gate charged `n_trials=1` and never deflated for the breadth of the search; since
+D310 the stamp populates the honest per-slot multiplicity once armed (recorded-not-binding on
+forge-source rows per their (a) resolution — per-run decisions still don't deflate; the post-hoc
+family lane adjudicates). This command measures the search-breadth gap from the per-batch counts
+already in `batch_summaries`
 (no new schema). It brackets the honest trial count by `Σ batch_size` (distinct gated configs —
 the floor) and `Σ enumerated_count` (configs the ranker selected among — the breadth ceiling), and
 prints the Bailey-Lopez de Prado `E[max]` benchmark for each end (the Sharpe, in cross-trial
