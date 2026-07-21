@@ -3414,16 +3414,23 @@ hazard).
 down (it removes `prefilter.yaml` keys the old code `_require`s), so the pending
 contracts adoption rode the same deploy window.
 
-**Contracts 1.35.0 — pin-only adopt** (Crucible `f5631d7`, "add `lot_floor` SizerSpec
-mode for small-capital tradeability"). Purely additive. NO-OP for Forge: Forge never
-constructs `SizerSpec` — it reads `config.sizer.mode` as a passthrough string
-(`novelty.py` bucketing) and enumerates whatever `sizer_modes` the registry export
-offers (Crucible-controlled), so a new mode needs no read-face change. No consumed
-model/hash changed → `§13.5` major-guard already passes; enumeration byte-identical.
-Bumped `FORGE_EXPECTED_CONTRACT_VERSION` 1.34.0 → 1.35.0 + `uv.lock` (editable source
-was already 1.35.0). The exact-match `test_expected_contract_version_matches_installed`
-was the forcing function — RED (preflight NO-GO) until adopted, GREEN after. Per the
-D262/D267 pin-hygiene discipline.
+**Contracts 1.35.0 — a FIX, not hygiene** (Crucible `f5631d7`, "add `lot_floor` SizerSpec
+mode for small-capital tradeability"). Additive Literal on `SizerSpec.mode`.
+**CORRECTED post-deploy from the pre-deploy "NO-OP" assumption:** the journal proved
+Forge DOES construct `SizerSpec` during enumeration, the registry export ALREADY offered
+`lot_floor` as a sizer_mode, and the pre-adopt 1.34.0 daemon was **failing whole
+iterations** on it (`ValidationError`/`literal_error` on `mode` → iteration skipped, no
+batch — journal PID 3671 iter 3097). Adopting 1.35.0 makes the mode valid and clears the
+failures — verified post-restart: **0** failed iterations / SizerSpec errors on the new
+daemon vs the old daemon's `lot_floor` aborts. No consumed model/hash changed → `§13.5`
+major-guard already passes; a valid `lot_floor` config enumerates byte-identically (it just
+no longer throws). Bumped `FORGE_EXPECTED_CONTRACT_VERSION` 1.34.0 → 1.35.0 + `uv.lock`
+(editable source was already 1.35.0). The exact-match
+`test_expected_contract_version_matches_installed` was the forcing function — RED (preflight
+NO-GO) until adopted, GREEN after. Timeliness lesson: an editable-sibling minor that adds a
+Literal Forge's enumeration can EMIT (not just read) is a live throughput bug until adopted,
+not deferrable hygiene — the exact-match test + the iteration-failure journal are the two
+signals.
 
 **Deploy ritual (deploy.md / D104).** `deploy_preflight.sh` → NO-GO (the expected
 contracts-red) → `stop` (clean SIGTERM exit 143) → merged `simplify/d326-autotunecfg-slim`

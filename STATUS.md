@@ -2,7 +2,7 @@
 
 ## 2026-07-21 — DEPLOY (restart, D327): adopted `crucible_contracts` 1.35.0 (pin-only) + landed the D326 config-slim in one window. Operator: "bring in the latest pin and merge to master"
 
-- **Contracts 1.35.0 — pin-only** (Crucible `f5631d7`, `lot_floor` SizerSpec mode). Additive; NO-OP for Forge (never constructs `SizerSpec`; reads `config.sizer.mode` as a passthrough string; enumerates registry-offered `sizer_modes`). Bumped `FORGE_EXPECTED_CONTRACT_VERSION` 1.34.0 → 1.35.0 + `uv.lock`. The exact-match forcing test is now GREEN (was the preflight NO-GO).
+- **Contracts 1.35.0 — a FIX, not hygiene** (Crucible `f5631d7`, `lot_floor` `SizerSpec.mode` Literal). CORRECTED post-deploy: the journal showed Forge DOES construct SizerSpec and the registry ALREADY offered `lot_floor`, so the old 1.34.0 daemon was **failing whole iterations** on it (`literal_error` → no batch). 1.35.0 clears it — verified **0** failed iterations on the new daemon vs the old daemon's aborts. Bumped `FORGE_EXPECTED_CONTRACT_VERSION` 1.34.0 → 1.35.0 + `uv.lock`; exact-match test now GREEN (was the preflight NO-GO).
 - **D326 co-landed** — the AutoTuneCalibration slim needed the daemon down, so the pending pin rode the same window.
 - **Ritual:** preflight NO-GO (expected contracts-red) → stop (exit 143) → merge D326 (STATUS conflict resolved) → pin bump → **full uncontended suite GREEN** → commit → reset-failed + start → verified journal (1.35.0 line, grammar_version, registry_loaded_from_export, no traceback). No unit change → no daemon-reload. Branch `simplify/d326-autotunecfg-slim` retired.
 - **Coordination (D245):** additive minor + tolerant readers → no asymmetric-wedge risk; Crucible already published 1.35.0.
