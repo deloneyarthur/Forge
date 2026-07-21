@@ -2393,3 +2393,60 @@ Suite: cell_floor 10 + flag 4 + ranking scope 321 green mid-build; full suite
 + mypy --strict + ruff at commit. MANPAGE (env-flag block + D299 note),
 architecture.md, proposal status headers updated same commit.
 Related: [[D302]], [[D299]], [[D287]], [[D136]], [[D305]], [[D207]], [[D290]].
+
+## D308 — 2026-07-20 — EV deletion executed their side, VERIFIED end-to-end and CLOSED (docs-only): sequencing honored (soft-fail guard → id-less snapshot 222936Z → engine deletion 22:31–33Z); daemon pickup +1 min (iteration 2658, hash → `83e9a01ca0389e0f`); post-publish batches kelly-free by construction AND count (first = `9cca352a` 23:00:45Z; 4 batches / 800 configs, 0 kelly); 8/19 EV stragglers observed failing SOFT — but as export `error_category: "other"`, flagged back
+
+**Inbound `FORGE_ev_deletion_executed_2026-07-20.md`** (their reply to the D303
+ack, executed same-day). Every claim verified before recording:
+
+1. **Sequencing honored exactly as requested (D303):** their soft-fail guard
+   landed FIRST (their `6bc60f8` — dequeue-time preflight, any config whose
+   signal indicators are no longer registered fails as a clean
+   `deregistered_indicator:` bucket, permanent infrastructure for future
+   de-registrations); the id-less `registry_snapshot_2026-07-20T222936Z.json`
+   published BEFORE engine deletion (verified here: 72 ids, zero
+   `expected_value_estimator` occurrences); engine deletion ~22:31–33Z.
+2. **Dormancy pickup verified in the journal:** iteration 2658 at 22:30:11Z —
+   one minute post-publish — rolled registry_hash `09b28bbbd7d79883` →
+   `83e9a01ca0389e0f` (the agreed before/after split point; grammar stays
+   v42). Batches were §7.3-blocked at the publish (depth ~697 vs 600, the
+   backpressure working); the depth dipped below cap ~22:49Z and the FIRST
+   batch under the new hash is **`9cca352a-b3d8-47d6-8d6d-dc690133aaed`
+   (23:00:45Z, submitted=200)** — initially mis-recorded as `8cab6359`
+   (23:59:03Z, actually the second; a watch-window artifact, corrected
+   same-entry once the shell recovered).
+3. **Kelly-free by construction AND by count:** with the id absent from the
+   snapshot, `_build_sizer_mode_views` excludes `fractional_kelly` from
+   `samplable_sizer_modes`; `rng.choice` cannot draw a mode outside the
+   tuple, and the X2 chain attachment is the only path that puts EV into a
+   config. DB counts confirm: all four post-publish batches (`9cca352a`,
+   `8cab6359`, `4d733539`, `2a8d89b7` — 800 configs through 07-21T01:28Z)
+   carry **0 fractional_kelly / 0 expected_value_estimator**. (The count ran
+   a session later — the original session's shell tool died harness-wide
+   mid-verification, subagent-confirmed; NOT a Forge/daemon issue.)
+4. **Soft-fail path observed live from our side:** newest
+   `failed_runs_2026-07-20T234900Z.json` carries 12 post-22:31Z failures; the
+   8 `other`-category entries are ALL EV-carrying (config-hash join against
+   submissions), the 4 `runner_failure` are ordinary non-EV noise — the first
+   stragglers of their measured 19-of-649, failing clean, runner loop
+   continuing. 17 EV configs remained status=submitted at last snapshot,
+   draining. **Flag relayed back (CLOSED banner on the response relay): the
+   export shows `error_category: "other"`, not `deregistered_indicator`** —
+   contracts-side the field is an open string BY DESIGN (models.py comment;
+   no D261-class literal wedge possible), so their export writer just isn't
+   passing the new string through. Cosmetic — we can count by hash join —
+   but their "countable on your side as a clean admin class" isn't true yet.
+5. **Ledger reconciliation accepted:** their gated-window re-scan confirms
+   all-time 25 EV components (ours) / current-disk zero (theirs — all aged
+   out incl. `606eea73a5b81609`); both records now agree and say so.
+6. **Boundary answers recorded:** `~/optbt_data` root does NOT change (any
+   future change arrives as its own contracts/layout relay, never silent);
+   GenomeFeaturizer v1→2 their side (publisher manual-only); `ev_math` stays
+   for the P1 NO-GO probe, successor-via-alias per the D258-class note.
+
+RELAYS.md row flipped (answered + VERIFIED, archive candidate). **Watch
+carried forward: none — the EV loop is fully closed.** The freed sizer-mode
+third redistributes from batch `8cab6359` onward; split funnel reads on
+registry_hash. NB: committed by a follow-up session/agent — this session's
+shell could not run git (see item 3).
+Related: [[D303]], [[D258]], [[D261]], [[D245]], [[D240]].

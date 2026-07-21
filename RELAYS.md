@@ -13,7 +13,7 @@ ops-debt item 5b).
 |---|---|---|---|---|
 | `PROMPT_CRUCIBLE_ALPHA_BUDGET_DSR.md` | → | answered (was answered 2026-07-08 all along — their `dffbb83`; the D295 "held" label was OUR mislabel, corrected D304) | archive candidate; Forge owes the Q2 follow-up (`search_n_trials` population, per-slot semantics) | D304 |
 | `PROMPT_CRUCIBLE_COMBINED_RELAY_RESPONSE.md` | → | held | carry; archive after the v39→v40 MR read (~07-22/23) | D291/D295 |
-| `PROMPT_CRUCIBLE_EV_DEREGISTRATION_RESPONSE.md` | → | held (NEW 07-20) | carry (the ACK takes effect on carry); archive after their deletion publishes + kelly dormancy verified in a batch | D303 |
+| `PROMPT_CRUCIBLE_EV_DEREGISTRATION_RESPONSE.md` | → | answered + VERIFIED (their `FORGE_ev_deletion_executed_2026-07-20.md`: deletion 22:31–33Z, sequencing honored; dormancy verified by construction + count — 4 post-publish batches / 800 configs, 0 kelly, first `9cca352a` under id-less hash `83e9a01c`; carries the CLOSED banner w/ the export `other`-bucket note) | archive candidate next sweep | D303/D308 |
 | `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` | → | carried (07-20, operator) | their answer (additive field / decline); telemetry build follows only on a yes | D302 |
 | `PROMPT_CRUCIBLE_FUNDAMENTAL_VALUE_PRECHECK.md` | → | held (since 06-28) | operator relay decision | crucible-handoff |
 | `PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md` | → | held (NEW 07-20) | carry — BLOCKS the search_n_trials build (their Q2 "populate + no flip" contradicts their binding `_verdict_from_gates` predicate; their (a)/(b)/(c) choice needed) | D306 |
