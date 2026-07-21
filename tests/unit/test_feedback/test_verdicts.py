@@ -114,7 +114,7 @@ def test_verdicts_table_created_by_ensure_schema() -> None:
         "grammar_version",
         "gate_results",
         "recorded_at",
-        # D315 (2c) — label provenance
+        # D316 (2c) — label provenance
         "source_export",
         "contracts_version",
     }
@@ -325,7 +325,7 @@ def test_reconcile_flushed_sentinel_rows_get_no_verdict(tmp_path: Path) -> None:
 
 
 def test_provenance_columns_stamped(tmp_path: Path) -> None:
-    """D315 (2c): verdicts rows carry label provenance — the source export
+    """D316 (2c): verdicts rows carry label provenance — the source export
     filename + the installed contracts version — so a future era cut (the ve
     ghost class) is a filter flip, not archaeology. Optional param: None
     leaves source_export NULL (the DB-fallback path)."""

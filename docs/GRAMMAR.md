@@ -43,6 +43,15 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 > Rule yaml untouched; the exemption lives at both predicate surfaces
 > (`_R1_GATE_EXEMPT_DIRECTIONALS`), keyed on the directional's exact indicator tuple.
 
+> **`>=1` permits an OPTIONAL SECOND gate (no rule change).** The `min: 1`
+> cardinality has always allowed >1 regime gate; the sampler exercises this via
+> one mutually-exclusive optional-second-gate slot (max 2 total): the calm-side
+> VETOES (dsj v25, ivol/market_rv v26/v29, ref_trailing_return v39 — dormant
+> until Crucible serves the id) and, since **v44 (D316)**, the `vix_term_slope`
+> CONDITIONER on the xsect trend arm (ANDed onto an adx/hurst trend-strength
+> primary — the confirmed resid_vix price-axis pair; active immediately, vix is
+> already served). C1 keeps the second gate a different family from the primary.
+
 **What.** At least one signal has `role: regime_filter`.
 
 **Why.** A strategy without a regime gate fires in every market state, including states where its hypothesis is structurally wrong. Mean-reversion fires when momentum is at its strongest; trend-continuation fires when the market is range-bound; volatility-event fires when no event is near. Each fire in the wrong regime is dead-weight risk. Requiring an explicit regime gate forces the strategy to declare when it should *not* fire.

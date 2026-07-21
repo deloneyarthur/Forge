@@ -729,7 +729,7 @@ _MAX_EXPLORATION_HOLDOUT_FRAC = 0.10
 
 
 def _resolve_young_explore_slots() -> int:
-    """Parse ``FORGE_YOUNG_CELL_EXPLORE_SLOTS`` (D315 / Theme 2d): extra seeded-random
+    """Parse ``FORGE_YOUNG_CELL_EXPLORE_SLOTS`` (D316 / Theme 2d): extra seeded-random
     submission slots per batch reserved for YOUNG-cell members, tagged
     ``young_explore`` (a third lane — never pollutes the uniform holdout estimand).
     Requires the D307/D312 young-cell floor to be ON (needs `mature_cells`); inert
@@ -2351,7 +2351,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # byte-identical, `_holdout_hashes` empty → every submission tagged 'ranked'.
     _holdout_frac = _resolve_exploration_holdout_frac()
     _holdout_n = round(_holdout_frac * batch_size) if _holdout_frac > 0.0 else 0
-    # D315 (2d) — the young-cell explore quota rides the same engine; inert
+    # D316 (2d) — the young-cell explore quota rides the same engine; inert
     # without the D307 floor's maturity data (mature_cells is None).
     _young_n = _resolve_young_explore_slots() if mature_cells is not None else 0
     if _holdout_n > 0 or _young_n > 0:

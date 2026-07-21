@@ -1,4 +1,4 @@
-"""Tests for the young-cell explore quota (D315, Theme 2d).
+"""Tests for the young-cell explore quota (D316, Theme 2d).
 
 The floor (D307/D312) guarantees young cells get SUBMITTED; this quota makes
 them accrue UNBIASED labels faster — extra seeded-random draws from young-cell

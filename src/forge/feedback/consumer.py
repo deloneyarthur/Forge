@@ -521,7 +521,7 @@ def reconcile_all_pending(
     # submitted (not just pending batches), so re-gates of completed batches
     # are captured and verdicts survive the rolling window. Idempotent on
     # `crucible_run_id`, so sweeping the same window every poll is a no-op.
-    # D315 (2c) — stamp label provenance: the newest gated export's filename
+    # D316 (2c) — stamp label provenance: the newest gated export's filename
     # (best-effort mirror of the reader's newest-file selection; a race with
     # a concurrent publish mis-stamps at most one poll's rows — documented,
     # acceptable for provenance) + the installed contracts version.

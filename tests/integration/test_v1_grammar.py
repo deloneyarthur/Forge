@@ -166,7 +166,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # 21 `rules:` textually unchanged).
     # D309 bumped v42 -> v43 (30-name yield-audit exclusion rider; enumeration-policy
     # tightening only, the 21 `rules:` textually unchanged).
-    assert grammar.grammar_version == "v43"  # type: ignore[attr-defined]
+    # D316 bumped v43 -> v44 (Q46 vix_term_slope second-gate conditioner on the xsect
+    # trend arm; emission-policy add, the 21 `rules:` textually unchanged — S3 `>=1`
+    # already permits a second gate).
+    assert grammar.grammar_version == "v44"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

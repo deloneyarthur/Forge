@@ -203,6 +203,40 @@ _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 # market_realized_vol `macro`.
 _REGIME_VETO_SHARE: float = 0.5
 
+# D316 (v44) — Q46 optional SECOND regime gate as a CONDITIONER (not a veto):
+# vix_term_slope ANDed onto a trend-STRENGTH primary gate (adx/hurst) on the
+# xsect trend arm. This is the "price-axis x vix-residual" pair that C1/R2 have
+# always PERMITTED but the sampler never emitted, because vix_term_slope was only
+# ever drawn as an R2 PRIMARY gate (150 residual_momentum x vix configs already
+# emit with vix-as-primary; ZERO pair vix with a trend-strength gate — the
+# double-gate is the genuine expressibility gap). Crucible
+# FORGE_q46_reply_repin_and_go_2026-07-21: GO on the scope; resid_vix =
+# residual_momentum directional x vix_term_slope gate (the confirmed region).
+# Design:
+#  - Shares the SINGLE optional second-gate slot with the veto (drawn FIRST,
+#    mutually exclusive -> at most one optional gate -> "max 2" total, honoring
+#    their scope ceiling for free).
+#  - xsect-first: vix_term_slope is market_wide_by_design (rank-eligible), so on
+#    the xsect arm it is a uniform market-level condition on WHEN the per-name
+#    rank fires -- thins the stream by TIME (VIX regime), not by name.
+#  - Primary restricted to trend-STRENGTH gates (adx/hurst -- the price axis the
+#    confirmed region conditions); this both (a) targets the confirmed pair and
+#    (b) is C1-safe by construction (trend_strength shares no family with
+#    vix_term_slope=macro), so no macro x macro stack (market_state, market_rv)
+#    can arise.
+#  - NOT dormant: vix_term_slope is already registry-served (a live R2 gate), so
+#    this ACTIVATES on the v44 restart -- unlike the v25/v26/v29/v39 vetoes which
+#    shipped dark until Crucible published their ids. The registry-membership
+#    check keeps it dormancy-safe only if vix_term_slope is ever pulled.
+#  - Share is its own knob (10-15% target midpoint), distinct from the 0.5 veto
+#    share; MR excluded at open (falling-knife shape -- their scope).
+# Drawn in the same LAST position as the veto, so activation shifts only the
+# added signal: the divergence onset is the first eligible xsect-trend-adx/hurst
+# config (the golden re-pin scoping proof).
+_VIX_CONDITIONER_ID: str = "vix_term_slope"
+_VIX_CONDITIONER_SHARE: float = 0.125
+_VIX_CONDITIONER_PRIMARY_GATES: frozenset[str] = frozenset({"adx", "hurst"})
+
 # D270 (v31) — the capitulation-bounce family (Crucible
 # FORGE_capitulation_bounce_generation_request_2026-07-12): `momentum` as a
 # mean_reversion directional (§3.5 C2 per-id carve-out, OPEN_PROPOSALS
@@ -928,6 +962,37 @@ def _eligible_regime_vetoes(
     )
 
 
+def _vix_conditioner_eligible(
+    signals: list[SignalSpec],
+    hypothesis: str,
+    directional_id: str,
+    combiner: CombinerSpec,
+    space: SearchSpace,
+) -> bool:
+    """§3.5 S3 optional second gate — the D316 (v44) vix_term_slope conditioner.
+
+    True iff: trend_continuation on the cross_sectional_rank combiner, a
+    non-capitulation directional, the mandatory primary regime gate is a
+    trend-STRENGTH gate (adx/hurst — the price axis the confirmed resid_vix
+    region conditions), and vix_term_slope is registry-served (the trend R2
+    pool carries it iff served → dormancy guard). C1 holds by construction: a
+    trend_strength primary shares no family with vix_term_slope (macro). Pure
+    predicate — consumes no rng, so ineligible configs draw byte-identically.
+    """
+    if hypothesis != "trend_continuation":
+        return False
+    if combiner.type != "cross_sectional_rank":
+        return False
+    if directional_id == _CAPITULATION_DIRECTIONAL_ID:
+        return False
+    if _VIX_CONDITIONER_ID not in space.regime_indicators_by_hypothesis.get(
+        "trend_continuation", ()
+    ):
+        return False
+    primaries = [s for s in signals if s.role == "regime_filter"]
+    return len(primaries) == 1 and primaries[0].indicators[0] in _VIX_CONDITIONER_PRIMARY_GATES
+
+
 def _config_has_veto_family_indicator(
     signals: list[SignalSpec], space: SearchSpace, veto_family: str
 ) -> bool:
@@ -958,7 +1023,7 @@ def _sample_veto_params(veto_id: str, rng: random.Random) -> dict[str, object]:
     return params
 
 
-def sample_config(
+def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional second-gate branches (D258/D316) are inherent, a refactor would be net harm
     space: SearchSpace,
     registry: RegistrySnapshot,
     rng: random.Random,
@@ -1258,9 +1323,32 @@ def sample_config(
     # eligibility filter (no rng consumed), so non-gamma_flip paths draw
     # identically; gamma_flip-gated trend paths skip the share draw when the
     # (single-id) eligible set empties — licensed by the v33 bump.
+    # D316 (v44): the vix_term_slope conditioner shares the SINGLE optional
+    # second-gate slot with the veto (drawn FIRST → mutually exclusive → "max 2"
+    # total gates). Eligible only on the xsect trend arm with an adx/hurst
+    # (trend-strength) primary — the confirmed resid_vix price-axis pair. The
+    # predicate consumes no rng, so ineligible configs stay byte-identical and
+    # the FIRST eligible config is the v44 divergence onset (scoping proof).
+    added_second_gate = False
+    if (
+        _vix_conditioner_eligible(signals, hypothesis, directional_id, combiner, space)
+        and rng.random() < _VIX_CONDITIONER_SHARE
+    ):
+        signals.append(
+            SignalSpec(
+                id="sig_vix_conditioner",
+                type="threshold",
+                role="regime_filter",
+                indicators=(_VIX_CONDITIONER_ID,),
+                params=sample_threshold_params(_VIX_CONDITIONER_ID, "regime_filter", rng),
+            )
+        )
+        added_second_gate = True
+
     eligible_vetoes = _eligible_regime_vetoes(signals, space, hypothesis)
     if (
-        directional_id != _CAPITULATION_DIRECTIONAL_ID
+        not added_second_gate
+        and directional_id != _CAPITULATION_DIRECTIONAL_ID
         and eligible_vetoes
         and rng.random() < _REGIME_VETO_SHARE
     ):

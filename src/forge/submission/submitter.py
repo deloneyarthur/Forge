@@ -308,7 +308,7 @@ def submit_batch(
     for candidate in candidates:
         # P3.3 (B7): tag the exploration-holdout draw so evals can split biased-vs-unbiased
         # labels. Empty `holdout_hashes` (default / flag-OFF) → every row is 'ranked'.
-        # D315 (2d): the young-cell explore quota gets its OWN tag — it is neither
+        # D316 (2d): the young-cell explore quota gets its OWN tag — it is neither
         # merit-ranked nor an unweighted draw, so it must pollute neither lane
         # (the holdout estimand and the campaign-audit denominator both depend
         # on 'holdout' meaning uniform-random). Holdout wins on overlap.

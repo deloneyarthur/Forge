@@ -509,7 +509,7 @@ def check_activation_probe(
     *,
     stale_warn_hours: float = 30.0,
 ) -> HealthResult:
-    """D315 (Theme 2c): surface the daily writer-activation probe.
+    """D316 (Theme 2c): surface the daily writer-activation probe.
 
     The ref_trailing_return class (D290: registered + enumerable, but
     Crucible's writer serves 0 activations → every carrier dies at our
@@ -837,7 +837,7 @@ def cmd_healthcheck(
     results.append(
         check_campaign_carriage(_read_last_json_line(eval_dir / "campaign_audit.jsonl"), now)
     )
-    # D315 (2c): the daily writer-activation probe — an INERT directional with
+    # D316 (2c): the daily writer-activation probe — an INERT directional with
     # live carriage (the ref_trailing_return class) or a dead probe both WARN.
     results.append(
         check_activation_probe(_read_last_json_line(eval_dir / "activation_probe.jsonl"), now)

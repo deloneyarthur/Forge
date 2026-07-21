@@ -2793,12 +2793,12 @@ prereg (v38→v39 pattern). Response `PROMPT_CRUCIBLE_Q46_MULTIGATE_SCOPING.md`
 Related: [[D258]], [[D263]], [[D290]], [[D264]], [[D276]], [[D287]], [[D310]],
 [[D313]].
 
-## D315 — 2026-07-21 — Themes 2c + 2d BUILT (operator "Finish Theme 2d + 2c"): label provenance stamped on every new verdict row + the standing writer-activation probe (2c); the young-cell explore quota as a THIRD submission lane, flag-gated (2d). The label-integrity program's cheap layers are in
+## D316 — 2026-07-21 — Themes 2c + 2d BUILT (operator "Finish Theme 2d + 2c"): label provenance stamped on every new verdict row + the standing writer-activation probe (2c); the young-cell explore quota as a THIRD submission lane, flag-gated (2d). The label-integrity program's cheap layers are in
 
 **2c — label provenance + integrity tripwires:**
 
 1. `verdicts` gains `source_export` + `contracts_version` (idempotent ALTERs;
-   pre-D315 rows NULL). `record_verdicts(..., source_export=)` stamps both;
+   pre-D316 rows NULL). `record_verdicts(..., source_export=)` stamps both;
    the consumer passes the newest gated export's filename (best-effort mirror
    of the reader's newest-file pick — a publish race mis-stamps at most one
    poll, documented). WHY: the ve ghost episode was five weeks of
@@ -2843,8 +2843,10 @@ row), so the floor's boundary stays clean; the flip is
 (one window, can carry the 2c stamping activation with it — both are
 selection/telemetry surfaces with no grammar boundary).
 
-NB the day's FOURTH number race: built as D314, renumbered D315 (the
-concurrent Q46 scoping took D314 mid-build). Suite: verdicts 12, healthcheck
+NB the day's FOURTH and FIFTH number races: built as D314 (taken by the
+concurrent Q46 scoping), renumbered D315 (ALSO taken — the concurrent Q46-GO
+triage committed first), settled as D316; the 7060dc6 commit message says
+D315, this header is authoritative. Suite: verdicts 12, healthcheck
 16, young-explore 6, ranking+submission 419 green mid-build; full gates at
 commit. Related: [[D307]], [[D312]], [[D299]], [[D290]], [[D254]], [[D287]],
 [[D111]].
@@ -2901,3 +2903,60 @@ Response `PROMPT_CRUCIBLE_Q46_GO_CONFIRM.md` (untracked, operator carries).
 NB: committed doc-only during the operator's concurrent code build
 (schemas/verdicts/consumer/submitter dirty — untouched, left for their commit).
 Related: [[D314]], [[D264]], [[D276]], [[D287]], [[D305]], [[D310]], [[D313]].
+
+## D316 — 2026-07-21 — v43 → v44 DEPLOYED: Q46 vix_term_slope second-gate CONDITIONER on the xsect trend arm (operator "Let's do v44"; Crucible GO). Co-adopts contracts 1.34.0. The confirmed resid_vix price-axis DOUBLE-GATE ({adx,hurst} primary × vix SECOND) — 0 in the stream before, because vix was only ever an R2 PRIMARY. Rules text unchanged; built in a worktree, full suite 2062 green
+
+**Trigger:** operator "Let's do v44 and contract adoption also do the prereg" on
+`FORGE_q46_reply_repin_and_go_2026-07-21.md` (Crucible GO on the D314/D315 scope).
+The both-axes ask from the D310 rider, now expressible in one genome.
+
+**The change (emission-policy — the 21 `rules:` text is UNCHANGED, the
+D258/D270/D280 header-note-bump convention):**
+
+- `sampler.py`: `vix_term_slope` joins the optional second-gate slot as a
+  CONDITIONER. `_vix_conditioner_eligible` = trend_continuation ×
+  cross_sectional_rank × non-capitulation × primary gate ∈ {adx, hurst}
+  (trend-strength) × vix served (the trend R2 pool carries it iff served —
+  dormancy guard). Fires at `_VIX_CONDITIONER_SHARE=0.125` (its own knob,
+  distinct from the 0.5 veto share), drawn FIRST and mutually exclusive with the
+  veto in the single slot → at most one optional gate → "max 2" total.
+- **Why this is the genuine gap:** vix_term_slope had only ever been drawn as an
+  R2 PRIMARY (150 residual_momentum × vix configs already emit vix-as-primary;
+  ZERO paired vix with a trend-strength gate). The double-gate ({adx,hurst}
+  primary × vix SECOND) is the confirmed resid_vix price-axis pair, and it was
+  unemitted. C1-safe by construction (trend_strength shares no family with
+  vix_term_slope = macro; market_state/market_rv macro primaries are C1-blocked,
+  so the primary collapses to {adx,hurst}). Verified emission on the live
+  registry: the conditioner fires at 11.8% of eligible, and every double-gate it
+  produced had directional=residual_momentum — the confirmed cell.
+- **NOT dormant** (unlike the v25/v26/v29/v39 vetoes): vix_term_slope is already
+  registry-served, so v44 ACTIVATES on the deploy restart. BUT under the minimal
+  test fixture (which serves no vix trend gate) it's inert → all 210 test_sampler
+  goldens BYTE-IDENTICAL (the hard-rule-#6 cold-path proof; no golden re-pin
+  needed). A dedicated `test_v44_vix_conditioner.py` (9 tests) exercises emission
+  via a `_v33`-pattern augmented registry: double-gate on adx/hurst, never MR /
+  single-name / macro-primary / capitulation, veto mutual-exclusion, ~12.5%
+  share, grammar-validity.
+
+**Contract adoption (co-adopted, forced by the red forcing test):** pin
+1.33.0 → 1.34.0 (`load_refutations_from_export` — the D313 refutations consumer
+path; purely additive, nothing reads it yet). v44 is the co-adoption window as
+v41/v42 rode 1.32.0/1.33.0.
+
+**Build/deploy discipline:** built in `../Forge-build` worktree (grammar-gated,
+never the live tree while the service runs). Full suite 2062 green + mypy --strict
++ ruff clean IN THE WORKTREE. Transferred to the live tree by patch once the
+operator's concurrent D315 (Themes 2c+2d, `7060dc6`) landed and cleared the tree;
+deploy preflight + ritual from the live tree. GRAMMAR.md S3 gains the
+optional-second-gate note; MANPAGE unchanged (no CLI/flag). Deploy relay
+`PROMPT_CRUCIBLE_V44_DEPLOYED.md`: the +2-week null-control read pins at this
+deploy; the honest contrast is the NEW double-gate vs the EXISTING vix-as-primary
+baseline (both carry residual_momentum), NOT "cell vs empty."
+
+**D-number race:** D315 was doubly-assigned — the operator's Themes 2c+2d
+(`7060dc6`) and my Q46-GO confirm (`2f1b6ca`) both took it (concurrent sessions;
+both stand, cross-reference by content). v44 is D316; the sampler/grammar/test
+comments hard-code D316.
+
+Related: [[D315]], [[D314]], [[D264]], [[D276]], [[D287]], [[D258]], [[D310]],
+[[D313]], [[D104]], [[D199]].

@@ -413,7 +413,7 @@ for r in results:
     print(f"daily-ranker-eval: campaign {r.name} ratio={ratio} starved={r.starved}")
 PY
 
-# --- writer-activation probe (D315, Theme 2c) ----------------------------------
+# --- writer-activation probe (D316, Theme 2c) ----------------------------------
 # The ref_trailing_return class made standing: probe every directional against
 # Crucible's LIVE writer daily; an [INERT] id (0 activations everywhere) means
 # enumeration is being drawn-then-killed at our prefilter. One JSONL row/day;

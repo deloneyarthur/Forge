@@ -231,7 +231,7 @@ its arms are individually mature (the arm-floor keying gap that forced the D287 
 window). Activation is an operator-gated deploy (flip the env on `forge.service` + restart);
 journal line when active: `cell_floor: mature_cells=N …`.
 
-**Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D315, Theme 2d): extra seeded-random
+**Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D316, Theme 2d): extra seeded-random
 submission slots per batch reserved for YOUNG-cell members, tagged
 `selection_mode='young_explore'` — a THIRD lane, deliberately distinct from the uniform
 holdout (which is the ranker-vs-random estimand and the campaign-audit denominator, and must
@@ -482,7 +482,7 @@ and **tmp_headroom** (D259: `/tmp` free space as a multiple of the forge.db size
 F3/wf_p25 models silently stale until the `model` check CRITs ~2 days later), and
 **campaign carriage** (D302: the daily campaign-audit JSONL row — WARN when a farming
 campaign is STARVED at selection (the D287 class) or the audit row has gone stale;
-OK-with-note before the first 05:00 fire). Plus **activation probe** (D315: the daily
+OK-with-note before the first 05:00 fire). Plus **activation probe** (D316: the daily
 writer-activation probe row — WARN on INERT directionals, the ref_trailing_return/D254
 drawn-then-killed class, or a stale probe file).
 Authoritative list: the `check_*` calls in
@@ -683,7 +683,7 @@ D284) and the gate-then-tail re-wire streak `~/forge_data/ranker_eval/rewire_str
 on a fresh per-checkpoint window. D302 adds a final non-fatal block: the campaign
 region-carriage audit (`forge.ranking.campaign_audit`) appends one row to
 `~/forge_data/ranker_eval/campaign_audit.jsonl`; the healthcheck's `campaign carriage` check
-WARNs on a starved campaign or a stale file. D315 adds the writer-activation probe:
+WARNs on a starved campaign or a stale file. D316 adds the writer-activation probe:
 `forge check-activations` daily → `~/forge_data/ranker_eval/activation_probe.jsonl` (the
 `activation probe` healthcheck WARNs on INERT ids). Deterministic (no LLM, hard rule #5);
 telemetry-only — never touches grammar/weights/config/ranking. Trap-cleans the snapshot +

@@ -152,7 +152,14 @@ from crucible_contracts import (
 # emergent-pool defect their xsect correction disclosed). PURELY PERMISSIVE for Forge (we emit
 # 2/3 single-name, constant 2 on xsect since v42/D294 — never 0; stamping 0 waits on their §20
 # engine pin + an explicit ask). Pin-only adopt riding the v42 bump per the D262/D267 discipline.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.33.0"
+# 1.34.0 (2026-07-21, Crucible cd19305): `load_refutations_from_export` + EXPORT_LAYOUT
+# `refutations*.json` — the consumer path for Crucible's docs/refutations.yaml (D313 reply's
+# "blessed consumption path" ask, answered same-day). Free-form dicts (vocabulary grows without a
+# literal_error wedge), stale-guarded, empty-on-cold. PURELY ADDITIVE for Forge — nothing reads it
+# yet (refutations wiring is a separate operator-gated proposal). Pin-only adopt riding the v44
+# bump (the exact-match forcing test was red on 1.34.0-installed vs the 1.33.0 pin once the
+# editable source moved; v44 is the co-adoption window, as v41/v42 rode 1.32.0/1.33.0). See D316.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.34.0"
 
 
 def check_contracts_version() -> str:

@@ -260,7 +260,7 @@ def test_starvation_ratio_boundary(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def test_young_explore_rows_count_in_neither_lane(conn: duckdb.DuckDBPyConnection) -> None:
-    """D315 (2d): young_explore rows are neither merit-ranked nor an unweighted
+    """D316 (2d): young_explore rows are neither merit-ranked nor an unweighted
     draw — they must not distort the ranked share OR the holdout denominator."""
     _fill(conn, hypothesis="hhh", mode="ranked", count=10, prefix="hr")
     _fill(conn, hypothesis="hhh", mode="holdout", count=2, prefix="hh")

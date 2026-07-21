@@ -47,7 +47,7 @@ def record_verdicts(
     Idempotent: rows whose `crucible_run_id` already exists are ignored, so the
     sweep is safe on every reconcile pass over an overlapping window.
 
-    ``source_export`` (D315/2c, label provenance): the gated-runs export
+    ``source_export`` (D316/2c, label provenance): the gated-runs export
     filename these runs were read from — stamped per row with the installed
     contracts version, so a future era cut (the ve ghost class) filters on a
     recorded column instead of reconstructing history. Best-effort: None (the

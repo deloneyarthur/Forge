@@ -1,10 +1,10 @@
 # Proposal: learned-target upgrade + label integrity as a standing system (Theme 2)
 
 Status: **2b ACTIVATED (D312, 2026-07-21, `FORGE_YOUNG_CELL_FLOOR=on`,
-mature_cells=174 live); 2c BUILT (D315: verdict provenance columns stamping at
+mature_cells=174 live); 2c BUILT (D316: verdict provenance columns stamping at
 the next restart; activation-probe timer + healthcheck live at next fire; the
 cache-era contracts ask HELD as `PROMPT_CRUCIBLE_CACHE_ERA_STAMP_ASK.md`);
-2d BUILT flag-OFF (D315: `FORGE_YOUNG_CELL_EXPLORE_SLOTS`, recommended flip=4
+2d BUILT flag-OFF (D316: `FORGE_YOUNG_CELL_EXPLORE_SLOTS`, recommended flip=4
 after the floor's first daily read).** Only 2a (ordinal gate-tail targets)
 remains a draft — operator-gated; nothing else ships off this doc.
 Date: 2026-07-20. Source: post-promotion process-improvement review (the 2-leg

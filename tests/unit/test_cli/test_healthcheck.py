@@ -285,7 +285,7 @@ def test_campaign_carriage_levels() -> None:
 
 
 def test_activation_probe_levels() -> None:
-    """D315 (2c): the daily activation-probe JSONL row -> healthcheck. The
+    """D316 (2c): the daily activation-probe JSONL row -> healthcheck. The
     ref_trailing_return incident class (a registered+enumerable id whose
     writer serves 0 activations) becomes a standing WARN instead of a
     per-bump manual probe."""

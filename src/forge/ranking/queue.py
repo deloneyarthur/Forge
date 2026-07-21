@@ -178,7 +178,7 @@ def sample_young_cell_explore(
     mature_cells: AbstractSet[ExperimentCell] | None,
     pinned_cells: AbstractSet[ExperimentCell],
 ) -> list[RankedCandidate]:
-    """D315 (Theme 2d): seeded random draw of up to ``quota`` YOUNG-cell members
+    """D316 (Theme 2d): seeded random draw of up to ``quota`` YOUNG-cell members
     from the rank-non-selected survivors.
 
     The floor (D307) guarantees young cells get submitted; this quota makes them
@@ -269,7 +269,7 @@ def rank_batch_with_exploration(
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
     mature_cells: AbstractSet[ExperimentCell] | None = None,
 ) -> tuple[list[RankedCandidate], list[RankedCandidate], list[RankedCandidate]]:
-    """The exploration engine (P3.3 holdout + D315 young-cell quota).
+    """The exploration engine (P3.3 holdout + D316 young-cell quota).
 
     Returns ``(selected, holdout, young_explore)`` — the three submission lanes
     the submitter tags. Rank slots = ``n - holdout_n - effective_young`` where
@@ -280,7 +280,7 @@ def rank_batch_with_exploration(
     cells only, pinned exempt). Both explore lanes REPLACE rank slots; total
     stays ``<= n``. ``young_explore_n == 0`` or ``mature_cells is None`` (the
     D307 floor flag off) keeps the young lane empty and the holdout path
-    byte-identical to the pre-D315 form."""
+    byte-identical to the pre-D316 form."""
     scored = _score_reports(
         ranker,
         reports,

@@ -94,7 +94,7 @@ def _tally_lanes(
 ) -> tuple[int, int, dict[str, dict[str, int]], dict[str, list[str]]]:
     """One pass over window rows: lane totals + per-campaign member counts.
 
-    D315 (2d): 'young_explore' rows are neither merit-ranked nor an unweighted
+    D316 (2d): 'young_explore' rows are neither merit-ranked nor an unweighted
     draw — counting them in either lane would distort the shares this audit
     exists to compare. They are skipped entirely."""
     ranked_total = 0

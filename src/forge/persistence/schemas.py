@@ -141,11 +141,11 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_verdicts_config_hash ON verdicts(config_hash)",
-    # D315 (Theme 2c) — label provenance. The ve ghost episode (D289/D290) cost
+    # D316 (Theme 2c) — label provenance. The ve ghost episode (D289/D290) cost
     # five weeks of archaeology to identify which stored verdicts were built on
     # stale features; these columns make the next era cut a filter flip.
     # `source_export` = the gated-runs export filename the row was reconciled
-    # from (NULL for the DB-fallback path + pre-D315 rows); `contracts_version`
+    # from (NULL for the DB-fallback path + pre-D316 rows); `contracts_version`
     # = the installed crucible_contracts at recording time. Idempotent ALTERs.
     "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS source_export VARCHAR",
     "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS contracts_version VARCHAR(20)",
