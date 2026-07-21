@@ -2713,3 +2713,82 @@ NB: fourth D-number race of the day (the concurrent session's young-cell
 activation took D312 mid-append); this entry renumbered to D313.
 Related: [[D269]], [[D294]], [[D296]], [[D303]], [[D310]], [[D276]],
 [[D287]], [[D245]], [[D299]], [[D302]], [[D312]].
+
+## D314 — 2026-07-21 — Q46 (optional second regime-gate) SCOPED at Crucible's request (docs-only, no build, operator-gated): the slot ALREADY EXISTS (3 veto ids live since v25/v26/v29/v39) → Q46 = a ONE-ID pool add (vix_term_slope as trend second-gate conditioner), C1/R2/S3 predicates UNCHANGED. Load-bearing correction relayed: their "multi-gate is starving (5.73%)" is a pre-veto-era artifact — our live stream is 34.5% multi-gate with every cited top pair already emitting
+
+**Trigger:** `FORGE_q46_multigate_scoped_ask_2026-07-21.md` — Crucible opens Q46
+(the both-axes ask from our D310 rider), a scoped proposal for an optional
+second regime gate: second-gate vocab = vix-residual family + days_since_jump,
+trend×xsect first, MR excluded, 10-15% share. Three questions: (1) cheap vs
+expensive in our sampler; (2) estimate + earliest version; (3) is their
+vix-residual export surface sufficient. Scoping conversation, nothing to ship.
+
+**Architecture investigation (read C1/R2/S3 + the sampler veto path + the
+family map + rank-exclusion flags before forming a view):**
+
+1. **The second-gate SLOT is fully built and battle-tested.** S3 is
+   `cardinality min: 1` (NOT `== 1`) — the grammar has permitted ≥1 regime gate
+   since v1. Three optional-second-gate ids exercise it: dsj (v25/D258, trend),
+   ivol + market_realized_vol (v26/D263, v29/D266, MR), ref_trailing_return
+   (v39/D290, ve). The mechanism (`_eligible_regime_vetoes` +
+   `_config_has_veto_family_indicator` + drawn-LAST + dormant-until-registry +
+   per-ID C1 guard) is exactly Q46's "max 2 regime gates" ceiling. `rng.choice`
+   over one pool → ≤1 optional second gate → ≤2 total, for free.
+2. **C1/R2/S3 predicates need ZERO change.** R2 is satisfied by the primary;
+   vix_term_slope is already R2-accepted (v27/D264). C1
+   (`no_duplicate_indicator_families`) already does Q46's disjointness:
+   vix_term_slope=family **macro**, adx/hurst=**trend_strength** → disjoint →
+   `{adx,hurst} × vix_term_slope` is C1-legal TODAY; and market_state /
+   market_realized_vol (both macro) × vix_term_slope are C1-auto-blocked, so the
+   primary collapses to {adx,hurst} with no hand-coded first-gate exclusion.
+3. **The true expressibility gap is ONE id:** vix_term_slope is drawn only as an
+   R2 PRIMARY, never as the optional SECOND gate — so the price-axis-primary ×
+   vix_term_slope-conditioner pair appears nowhere. That is their "vix-residual ×
+   price-axis." residual_momentum is the DIRECTIONAL (family trend,
+   directional-only), not a gate; no separate vix-residual id exists
+   (registry vix/resid ids: vix_term_slope, residual_momentum, vix_level,
+   iv_term_slope). **Surface sufficient as-is, zero Crucible work.**
+4. **xsect-eligibility confirmed:** vix_term_slope's rank-exclusion class =
+   `NOT rank_per_name_coherent AND NOT market_wide_by_design` =
+   `NOT False AND NOT True` = False → rank-eligible as a market-wide gate (the
+   uniform market-level condition on when the per-name rank fires — the
+   xsect-first structure they want).
+
+**Load-bearing correction (measured, relayed as their Ask-1-back):** their
+census premise "multi-gate is the best-converting class AND your grammar can't
+emit more of it (5.73%)" is a PRE-veto-era dilution artifact. Live stream
+(16,600 submissions ≥2026-07-19): **34.52% multi-gate**, and every cited top
+pair already emits — dsj|hurst 570, dsj|market_state 165, adx|dsj 161,
+dsj|vix_term_slope 255 (dsj veto stacks on a vix_term_slope PRIMARY),
+ivol|market_rv 3,264. Asked them to re-split the census by grammar_version
+(cut ~07-08) before scoping the pilot as a throughput play — the throughput
+case is likely already won; the pilot's real value is the orthogonality
+(vix-residual pair), which sharpens the readout.
+
+**The one real knob + one design question relayed:** conditioner share
+(their 10-15%) vs our fixed `_REGIME_VETO_SHARE=0.5` — if vix_term_slope joins
+the single pool, rng.choice over-serves it; hitting 10-15% needs a weighted
+share (the one genuinely new piece, small). Design Q back: conditioner and veto
+share the SINGLE optional slot (mutually exclusive → honors "max 2" for free);
+confirmed that's the intent, else vix-AND-dsj co-fire = a 3-gate change, a
+larger conversation.
+
+**Estimate:** small (~D258 dsj-veto diff size: pool add + share knob +
+xsect-scope + golden re-pin + deploy ritual). **Rides v44** (next
+operator-gated bump). **NOT dormant** — vix_term_slope is already served, so
+the bump activates on restart with an immediate golden re-pin and immediate
+emission (unlike the three prior second gates, which shipped dark until
+Crucible published their ids). Grammar rule TEXT unchanged (the
+D258/D270/D280 header-note-bump convention). Counter-scope relayed:
+first-gate-minus-blocked is a no-op for the trend pilot (D313 blocks nothing in
+the trend R2 pool); MR-exclusion + xsect-first + multiplicity all agreed;
+market-wide gate thins by TIME not by name (a point for xsect vs per-name
+sparsity).
+
+**Posture:** NOTHING built. On operator greenlight → v44 worktree build with
+the +2wk null-control funnel read they propose, registered against a pilot
+prereg (v38→v39 pattern). Response `PROMPT_CRUCIBLE_Q46_MULTIGATE_SCOPING.md`
+(untracked, operator carries).
+
+Related: [[D258]], [[D263]], [[D290]], [[D264]], [[D276]], [[D287]], [[D310]],
+[[D313]].
