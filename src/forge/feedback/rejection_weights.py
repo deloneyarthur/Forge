@@ -9,7 +9,7 @@ down-weighted as their sample size grows.
 
 Wiring (separate from this module):
   - cli/main.py computes weights once per iteration via
-    `compute_hypothesis_weights(db, gated_runs)`
+    `compute_hypothesis_component_weights(...)` (the D094 multi-class weighter)
   - sampler.py accepts an optional `hypothesis_weights` map and
     `rng.choices(weights=...)` instead of `rng.choice(...)`
   - Empty/missing weights → uniform sampling (no behavior change)
@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 from forge.enumeration.underlying_class import underlying_class
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Mapping, Sequence
 
     import duckdb
     from crucible_contracts import GatedRun
@@ -50,66 +50,6 @@ DEFAULT_ALPHA: float = 1.0
 DEFAULT_BETA: float = 10.0
 
 
-def _iter_hypothesis_outcomes(
-    db: duckdb.DuckDBPyConnection,
-    gated_runs: Sequence[GatedRun],
-) -> Iterator[tuple[str, GatedRun]]:
-    """Yield ``(hypothesis, gated_run)`` per submission with a matching gated run.
-
-    The shared join behind both the promotion-only and the multi-class reward
-    weighters. Submissions whose ``config_json`` is not a dict, or that lack a
-    string ``hypothesis``, are skipped. config_hash is unique-indexed in
-    ``submissions`` (§13.4), so each hash maps to at most one row.
-    """
-    run_by_hash: dict[str, GatedRun] = {gr.run.config_hash: gr for gr in gated_runs}
-    rows = db.execute("SELECT config_hash, config_json FROM submissions").fetchall()
-    for config_hash, config_json_raw in rows:
-        gr = run_by_hash.get(config_hash)
-        if gr is None:
-            continue
-        cfg = json.loads(config_json_raw) if isinstance(config_json_raw, str) else config_json_raw
-        hyp = cfg.get("hypothesis") if isinstance(cfg, dict) else None
-        if not isinstance(hyp, str):
-            continue
-        # D290: ghost-era ve labels are fiction — never learn from them.
-        if is_ve_ghost_label(hyp, gr.decision.decided_at):
-            continue
-        yield hyp, gr
-
-
-def compute_hypothesis_weights(
-    db: duckdb.DuckDBPyConnection,
-    gated_runs: Sequence[GatedRun],
-    *,
-    alpha: float = DEFAULT_ALPHA,
-    beta: float = DEFAULT_BETA,
-) -> dict[str, float]:
-    """Posterior mean of promotion rate per hypothesis, Beta-smoothed.
-
-    Joins Forge's `submissions` table (which has `config_json` containing
-    the hypothesis) with the supplied `gated_runs` (which carry the
-    promotion decision per `config_hash`). Returns a dict mapping
-    hypothesis name → posterior mean in (0, 1).
-
-    A hypothesis seen in `submissions` but not yet present in
-    `gated_runs` (still being backtested) contributes nothing. Empty
-    `gated_runs` → returns an empty dict; the caller treats that as
-    "fall back to uniform sampling."
-    """
-    if not gated_runs:
-        return {}
-    counts: dict[str, list[int]] = {}  # hypothesis → [total, promoted]
-    for hyp, gr in _iter_hypothesis_outcomes(db, gated_runs):
-        bucket = counts.setdefault(hyp, [0, 0])
-        bucket[0] += 1
-        if gr.decision.decision == "promote":
-            bucket[1] += 1
-    return {
-        hyp: (alpha + promoted) / (alpha + beta + total)
-        for hyp, (total, promoted) in counts.items()
-    }
-
-
 def prior_mean(*, alpha: float = DEFAULT_ALPHA, beta: float = DEFAULT_BETA) -> float:
     """Beta(alpha, beta) prior mean — the weight given to unseen hypotheses."""
     return alpha / (alpha + beta)
@@ -118,9 +58,10 @@ def prior_mean(*, alpha: float = DEFAULT_ALPHA, beta: float = DEFAULT_BETA) -> f
 # ---------------------------------------------------------------------------
 # Multi-class reward weighting (improvement-plan Phase 2; D094).
 #
-# `compute_hypothesis_weights` learns only from promotions. With Forge in a
-# sustained zero-promotion regime (§1.2), every hypothesis collapses to the
-# same trial-count decay and the enumerator loses its gradient. This weighter
+# The promotion-only Beta-posterior weighter (removed D323) learned only from
+# promotions. With Forge in a sustained zero-promotion regime (§1.2), every
+# hypothesis collapses to the same trial-count decay and the enumerator loses
+# its gradient. This weighter
 # generalizes the Beta-posterior mean to a graded per-run reward built from the
 # two signals that DO vary across hypotheses pre-promotion:
 #
@@ -1281,8 +1222,7 @@ def apply_exploration_floor(
     The returned dict ALWAYS contains every name in ``hypotheses``, so
     the sampler's `weights.get(h, prior_mean)` fallback no longer fires
     for canonical hypotheses — every one is explicitly floored before
-    leaving this function. Callers that need the raw posterior should
-    call ``compute_hypothesis_weights`` directly.
+    leaving this function.
     """
     result: dict[str, float] = {}
     for h in hypotheses:
@@ -1364,7 +1304,6 @@ __all__ = [
     "compute_hypothesis_bucket_weights",
     "compute_hypothesis_component_weights",
     "compute_hypothesis_directional_bucket_weights",
-    "compute_hypothesis_weights",
     "compute_orthogonal_yield_discounts",
     "compute_relative_value_regime_weights",
     "compute_underlying_class_weights",

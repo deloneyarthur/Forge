@@ -24,7 +24,6 @@ import pytest
 
 from forge.feedback.rejection_weights import (
     VE_GHOST_LABEL_CUT,
-    compute_hypothesis_weights,
     is_ve_ghost_label,
 )
 from forge.persistence.db import db_connection
@@ -94,38 +93,6 @@ def test_is_ve_ghost_label_boundary() -> None:
     assert not is_ve_ghost_label("volatility_event", _POST_CUT)
     assert not is_ve_ghost_label("volatility_event", VE_GHOST_LABEL_CUT.replace(tzinfo=None))
     assert not is_ve_ghost_label("trend_continuation", _PRE_CUT)
-
-
-def test_hypothesis_weights_exclude_ghost_ve_runs() -> None:
-    """A pre-cut ve run contributes NOTHING; a post-cut ve run counts; a pre-cut
-    trend run is untouched by the ve-scoped cut."""
-    with db_connection() as conn:
-        _seed_submission(conn, hypothesis="volatility_event", config_hash="ve_ghost_hash")
-        _seed_submission(conn, hypothesis="volatility_event", config_hash="ve_clean_hash")
-        _seed_submission(conn, hypothesis="trend_continuation", config_hash="tc_hash")
-        runs = [
-            _gated_run(config_hash="ve_ghost_hash", decision="promote", decided_at=_PRE_CUT),
-            _gated_run(config_hash="ve_clean_hash", decision="reject", decided_at=_POST_CUT),
-            _gated_run(config_hash="tc_hash", decision="promote", decided_at=_PRE_CUT),
-        ]
-        weights = compute_hypothesis_weights(conn, runs)
-
-    # ve: only the clean (rejected) run counts -> posterior BELOW the trend
-    # hypothesis, whose pre-cut promote still counts (non-ve rows untouched).
-    assert "trend_continuation" in weights
-    assert "volatility_event" in weights
-    assert weights["volatility_event"] < weights["trend_continuation"]
-
-    # Control: a post-cut ve promote still counts — the posterior lifts above the
-    # Beta prior mean (alpha=1, beta=10 -> ~0.091; one promote -> 2/12 ~ 0.167).
-    from forge.feedback.rejection_weights import DEFAULT_ALPHA, DEFAULT_BETA
-
-    prior_mean = DEFAULT_ALPHA / (DEFAULT_ALPHA + DEFAULT_BETA)
-    with db_connection() as conn:
-        _seed_submission(conn, hypothesis="volatility_event", config_hash="ve_clean_hash")
-        runs = [_gated_run(config_hash="ve_clean_hash", decision="promote", decided_at=_POST_CUT)]
-        clean = compute_hypothesis_weights(conn, runs)
-    assert clean["volatility_event"] > prior_mean  # post-cut ve promotes still count
 
 
 def test_label_frame_excludes_ghost_ve_rows() -> None:

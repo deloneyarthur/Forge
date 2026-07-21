@@ -3220,3 +3220,51 @@ Both symbols were unreachable from the run loop, so the daemon is byte-unaffecte
 no restart. Related: [[D321]] (the pass this continues), [[D301]] (the prior
 dead-export cut), [[D044]] (the T2.3 auto-apply origin), [[D105]] (the proposer
 re-aim that left the gate unwired).
+
+## D323 — 2026-07-21 — Complexity-reduction pass, Tier-2 (part 1): remove the superseded `compute_hypothesis_weights` promotion-only weighter + its `_iter_hypothesis_outcomes` helper (operator via AskUserQuestion: "Active development" · "Delete whole ~150-LOC stratum"). SCOPE CORRECTED by independent verification. No daemon path touched; no restart
+
+**Context.** The audit put a "~150-LOC dead stratum in `rejection_weights.py`" in
+Tier-2; the operator approved deleting it, with the standing instruction to verify
+each symbol dead first. Verification materially corrected the scope — a good catch:
+
+- **`_REWIRE_DELTA_CRITERION` is LIVE, not dead.** It lives in
+  `cli/ranker_model_cmd.py:74` (not `rejection_weights.py`) and the live ranker-eval
+  timer imports it (`scripts/daily_ranker_eval.sh:269`). The `STATUS.md:606`
+  audit note calling it "dead" was stale. **Excluded — untouched.**
+- **`prior_mean` and `is_ve_ghost_label` are LIVE** (`main.py:645–895` sampler
+  fallback; `dataset.py:131` + `trade_rate_priors.py:227` + `rejection_weights.py:501`
+  ghost cuts). **Kept.**
+
+So the verified-dead set was smaller than "150 LOC": the promotion-only weighter
+`compute_hypothesis_weights` (superseded D094/D101 — the live estimand is
+`compute_hypothesis_component_weights`, `main.py:833/880`) and its **sole caller**
+`_iter_hypothesis_outcomes` (~56 LOC). Neither is reachable from the run loop.
+
+**Removed.** The two functions + the `__all__` entry + 7 tests (6 in
+`test_rejection_weights.py`: the 5 `compute_hypothesis_weights` unit tests + the
+corrupt-json test; 1 in `test_ve_ghost_cut.py`: `test_hypothesis_weights_exclude_ghost_ve_runs`).
+Reworded 3 stale prose refs (module docstring wiring bullet → the live component
+weighter; the D094 contrast comment; the floor docstring's "call … directly"
+sentence) + the D067 test comment.
+
+**Coverage preserved (verified before cutting).** The ve-ghost cut is independently
+covered on every LIVE path — `test_ve_ghost_cut.py` still exercises it via
+`build_dataset` (dataset), `compute_mature_arms` (arm_floor), and `is_ve_ghost_label`
+directly. Corrupt-JSON skipping is covered on the live component path by
+`test_component_rate_weights.py:600` (`test_deterministic_and_orphans_and_corrupt_skipped`).
+No live behavior lost coverage.
+
+**Deferred — `--orthogonal-yield` (H4).** The operator approved "abandon + delete",
+but the audit's "~60 LOC dead flag" estimate was wrong: it's a full feature threaded
+through the **determinism-critical sampler** (`sampler.py:1081/1123/1233`), the
+enumerator (`iterator.py`), a live feedback computation (`compute_orthogonal_yield_discounts`),
+plus a dedicated `test_orthogonal_yield.py`, invariant tests, and MANPAGE docs.
+Full removal is rule-#6-sensitive sampler surgery → belongs in a worktree, not the
+live tree. Held pending the operator's scope decision (full removal vs. CLI-only
+strip leaving the inert `=None` engine param).
+
+**Gates.** ruff check + format clean; mypy --strict clean (108 files); full suite
+**2070 passed / 1 skipped** (2077 − 7 removed tests; the skip pre-exists). Dead path
+→ daemon byte-unaffected, no restart. Related: [[D322]] (Tier-1, same pass), [[D301]]
+(the prior `compute_hypothesis_reward_weights` cut in this same stratum), [[D094]]/[[D101]]
+(the removed weighter's origin), [[D105]] (the component-rate lane that superseded it).

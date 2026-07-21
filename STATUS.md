@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.1 (D323, no deploy/restart): removed the superseded `compute_hypothesis_weights` + `_iter_hypothesis_outcomes`. Operator (AskUserQuestion): "Active development" (keep machinery, cut dead residue only) + "Delete whole ~150-LOC stratum" — SCOPE CORRECTED by verification
+
+- **Verification corrected the "~150-LOC stratum":** `_REWIRE_DELTA_CRITERION` is **LIVE** (in `cli/ranker_model_cmd.py:74`, imported by `scripts/daily_ranker_eval.sh:269` — the `STATUS.md:606` "dead" note was stale) → EXCLUDED. `prior_mean` + `is_ve_ghost_label` LIVE → kept. Verified-dead set = `compute_hypothesis_weights` (superseded D094/D101; live estimand is `compute_hypothesis_component_weights`) + its sole caller `_iter_hypothesis_outcomes` (~56 LOC).
+- **Removed:** the 2 fns + `__all__` entry + 7 tests (6 in test_rejection_weights, 1 in test_ve_ghost_cut). Reworded 3 stale prose refs + 1 test comment. Coverage preserved: ve-ghost cut still covered via dataset/arm_floor/direct; corrupt-JSON via `test_component_rate_weights.py:600`.
+- **Gates:** ruff + format clean; mypy --strict clean (108 files); full suite **2070 passed / 1 skipped**. Dead path → daemon byte-unaffected, no restart.
+- **Open decisions (Tier-2 remainder):** `auto_tune` → LEAVE retire-in-place (operator). `--orthogonal-yield` (H4) → operator said "abandon+delete" BUT audit's ~60-LOC estimate was wrong — it threads the determinism-critical sampler (`sampler.py:1081/1123/1233`) + iterator + `compute_orthogonal_yield_discounts` + dedicated tests + MANPAGE → rule-#6 sampler surgery, **worktree job**, HELD for scope confirmation (full vs CLI-only strip). A4/A5 scaffolding → KEEP. `scratchpad/` (gitignored) → left, awaiting delete-vs-keep.
+
 ## 2026-07-21 — COMPLEXITY-REDUCTION PASS cont. (D322, no deploy/restart): Tier-1 dead-code removal — 2 verified-dead exported symbols. Operator "lets do tier 1. make sure its a safe deletion through validation". NO daemon path, grammar, or contracts touched
 
 - **`should_auto_apply_proposal` REMOVED** (`feedback/proposer.py`) — the D044/T2.3 auto-apply gate, never wired (no caller auto-applies; hard-rule #4 keeps loosenings operator-gated via `forge grammar apply-proposal`). Only refs were 3 tests + `__all__`. Removed fn + `__all__` entry + 3 tests; reworded the dangling docstring ref in the kept `evaluate_counterfactual` (still imported by `proposal_writer`).
