@@ -1,4 +1,4 @@
-"""Tests for ``forge.submission.search_multiplicity`` (D309).
+"""Tests for ``forge.submission.search_multiplicity`` (D310).
 
 Per-slot cumulative ``search_n_trials`` stamping, self-gated on Crucible's
 record-not-bind deployment marker (their (a) resolution to the D306

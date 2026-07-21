@@ -241,7 +241,7 @@ def test_same_seed_is_deterministic(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# D309 — search_n_trials stamping (self-gated on Crucible's marker)
+# D310 — search_n_trials stamping (self-gated on Crucible's marker)
 # ---------------------------------------------------------------------------
 
 

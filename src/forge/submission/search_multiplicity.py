@@ -1,4 +1,4 @@
-"""Per-slot cumulative ``search_n_trials`` stamping, self-gated (D309).
+"""Per-slot cumulative ``search_n_trials`` stamping, self-gated (D310).
 
 Crucible's DSR gate charges multiple-comparison deflation at
 ``n_trials = max(search_n_trials or 1, selection_n_trials or 1)``. Forge

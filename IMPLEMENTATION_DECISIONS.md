@@ -2525,5 +2525,62 @@ path) until the marker is observed, because stamping against their old
 binding `_verdict_from_gates` predicate would flip the component stream to
 reject (the D306 finding); journal line `search_n_trials: dormant … /
 stamped …`. MANPAGE + architecture rows were already written by that
-session. The owning session should verify this absorption and extend this
-entry with its full record. Related: [[D304]], [[D306]], [[D309]].
+session.
+
+**Owning-session extension (the session was NOT dead — its shell tool was;
+build + verification below happened live, absorption verified correct):**
+
+1. **Trigger + their exact semantics** (`FORGE_search_n_trials_resolution_
+   2026-07-20.md`, their §20 `dsr-record-not-binding-forge-minimal`, commit
+   `69f9c25`): operator ruling **(a)**, compute-and-record variant. Our D306
+   finding acknowledged verbatim, all three claims code-confirmed. For
+   forge-source minimal decisions `deflated_sharpe` is computed/recorded at
+   the honest stamped multiplicity with a `recorded_not_binding` marker in
+   the gate detail and excluded from BOTH the all-pass and component verdict
+   predicates — decisions byte-identical. They chose record-not-bind over
+   our exemption-set phrasing deliberately (the exemption set would DEMOTE
+   full-pass runs to component once stamped). (b) stays available as its own
+   pre-announced §20 + feedback-era boundary. Non-forge sources keep DSR
+   binding at n=1; the selection restamp lanes + §8.7 remain where deflation
+   adjudicates. The operator approved this build in the D306 session; their
+   (a) released the hold.
+2. **Why the self-gate exists (pre-build verification):** their "live as of
+   this relay's commit window" was NOT yet observable at build time — the
+   freshest verdicts (07-21T01:31Z) still carried the old
+   `"Single-config DSR (n_trials=1)"` detail, no marker. Stamping on trust
+   would reproduce the exact D306 crater, so the wiring trusts only the
+   marker (their own designated deployment signal), bounded at the 07-20
+   ship date so a stray pre-ship string can never arm it. Self-arms
+   batch-by-batch; safe under any restart ordering (the D290 pattern).
+3. **Design details:** counts from `submissions` NOT `verdicts` (the stamp
+   should lead the decided count — a config's own trial belongs in its
+   multiplicity; also deliberately "slightly ahead", per the interaction
+   relay); position-aware within the batch (the Kth new config of a slot =
+   trial `prior+K`; fresh slot starts at 1, matching their `or 1` floor);
+   `count(*)` = distinct configs via the §13.4 unique index.
+4. **Reader-safety checks:** zero Forge readers of `failure_buckets`
+   (comments only) — their heads-up that stamped non-reject rows will carry
+   `dsr_below_bar` cannot confuse anything (F3/tail/yield label on
+   `decision` alone); recorded DSR margins at slot-scale n are non-binding
+   on forge rows (attribution must mirror the verdict predicate — their own
+   caveat, recorded).
+5. **Tests** (all in the absorbed commit `babb148`): 12 module tests (slot
+   key, count grouping, marker predicate incl. the pre-ship-date guard,
+   position-aware stamping, no-mutation, field preservation), 2 end-to-end
+   `forge run` wiring tests (dormant → inbox `search_n_trials: null`;
+   seeded marker → stamped integers in the inbox files), 2 invariant tests
+   (stamping never moves `config_hash`, incl. at their Q1 magnitude
+   46,132 — the tripwire if a contracts upgrade ever folds the field into
+   the hash).
+6. **Riding confirms in their relay, recorded:** sma_slope GO received;
+   resid-vix floor retirement noted; their BOTH-AXES supply ask stays a
+   standing record (inexpressible under C1/R2 — the Q46 class, not opened).
+7. **Numbering:** the build's in-code D-refs (written pre-race as D309) were
+   renumbered to D310 — main.py in the absorb commit, the module/test
+   docstrings in this one. Third number race of the day.
+
+**Watch:** the journal line flips `dormant` → `stamped` without any Forge
+action once their marker lands in our verdicts; record the first stamped
+batch_id when it does. Until then their gate keeps the n_trials=1 path —
+today's behavior, byte-identical decisions.
+Related: [[D304]], [[D306]], [[D309]], [[D207]], [[D245]], [[D290]].

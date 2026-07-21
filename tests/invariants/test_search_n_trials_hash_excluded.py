@@ -1,7 +1,7 @@
-"""Invariant: stamping ``search_n_trials`` never moves ``config_hash`` (D309).
+"""Invariant: stamping ``search_n_trials`` never moves ``config_hash`` (D310).
 
-`search_n_trials` is hash-excluded by contracts 1.19.0 (D175/D176). The
-D309 stamp relies on that exclusion twice over:
+`search_n_trials` is hash-excluded by contracts 1.19.0 (D175/D176).
+The D310 stamp relies on that exclusion twice over:
 
 - §13.4 idempotency — the stamped config must dedupe against its own
   unstamped hash (the unique index on ``submissions.config_hash``);
