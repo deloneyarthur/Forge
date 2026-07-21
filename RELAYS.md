@@ -21,6 +21,7 @@ read-pin lives in Q46_READ_INVERSION's v45 banner; boundary record preserved in
 |---|---|---|---|---|
 | `PROMPT_CRUCIBLE_COMBINED_RELAY_RESPONSE.md` | → | held | carry; archive after the v39→v40 MR read (~07-22/23) | D291/D295 |
 | `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` | → | carried (07-20, operator) | their answer (additive field / decline); telemetry build follows only on a yes | D302 |
+| `PROMPT_CRUCIBLE_SINGLE_NAME_AXIS_RETIREMENT_ASK.md` | → | held (NEW 07-21) | **operator go** — freeze-program read: do assembled books consume single-name trend/MR components? gates the single-name-axis prune (the 2.8% dead-flow); flag answer → stage a prune or hold | D328 |
 | `PROMPT_CRUCIBLE_V46_DEPLOYED.md` | → | held (NEW 07-21) | carry; asks `funnel --compare v45 v46` + suppressed-mass census key shape; archive after the funnel read | D320 |
 | `PROMPT_CRUCIBLE_CACHE_ERA_STAMP_ASK.md` | → | held (NEW 07-21) | **operator go** — new-initiative contracts ask (cache-era/writer-version stamp on gated exports; the ghost-episode fix Crucible-side half; would make era cuts lane-aware) | D316 |
 | `PROMPT_CRUCIBLE_V43_DEPLOYED.md` | → | answered (their same-hour `FORGE_v43_row45_crosscheck_2026-07-21.md`: 0/30 starved, premise reproduced their ledger, ALIVE flags LRCX/GE/WFC/UNG noted-not-invoked; addenda 1+2 carry deploy evidence + our ghost cross-check) | archive after the scheduled `funnel --compare v42 v43` (reads against prereg `44a4e08aef4f`) | D309/D311 |
