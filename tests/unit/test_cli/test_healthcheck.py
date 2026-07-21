@@ -282,3 +282,35 @@ def test_campaign_carriage_levels() -> None:
 
     # Unparseable/missing ts -> WARN (cannot trust freshness).
     assert check_campaign_carriage({"starved": []}, _NOW).level is Level.WARN
+
+
+def test_activation_probe_levels() -> None:
+    """D315 (2c): the daily activation-probe JSONL row -> healthcheck. The
+    ref_trailing_return incident class (a registered+enumerable id whose
+    writer serves 0 activations) becomes a standing WARN instead of a
+    per-bump manual probe."""
+    from forge.cli.healthcheck_cmd import check_activation_probe
+
+    fresh_ts = (_NOW - timedelta(hours=5)).isoformat()
+    stale_ts = (_NOW - timedelta(hours=40)).isoformat()
+
+    # No rows yet -> OK note (wiring is new; staleness covers a dead timer later).
+    result = check_activation_probe(None, _NOW)
+    assert result.level is Level.OK
+    assert "no activation-probe rows" in result.message
+
+    # Fresh, nothing inert -> OK.
+    ok = {"ts": fresh_ts, "inert": [], "probed": 12}
+    assert check_activation_probe(ok, _NOW).level is Level.OK
+
+    # Fresh with inert ids -> WARN, ids named.
+    bad = {"ts": fresh_ts, "inert": ["sma_slope"], "probed": 12}
+    result = check_activation_probe(bad, _NOW)
+    assert result.level is Level.WARN
+    assert "sma_slope" in result.message
+
+    # Stale -> WARN.
+    assert check_activation_probe({"ts": stale_ts, "inert": []}, _NOW).level is Level.WARN
+
+    # Unparseable ts -> WARN.
+    assert check_activation_probe({"inert": []}, _NOW).level is Level.WARN

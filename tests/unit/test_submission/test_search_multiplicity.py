@@ -78,7 +78,9 @@ def _insert_verdict(conn: object, *, detail: str, decided_at: datetime) -> None:
         },
     }
     conn.execute(  # type: ignore[attr-defined]
-        "INSERT INTO verdicts VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO verdicts (crucible_run_id, config_hash, decision, decided_at, "
+        "trade_count, grammar_version, gate_results, recorded_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
             str(uuid.uuid4()),
             "abcdef0123456789",

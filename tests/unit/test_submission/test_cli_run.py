@@ -263,7 +263,9 @@ def _seed_marker_verdict(forge_db: Path) -> None:
     )
     with db_connection(forge_db) as conn:
         conn.execute(
-            "INSERT INTO verdicts VALUES (?, ?, 'reject', '2026-07-21 01:00:00', 5, 'v42', ?,"
+            "INSERT INTO verdicts (crucible_run_id, config_hash, decision, decided_at, "
+            "trade_count, grammar_version, gate_results, recorded_at) "
+            "VALUES (?, ?, 'reject', '2026-07-21 01:00:00', 5, 'v42', ?,"
             " '2026-07-21 01:00:00')",
             [str(_uuid.uuid4()), "0" * 16, gate_results],
         )

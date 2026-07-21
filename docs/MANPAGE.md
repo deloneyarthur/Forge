@@ -231,6 +231,17 @@ its arms are individually mature (the arm-floor keying gap that forced the D287 
 window). Activation is an operator-gated deploy (flip the env on `forge.service` + restart);
 journal line when active: `cell_floor: mature_cells=N …`.
 
+**Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D315, Theme 2d): extra seeded-random
+submission slots per batch reserved for YOUNG-cell members, tagged
+`selection_mode='young_explore'` — a THIRD lane, deliberately distinct from the uniform
+holdout (which is the ranker-vs-random estimand and the campaign-audit denominator, and must
+stay an unweighted draw). The floor guarantees young cells get submitted; this quota makes
+them accrue UNBIASED labels faster. Requires the young-cell floor ON (needs `mature_cells`);
+inert without it. Unset/0 → **byte-identical**; clamp [0, 8]; recommended 4. Slots REPLACE
+rank slots (total ≤ batch_size), feasibility-checked so a short young pool never under-fills
+the merit lane. Draw via `SeedHierarchy(seed).rng("young_cell_explore")`. Activation is an
+operator-gated deploy (env + daemon-reload + restart). Journal line: `young_explore: K of N …`.
+
 ```
 # One real batch, persisted:
 forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db --batch-size 200
@@ -471,7 +482,9 @@ and **tmp_headroom** (D259: `/tmp` free space as a multiple of the forge.db size
 F3/wf_p25 models silently stale until the `model` check CRITs ~2 days later), and
 **campaign carriage** (D302: the daily campaign-audit JSONL row — WARN when a farming
 campaign is STARVED at selection (the D287 class) or the audit row has gone stale;
-OK-with-note before the first 05:00 fire).
+OK-with-note before the first 05:00 fire). Plus **activation probe** (D315: the daily
+writer-activation probe row — WARN on INERT directionals, the ref_trailing_return/D254
+drawn-then-killed class, or a stale probe file).
 Authoritative list: the `check_*` calls in
 `src/forge/cli/healthcheck_cmd.py`. Reads the journal + filesystem +
 version + the ranker-eval clocks — no DB snapshot.
@@ -670,7 +683,9 @@ D284) and the gate-then-tail re-wire streak `~/forge_data/ranker_eval/rewire_str
 on a fresh per-checkpoint window. D302 adds a final non-fatal block: the campaign
 region-carriage audit (`forge.ranking.campaign_audit`) appends one row to
 `~/forge_data/ranker_eval/campaign_audit.jsonl`; the healthcheck's `campaign carriage` check
-WARNs on a starved campaign or a stale file. Deterministic (no LLM, hard rule #5);
+WARNs on a starved campaign or a stale file. D315 adds the writer-activation probe:
+`forge check-activations` daily → `~/forge_data/ranker_eval/activation_probe.jsonl` (the
+`activation probe` healthcheck WARNs on INERT ids). Deterministic (no LLM, hard rule #5);
 telemetry-only — never touches grammar/weights/config/ranking. Trap-cleans the snapshot +
 staging on every exit. No args.
 

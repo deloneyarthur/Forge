@@ -521,7 +521,20 @@ def reconcile_all_pending(
     # submitted (not just pending batches), so re-gates of completed batches
     # are captured and verdicts survive the rolling window. Idempotent on
     # `crucible_run_id`, so sweeping the same window every poll is a no-op.
-    record_verdicts(forge_db, runs)
+    # D315 (2c) — stamp label provenance: the newest gated export's filename
+    # (best-effort mirror of the reader's newest-file selection; a race with
+    # a concurrent publish mis-stamps at most one poll's rows — documented,
+    # acceptable for provenance) + the installed contracts version.
+    newest_export = max(
+        exports_dir.glob("gated_runs_*.json"),
+        key=lambda p: p.stat().st_mtime,
+        default=None,
+    )
+    record_verdicts(
+        forge_db,
+        runs,
+        source_export=newest_export.name if newest_export is not None else None,
+    )
 
     # 2026-07-05 incident: retire runner-failed / pool-broken runs Crucible reports
     # in `failed_runs` but that never enter `gated_runs`. Without this they sit

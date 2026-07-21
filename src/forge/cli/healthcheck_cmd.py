@@ -503,6 +503,49 @@ def check_campaign_carriage(
     )
 
 
+def check_activation_probe(
+    latest: dict[str, object] | None,
+    now: datetime,
+    *,
+    stale_warn_hours: float = 30.0,
+) -> HealthResult:
+    """D315 (Theme 2c): surface the daily writer-activation probe.
+
+    The ref_trailing_return class (D290: registered + enumerable, but
+    Crucible's writer serves 0 activations → every carrier dies at our
+    prefilter) was caught by a MANUAL probe during a deploy; the daily eval
+    now runs `forge check-activations` and appends one JSONL row. An INERT
+    id there means live enumeration is being drawn-then-killed — WARN with
+    the ids. Stale/unparseable rows WARN (a silently dead probe is the
+    failure this check exists to catch); no rows yet is OK-with-note.
+    """
+    label = "activation probe"
+    if latest is None:
+        return HealthResult(
+            label, Level.OK, "activation probe: no activation-probe rows yet (first 05:00 fire)"
+        )
+    try:
+        ts = datetime.fromisoformat(str(latest.get("ts")))
+    except (TypeError, ValueError):
+        return HealthResult(label, Level.WARN, "activation probe: latest row has no parseable ts")
+    age_hours = (now - ts).total_seconds() / 3600.0
+    if age_hours > stale_warn_hours:
+        return HealthResult(
+            label, Level.WARN, f"activation probe stale: last row {age_hours:.0f}h ago"
+        )
+    inert = latest.get("inert")
+    if isinstance(inert, list) and inert:
+        ids = ", ".join(str(i) for i in inert)
+        return HealthResult(
+            label,
+            Level.WARN,
+            f"INERT directionals (writer serves 0 activations — the D290/D254 "
+            f"class): {ids} — carriers are drawn-then-killed at the prefilter",
+        )
+    probed = latest.get("probed")
+    return HealthResult(label, Level.OK, f"activation probe ok ({probed} ids probed, none inert)")
+
+
 def check_registry_unknown_family(journal: JournalState) -> HealthResult:
     """D261: the registry loader dropped an indicator whose `family` Literal is unknown to
     Forge's installed contracts — a Crucible family added to a live registry snapshot ahead
@@ -793,6 +836,11 @@ def cmd_healthcheck(
     # stopped audit both WARN here.
     results.append(
         check_campaign_carriage(_read_last_json_line(eval_dir / "campaign_audit.jsonl"), now)
+    )
+    # D315 (2c): the daily writer-activation probe — an INERT directional with
+    # live carriage (the ref_trailing_return class) or a dead probe both WARN.
+    results.append(
+        check_activation_probe(_read_last_json_line(eval_dir / "activation_probe.jsonl"), now)
     )
     if journal is not None:
         results.append(check_hypothesis_weights_fallback(journal))

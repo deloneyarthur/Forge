@@ -114,6 +114,9 @@ def test_verdicts_table_created_by_ensure_schema() -> None:
         "grammar_version",
         "gate_results",
         "recorded_at",
+        # D315 (2c) — label provenance
+        "source_export",
+        "contracts_version",
     }
 
 
@@ -319,3 +322,36 @@ def test_reconcile_flushed_sentinel_rows_get_no_verdict(tmp_path: Path) -> None:
             [stale_cfg.config_hash],
         ).fetchone()
         assert str(sentinel[0]) == "00000000-0000-0000-0000-000000000000"
+
+
+def test_provenance_columns_stamped(tmp_path: Path) -> None:
+    """D315 (2c): verdicts rows carry label provenance — the source export
+    filename + the installed contracts version — so a future era cut (the ve
+    ghost class) is a filter flip, not archaeology. Optional param: None
+    leaves source_export NULL (the DB-fallback path)."""
+    from crucible_contracts import CONTRACT_VERSION
+
+    db = tmp_path / "forge.db"
+    with db_connection(db) as conn:
+        _insert_submission(conn, config_hash="p" * 16)
+        n = record_verdicts(
+            conn,
+            [_gated_run(config_hash="p" * 16)],
+            source_export="gated_runs_2026-07-21T020000Z.json",
+        )
+        assert n == 1
+        row = conn.execute("SELECT source_export, contracts_version FROM verdicts").fetchone()
+    assert row is not None
+    assert row[0] == "gated_runs_2026-07-21T020000Z.json"
+    assert row[1] == CONTRACT_VERSION
+
+
+def test_provenance_source_export_nullable(tmp_path: Path) -> None:
+    db = tmp_path / "forge.db"
+    with db_connection(db) as conn:
+        _insert_submission(conn, config_hash="q" * 16)
+        record_verdicts(conn, [_gated_run(config_hash="q" * 16)])
+        row = conn.execute("SELECT source_export, contracts_version FROM verdicts").fetchone()
+    assert row is not None
+    assert row[0] is None
+    assert row[1] is not None  # contracts version always known locally

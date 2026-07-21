@@ -413,4 +413,44 @@ for r in results:
     print(f"daily-ranker-eval: campaign {r.name} ratio={ratio} starved={r.starved}")
 PY
 
+# --- writer-activation probe (D315, Theme 2c) ----------------------------------
+# The ref_trailing_return class made standing: probe every directional against
+# Crucible's LIVE writer daily; an [INERT] id (0 activations everywhere) means
+# enumeration is being drawn-then-killed at our prefilter. One JSONL row/day;
+# the healthcheck's `activation probe` check WARNs on inert ids or a stale
+# file. Non-fatal (writer may be briefly down); exit code recorded either way.
+echo "daily-ranker-eval: activation probe"
+_PROBE_OUT="$OUT_DIR/activation_probe_last_run.txt"
+uv run forge check-activations > "$_PROBE_OUT" 2>&1
+_PROBE_RC=$?
+uv run python - "$_PROBE_OUT" "$OUT_DIR/activation_probe.jsonl" "$_PROBE_RC" <<'PY' || echo "daily-ranker-eval: activation probe record failed -- continuing" >&2
+import json
+import re
+import sys
+from pathlib import Path
+
+from forge.core.clock import utc_now
+
+raw = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+out = Path(sys.argv[2])
+rc = int(sys.argv[3])
+inert = re.findall(r"\[INERT\]\s+(\S+):", raw)
+ok = re.findall(r"\[ OK\s*\]\s+(\S+):", raw)
+uncheckable = re.findall(r"\[UNCHK\]\s+(\S+):", raw)
+row = {
+    "ts": utc_now().isoformat(),
+    "exit_code": rc,
+    "probed": len(ok) + len(inert),
+    "inert": inert,
+    "ok": len(ok),
+    "uncheckable": len(uncheckable),
+}
+with out.open("a") as fh:
+    fh.write(json.dumps(row) + "\n")
+print(
+    f"daily-ranker-eval: activation probe rc={rc} ok={len(ok)} "
+    f"inert={inert or 'none'} unchk={len(uncheckable)}"
+)
+PY
+
 echo "daily-ranker-eval: done"

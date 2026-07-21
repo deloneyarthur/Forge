@@ -88,6 +88,37 @@ def _member_decisions(
     return {str(decision): int(count) for decision, count in rows}
 
 
+def _tally_lanes(
+    rows: Sequence[tuple[str, str, str]],
+    auditable: Sequence[tuple[Campaign, Callable[[Mapping[str, Any]], bool]]],
+) -> tuple[int, int, dict[str, dict[str, int]], dict[str, list[str]]]:
+    """One pass over window rows: lane totals + per-campaign member counts.
+
+    D315 (2d): 'young_explore' rows are neither merit-ranked nor an unweighted
+    draw — counting them in either lane would distort the shares this audit
+    exists to compare. They are skipped entirely."""
+    ranked_total = 0
+    holdout_total = 0
+    member_hashes: dict[str, list[str]] = {c.name: [] for c, _ in auditable}
+    member_counts: dict[str, dict[str, int]] = {
+        c.name: {"ranked": 0, "holdout": 0} for c, _ in auditable
+    }
+    for config_json, mode, config_hash in rows:
+        if mode == "young_explore":
+            continue
+        lane = "holdout" if mode == "holdout" else "ranked"
+        if lane == "holdout":
+            holdout_total += 1
+        else:
+            ranked_total += 1
+        config = json.loads(config_json)
+        for campaign, fn in auditable:
+            if fn(config):
+                member_counts[campaign.name][lane] += 1
+                member_hashes[campaign.name].append(str(config_hash))
+    return ranked_total, holdout_total, member_counts, member_hashes
+
+
 def audit_carriage(
     conn: duckdb.DuckDBPyConnection,
     *,
@@ -126,23 +157,7 @@ def audit_carriage(
         [_watermark(now, days)],
     ).fetchall()
 
-    ranked_total = 0
-    holdout_total = 0
-    member_hashes: dict[str, list[str]] = {c.name: [] for c, _ in auditable}
-    member_counts: dict[str, dict[str, int]] = {
-        c.name: {"ranked": 0, "holdout": 0} for c, _ in auditable
-    }
-    for config_json, mode, config_hash in rows:
-        lane = "holdout" if mode == "holdout" else "ranked"
-        if lane == "holdout":
-            holdout_total += 1
-        else:
-            ranked_total += 1
-        config = json.loads(config_json)
-        for campaign, fn in auditable:
-            if fn(config):
-                member_counts[campaign.name][lane] += 1
-                member_hashes[campaign.name].append(str(config_hash))
+    ranked_total, holdout_total, member_counts, member_hashes = _tally_lanes(rows, auditable)
 
     results: list[CampaignCarriage] = []
     for campaign, _fn in auditable:

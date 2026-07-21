@@ -274,6 +274,7 @@ def submit_batch(
     survived_count: int | None = None,
     enumerated_by_hypothesis: Mapping[str, int] | None = None,
     holdout_hashes: frozenset[str] = frozenset(),
+    young_explore_hashes: frozenset[str] = frozenset(),
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
@@ -307,9 +308,17 @@ def submit_batch(
     for candidate in candidates:
         # P3.3 (B7): tag the exploration-holdout draw so evals can split biased-vs-unbiased
         # labels. Empty `holdout_hashes` (default / flag-OFF) → every row is 'ranked'.
-        selection_mode = (
-            "holdout" if candidate.report.config.config_hash in holdout_hashes else "ranked"
-        )
+        # D315 (2d): the young-cell explore quota gets its OWN tag — it is neither
+        # merit-ranked nor an unweighted draw, so it must pollute neither lane
+        # (the holdout estimand and the campaign-audit denominator both depend
+        # on 'holdout' meaning uniform-random). Holdout wins on overlap.
+        config_hash = candidate.report.config.config_hash
+        if config_hash in holdout_hashes:
+            selection_mode = "holdout"
+        elif config_hash in young_explore_hashes:
+            selection_mode = "young_explore"
+        else:
+            selection_mode = "ranked"
         record = _submit_one(
             db,
             batch=batch,

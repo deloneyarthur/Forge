@@ -17,6 +17,7 @@ from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING
 
 from forge.ranking.diversifier import jaccard_signal_ids, select_top_n
+from forge.ranking.experiment_cells import config_cell
 from forge.ranking.prior_promotion import compute_prior_promotion_proximity
 from forge.ranking.types import RankedCandidate
 
@@ -169,6 +170,41 @@ def sample_exploration_holdout(
     return rng.sample(ordered, min(holdout_n, len(ordered)))
 
 
+def sample_young_cell_explore(
+    pool: Sequence[RankedCandidate],
+    quota: int,
+    rng: random.Random,
+    *,
+    mature_cells: AbstractSet[ExperimentCell] | None,
+    pinned_cells: AbstractSet[ExperimentCell],
+) -> list[RankedCandidate]:
+    """D315 (Theme 2d): seeded random draw of up to ``quota`` YOUNG-cell members
+    from the rank-non-selected survivors.
+
+    The floor (D307) guarantees young cells get submitted; this quota makes them
+    accrue UNBIASED labels faster than the flat 5% holdout provides. It is a
+    SEPARATE lane (tagged ``young_explore`` by the submitter) precisely so the
+    uniform holdout stays a clean estimand — the ranker-vs-random A/B (prereg
+    61837dd2) and the campaign-audit carriage denominator (D299) both depend on
+    the holdout being an unweighted draw. Eligibility mirrors diversifier phase
+    0c: cell present, not mature, not hand-pinned. ``mature_cells is None``
+    (floor flag off) or ``quota <= 0`` → inert, byte-identical. Same
+    determinism contract as the holdout draw (sorted, seeded, rule #6/#8)."""
+    if quota <= 0 or not pool or mature_cells is None:
+        return []
+    young = [
+        c
+        for c in pool
+        if (cell := config_cell(c.report.config)) is not None
+        and cell not in mature_cells
+        and cell not in pinned_cells
+    ]
+    if not young:
+        return []
+    ordered = sorted(young, key=lambda c: c.report.config.config_hash)
+    return rng.sample(ordered, min(quota, len(ordered)))
+
+
 def rank_batch_with_holdout(
     ranker: Ranker,
     reports: Iterable[PreFilterReport],
@@ -193,6 +229,58 @@ def rank_batch_with_holdout(
     ``(selected, holdout)``. Total submitted is still ``<= n`` (holdout REPLACES rank slots, it
     doesn't add). `holdout_n == 0` reduces to a plain `rank_batch` selection with an empty
     holdout, so the caller's flag-OFF path stays byte-identical."""
+    selected, holdout, _young = rank_batch_with_exploration(
+        ranker,
+        reports,
+        promoted_strategies,
+        n,
+        holdout_n=holdout_n,
+        rng=rng,
+        young_explore_n=0,
+        young_rng=None,
+        similarity_fn=similarity_fn,
+        min_per_hypothesis=min_per_hypothesis,
+        floor_exempt_hypotheses=floor_exempt_hypotheses,
+        mature_arms=mature_arms,
+        verdict_scorer=verdict_scorer,
+        gate_tail_ordering=gate_tail_ordering,
+        experiment_cells=experiment_cells,
+        mature_cells=mature_cells,
+    )
+    return selected, holdout
+
+
+def rank_batch_with_exploration(
+    ranker: Ranker,
+    reports: Iterable[PreFilterReport],
+    promoted_strategies: Sequence[StrategyConfig],
+    n: int,
+    *,
+    holdout_n: int,
+    rng: random.Random,
+    young_explore_n: int = 0,
+    young_rng: random.Random | None = None,
+    similarity_fn: Callable[[StrategyConfig, StrategyConfig], float] = jaccard_signal_ids,
+    min_per_hypothesis: int = 0,
+    floor_exempt_hypotheses: AbstractSet[str] = frozenset(),
+    mature_arms: AbstractSet[Arm] | None = None,
+    verdict_scorer: Callable[[StrategyConfig], float] | None = None,
+    gate_tail_ordering: bool = False,
+    experiment_cells: AbstractSet[ExperimentCell] | None = None,
+    mature_cells: AbstractSet[ExperimentCell] | None = None,
+) -> tuple[list[RankedCandidate], list[RankedCandidate], list[RankedCandidate]]:
+    """The exploration engine (P3.3 holdout + D315 young-cell quota).
+
+    Returns ``(selected, holdout, young_explore)`` — the three submission lanes
+    the submitter tags. Rank slots = ``n - holdout_n - effective_young`` where
+    ``effective_young`` counts only what the young draw can actually fill (a
+    short young pool never under-fills the merit lane). Draw order: merit →
+    holdout (uniform, from ALL non-selected survivors — the estimand lane must
+    never be conditioned on cell age) → young quota (from the remainder, young
+    cells only, pinned exempt). Both explore lanes REPLACE rank slots; total
+    stays ``<= n``. ``young_explore_n == 0`` or ``mature_cells is None`` (the
+    D307 floor flag off) keeps the young lane empty and the holdout path
+    byte-identical to the pre-D315 form."""
     scored = _score_reports(
         ranker,
         reports,
@@ -200,9 +288,24 @@ def rank_batch_with_holdout(
         verdict_scorer=verdict_scorer,
         gate_tail_ordering=gate_tail_ordering,
     )
+    # Pre-draw the young quota's FEASIBLE size against the whole scored pool so
+    # merit slots are only surrendered for draws that can actually happen. The
+    # actual draw runs after selection/holdout over the true remainder.
+    pinned = experiment_cells or frozenset()
+    if young_explore_n > 0 and mature_cells is not None:
+        young_capacity = sum(
+            1
+            for c in scored
+            if (cell := config_cell(c.report.config)) is not None
+            and cell not in mature_cells
+            and cell not in pinned
+        )
+        effective_young = min(young_explore_n, young_capacity)
+    else:
+        effective_young = 0
     selected = select_top_n(
         scored,
-        max(0, n - holdout_n),
+        max(0, n - holdout_n - effective_young),
         similarity_fn=similarity_fn,
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
@@ -213,7 +316,26 @@ def rank_batch_with_holdout(
     selected_hashes = {c.report.config.config_hash for c in selected}
     pool = [c for c in scored if c.report.config.config_hash not in selected_hashes]
     holdout = sample_exploration_holdout(pool, holdout_n, rng)
-    return selected, holdout
+    holdout_hashes = {c.report.config.config_hash for c in holdout}
+    remainder = [c for c in pool if c.report.config.config_hash not in holdout_hashes]
+    young = (
+        sample_young_cell_explore(
+            remainder,
+            effective_young,
+            young_rng,
+            mature_cells=mature_cells,
+            pinned_cells=pinned,
+        )
+        if effective_young > 0 and young_rng is not None
+        else []
+    )
+    return selected, holdout, young
 
 
-__all__ = ["rank_batch", "rank_batch_with_holdout", "sample_exploration_holdout"]
+__all__ = [
+    "rank_batch",
+    "rank_batch_with_exploration",
+    "rank_batch_with_holdout",
+    "sample_exploration_holdout",
+    "sample_young_cell_explore",
+]

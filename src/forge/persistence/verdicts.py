@@ -27,6 +27,8 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from crucible_contracts import CONTRACT_VERSION
+
 from forge.core.clock import utc_now
 
 if TYPE_CHECKING:
@@ -37,11 +39,19 @@ if TYPE_CHECKING:
 def record_verdicts(
     db: duckdb.DuckDBPyConnection,
     runs: list[GatedRun],
+    *,
+    source_export: str | None = None,
 ) -> int:
     """Insert one verdicts row per export run Forge submitted; return new-row count.
 
     Idempotent: rows whose `crucible_run_id` already exists are ignored, so the
     sweep is safe on every reconcile pass over an overlapping window.
+
+    ``source_export`` (D315/2c, label provenance): the gated-runs export
+    filename these runs were read from — stamped per row with the installed
+    contracts version, so a future era cut (the ve ghost class) filters on a
+    recorded column instead of reconstructing history. Best-effort: None (the
+    DB-fallback path) leaves the column NULL.
     """
     if not runs:
         return 0
@@ -76,7 +86,8 @@ def record_verdicts(
         ).fetchall()
     }
     recorded_at = utc_now().replace(tzinfo=None)
-    rows: list[tuple[str, str, str, object, int, str | None, str, object]] = []
+    contracts_version = CONTRACT_VERSION
+    rows: list[tuple[str, str, str, object, int, str | None, str, object, str | None, str]] = []
     for gr, decided in candidates:
         if gr.run.run_id in existing_run_ids:
             continue
@@ -94,6 +105,8 @@ def record_verdicts(
                 gr.run.grammar_version,
                 gate_json,
                 recorded_at,
+                source_export,
+                contracts_version,
             )
         )
     if not rows:
@@ -104,8 +117,9 @@ def record_verdicts(
         """
         INSERT OR IGNORE INTO verdicts
         (crucible_run_id, config_hash, decision, decided_at, trade_count,
-         grammar_version, gate_results, recorded_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         grammar_version, gate_results, recorded_at, source_export,
+         contracts_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rows,
     )

@@ -707,3 +707,28 @@ def test_d097_stamp_tracks_batch_and_preserves_config_hash(tmp_path: Path) -> No
     assert row is not None
     assert row[0] == expected_hash
     assert json.loads(row[1])["grammar_version"] == "v4"
+
+
+def test_selection_mode_tags_young_explore(tmp_path: Path) -> None:
+    # D315 (2d): `young_explore_hashes` tags the young-cell quota with its OWN
+    # mode — never 'holdout' (the uniform-holdout estimand must stay clean) and
+    # never 'ranked'. Holdout wins if a hash somehow appears in both (it can't
+    # in production — the draws are disjoint — but the precedence is pinned).
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    a = _candidate("a", "dir_a")
+    b = _candidate("b", "dir_b")
+    c = _candidate("c", "dir_c")
+    with db_connection(forge_db) as conn:
+        submit_batch(
+            conn,
+            batch=_ctx(),
+            candidates=(a, b, c),
+            inbox_root=inbox,
+            holdout_hashes=frozenset({b.report.config.config_hash}),
+            young_explore_hashes=frozenset({c.report.config.config_hash}),
+        )
+        rows = dict(conn.execute("SELECT config_hash, selection_mode FROM submissions").fetchall())
+    assert rows[a.report.config.config_hash] == "ranked"
+    assert rows[b.report.config.config_hash] == "holdout"
+    assert rows[c.report.config.config_hash] == "young_explore"
