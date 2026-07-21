@@ -1,72 +1,77 @@
-# Proposal: v47 — retire `relative_value` from enumeration (first freeze prune)
+# Proposal: v47 — retire the dead single-name axes (single-name trend/MR + relative_value; single-name event_momentum pending)
 
-**Status: STAGED (operator-gated deploy) — built nowhere yet; this doc + the prereg are the
-gate.** The first prune of the freeze program (`docs/proposals/grammar-freeze-criterion.md`).
-Deploys on the operator's word via `docs/tasks/deploy.md`; rides its own window or the next
-grammar bump.
+**Status: STAGED + HELD (Path B) — operator "let's do Path b" 2026-07-21.** The first
+prune of the freeze program (`docs/proposals/grammar-freeze-criterion.md`), now bundling
+the Crucible-greenlit single-name trend/MR retirement. HELD until Crucible answers the
+event_momentum relay (`PROMPT_CRUCIBLE_EVENT_MOMENTUM_SOXL_DEGENERATE.md`) so a fast yes
+folds single-name `event_momentum` into the same deploy; a slow answer ships v47 without
+it (em retires in a small v48). Deploys on the operator's word via `docs/tasks/deploy.md`.
 
-Source: the D1 search-multiplicity census (`scripts/search_multiplicity_census.py`, baseline
-2026-07-21). Relates to: [[promotion-gate-tiers-and-constraint]] (relval refutation D215/D216),
-[[grammar-review-expansion]]; hard rules #1/#4/#6/#10; D098/v5 (the enumeration-policy bump
-precedent). Class: **auto-tightening** (removes a hypothesis; hard rule #4 permits it without
-approval — the deploy/restart is the operator gate).
+Source: the D1 census (`scripts/search_multiplicity_census.py`) + Crucible
+`FORGE_single_name_trend_mr_retirement_read_2026-07-21.md`. Relates to:
+[[promotion-gate-tiers-and-constraint]], D215/D216/D268, hard rules #1/#4/#6/#10, D098/v5.
+Class: **auto-tightening** (hard rule #4 permits without approval; the deploy is the gate).
 
-## The change
+## The change (three prunes, two mechanisms)
 
-Add `relative_value` to `DISABLED_HYPOTHESES` in `src/forge/enumeration/search_space.py:102`
-(today `frozenset({"regime_arbitrage"})` → `frozenset({"regime_arbitrage", "relative_value"})`).
-This stops enumeration while leaving every relval code path intact (the pairs combiner, the
-universe-template underlying=None path) — exactly the `regime_arbitrage`/D098 pattern, so a
-reopener is a one-line revert, not a rebuild. `rules:` text is unchanged; the `grammar_version`
-bump v46 → v47 exists solely for Crucible funnel attribution.
+1. **`relative_value` → `DISABLED_HYPOTHESES`** (`search_space.py:102`; the
+   `regime_arbitrage`/D098 pattern). Fully removed from enumeration — dormant + refuted
+   (D215/D276: xsect rank-IC negative, corr-to-MR 0.88). Code paths stay intact for a
+   one-line reopener.
+2. **Single-name (per-name) `trend_continuation` + `mean_reversion` → xsect-only.** A
+   scoped **sampler** change: force these two rank-coherent hypotheses to enumerate only
+   the cross-sectional form (`combiner.type == cross_sectional_rank`, `underlying=None`);
+   drop the named/single-underlying path. Their xsect form — the converting core — is
+   untouched. (Exact lever designed at build time: the named-vs-universe branch in
+   `_pick_underlying` / the combiner choice; determinism-critical → goldens re-pin.)
+3. **Single-name `event_momentum` → xsect-only (PENDING Crucible ask #2).** Same
+   mechanism as (2). Folded in only on a Crucible yes; otherwise deferred to v48.
 
-## Evidence (census + prior refutation)
+## Evidence
 
-- **Refuted with data, not by construction:** cross-sectional relval rank-IC −0.038 (t −2.2),
-  corr-to-MR 0.88, residual IC −0.044 — no orthogonal directional edge (D215, prereg
-  `9b88966c446a` RESOLVED REFUTED; reaffirmed D276). It is ranker-zeroed today (D145 floor
-  exemption).
-- **Already dormant:** the census shows `relative_value swing_short/swing_mid named` at **0
-  decided in the last 14d** and **not in the dead-mass flow ledger** (below the liveness floor) —
-  it is enumerated but not reaching submission. Retiring it therefore reclaims ~no current
-  throughput; its value is **surface minimality** (removes ~4% of all-time multiplicity from the
-  frozen picture) and **proving the freeze machinery on a zero-risk case**.
+- **relative_value:** refuted (D215/D276) + dormant (census: 0 recent flow).
+- **Single-name trend/MR (Crucible read, decisive):** **0** single-name trend/MR slots
+  across all 4 promoted books AND all 106 assemblies ever built; 363 xsect-trend / 142
+  xsect-MR slots vs 0 single-name; ~361 admitted-but-never-selected components (their
+  count 136 trend / 225 MR ≈ our ~130/~220). Dead-on-consumption. Slot-scoped DSR (D310)
+  → different slot from the xsect converters, so no DSR-hurdle change: a throughput +
+  minimal-surface win, not a promotion unlock.
+- **Single-name event_momentum (contested — see the relay):** Crucible said "keep it"
+  because `pure_sue175` uses a single-name em leg, BUT that leg is the **D268 degenerate**
+  (SOXL, inert `sue`/`days_since_earnings`, naked long-SOXL calls, 0 PEAD; unreproducible
+  post-D268/v32). The real-company single-name em Forge emits is dead (~3 components, 0
+  conversion). Ask #2 settles whether it retires with (2). Retiring generation does NOT
+  touch the frozen promoted leg.
 
-## NOT in this proposal — `event_momentum` (census correction of record)
+## Prereg (register BEFORE the edit — D207, at the deploy-window open)
 
-The freeze plan floated `event_momentum` as a co-prune. The census refutes "clean": it exists
-**only** as single-name (`named`) `sue × days_since_earnings` (~606 submitted/14d, **0 recent
-components**), and **no cross-sectional `event_momentum` slot is generated at all**. That is the
-same "productive form not enumerated" pattern as the single-name trend/MR axis — retiring the
-`named` form could discard a form whose xsect variant was never tried. So `event_momentum` is
-**deferred into the single-name-axis Crucible read**, not retired here. Honest scope: v47 is
-`relative_value` alone.
-
-## Prereg (register BEFORE the edit — D207)
-
-`forge prereg register --claim "v47 relative_value retirement: post-cut relval conversion ≈ 0
-and no conversion displaced to other hypotheses" --predicted "<= 0.001 pooled post-cut relval
-conversion; converting-slot component rate unchanged within noise" --action "confirm the
-retirement lost nothing" --cohort-cut <deploy-window-open>` → commit `config/preregistrations.jsonl`
-so the prediction is recorded before its test. Resolve on post-cut evidence via `forge prereg
-resolve`.
+`forge prereg register --claim "v47 single-name-axis retirement: post-cut single-name
+trend/MR (+relative_value [+event_momentum if folded]) conversion ~0; xsect converting-slot
+component rate unchanged" --predicted "<= 0.001 pooled post-cut single-name conversion;
+xsect rates within noise" --cohort-cut <deploy-window-open>` → commit `preregistrations.jsonl`.
 
 ## Determinism & test surface
 
-- Removing a hypothesis from enumeration **shifts the draw sequence** → the sampler/enumeration
-  **goldens re-pin** (v43 precedent: onset at the first pool-tapping config; regime goldens shift
-  first). Environment-matched re-pin in the build window.
-- **Emission proof:** enumerate N cold seeds against the live registry → **0 `relative_value`
-  configs** post-change; all other hypotheses still reachable.
-- `test_v1_grammar_loads` → v47; `NON_ENUMERABLE_HYPOTHESES` invariant coverage picks up the new
-  member (mirror the `regime_arbitrage` assertions).
+- The sampler change (2)/(3) shifts the draw sequence → **goldens re-pin** (v43 precedent;
+  onset at the first pool-tapping config). Emission proof: 0 single-name trend/MR
+  (+em if folded) draws over N cold seeds; xsect trend/MR + all other hypotheses still
+  reachable; 0 `relative_value` draws.
+- `test_v1_grammar_loads` → v47; `NON_ENUMERABLE_HYPOTHESES` invariant picks up
+  `relative_value`; new sampler invariants pin the xsect-only scoping for trend/MR (+em).
 
 ## Ritual (one operator-gated window — `docs/tasks/deploy.md`)
 
-Build grammar-gated → `../Forge-build` worktree (this tree is production, D104). Register prereg →
-edit `DISABLED_HYPOTHESES` → `grammar.yaml` v47 header note + `grammar_version` bump → archive
-`config/grammar_archive/v47.yaml` → re-pin goldens → full uncontended suite green → emission proof
-→ stop service → commit → restart → verify journal (grammar_version=v47, no traceback) →
-`funnel --compare v46 v47`. STATUS block + D-entry. Reversible: drop `relative_value` from the
-frozenset (a future relval reopener — e.g. a sector/GICS ingest that decorrelates it — would
-re-admit it with its own bump).
+Build grammar-gated → `../Forge-build` worktree (this tree is production, D104). Register
+prereg → edit (`DISABLED_HYPOTHESES` + the sampler xsect-only scoping) → `grammar.yaml` v47
+header + bump → archive `v47.yaml` → re-pin goldens → full uncontended suite → emission
+proof → stop service → commit → restart → verify journal (grammar_version=v47) →
+`funnel --compare v46 v47`. STATUS block + D-entry. Reversible: revert the frozenset +
+sampler scoping (a future reopener — e.g. a sector/GICS ingest decorrelating relval, or a
+Crucible request — re-admits with its own bump).
+
+## NOT in v47
+
+- **Census accuracy fixes** (promoted-book-component protection via the `promoted_portfolios`
+  export + the D268 no-earnings-underlying exclusion + degenerate-leg flagging) — tooling,
+  not grammar; a census follow-up regardless.
+- **xsect-PEAD add** — a net grammar *expansion* (Crucible ask #3), separate design + gate.
