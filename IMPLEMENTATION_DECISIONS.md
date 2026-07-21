@@ -3057,3 +3057,75 @@ v44). Crucible pins the +2-week in-book read to THIS deploy, not v44's 03:43Z.
 Deploy relay updated with the v45 timestamp + emission proof.
 
 Related: [[D318]], [[D317]], [[D315]], [[D276]], [[D287]], [[D264]], [[D213]], [[D104]].
+
+## D320 — 2026-07-21 — GRAMMAR v45 → v46: refutation-registry wiring into generation (operator "Let's do refutation registry into generation" → "let's do v46"). Forge now CONSUMES Crucible's published refutation registry and routes generation mass off proven-dead cells. Emission-policy; cold-start byte-identical; contracts stays 1.34.0
+
+**What this closes:** the cross-system search-dedup loop. Crucible's gate
+proves regions dead (the 28-entry registry); until now Forge kept enumerating
+them because it never consumed the refutations — and those wasted draws inflate
+the search-multiplicity tax (the D310 `search_n_trials` stamp → a higher DSR
+hurdle; prereg `098ea730` just showed the v1 best is indistinguishable from
+luck at n=13,397). This is the only HONEST lever on that hurdle: stop spending
+trials on cells Crucible has proven dead.
+
+**Architecture (`forge/enumeration/refutations.py`, new):**
+- **Split of authority (hard rule #2):** the EXPORT
+  (`load_refutations_from_export`, contracts 1.34.0) is the live authority on
+  whether an entry is active + its `generation_effect` verb; the hand-authored
+  `BINDINGS` table is the authority on which Forge DRAW each entry maps to (our
+  D313 mapping, D-entry-gated like the sampler pins). Fail-OPEN: missing /
+  stale / corrupt registry, or an unknown effect verb (the 1.28.0 literal_error
+  scar), → NO effect (byte-identical). Self-heals: a withdrawn / downgraded-to-
+  `none` entry stops applying at the next read.
+- **`resolve_effects()` → `RefutationEffects`**, threaded into `sample_config` /
+  `enumerate_candidates` as an optional input (None = byte-identical, the
+  yield-map pattern). Kill-switch `FORGE_REFUTATION_GUARD=off`. The daemon reads
+  the export and passes it; goldens (no param) stay byte-identical.
+- **`refutation_fingerprint()`** (over the ACTIVE effects, not the raw file —
+  prose-only amendments don't perturb it) folds into `enumeration_inputs_hash`
+  so each batch's identity tracks what shaped its draw (#6). Empty when no
+  effect active → recorded identity byte-identical to cold.
+
+**The three effects (only the Class-B entries with live mass are bound; the
+other 25 are already-structural, mass 0):**
+1. `hurst-mr-conditioner` (deprioritize) → `_pick_regime` down-weights the hurst
+   gate x0.25 for MR. **SCOPE GUARD (load-bearing): MR-ONLY** — trend x hurst is
+   above baseline and a top yield cell. Byte-identity preserved when inactive
+   (weighted branches multiply by all-ones; the uniform branch keeps
+   `rng.choice`, diverging to `rng.choices` only when a deprioritize applies).
+2. `deep-itm-directional` (blocklist) → `_build_selector` clips the P3 delta
+   upper edge below 0.50 (the refuted deep-ITM sliver; the 0.23-0.35
+   default/interior is untouched → byte-identical there).
+3. `broad-index-vol-event` (deprioritize) → `_pick_underlying` down-weights the
+   DIVERSIFIED/ETF underlying class x0.25 for ve. **INDEX HALF ONLY** — the
+   single-name half is deferred (it feeds Crucible's ve-solo-density unlock,
+   which needs the single-name ve supply `ve-exit-repair` farms). Gated on the
+   pool actually containing an ETF so earnings-gated single-name ve stays
+   byte-identical.
+
+**Emission proof (live registry, 4k cold, seed 0, effects OFF vs ON):**
+deep-ITM sliver **736 → 0**; MR x hurst share **13.8% → 3.7%** (~1/4);
+**trend x hurst 202 → 199 = UNTOUCHED** (the scope guard, the load-bearing
+correctness datum); ve-diversified share **11.9% → 6.7%** (index half down,
+single-name ve preserved). All three fire; the guard holds.
+
+**Goldens: byte-identical** (no re-pin) — the effects are a threaded optional
+input; the cold-start (no-param) golden path is unchanged (482 enumeration
+tests green pre-bump). v46 bump is for cohort attribution (`funnel --compare
+v45 v46`) + the suppressed-mass census boundary (the v32/v5 precedent: a
+version bump whose activation is the daemon passing the new input). The
+`test_v1_grammar_loads` version assert → v46.
+
+**Tests:** `test_refutations.py` (consumer: binding table, resolve, self-heal,
+fingerprint) + `test_sampler_refutations.py` (active behavior + byte-identity of
+the inactive path). Full suite green pre-commit (see STATUS). mypy --strict +
+ruff clean.
+
+**Standing value beyond the 3 cells:** the registry's `unlock` fields are now a
+live, machine-readable ledger of what structure reopens each dead region — the
+Path C exhaustion evidence, maintained Crucible-side. When any entry is wired,
+per-entry suppressed share flows to the funnel/census keyed by entry id
+(Crucible's P5 KPIs read against it). Related: [[D313]] (the mapping), [[D310]]
+(the search-multiplicity tax this relieves), [[D290]] (ve-solo-density
+interaction), [[D317]]/[[D319]] (v44/v45, the base), [[D268]] (the
+earnings-manifest fingerprint precedent).

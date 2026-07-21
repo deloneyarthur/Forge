@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
+    from forge.enumeration.refutations import RefutationEffects
     from forge.grammar.models import Grammar
 
 
@@ -100,6 +101,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
     rank_combiner_share: Mapping[str, float] | None = None,
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    refutation_effects: RefutationEffects | None = None,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
@@ -232,6 +234,7 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
                 rank_combiner_share=rank_combiner_share,
                 cohort_yield_weights=cohort_yield_weights,
                 regime_gate_yield_weights=regime_gate_yield_weights,
+                refutation_effects=refutation_effects,
                 forced_hypothesis=forced_hypothesis,
             )
         except SamplerError as exc:

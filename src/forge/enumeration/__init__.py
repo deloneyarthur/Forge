@@ -21,6 +21,11 @@ from __future__ import annotations
 
 from forge.enumeration.indicator_thresholds import auto_tightenings_fingerprint
 from forge.enumeration.iterator import EnumerationCapped, enumerate_candidates
+from forge.enumeration.refutations import (
+    RefutationEffects,
+    refutation_fingerprint,
+    resolve_effects,
+)
 from forge.enumeration.registry_fingerprint import registry_hash
 from forge.enumeration.sampler import (
     SamplerError,
@@ -44,11 +49,19 @@ def enumeration_inputs_hash() -> str:
     coverage_fp = earnings_coverage_fingerprint()
     if coverage_fp:
         parts.append(coverage_fp)
+    # D320 — the active refutation effects shadow the draw (deprioritize / clip),
+    # so a batch's emitted sequence depends on them; fold the fingerprint in so
+    # the recorded identity is reproducible (hard rule #6). Empty (guard off /
+    # cold registry / no active effect) → appends nothing → byte-identical.
+    refutation_fp = refutation_fingerprint()
+    if refutation_fp:
+        parts.append(refutation_fp)
     return "|".join(parts)
 
 
 __all__ = [
     "EnumerationCapped",
+    "RefutationEffects",
     "SamplerError",
     "SearchSpace",
     "auto_tightenings_fingerprint",
@@ -56,7 +69,9 @@ __all__ = [
     "earnings_coverage_fingerprint",
     "enumerate_candidates",
     "enumeration_inputs_hash",
+    "refutation_fingerprint",
     "registry_hash",
+    "resolve_effects",
     "sample_config",
     "universe_fingerprint",
 ]

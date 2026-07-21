@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
+    from forge.enumeration import RefutationEffects
     from forge.feedback.trade_rate_priors import BucketKey, BucketStats
     from forge.feedback.types import BatchFeedback
     from forge.grammar import Grammar
@@ -1556,6 +1557,7 @@ def _run_battery_for_seed(
     rank_combiner_share: Mapping[str, float] | None = None,
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    refutation_effects: RefutationEffects | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
     timings: dict[str, float] | None = None,
@@ -1629,6 +1631,7 @@ def _run_battery_for_seed(
             rank_combiner_share=rank_combiner_share,
             cohort_yield_weights=cohort_yield_weights,
             regime_gate_yield_weights=regime_gate_yield_weights,
+            refutation_effects=refutation_effects,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
     )
@@ -2168,6 +2171,22 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             f"min_samples={calibration.expected_trade_count.min_bucket_samples}"
         )
     timings["weights"] = _time.monotonic() - _t_weights
+
+    # D320 — refutation-registry effects: read the live export (+ our binding
+    # table) and route generation mass off Crucible-proven-dead cells. Fails
+    # open (empty) on a missing/stale registry; respects FORGE_REFUTATION_GUARD.
+    from forge.enumeration import resolve_effects as _resolve_refutation_effects
+
+    refutation_effects = _resolve_refutation_effects()
+    if not refutation_effects.is_empty():
+        typer.echo(
+            "refutation_guard: active "
+            f"{list(refutation_effects.active_entry_ids)} "
+            f"(deprioritize x{refutation_effects.deprioritize_weight})"
+        )
+    else:
+        typer.echo("refutation_guard: no active effects (guard off / cold registry)")
+
     try:
         reports = _run_battery_for_seed(
             grammar,
@@ -2185,6 +2204,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             rank_combiner_share=rank_combiner_share,
             cohort_yield_weights=cohort_yield_weights,
             regime_gate_yield_weights=regime_gate_yield_weights,
+            refutation_effects=refutation_effects,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
             timings=timings,

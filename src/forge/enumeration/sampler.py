@@ -57,11 +57,17 @@ from forge.enumeration.indicator_thresholds import (
     is_threshold_skippable,
     sample_threshold_params,
 )
+from forge.enumeration.refutations import (
+    DEPRIORITIZE_WEIGHT as _REFUTATION_DEPRIORITIZE_WEIGHT,
+)
+from forge.enumeration.refutations import (
+    RefutationEffects,
+)
 from forge.enumeration.search_space import (
     NON_ENUMERABLE_HYPOTHESES,
     RANK_COMBINER_HYPOTHESES,
 )
-from forge.enumeration.underlying_class import underlying_class
+from forge.enumeration.underlying_class import DIVERSIFIED, underlying_class
 from forge.grammar.signal_horizon import (
     buckets_for_horizon_class,
     horizon_class,
@@ -831,6 +837,7 @@ def _pick_underlying(
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
     factor_cell_discounts: Mapping[str, float] | None = None,
+    deprioritize_diversified: bool = False,
 ) -> str | None:
     """Per-config underlying selection from the Tier 1+2 pool.
 
@@ -885,7 +892,20 @@ def _pick_underlying(
     # D278 (v34): filter AFTER the branch so it covers both pools; order
     # preserved (filter, not set ops) so the draw stays deterministic (#6).
     pool = tuple(u for u in pool if u not in _STRUCTURALLY_UNTRADEABLE_UNDERLYINGS)
-    if underlying_class_weights or underlying_name_weights or factor_cell_discounts:
+    # D320 (refutation wiring) — `broad-index-vol-event`: deprioritize the
+    # DIVERSIFIED (ETF/index) class for ve. Only the index half is mapped (the
+    # single-name half feeds Crucible's ve-solo-density unlock). Gate on the pool
+    # actually CONTAINING a diversified name so an earnings-gated single-name ve
+    # pool stays byte-identical (the uniform branch keeps rng.choice, #6).
+    deprio_diversified = deprioritize_diversified and any(
+        underlying_class(u) == DIVERSIFIED for u in pool
+    )
+    if (
+        underlying_class_weights
+        or underlying_name_weights
+        or factor_cell_discounts
+        or deprio_diversified
+    ):
         names = underlying_name_weights or {}
         classes = underlying_class_weights or {}
         discounts = factor_cell_discounts or {}
@@ -895,6 +915,8 @@ def _pick_underlying(
             if weight is None:
                 weight = classes.get(underlying_class(ticker), _UNDERLYING_CLASS_PRIOR_MEAN)
             weight *= discounts.get(ticker, 1.0)
+            if deprio_diversified and underlying_class(ticker) == DIVERSIFIED:
+                weight *= _REFUTATION_DEPRIORITIZE_WEIGHT
             return max(weight, _UNDERLYING_CLASS_EXPLORATION_FLOOR)
 
         return rng.choices(pool, weights=[_ticker_weight(u) for u in pool], k=1)[0]
@@ -1060,6 +1082,7 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
     rank_combiner_share: Mapping[str, float] | None = None,
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    refutation_effects: RefutationEffects | None = None,
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -1194,6 +1217,11 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
         bucket_weights=bucket_weights,
         directional_bucket_weights=directional_bucket_weights,
         regime_gate_yield_weights=regime_gate_yield_weights,
+        deprioritized_gates=(
+            refutation_effects.deprioritized_regime_gates.get(hypothesis, frozenset())
+            if refutation_effects is not None
+            else frozenset()
+        ),
     )
 
     # H4: slice the (hypothesis, directional, name) discount map down to this
@@ -1235,7 +1263,15 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
             )
         )
 
-    selector = _build_selector(space, hypothesis, bucket, rng)
+    selector = _build_selector(
+        space,
+        hypothesis,
+        bucket,
+        rng,
+        delta_clip_upper=(
+            refutation_effects.delta_upper_clip if refutation_effects is not None else None
+        ),
+    )
     sizer = _build_sizer(space, mode, rng)
     exits = _build_exits(space, hypothesis, rng, directional_id=directional_id, bucket=bucket)
 
@@ -1255,6 +1291,10 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
         underlying_class_weights=underlying_class_weights,
         underlying_name_weights=underlying_name_weights,
         factor_cell_discounts=factor_cell_discounts,
+        deprioritize_diversified=(
+            refutation_effects is not None
+            and hypothesis in refutation_effects.deprioritize_diversified_hypotheses
+        ),
     )
 
     # H1 (v12 / D109) — cross_sectional_rank combiner, the breadth lever. Drawn
@@ -1641,6 +1681,7 @@ def _select_bucket_directional_regime(
     bucket_weights: Mapping[tuple[str, str], float] | None = None,
     directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    deprioritized_gates: frozenset[str] = frozenset(),
 ) -> tuple[str, str, str | None]:
     """v8 (D102) horizon-matched selection. Returns ``(bucket, directional_id,
     regime_id)``.
@@ -1736,7 +1777,9 @@ def _select_bucket_directional_regime(
             for (h, d, b, r), w in regime_gate_yield_weights.items()
             if h == hypothesis and d == directional_id and b == bucket
         }
-    regime_id = _pick_regime(hypothesis, regimes, rng, regime_weights, learned_regime)
+    regime_id = _pick_regime(
+        hypothesis, regimes, rng, regime_weights, learned_regime, deprioritized_gates
+    )
     return bucket, directional_id, regime_id
 
 
@@ -1746,8 +1789,17 @@ def _pick_regime(
     rng: random.Random,
     regime_weights: Mapping[str, float] | None,
     learned_regime_weights: Mapping[str, float] | None = None,
+    deprioritized_gates: frozenset[str] = frozenset(),
 ) -> str:
     """Pick the §3.5 S3 regime gate from the compatible pool.
+
+    ``deprioritized_gates`` (D320 refutation wiring) down-weights the named
+    gates by ``_REFUTATION_DEPRIORITIZE_WEIGHT`` — the ``hurst-mr-conditioner``
+    entry (MR x hurst converts at ~1/7th baseline). The caller passes only the
+    gates bound for THIS hypothesis, so trend x hurst (a top yield cell) is
+    never touched. Empty (or no pool overlap) → the branch below runs
+    byte-identically (hard rule #6): a weighted branch multiplies by an
+    all-ones vector, the uniform branch keeps ``rng.choice``.
 
     For the curated hypothesis (relative_value) WITH feedback ``regime_weights``,
     draw weighted toward learned-good gates (D103) — each weight floored (D067
@@ -1767,12 +1819,23 @@ def _pick_regime(
     intact (so D150 is refined by evidence, never silently discarded).
     relative_value is never composed (D119 — its pairs runner ignores the gate).
     None/empty preserves the base draw byte-identically (hard rule #6)."""
+    deprio_active = bool(deprioritized_gates) and any(r in deprioritized_gates for r in regimes)
+
+    def _deprio(weights: list[float]) -> list[float]:
+        # Identity when inactive → the weighted branches stay byte-identical.
+        if not deprio_active:
+            return weights
+        return [
+            w * (_REFUTATION_DEPRIORITIZE_WEIGHT if r in deprioritized_gates else 1.0)
+            for w, r in zip(weights, regimes, strict=True)
+        ]
+
     if hypothesis == _REGIME_CURATED_HYPOTHESIS and regime_weights:
         weights = [
             max(regime_weights.get(r, _REGIME_WEIGHT_PRIOR_MEAN), _REGIME_EXPLORATION_FLOOR)
             for r in regimes
         ]
-        return rng.choices(regimes, weights=weights, k=1)[0]
+        return rng.choices(regimes, weights=_deprio(weights), k=1)[0]
     # D150 (v20): bias mean_reversion toward its ranging R1 gates vs the sparse
     # iv_rank (which stays explorable at weight 1.0). Only engages when >1 gate is
     # present, so a single-gate registry stays byte-identical to rng.choice.
@@ -1800,9 +1863,13 @@ def _pick_regime(
             )
             for i in range(len(regimes))
         ]
-        return rng.choices(regimes, weights=weights, k=1)[0]
+        return rng.choices(regimes, weights=_deprio(weights), k=1)[0]
     if base is not None:
-        return rng.choices(regimes, weights=base, k=1)[0]
+        return rng.choices(regimes, weights=_deprio(base), k=1)[0]
+    if deprio_active:
+        # The uniform branch: only diverge from rng.choice when a deprioritize
+        # actually applies (choice vs choices consume rng differently, #6).
+        return rng.choices(regimes, weights=_deprio([1.0] * len(regimes)), k=1)[0]
     return rng.choice(regimes)
 
 
@@ -1811,6 +1878,7 @@ def _build_selector(
     hypothesis: str,
     bucket: str,
     rng: random.Random,
+    delta_clip_upper: float | None = None,
 ) -> SelectorSpec:
     """§3.5 P2 entry-side DTE + §3.5 P3 delta band (hypothesis-aware, D125).
 
@@ -1834,6 +1902,13 @@ def _build_selector(
     delta_low, delta_high = space.delta_band_overrides_by_hypothesis.get(hypothesis, {}).get(
         bucket, space.delta_band_by_bucket[bucket]
     )
+    # D320 (refutation wiring) — the `deep-itm-directional` blocklist: clip the
+    # P3 upper edge below 0.50 (the refuted deep-ITM sliver). Only bites when the
+    # band would otherwise reach >= the clip; when it doesn't (the 0.23-0.35
+    # default/interior), delta_high is unchanged → the rng.uniform draw is
+    # byte-identical (hard rule #6). Floored at delta_low so the band stays valid.
+    if delta_clip_upper is not None and delta_clip_upper < delta_high:
+        delta_high = max(delta_low, delta_clip_upper)
     mid = (dte_low + dte_high) // 2
     return SelectorSpec(
         delta_target=round(rng.uniform(delta_low, delta_high), 3),

@@ -171,7 +171,10 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # already permits a second gate).
     # D319 bumped v44 -> v45 (Q46 refinement: conditioner primary hurst-only + the
     # residual_momentum pilot dial; emission-policy, rules text unchanged).
-    assert grammar.grammar_version == "v45"  # type: ignore[attr-defined]
+    # D320 bumped v45 -> v46 (refutation-registry wiring: three threaded effects
+    # routing generation mass off Crucible-proven-dead cells; emission-policy,
+    # cold-start byte-identical, rules text unchanged).
+    assert grammar.grammar_version == "v46"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
