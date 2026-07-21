@@ -2649,3 +2649,67 @@ lines + daemon-reload + restart (byte-identical). Watch: young-cell count
 per batch (over-subscription of the sorted-order cap = the documented
 revisit trigger); the campaign-audit JSONL picks up carriage shifts at the
 next 05:00 fire. Related: [[D307]], [[D287]], [[D136]], [[D309]].
+
+## D313 — 2026-07-21 — Refutation-registry reply DRAFTED (the "registry reply" their status awaits; docs-only, nothing wired): all 28 entries mapped to our cell vocabulary; 2 entries CORROBORATED by our funnel with live suppressible mass (MR×hurst 1.10% vs 8.07% baseline; delta≥0.50 sliver = 9.3% of stream); the broad-index-ve ↔ ve-solo-density interaction flagged; wiring blocked on a blessed consumption path
+
+**Trigger:** `FORGE_refutation_registry_2026-07-20.md` — their 28-entry
+machine-readable negative-results registry (`docs/refutations.yaml`, statuses
+refuted/no_go/untested_gated/caution_not_refuted/policy_bar + per-entry
+`unlock` conditions), Tranche 2 of their process-improvement plan. Their asks:
+(1) validate before wiring, flag disagreements; (2) map entries to OUR cell
+vocabulary and report the mapping; (3) report suppressed mass into the weekly
+census once wired; (4) never treat blocklists as gate information. This
+inbound sat untriaged since last evening — surfaced by their status line
+("Awaiting … Forge's registry reply") relayed by the operator.
+
+**The mapping** (full table in `PROMPT_CRUCIBLE_REFUTATION_REGISTRY_REPLY.md`,
+untracked, operator carries):
+
+- **23 of 28 entries are Class A — already structural** (suppressed mass 0 by
+  construction): dead ids never grammar-admitted (butterfly_25d, skew_25d,
+  days_to_cover, iv_vs_index…), axes without vocabulary (pyramiding,
+  regime-switching, put/call side, book-timing, intraday), schema-enforced
+  (target_exit on trend: 0 of 520k all-time — S5 never admitted it, D236 even
+  prefers their winning chandelier), rank-exclusion-enforced
+  (xsect-chain-rank-gates via rank_per_name_coherent, v15/v16), or already
+  our own recorded decisions (sector-relval=D269, xsect-tier=D294/D296,
+  ev-as-sizing=D303/D308, capitulation caution=v35 — we FARM that axis).
+- **2 entries corroborated with measurable live mass (wiring candidates,
+  operator-gated, each needs a version bump):** `hurst-mr-conditioner` — our
+  clean-era funnel INDEPENDENTLY corroborates their refutation: MR×hurst
+  24,779 decided → 1.10% components vs MR baseline 8.07% (~1/7th; ~19% of MR
+  volume). CRITICAL scope guard recorded: trend×hurst is ABOVE baseline
+  (14.2% vs 12.0%) and a top yield cell — the wiring must be MR-scoped, never
+  id-level. `deep-itm-directional` — P3 caps at 0.55 so their refuted ≥0.50
+  region overlaps our top sliver: 9.3% of trailing-7d submissions (trend
+  14.0% / ve 25.9% / MR 1.0%); their 07-20 scope bound honored (nothing below
+  0.50 mapped; 0.23–0.35 is our default region, also under their delta30
+  test).
+- **1 interaction flagged (their ask #1):** `broad-index-vol-event`'s
+  single-name half collides with their own `ve-solo-density` unlock, which
+  NEEDS the v39/v41 exit-repair cohorts (min_oos ≥ 60 recipes) — suppressing
+  single-name ve would starve their own density heal. Only the index/ETF half
+  mapped as a candidate (measured: 4,145 decided / 12 comps = 0.29%,
+  IDENTICAL to single-name ve 0.29%); both halves defer to their v38→v39 ve
+  read.
+
+**Wiring posture:** NOTHING wired (their relay: operator carries adoption).
+Sequencing blocker relayed: `refutations.yaml` lives in their repo — a daemon
+read of their docs tree would be a new unversioned cross-system surface (hard
+rule #2 / D245 class); wiring needs the registry published into
+`~/optbt_data/exports` (registry-snapshot pattern) or a contracts helper.
+Suppressed-mass census reporting committed for post-wiring via the D299/D302
+audit infrastructure, keyed by registry entry id.
+
+**Riding receipts in the reply** (the other items of their awaited-list):
+timer-MR regeneration continues post-v43 (first v43 batch: 41/63 MR on the
+required time_stop pick = 65.1%, the v40 weighting exactly — the 30-name
+exclusion did not dent the cell); search_n_trials armed (D310 banner
+referenced); the ve frozen-recipe calendar row confirmed THEIR-side owned
+(their `forward_calendar.md`: "owner registers its read date(s) here at the
+first accrual checkpoint" — the recipe + accrual live on their engine).
+
+NB: fourth D-number race of the day (the concurrent session's young-cell
+activation took D312 mid-append); this entry renumbered to D313.
+Related: [[D269]], [[D294]], [[D296]], [[D303]], [[D310]], [[D276]],
+[[D287]], [[D245]], [[D299]], [[D302]], [[D312]].
