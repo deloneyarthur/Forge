@@ -124,7 +124,6 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 | `--max-iterations` | int | unbounded | Cap loop iterations (testing). |
 | `--poll-interval-seconds` | int | `60` (`600`) | Sleep between loop iterations. |
 | `--consume-feedback` | flag | off | Run feedback chain (consumer/analyzer/proposer/auto-tune) after submit. |
-| `--orthogonal-yield` | flag | off | H4 A/B: discount over-mined (hypothesis, directional, underlying-class) factor cells in the underlying draw, rewarding orthogonal components. Off is byte-identical to D105/D106. |
 | `--cross-sectional-rank / --no-cross-sectional-rank` | flag | on | H1 (v12) breadth lever: emit `cross_sectional` combiners for the breadth-starved directional archetypes (trend/mean_reversion) at a ~1/3 exploration share, defeating the 100-trade floor. ON by default (the point of v12); `--no-cross-sectional-rank` is the kill switch (revert to confluence). |
 | `--cohort-yield` | flag | off | §3 yield-map refresh (D182): make the cohort draw (cross_sectional vs confluence) yield-driven by the learned (hypothesis, directional, dte_bucket, cohort) component-rate instead of the fixed share. On the service. Off is byte-identical to the H1 draw. |
 | `--regime-gate-yield` | flag | off | §2 yield-map refresh (D183): make the regime-gate draw yield-driven — compose the learned (hypothesis, directional, dte_bucket, regime_gate) rate onto the D150/uniform base, down-weighting sink gates (gamma_flip) and favouring minting ones. `relative_value` excluded (D119). On the service. Off is byte-identical. |

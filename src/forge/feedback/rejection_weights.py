@@ -227,24 +227,6 @@ COMPONENT_HIER_PRIOR_STRENGTH: float = 50.0
 # in the CLI) so the tiebreak-vs-window invariant is checkable next to ε.
 FEEDBACK_GATED_RUNS_LIMIT: int = 10_000
 
-# H4 (orthogonal-yield, NEW_HYPOTHESES_V11_PLAN). The marginal-value discount
-# applied to a (hypothesis, directional, underlying-class) FACTOR CELL's
-# underlying draw weight: discount = (1 + m) ** -strength, m = the cell's
-# version-weighted component count. strength=0.5 is the pure Grinold/pod-shop
-# 1/sqrt form (the m-th correlated sleeve ≈ 1/sqrt(m) of the first); we ship
-# gentler. STATUS.md emission read (2026-06-08): pure sqrt is a ~46% first-order
-# raw-yield cut on the live name cells — too aggressive for "same yield, more
-# orthogonal". DEFAULT_ORTHOGONAL_YIELD_STRENGTH = 0.15 is the operator-calibrated
-# curve (D108, emission-proofed against the live export ⋈ forge.db: top name cell
-# AAPL m≈20 → 0.64 discount, steady-state name-concentration -13% at raw-yield
-# -17%, honouring "yield roughly flat"). MIN_DISCOUNT is a hard cap so a hugely
-# over-mined cell still can't be starved — the sampler's underlying exploration
-# floor is a second, independent guard. Anti-Goodhart: with the component-count
-# estimand (tiebreak_weight=0.0 below) a cell's discount is a pure function of
-# components, never trades, so discount = 1.0 (cell absent) at m = 0.
-DEFAULT_ORTHOGONAL_YIELD_STRENGTH: float = 0.15
-DEFAULT_ORTHOGONAL_YIELD_MIN_DISCOUNT: float = 0.25
-
 _COMPONENT_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
 
 # D128 (enforcing D124's read standard in the reward path).
@@ -961,127 +943,6 @@ def compute_regime_gate_yield_weights(
 
 
 # ---------------------------------------------------------------------------
-# Orthogonal-yield marginal-value discount (H4; NEW_HYPOTHESES_V11_PLAN).
-#
-# D105 re-aimed the reward to raw component-rate. That maximises components, but
-# the live pool (2026-06-08 yield map) shows it over-concentrates into CORRELATED
-# sleeves: 122 volatility_event components share one variance-risk-premium factor
-# and one macro calendar, 36 on AAPL alone. The pod-shop uncorrelated-sleeve
-# model (Millennium: 330+ *uncorrelated* sleeves, partitioned to prevent alpha
-# cannibalisation) says the marginal portfolio value of the 37th AAPL long-vol
-# clone ≈ 0 — so a generator that keeps minting them is spending breadth it can't
-# bank. H4 discounts each (hypothesis x directional x underlying-class) FACTOR
-# CELL's underlying-draw weight by the Grinold marginal-value factor
-# (1 + m) ** -strength, m = the cell's component count: the over-mined cell yields
-# draw probability to orthogonal candidates without lowering any gate (hard rule
-# #3) and without a grammar change (versionless, like D101/D103/D105 components).
-#
-# Why this is NOT the §6.3 diversifier: the diversifier is selection-side and
-# Jaccard-keyed — two AAPL long-vol configs with different thresholds have low
-# structural Jaccard yet sit in the IDENTICAL factor cell, so it cannot see the
-# correlation H4 targets. H4 lives on the generation/feedback side, keyed on the
-# factor cell, where the concentration actually accumulates.
-#
-# Anti-Goodhart by construction: the discount is computed off the COMPONENT count
-# only (tiebreak_weight=0.0 — the ordering tiebreak the other weighters carry is
-# irrelevant to a marginal-value count), so it is a pure function of components,
-# never trades. A cell with 0 components is ABSENT from the map (discount 1.0 at
-# the draw site): dead-but-busy cells are neither inflated nor penalised for
-# trading — only over-represented cells bite. The cell is keyed on underlying
-# NAME (D108, from the emission proof): at class granularity the underlying draw
-# can only shift high-idio→diversified within a (hyp, directional), and
-# diversified vol_event mints far less, so a class discount dilutes yield rather
-# than orthogonalising; the name cell spreads the over-mined name (AAPL) across
-# its minting peers (NVDA/AMD/…). Note H4 cannot reach the FACTOR (variance-risk-
-# premium) concentration all high-idio vol_event components share — that needs
-# hypothesis/directional diversification, not the underlying draw — so its
-# ceiling is modest by construction (a quality lever, not a breadth lever).
-#
-# Consumer: the sampler slices the triple map by the chosen (hypothesis,
-# directional) and multiplies each candidate ticker's existing D105/D106 weight
-# by its class's discount BEFORE the underlying exploration floor — so the floor
-# is preserved and a crowded cell stays explorable (evidence keeps flowing to
-# revise the discount). None/empty → no-op (byte-identical; hard rule #6).
-# ---------------------------------------------------------------------------
-
-
-def _factor_cell_of(cfg: Mapping[str, object]) -> tuple[str, str, str] | None:
-    """The ``(hypothesis, directional, underlying-name)`` factor cell of a
-    serialized config, or ``None``.
-
-    Keyed on the NAME (not the two-class label) per the 2026-06-08 emission proof
-    (D108): H4 attaches at the underlying draw, which only redistributes WITHIN a
-    fixed (hypothesis, directional); at class granularity the only move is
-    high-idio→diversified, and diversified vol_event mints ~0.7% vs high-idio's
-    6.1%, so a class discount dilutes yield instead of orthogonalising. The real
-    concentration ("36 on AAPL") is per-name inside high-idio, so the name cell
-    is what lets the discount spread AAPL→NVDA/AMD (all minting names). Natural
-    D105(class)→D106(name) progression.
-
-    ``None`` for relative_value (its ``underlying`` is None — pairs legs are
-    Crucible-resolved, D098 — so it has no single-name draw for H4 to tilt) and
-    for any config missing a parseable hypothesis / directional / underlying."""
-    hyp = cfg.get("hypothesis")
-    underlying = cfg.get("underlying")
-    if not isinstance(hyp, str) or not isinstance(underlying, str):
-        return None
-    directional = _directional_indicator_of(cfg)
-    if directional is None:
-        return None
-    return (hyp, directional, underlying)
-
-
-def compute_orthogonal_yield_discounts(
-    db: duckdb.DuckDBPyConnection,
-    gated_runs: Sequence[GatedRun],
-    *,
-    current_grammar_version: str | None = None,
-    prior_version_weight: float = COMPONENT_PRIOR_VERSION_WEIGHT,
-    cold_start_hypotheses: frozenset[str] = frozenset(),
-    strength: float = DEFAULT_ORTHOGONAL_YIELD_STRENGTH,
-    min_discount: float = DEFAULT_ORTHOGONAL_YIELD_MIN_DISCOUNT,
-) -> dict[tuple[str, str, str], float]:
-    """Marginal-value discount per ``(hypothesis, directional, underlying-name)``
-    factor cell (H4).
-
-    Each cell's discount is ``max(min_discount, (1 + m) ** -strength)`` where
-    ``m`` is the cell's version-weighted component count (D081 scoping: a
-    prior-version component contributes ``prior_version_weight``; a cold-start
-    hypothesis drops its prior-version rows entirely). Only cells with at least
-    one component appear — a cell with zero components has discount 1.0 and is
-    omitted, so the sampler (which defaults absent cells to 1.0) leaves it
-    untouched. This is the anti-Goodhart property: the discount keys on
-    components, never on trades.
-
-    Same determinism property as the rest of the module (hard rule #6: a pure
-    function of the ``submissions`` table + the ``gated_runs`` snapshot) and the
-    same empty → ``{}`` cold-start contract (the sampler then applies no
-    discount, byte-identical to the pre-H4 underlying draw).
-    """
-    if not gated_runs:
-        return {}
-    # tiebreak_weight=0.0 AND quality_weight=0.0: H4 wants the pure component
-    # COUNT for the marginal-value factor — neither the gate/Sharpe ordering
-    # tiebreak nor the D114 joint-quality term may contribute, or componentless
-    # cells would gain non-zero mass and break "discount = 1.0 at m = 0".
-    sums = _component_rate_sums(
-        db,
-        gated_runs,
-        _factor_cell_of,
-        tiebreak_weight=0.0,
-        quality_weight=0.0,
-        current_grammar_version=current_grammar_version,
-        prior_version_weight=prior_version_weight,
-        cold_start_hypotheses=cold_start_hypotheses,
-    )
-    return {
-        cell: max(min_discount, (1.0 + count) ** (-strength))
-        for cell, (_total, count) in sums.items()
-        if count > 0.0
-    }
-
-
-# ---------------------------------------------------------------------------
 # Dynamic relative_value regime-gate curation (D103 / v9; estimand re-aimed by
 # D105) — FROZEN by D119 (2026-06-09).
 #
@@ -1291,8 +1152,6 @@ __all__ = [
     "DEFAULT_ALPHA",
     "DEFAULT_BETA",
     "DEFAULT_EXPLORATION_FLOOR",
-    "DEFAULT_ORTHOGONAL_YIELD_MIN_DISCOUNT",
-    "DEFAULT_ORTHOGONAL_YIELD_STRENGTH",
     "DEFAULT_SHARPE_CEILING",
     "DEFAULT_SHARPE_FLOOR",
     "DEFAULT_SHARPE_METRIC",
@@ -1304,7 +1163,6 @@ __all__ = [
     "compute_hypothesis_bucket_weights",
     "compute_hypothesis_component_weights",
     "compute_hypothesis_directional_bucket_weights",
-    "compute_orthogonal_yield_discounts",
     "compute_relative_value_regime_weights",
     "compute_underlying_class_weights",
     "compute_underlying_name_weights",

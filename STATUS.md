@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.2 (D324, BUILT IN WORKTREE — NOT YET LANDED): FULL removal of the H4 `--orthogonal-yield` feature. Operator (AskUserQuestion): "Full removal in a worktree". Byte-identical proven; awaiting landing decision
+
+- **Where:** branch `simplify/d324-orthogonal-yield` in `../Forge-build` (isolated venv). Committed there, NOT on main. Sampler-touching → built in a worktree per CLAUDE.md; the restart/land is the operator's gate.
+- **Removed end-to-end (11 files, −979 net):** the feedback computation `compute_orthogonal_yield_discounts` (+`_factor_cell_of`, 2 constants), the CLI `--orthogonal-yield` flag + `_load_/_format_` + apply block + param threading, the `orthogonal_yield_discounts` param on `enumerate_candidates`/`sample_config` + the H4 slice block, and `_pick_underlying`'s `factor_cell_discounts` param + the `weight *= discounts.get(t,1.0)` multiply. Deleted `test_orthogonal_yield.py` + 6 H4 tests in 3 files; MANPAGE + feedback-change doc rows.
+- **KEPT (near-miss):** `apply_orthogonal_family_floor` / `FORGE_ORTHOGONAL_FAMILY_FLOOR` is the DIFFERENT live D216 feature (`volatility_event=0.20` on the unit) — name-adjacent, untouched.
+- **Rule #6 proof (sampler edit):** cross-tree main-vs-worktree — (1) `forge enumerate` weights-off over 6 seeds → identical SHA256 (`527db225…`); (2) `_pick_underlying` weights-ON probe, 9600 draws → identical SHA256 (`3edf9e5a…`). The `*= ×1.0` removal is exact.
+- **Gates:** ruff + format clean; mypy --strict clean (108 files); full suite **2052 passed / 1 skipped** (2070 − 18 removed tests).
+- **LANDING (operator's call):** byte-identical → a fast-forward merge of the branch to main needs **no restart** (the running daemon keeps producing identical output on old code; new code loads on the next natural restart/reboot) — same pattern as D322/D323. Or run the full deploy ritual with a restart. Worktree stays until landed, then `git worktree remove`.
+
 ## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.1 (D323, no deploy/restart): removed the superseded `compute_hypothesis_weights` + `_iter_hypothesis_outcomes`. Operator (AskUserQuestion): "Active development" (keep machinery, cut dead residue only) + "Delete whole ~150-LOC stratum" — SCOPE CORRECTED by verification
 
 - **Verification corrected the "~150-LOC stratum":** `_REWIRE_DELTA_CRITERION` is **LIVE** (in `cli/ranker_model_cmd.py:74`, imported by `scripts/daily_ranker_eval.sh:269` — the `STATUS.md:606` "dead" note was stale) → EXCLUDED. `prior_mean` + `is_ve_ghost_label` LIVE → kept. Verified-dead set = `compute_hypothesis_weights` (superseded D094/D101; live estimand is `compute_hypothesis_component_weights`) + its sole caller `_iter_hypothesis_outcomes` (~56 LOC).

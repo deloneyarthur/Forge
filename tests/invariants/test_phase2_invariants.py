@@ -56,31 +56,6 @@ def test_enumeration_diverges_when_seed_changes(grammar: Grammar) -> None:
     assert a != b
 
 
-def test_h4_orthogonal_yield_flag_off_byte_identical(grammar: Grammar) -> None:
-    """H4 (orthogonal-yield discount) is an ADDED sampler input behind an A/B
-    flag — hard rule #6: when the flag is OFF the discounts map is None/empty,
-    and enumeration must reproduce the pre-H4 sequence byte-for-byte. This is
-    the structural guarantee that a restart (or reboot) with the flag unset can
-    never silently change what Forge submits (the D104 lesson)."""
-    registry = demo_registry()
-    seed = 271
-    n = 80
-    base = [c.config_hash for c in enumerate_candidates(grammar, registry, seed, max_candidates=n)]
-    off_none = [
-        c.config_hash
-        for c in enumerate_candidates(
-            grammar, registry, seed, max_candidates=n, orthogonal_yield_discounts=None
-        )
-    ]
-    off_empty = [
-        c.config_hash
-        for c in enumerate_candidates(
-            grammar, registry, seed, max_candidates=n, orthogonal_yield_discounts={}
-        )
-    ]
-    assert base == off_none == off_empty
-
-
 def test_cohort_yield_flag_off_byte_identical(grammar: Grammar) -> None:
     """Cohort-yield (§3 of Crucible's 2026-06-17 yield-map refresh) makes the
     final cohort draw yield-driven, but it is an ADDED sampler input behind an

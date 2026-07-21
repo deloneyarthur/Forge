@@ -3268,3 +3268,48 @@ strip leaving the inert `=None` engine param).
 → daemon byte-unaffected, no restart. Related: [[D322]] (Tier-1, same pass), [[D301]]
 (the prior `compute_hypothesis_reward_weights` cut in this same stratum), [[D094]]/[[D101]]
 (the removed weighter's origin), [[D105]] (the component-rate lane that superseded it).
+
+## D324 — 2026-07-21 — Complexity-reduction pass, Tier-2 (part 2): FULL removal of the H4 `--orthogonal-yield` feature — the never-launched marginal-value discount lever (operator via AskUserQuestion: "Full removal in a worktree"). Built + validated in `../Forge-build`; byte-identical proven; NOT yet landed on main
+
+**Context.** The audit called `--orthogonal-yield` a "~60-LOC dead flag." Verification
+showed it was actually a full feature (~980 LOC incl. tests) threaded through the
+**determinism-critical sampler** — never activated in production (the flag was never
+set on the unit). Operator chose full removal, done in an isolated worktree per
+the CLAUDE.md rule for sampler-touching changes.
+
+**Removed end-to-end** (branch `simplify/d324-orthogonal-yield`, 11 files, −979 net):
+- **Feedback:** `compute_orthogonal_yield_discounts` + `_factor_cell_of` + the two
+  `DEFAULT_ORTHOGONAL_YIELD_*` constants + `__all__` entries (`rejection_weights.py`).
+- **CLI:** the `--orthogonal-yield` flag + `_load_/_format_orthogonal_yield_discounts`
+  + the H4 apply block + all `orthogonal_yield` param threading (`cli/main.py`).
+- **Engine:** the `orthogonal_yield_discounts` param on `enumerate_candidates` and
+  `sample_config`, the H4 slice block, and the `factor_cell_discounts` param + the
+  `weight *= discounts.get(t, 1.0)` multiply in `_pick_underlying`
+  (`iterator.py` + `sampler.py`).
+- **Tests:** deleted `test_orthogonal_yield.py` (12 tests); removed 6 H4 tests from
+  `test_sampler.py` (4) / `test_quality_term.py` (1) / `test_phase2_invariants.py` (1);
+  dropped the flag from `test_run_loop.py`'s forward-parity list.
+- **Docs:** MANPAGE flag row + the `feedback-change.md` journal-watch line.
+
+**KEPT (the near-miss trap):** `apply_orthogonal_family_floor` / `FORGE_ORTHOGONAL_FAMILY_FLOOR`
+is a DIFFERENT, LIVE feature (D216, `volatility_event=0.20` on the unit) — name-adjacent,
+untouched. Also kept: `_COMPONENT_DECISIONS`, `_directional_indicator_of`, every other
+weight param.
+
+**Rule #6 byte-identical proof (the gate for a sampler edit).** Cross-tree, main
+(pre) vs worktree (post): (1) production weights-off path — `forge enumerate` over
+6 seeds → identical SHA256 (`527db225…`), 1530 lines each; (2) the weights-ON path
+(the only other site the multiply touched) — a `_pick_underlying` probe with
+class+name weights present, 9600 draws → identical SHA256 (`3edf9e5a…`), confirming
+`weight *= discounts.get(t,1.0)` was exactly `×1.0`. Also: `sample_config`'s
+`# noqa: PLR0912` became RUF100-unused after the slice block went (fewer branches) —
+removed; two dangling doc cross-refs (`_load_cohort_yield_weights` "Mirrors …",
+a "like --orthogonal-yield" comment) repointed to live siblings.
+
+**Gates (in the worktree venv).** ruff check + format clean; mypy --strict clean
+(108 files); full suite **2052 passed / 1 skipped** (2070 − 18 removed tests; the
+skip pre-exists). **NOT landed:** committed on the branch only; awaiting the operator's
+landing call (byte-identical → a fast-forward merge needs no restart; the daemon keeps
+producing identical output and picks up the new code on the next natural restart).
+Related: [[D323]] (Tier-2 pt.1, same pass), [[D322]] (Tier-1), [[D108]] (the H4 origin
+this retires), [[D216]] (the orthogonal-FAMILY floor — the different live feature kept).

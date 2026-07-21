@@ -1188,60 +1188,6 @@ def _format_directional_bucket_weights_line(
     return f"directional_bucket_weights: {len(weights)} cells learned; top: {parts}"
 
 
-def _load_orthogonal_yield_discounts(
-    forge_db_path: Path,
-    current_grammar_version: str | None = None,
-) -> dict[tuple[str, str, str], float]:
-    """H4 — (hypothesis, directional, underlying-class) marginal-value discounts
-    for the sampler's underlying pick.
-
-    Mirrors `_load_directional_bucket_weights` (file-based export read, silent
-    degrade to {}; the hypothesis-weights loader carries the loud warn-once;
-    same version scoping). Returns over-mined cells only (discount < 1.0); the
-    sampler defaults absent cells to 1.0. Only called when the operator enables
-    the H4 A/B flag — when off, the loader is skipped entirely and the underlying
-    draw is byte-identical to D105/D106.
-    """
-    from crucible_contracts import load_recent_gated_runs_from_export
-    from crucible_contracts.exceptions import QueryError
-
-    from forge.feedback.rejection_weights import (
-        FEEDBACK_GATED_RUNS_LIMIT,
-        compute_orthogonal_yield_discounts,
-    )
-    from forge.feedback.trade_rate_priors import COLD_START_HYPOTHESES
-    from forge.persistence.db import db_connection
-
-    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
-        return {}
-    exports_dir = Path.home() / "optbt_data" / "exports"
-    try:
-        gated_runs = load_recent_gated_runs_from_export(
-            exports_dir, limit=FEEDBACK_GATED_RUNS_LIMIT
-        )
-    except (QueryError, OSError):
-        return {}
-    if not gated_runs:
-        return {}
-    with db_connection(forge_db_path) as conn:
-        return compute_orthogonal_yield_discounts(
-            conn,
-            gated_runs,
-            current_grammar_version=current_grammar_version,
-            cold_start_hypotheses=COLD_START_HYPOTHESES,
-        )
-
-
-def _format_orthogonal_yield_discounts_line(
-    discounts: Mapping[tuple[str, str, str], float],
-) -> str:
-    """One-line journal summary: count + the most-discounted (most over-mined)
-    factor cells — sorted ascending so the smallest (hardest-bitten) lead."""
-    top = sorted(discounts.items(), key=lambda kv: kv[1])[:4]
-    parts = ", ".join(f"{h}x{d}x{c}={w:.3f}" for (h, d, c), w in top)
-    return f"orthogonal_yield_discounts: {len(discounts)} cells discounted; most-mined: {parts}"
-
-
 # H1 (v12 / D109) — the modest exploration share at which the breadth-starved
 # directional archetypes draw a cross_sectional_rank combiner when the operator
 # enables --cross-sectional-rank. Fixed for now (~1/3); feedback can rebalance it
@@ -1264,7 +1210,7 @@ def _load_cohort_yield_weights(
     sampler's final cohort draw yield-driven instead of the fixed
     `rank_combiner_share` coin-flip.
 
-    Mirrors `_load_orthogonal_yield_discounts` (file-based export read, silent
+    Mirrors `_load_directional_bucket_weights` (file-based export read, silent
     degrade to {}; same version scoping). Only called when the operator enables
     the --cohort-yield A/B flag — off, the loader is skipped entirely and the
     cohort draw keeps the fixed share (byte-identical, hard rule #6).
@@ -1552,7 +1498,6 @@ def _run_battery_for_seed(
     directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
-    orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
     rank_combiner_share: Mapping[str, float] | None = None,
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
@@ -1626,7 +1571,6 @@ def _run_battery_for_seed(
             directional_bucket_weights=directional_bucket_weights,
             underlying_class_weights=underlying_class_weights,
             underlying_name_weights=underlying_name_weights,
-            orthogonal_yield_discounts=orthogonal_yield_discounts,
             rank_combiner_share=rank_combiner_share,
             cohort_yield_weights=cohort_yield_weights,
             regime_gate_yield_weights=regime_gate_yield_weights,
@@ -1893,11 +1837,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     open_proposals: Path,
     prefilter_yaml: Path,
     require_real_cache: bool = False,
-    # H4 (orthogonal-yield) A/B flag. Off (default) → byte-identical to D105/D106
-    # (the loader is skipped, the sampler gets {}); on → discount over-mined
-    # (hypothesis, directional, underlying-class) factor cells in the underlying
-    # draw. Operator flips it on the systemd unit, like --consume-feedback.
-    orthogonal_yield: bool = False,
     # H1 (v12 / D109) cross_sectional_rank — the breadth lever, ON by default at
     # the ~1/3 exploration share (the point of v12; "like every prior weight
     # addition" per the spec — production passes the share, the sampler-core
@@ -1909,7 +1848,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # byte-identical (the loader is skipped, the cohort draw keeps the fixed
     # rank_combiner_share); on → the cohort draw is yield-driven by the learned
     # (hyp, directional, bucket, cohort) component-rate. Operator flips it on the
-    # systemd unit, like --orthogonal-yield.
+    # systemd unit, like --consume-feedback.
     cohort_yield: bool = False,
     # §2 yield-map refresh (2026-06-17) regime-gate-yield A/B flag. Off (default) →
     # byte-identical (loader skipped, regime draw keeps its D150/uniform base); on →
@@ -2097,18 +2036,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     )
     if directional_bucket_weights:
         typer.echo(_format_directional_bucket_weights_line(directional_bucket_weights))
-    # H4 (orthogonal-yield) — operator-gated A/B flag. Off (default): skip the
-    # load entirely so the underlying draw stays byte-identical to D105/D106
-    # (the sampler treats {} as no-op). On: discount over-mined
-    # (hypothesis, directional, underlying-class) factor cells so the generator
-    # spends breadth on orthogonal sleeves instead of the 37th AAPL long-vol clone.
-    orthogonal_yield_discounts: dict[tuple[str, str, str], float] = {}
-    if orthogonal_yield:
-        orthogonal_yield_discounts = _load_orthogonal_yield_discounts(
-            forge_db_path, current_grammar_version=grammar.grammar_version
-        )
-        if orthogonal_yield_discounts:
-            typer.echo(_format_orthogonal_yield_discounts_line(orthogonal_yield_discounts))
     # H1 (v12 / D109) — cross_sectional_rank combiner, the breadth lever, ON by
     # default: each breadth-starved directional archetype (RANK_COMBINER_HYPOTHESES)
     # draws a rank combiner with probability _DEFAULT_RANK_COMBINER_SHARE, making
@@ -2199,7 +2126,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             directional_bucket_weights=directional_bucket_weights,
             underlying_class_weights=underlying_class_weights,
             underlying_name_weights=underlying_name_weights,
-            orthogonal_yield_discounts=orthogonal_yield_discounts,
             rank_combiner_share=rank_combiner_share,
             cohort_yield_weights=cohort_yield_weights,
             regime_gate_yield_weights=regime_gate_yield_weights,
@@ -2750,15 +2676,6 @@ def cmd_run(
         "--consume-feedback",
         help="after submit, run the feedback chain (consumer/analyzer/proposer/auto_tune)",
     ),
-    orthogonal_yield: bool = typer.Option(
-        False,
-        "--orthogonal-yield",
-        help=(
-            "H4 A/B flag: discount over-mined (hypothesis, directional, "
-            "underlying-class) factor cells in the underlying draw, rewarding "
-            "orthogonal components. Off (default) is byte-identical to D105/D106."
-        ),
-    ),
     cross_sectional_rank: bool = typer.Option(
         True,
         "--cross-sectional-rank/--no-cross-sectional-rank",
@@ -2900,7 +2817,6 @@ def cmd_run(
             open_proposals=open_proposals,
             prefilter_yaml=prefilter_yaml,
             require_real_cache=require_real_cache,
-            orthogonal_yield=orthogonal_yield,
             cross_sectional_rank=cross_sectional_rank,
             cohort_yield=cohort_yield,
             regime_gate_yield=regime_gate_yield,
@@ -2937,7 +2853,6 @@ def cmd_run(
                     open_proposals=open_proposals,
                     prefilter_yaml=prefilter_yaml,
                     require_real_cache=require_real_cache,
-                    orthogonal_yield=orthogonal_yield,
                     cross_sectional_rank=cross_sectional_rank,
                     cohort_yield=cohort_yield,
                     regime_gate_yield=regime_gate_yield,

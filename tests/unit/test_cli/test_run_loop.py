@@ -814,7 +814,6 @@ def test_loop_and_single_iteration_forward_identical_flags(
     forwarded_keys = [
         "consume_feedback",
         "require_real_cache",
-        "orthogonal_yield",
         "cross_sectional_rank",
         "cohort_yield",
         "regime_gate_yield",

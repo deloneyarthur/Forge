@@ -42,7 +42,7 @@ uv run pytest tests/unit/test_feedback tests/unit/test_enumeration tests/invaria
 ```
 
 Post-deploy: watch the journal weight lines (`hypothesis_weights:`, `bucket_weights:`,
-`underlying_class_weights:`, `underlying_name_weights:`, `orthogonal_yield_discounts:`) on the
+`underlying_class_weights:`, `underlying_name_weights:`) on the
 first unblocked iteration.
 
 ## Attribution

@@ -19,9 +19,7 @@ its own ``min_oos_trade_count`` gate. Properties pinned here:
     still cannot outrank a single component event;
   - the deliberate departure: a cell with SUSTAINED near-gate quality can now
     accumulate reward mass comparable to a sparse component event (that is the
-    point — WF/CPCV are the actual promotion axes);
-  - H4 isolation: the orthogonal-yield discount's ``m`` stays a pure component
-    count — quality contributes nothing to it.
+    point — WF/CPCV are the actual promotion axes).
 """
 
 from __future__ import annotations
@@ -51,7 +49,6 @@ from forge.feedback.rejection_weights import (
     _component_run_reward,
     _joint_quality,
     compute_hypothesis_component_weights,
-    compute_orthogonal_yield_discounts,
 )
 from forge.persistence.db import db_connection
 
@@ -365,37 +362,8 @@ def test_sustained_quality_can_rival_a_sparse_component(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# H4 isolation + cold start
+# cold start
 # ---------------------------------------------------------------------------
-
-
-def test_h4_discounts_blind_to_quality(tmp_path: Path) -> None:
-    """The orthogonal-yield discount's m is a pure COMPONENT count: a cell of
-    frontier-quality rejects must stay ABSENT from the discount map, and a
-    minting cell's discount must not move when quality rows appear."""
-    with db_connection(tmp_path / "forge.db") as conn:
-        gated: list[GatedRun] = []
-        for i in range(10):  # frontier-quality rejects, zero components
-            ch = f"fq_{i:03d}"
-            _insert_submission(
-                conn, config=_config("volatility_event", f"q{i}", underlying="NVDA"), config_hash=ch
-            )
-            gated.append(_quality_run(config_hash=ch, wf=2.2, cpcv=1.55))
-        _insert_submission(
-            conn, config=_config("volatility_event", "c0", underlying="AAPL"), config_hash="comp"
-        )
-        gated.append(
-            _quality_run(
-                config_hash="comp",
-                decision="component",
-                wf=1.0,
-                cpcv=0.9,
-                regime_coverage_passed=True,
-            )
-        )
-        discounts = compute_orthogonal_yield_discounts(conn, gated)
-    assert ("volatility_event", "rsi_2", "NVDA") not in discounts
-    assert discounts[("volatility_event", "rsi_2", "AAPL")] == pytest.approx(2.0**-0.15)
 
 
 def test_cold_start_contract_unchanged(tmp_path: Path) -> None:

@@ -836,7 +836,6 @@ def _pick_underlying(
     regime_indicators: tuple[str, ...] = (),
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
-    factor_cell_discounts: Mapping[str, float] | None = None,
     deprioritize_diversified: bool = False,
 ) -> str | None:
     """Per-config underlying selection from the Tier 1+2 pool.
@@ -870,17 +869,6 @@ def _pick_underlying(
     then the prior. The chain keeps every ticker on one coherent
     component-rate scale, so AAPL-grade evidence concentrates draws without
     starving the unobserved remainder of its class.
-
-    H4 (orthogonal-yield): ``factor_cell_discounts`` is the
-    (hypothesis, directional)-sliced ``{underlying-name: discount}`` map for
-    THIS config's chosen hypothesis+directional (sample_config does the slice).
-    Each ticker's weight is multiplied by its own marginal-value discount
-    (over-mined names < 1.0; absent → 1.0) BEFORE the exploration floor, so the
-    floor still guarantees every ticker a minimum draw and a crowded name stays
-    explorable — the discount spreads an over-mined name (AAPL) across its
-    minting peers (NVDA/AMD) rather than toward the non-minting diversified
-    class. None/empty keeps the D105/D106 (and pre-D105) draw byte-identical
-    (hard rule #6 — multiply by exactly 1.0).
     """
     if hypothesis == "relative_value":
         return None
@@ -900,21 +888,14 @@ def _pick_underlying(
     deprio_diversified = deprioritize_diversified and any(
         underlying_class(u) == DIVERSIFIED for u in pool
     )
-    if (
-        underlying_class_weights
-        or underlying_name_weights
-        or factor_cell_discounts
-        or deprio_diversified
-    ):
+    if underlying_class_weights or underlying_name_weights or deprio_diversified:
         names = underlying_name_weights or {}
         classes = underlying_class_weights or {}
-        discounts = factor_cell_discounts or {}
 
         def _ticker_weight(ticker: str) -> float:
             weight = names.get(ticker)
             if weight is None:
                 weight = classes.get(underlying_class(ticker), _UNDERLYING_CLASS_PRIOR_MEAN)
-            weight *= discounts.get(ticker, 1.0)
             if deprio_diversified and underlying_class(ticker) == DIVERSIFIED:
                 weight *= _REFUTATION_DEPRIORITIZE_WEIGHT
             return max(weight, _UNDERLYING_CLASS_EXPLORATION_FLOOR)
@@ -1067,7 +1048,7 @@ def _sample_veto_params(veto_id: str, rng: random.Random) -> dict[str, object]:
     return params
 
 
-def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional second-gate branches (D258/D317) are inherent, a refactor would be net harm
+def sample_config(
     space: SearchSpace,
     registry: RegistrySnapshot,
     rng: random.Random,
@@ -1078,7 +1059,6 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
     directional_bucket_weights: Mapping[tuple[str, str, str], float] | None = None,
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
-    orthogonal_yield_discounts: Mapping[tuple[str, str, str], float] | None = None,
     rank_combiner_share: Mapping[str, float] | None = None,
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
@@ -1119,13 +1099,6 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
     the underlying pick per ticker, falling back to the class weight. Both
     None/empty preserve the respective D105 (and, transitively, pre-D105)
     behaviour byte-identically.
-
-    ``orthogonal_yield_discounts`` (H4) is the
-    ``(hypothesis, directional, underlying-name)`` marginal-value discount map.
-    It is sliced here by the chosen ``(hypothesis, directional)`` to a
-    ``{underlying-name: discount}`` map and forwarded to the underlying pick,
-    which multiplies each ticker's weight by its own discount (over-mined names
-    < 1.0). None/empty preserves the draw byte-identically (hard rule #6).
 
     ``rank_combiner_share`` (H1, v12) is the per-hypothesis probability of
     emitting a ``cross_sectional_rank`` combiner (the breadth lever) instead of
@@ -1224,19 +1197,6 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
         ),
     )
 
-    # H4: slice the (hypothesis, directional, name) discount map down to this
-    # config's chosen (hypothesis, directional) — the factor cell is only fully
-    # determined once the underlying (the name) is drawn below, so the discount
-    # can only attach to the underlying pick, conditioned on the already-chosen
-    # hypothesis + directional. None/empty → no slice → no-op.
-    factor_cell_discounts: dict[str, float] | None = None
-    if orthogonal_yield_discounts:
-        factor_cell_discounts = {
-            name: disc
-            for (h, d, name), disc in orthogonal_yield_discounts.items()
-            if h == hypothesis and d == directional_id
-        }
-
     signals = _base_signals(hypothesis, directional_id, regime_id, rng)
     # Belt-and-suspenders: a `type='threshold'` signal with no `threshold`
     # key in params bypasses Crucible's predicate (`lambda _v: False`) and
@@ -1290,7 +1250,6 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
         ),
         underlying_class_weights=underlying_class_weights,
         underlying_name_weights=underlying_name_weights,
-        factor_cell_discounts=factor_cell_discounts,
         deprioritize_diversified=(
             refutation_effects is not None
             and hypothesis in refutation_effects.deprioritize_diversified_hypotheses
