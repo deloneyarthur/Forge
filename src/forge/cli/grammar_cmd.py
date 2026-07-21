@@ -197,11 +197,12 @@ def cmd_apply_proposal(
     import json
 
     from forge.core.clock import utc_now
-    from forge.feedback.auto_tune import _write_grammar_versions_row, write_calibration_yaml
+    from forge.grammar.version_audit import _write_grammar_versions_row
     from forge.prefilters.calibration import (
         apply_tightening,
         load_calibration,
         propose_adjustment,
+        write_calibration_yaml,
     )
 
     # Proposals whose evidence_json.trigger lands in this set route to the
@@ -335,13 +336,13 @@ def cmd_revert(
     """
     import re
 
-    from forge.feedback.auto_tune import _write_grammar_versions_row
     from forge.grammar import load_grammar
     from forge.grammar.archive import (
         archive_grammar,
         find_archived_grammar,
         list_archived_versions,
     )
+    from forge.grammar.version_audit import _write_grammar_versions_row
 
     if not initials.strip():
         typer.echo("error: --initials must be non-empty", err=True)

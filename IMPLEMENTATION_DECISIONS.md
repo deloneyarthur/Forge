@@ -3313,3 +3313,58 @@ landing call (byte-identical → a fast-forward merge needs no restart; the daem
 producing identical output and picks up the new code on the next natural restart).
 Related: [[D323]] (Tier-2 pt.1, same pass), [[D322]] (Tier-1), [[D108]] (the H4 origin
 this retires), [[D216]] (the orthogonal-FAMILY floor — the different live feature kept).
+
+## D325 — 2026-07-21 — Complexity-reduction pass, Tier-2 (part 3): delete the dead §5.5 auto-tune TRIGGER + extract its bundled live helpers to honest homes (operator via AskUserQuestion: "Extract to honest homes"). Built + validated in `../Forge-build`; behavior-identical; NOT yet landed
+
+**Context.** Operator asked whether auto-tune is ever actually used. Empirical
+answer: **never** — the live `grammar_versions` table has 44 rows, ALL
+`manual_bump` / "auto-recorded on first load" (incl. v44/45/46 today); zero from
+auto-tune or apply-proposal; `auto_tightened_thresholds.yaml` empty; `enabled:
+false` (D218/D206). `auto_tune()` was called every batch (via `--consume-feedback`)
+but hit the `enabled` guard and returned immediately — a no-op the whole time.
+
+**The trap the module posed.** `feedback/auto_tune.py` (307 LOC) was mis-factored:
+it bundled the dead §5.5 trigger with THREE live helpers — `ensure_grammar_version_recorded`
+(the daemon calls it every cycle; it wrote today's v44/45/46 provenance rows),
+`_write_grammar_versions_row`, and `write_calibration_yaml` (the live `apply-proposal`
+path uses the last two). So a blind `rm` would have broken grammar-version
+provenance + the manual tighten path.
+
+**Verified NOT to widen: `apply-proposal` is LIVE.** The feedback proposer still
+emits `gate_failure_concentration` tighten proposals (`proposer.py:96`), and
+`cmd_apply_proposal` is their standing apply path — an operator-gated hard-rule-#4
+mechanism, unused-so-far but functional. So `apply_tightening` / `propose_adjustment`
+/ `AutoTuneCalibration` / `cmd_apply_proposal` were left UNTOUCHED. (Consequence:
+`AutoTuneCalibration`'s `enabled`/`min`/`max` fields are now config-present-but-unread;
+only `adjustment_pct_per_step` stays live via apply-proposal — left as-is, a possible
+future config-slim.)
+
+**Done (10 files, net −734).**
+- NEW `src/forge/grammar/version_audit.py` (107 LOC) — `ensure_grammar_version_recorded`
+  + `_write_grammar_versions_row` moved verbatim (grammar-version provenance, D051).
+- `write_calibration_yaml` → `prefilters/calibration.py` (with the `Calibration` model).
+- DELETED `feedback/auto_tune.py` — the dead §5.5 trigger (`auto_tune`,
+  `_rolling_promotion_rate`, `_cumulative_tightenings`, `_apply_tighten_and_persist`,
+  `_write_loosen_proposal`) + both feedback-chain call blocks (`main.py`,
+  `feedback_cmd.py`) + their now-unused `auto_tune`/`load_calibration` imports.
+- Repointed importers (`main.py`, `grammar_cmd.py` ×2). Zero `forge.feedback.auto_tune`
+  refs remain (2 history-note docstrings aside).
+- Tests: deleted `test_auto_tune.py` (604 LOC) + 3 auto_tune-coupled tests in
+  `test_phase5_invariants.py`; moved the 4 recorder tests → new
+  `tests/unit/test_grammar/test_version_audit.py` and `test_write_calibration_yaml_is_atomic`
+  → `test_calibration.py`.
+
+**Invariant coverage preserved (checked before landing).** Hard-rule-#4 (no
+`apply_loosening`) still covered by 4+ sibling checks (phase5 prefilters/proposal_writer/
+proposer/analyzer + phase3 + test_calibration + test_proposal_writer); the deleted one
+introspected the now-nonexistent `auto_tune` module. §13.3 audit-row for the LIVE path
+is covered by `test_grammar_cmd.py:307` (`test_apply_proposal_records_grammar_versions_row`);
+the deleted §13.3 test only exercised the dead auto_tune tighten path.
+
+**Gates (worktree venv).** ruff + format clean; mypy --strict clean (108 files, now
+incl. the new module); full suite **2038 passed / 1 skipped** (2052 − 14 dead-trigger
+tests; the 5 moved tests pass in their new homes). Behavior-identical: the removed
+`auto_tune()` call was a disarmed no-op, and the daemon calls the recorder the same
+way from its new home. **NOT landed** — awaiting the FF-merge (no restart needed).
+Related: [[D324]] (Tier-2 pt.2, same pass), [[D298]] (auto_tune disarmed permanent),
+[[D206]] (prefilter-tightening retired), [[D051]] (the grammar-version-audit origin).

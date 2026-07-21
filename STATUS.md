@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.3 (D325, BUILT IN WORKTREE — NOT YET LANDED): deleted the dead §5.5 auto-tune TRIGGER + extracted its bundled live helpers. Operator (AskUserQuestion): "Extract to honest homes". Behavior-identical; awaiting FF-merge
+
+- **Auto-tune (tightening) confirmed NEVER used:** live `grammar_versions` = 44 rows, ALL `manual_bump`/"auto-recorded on first load" (incl. v44/45/46 today); 0 from auto-tune or apply-proposal; thresholds yaml empty; `enabled: false`. `auto_tune()` ran every batch but returned immediately (disarmed no-op).
+- **Where:** branch `simplify/d325-auto-tune-extract` in `../Forge-build`. Committed there, NOT on main.
+- **Done (10 files, net −734):** NEW `forge/grammar/version_audit.py` (the live `ensure_grammar_version_recorded` + `_write_grammar_versions_row`, D051 provenance the daemon calls every cycle); `write_calibration_yaml` → `prefilters/calibration.py`; DELETED `feedback/auto_tune.py` (307 LOC, the dead §5.5 trigger) + both feedback-chain call blocks + unused imports; repointed importers; test split (deleted `test_auto_tune.py` + 3 phase5 trigger tests; moved 4 recorder tests → `test_version_audit.py` + the calib-yaml test → `test_calibration.py`).
+- **NOT widened (apply-proposal is LIVE):** the proposer still emits `gate_failure_concentration`; `cmd_apply_proposal`/`apply_tightening`/`propose_adjustment`/`AutoTuneCalibration` left untouched. NB `AutoTuneCalibration.enabled`/`min`/`max` are now config-present-but-unread (only `adjustment_pct_per_step` live via apply-proposal) — possible future config-slim.
+- **Invariant coverage preserved:** hard-rule-#4 via 4+ sibling checks; §13.3 audit-row via `test_grammar_cmd.py:307` (live apply-proposal path). The deleted invariant tests only exercised the dead trigger.
+- **Gates:** ruff + format clean; mypy --strict clean (108 files); full suite **2038 passed / 1 skipped**. Behavior-identical (the removed call was a no-op) → **FF-merge, no restart** (D322–D324 pattern).
+
 ## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.2 (D324, BUILT IN WORKTREE — NOT YET LANDED): FULL removal of the H4 `--orthogonal-yield` feature. Operator (AskUserQuestion): "Full removal in a worktree". Byte-identical proven; awaiting landing decision
 
 - **Where:** branch `simplify/d324-orthogonal-yield` in `../Forge-build` (isolated venv). Committed there, NOT on main. Sampler-touching → built in a worktree per CLAUDE.md; the restart/land is the operator's gate.

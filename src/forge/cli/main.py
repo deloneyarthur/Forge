@@ -1610,7 +1610,7 @@ def _ensure_grammar_version_recorded_silently(
     iteration) because this is the audit-trail, not a production-data path.
     """
     from forge.core.clock import utc_now
-    from forge.feedback.auto_tune import ensure_grammar_version_recorded
+    from forge.grammar.version_audit import ensure_grammar_version_recorded
     from forge.persistence.db import db_connection
 
     try:
@@ -1710,7 +1710,6 @@ def _consume_feedback_after_submit(
 
     from forge.core.clock import utc_now
     from forge.feedback.analyzer import analyze_batch
-    from forge.feedback.auto_tune import auto_tune
     from forge.feedback.consumer import consume_batch_results
     from forge.feedback.promoted_patterns import record_promoted_patterns
     from forge.feedback.proposal_writer import enrich_and_append_proposals
@@ -1718,7 +1717,6 @@ def _consume_feedback_after_submit(
     from forge.feedback.stuck_state import is_stuck, most_recent_grammar_change
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
-    from forge.prefilters.calibration import load_calibration
 
     now = utc_now()
     with db_connection(forge_db_path) as conn:
@@ -1737,15 +1735,6 @@ def _consume_feedback_after_submit(
             db=conn,
             at=now,
         )
-        if prefilter_yaml.exists():
-            calibration = load_calibration(prefilter_yaml)
-            auto_tune(
-                db=conn,
-                calibration=calibration,
-                prefilter_yaml_path=prefilter_yaml,
-                open_proposals_path=open_proposals,
-                at=now,
-            )
         # D035: floor the zero-promotion streak at the last grammar bump so
         # post-bump batches start fresh; pre-bump stretches don't poison
         # the post-bump warmup window. None floor = all-time count.

@@ -1,12 +1,12 @@
 """`forge feedback` — manual single-batch feedback consumer + analyzer + proposer.
 
 D024/D6: this command runs the per-batch feedback chain once over the
-target batch (current latest by default; or explicit `--batch-id`).
-Auto-tune is invoked unconditionally so calibration loosenings get
-proposed even when the proposer fires no §8.4 triggers.
+target batch (current latest by default; or explicit `--batch-id`):
+consume → analyze → propose → enrich/append proposals.
 
 See `cli/main.py` for `forge run --consume-feedback` (the inline daemon
-hook).
+hook). (D325: the §5.5 auto-tune calibration trigger this chain once
+invoked was retired — it never fired — so the chain ends at the proposer.)
 """
 
 from __future__ import annotations
@@ -91,14 +91,12 @@ def cmd_feedback(
     from crucible_contracts.exceptions import QueryError
 
     from forge.feedback.analyzer import analyze_batch
-    from forge.feedback.auto_tune import auto_tune
     from forge.feedback.consumer import consume_batch_results
     from forge.feedback.promoted_patterns import record_promoted_patterns
     from forge.feedback.proposal_writer import enrich_and_append_proposals
     from forge.feedback.proposer import propose
     from forge.persistence.db import db_connection
     from forge.persistence.registry_loader import load_registry
-    from forge.prefilters.calibration import load_calibration
 
     resolved_batch_id = uuid.UUID(batch_id) if batch_id else None
     parsed_since = datetime.fromisoformat(since) if since else None
@@ -139,16 +137,6 @@ def cmd_feedback(
             db=conn,
             at=now,
         )
-
-        if prefilter_yaml.exists():
-            calibration = load_calibration(prefilter_yaml)
-            auto_tune(
-                db=conn,
-                calibration=calibration,
-                prefilter_yaml_path=prefilter_yaml,
-                open_proposals_path=open_proposals,
-                at=now,
-            )
 
     typer.echo(
         f"batch_id={feedback.batch_id} "

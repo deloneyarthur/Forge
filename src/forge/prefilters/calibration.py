@@ -13,7 +13,8 @@ See DESIGN.md §5.5, `IMPLEMENTATION_DECISIONS.md` D021 (closure D3).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+import os
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -475,6 +476,37 @@ def write_loosening_proposal(proposal: AdjustmentProposal, inbox_path: Path) -> 
         fh.write(block)
 
 
+def write_calibration_yaml(calibration: Calibration, path: Path) -> None:
+    """Serialize `Calibration` back to the §10.2 YAML shape, atomically.
+
+    H-6 (audit 2026-05-29): the daemon re-reads this file via `load_calibration`
+    at the top of EVERY iteration, and that loader raises on a
+    missing-key/truncated file. A non-atomic `write_text` killed mid-flight
+    (OOM, SIGTERM, power loss) would leave `prefilter.yaml` partial and brick the
+    daemon into a 30s systemd crash-loop. Write to a sibling tmp then `os.replace`
+    (POSIX-atomic on the same filesystem) — mirrors `proposal_writer._atomic_write`.
+    The one live writer of this file is `grammar apply-proposal` (D325 note: the
+    §5.5 auto-tune self-apply that formerly wrote it was retired).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "prefilter": {
+            "signal_density": asdict(calibration.signal_density),
+            "expected_trade_count": asdict(calibration.expected_trade_count),
+            "predicted_activations": asdict(calibration.predicted_activations),
+            "novelty": asdict(calibration.novelty),
+            "signal_correlation": asdict(calibration.signal_correlation),
+            "regime_exposure": asdict(calibration.regime_exposure),
+            "permutation_test": asdict(calibration.permutation_test),
+            "auto_tune": asdict(calibration.auto_tune),
+        }
+    }
+    content = yaml.safe_dump(data, sort_keys=False)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 __all__ = [
     "AdjustmentProposal",
     "AutoTuneCalibration",
@@ -489,5 +521,6 @@ __all__ = [
     "apply_tightening",
     "load_calibration",
     "propose_adjustment",
+    "write_calibration_yaml",
     "write_loosening_proposal",
 ]

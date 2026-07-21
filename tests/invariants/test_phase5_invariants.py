@@ -17,7 +17,6 @@ import duckdb
 import pytest
 
 from forge.feedback import analyzer, proposal_writer, proposer
-from forge.feedback import auto_tune as auto_tune_mod
 from forge.feedback.consumer import consume_batch_results
 from forge.feedback.types import GrammarProposal
 from forge.persistence.db import db_connection
@@ -47,12 +46,6 @@ def test_no_apply_loosening_in_proposal_writer() -> None:
     names = _module_function_names(proposal_writer)
     for forbidden in _LOOSEN_FORBIDDEN_NAMES:
         assert forbidden not in names, f"proposal_writer exposes {forbidden}"
-
-
-def test_no_apply_loosening_in_auto_tune() -> None:
-    names = _module_function_names(auto_tune_mod)
-    for forbidden in _LOOSEN_FORBIDDEN_NAMES:
-        assert forbidden not in names, f"auto_tune exposes {forbidden}"
 
 
 def test_no_apply_loosening_in_proposer() -> None:
@@ -102,167 +95,6 @@ def test_phase5_proposer_only_emits_tighten_direction() -> None:
     proposals = propose(report, feedback, at=datetime(2026, 5, 13, tzinfo=UTC))
     assert proposals  # fixture should fire at least one
     assert all(p.is_loosen is False for p in proposals)
-
-
-# ---------------------------------------------------------------------------
-# §13.3 — every grammar.yaml-touching change writes a grammar_versions row
-# ---------------------------------------------------------------------------
-
-
-def test_auto_tune_tighten_writes_grammar_versions_audit_row(tmp_path: Path) -> None:
-    """Hard rule #3: the auto-tune tighten path must write a
-    grammar_versions row. Without that row the audit trail is broken."""
-    from forge.feedback.auto_tune import auto_tune, write_calibration_yaml
-    from forge.prefilters.calibration import (
-        AutoTuneCalibration,
-        Calibration,
-        ExpectedTradeCountCalibration,
-        NoveltyCalibration,
-        PermutationTestCalibration,
-        PredictedActivationsCalibration,
-        RegimeExposureCalibration,
-        SignalCorrelationCalibration,
-        SignalDensityCalibration,
-    )
-
-    cal = Calibration(
-        signal_density=SignalDensityCalibration(min_activations=30),
-        expected_trade_count=ExpectedTradeCountCalibration(min_trades=50),
-        predicted_activations=PredictedActivationsCalibration(min_entries=10),
-        novelty=NoveltyCalibration(max_jaccard_overlap=0.80),
-        signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=0.85),
-        regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=0.80),
-        permutation_test=PermutationTestCalibration(
-            n_permutations=100, p_value_threshold=0.10, forward_horizon_days=0
-        ),
-        auto_tune=AutoTuneCalibration(
-            enabled=True,
-            min_promotion_rate=0.005,
-            max_promotion_rate=0.05,
-            adjustment_pct_per_step=0.10,
-            max_cumulative_adjustment=0.30,
-        ),
-    )
-    yaml_path = tmp_path / "prefilter.yaml"
-    write_calibration_yaml(cal, yaml_path)
-    forge_db = tmp_path / "forge.db"
-    with db_connection(forge_db) as conn:
-        # 2 batches > 5% promotion rate
-        for _ in range(2):
-            conn.execute(
-                "INSERT INTO batch_summaries (forge_batch_id, batch_size, submitted_at, "
-                "grammar_version, registry_version, promotion_rate) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                [
-                    str(uuid.uuid4()),
-                    100,
-                    datetime(2026, 5, 13, tzinfo=UTC),
-                    "v1",
-                    "abc",
-                    0.07,
-                ],
-            )
-        auto_tune(
-            db=conn,
-            calibration=cal,
-            prefilter_yaml_path=yaml_path,
-            open_proposals_path=tmp_path / "OPEN_PROPOSALS.md",
-            at=datetime(2026, 5, 13, tzinfo=UTC),
-        )
-        rows = conn.execute(
-            "SELECT change_type, operator_initials FROM grammar_versions "
-            "WHERE change_type = 'auto_tighten_calibration'"
-        ).fetchall()
-    assert len(rows) == 1
-    # §13.3: auto changes have NULL operator_initials
-    assert rows[0][1] is None
-
-
-# ---------------------------------------------------------------------------
-# §5.5 — cumulative cap structurally enforced
-# ---------------------------------------------------------------------------
-
-
-def test_auto_tune_does_not_exceed_cumulative_cap(tmp_path: Path) -> None:
-    from forge.feedback.auto_tune import auto_tune, write_calibration_yaml
-    from forge.prefilters.calibration import (
-        AutoTuneCalibration,
-        Calibration,
-        ExpectedTradeCountCalibration,
-        NoveltyCalibration,
-        PermutationTestCalibration,
-        PredictedActivationsCalibration,
-        RegimeExposureCalibration,
-        SignalCorrelationCalibration,
-        SignalDensityCalibration,
-    )
-
-    cal = Calibration(
-        signal_density=SignalDensityCalibration(min_activations=30),
-        expected_trade_count=ExpectedTradeCountCalibration(min_trades=50),
-        predicted_activations=PredictedActivationsCalibration(min_entries=10),
-        novelty=NoveltyCalibration(max_jaccard_overlap=0.80),
-        signal_correlation=SignalCorrelationCalibration(max_jaccard_overlap=0.85),
-        regime_exposure=RegimeExposureCalibration(max_single_regime_concentration=0.80),
-        permutation_test=PermutationTestCalibration(
-            n_permutations=100, p_value_threshold=0.10, forward_horizon_days=0
-        ),
-        auto_tune=AutoTuneCalibration(
-            enabled=True,
-            min_promotion_rate=0.005,
-            max_promotion_rate=0.05,
-            adjustment_pct_per_step=0.10,
-            max_cumulative_adjustment=0.30,
-        ),
-    )
-    yaml_path = tmp_path / "prefilter.yaml"
-    write_calibration_yaml(cal, yaml_path)
-    forge_db = tmp_path / "forge.db"
-    with db_connection(forge_db) as conn:
-        # Pre-populate 3 prior auto_tighten rows -> already at cap (0.30)
-        for i in range(3):
-            conn.execute(
-                "INSERT INTO grammar_versions "
-                "(version, rule_count, yaml_sha256, changed_at, change_type, "
-                "change_description, operator_initials) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [
-                    f"calib_v{i}",
-                    0,
-                    "0" * 64,
-                    datetime(2026, 5, 13, tzinfo=UTC),
-                    "auto_tighten_calibration",
-                    "step_pct=0.10",
-                    None,
-                ],
-            )
-        for _ in range(2):
-            conn.execute(
-                "INSERT INTO batch_summaries (forge_batch_id, batch_size, submitted_at, "
-                "grammar_version, registry_version, promotion_rate) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                [
-                    str(uuid.uuid4()),
-                    100,
-                    datetime(2026, 5, 13, tzinfo=UTC),
-                    "v1",
-                    "abc",
-                    0.10,
-                ],
-            )
-        new_cal = auto_tune(
-            db=conn,
-            calibration=cal,
-            prefilter_yaml_path=yaml_path,
-            open_proposals_path=tmp_path / "OPEN_PROPOSALS.md",
-            at=datetime(2026, 5, 13, tzinfo=UTC),
-        )
-        # No new auto_tighten row written (cap already met)
-        rows = conn.execute(
-            "SELECT COUNT(*) FROM grammar_versions WHERE change_type = 'auto_tighten_calibration'"
-        ).fetchone()
-    assert new_cal == cal
-    assert rows is not None
-    assert rows[0] == 3  # unchanged from pre-populated
 
 
 # ---------------------------------------------------------------------------
@@ -504,8 +336,8 @@ def test_ensure_grammar_version_recorded_lands_active_grammar(tmp_path: Path) ->
     change."""
     from pathlib import Path as _Path
 
-    from forge.feedback.auto_tune import ensure_grammar_version_recorded
     from forge.grammar import load_grammar
+    from forge.grammar.version_audit import ensure_grammar_version_recorded
 
     yaml_path = _Path(__file__).resolve().parents[2] / "config" / "grammar.yaml"
     archive_dir = yaml_path.parent / "grammar_archive"
