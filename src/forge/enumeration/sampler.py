@@ -219,9 +219,14 @@ _REGIME_VETO_SHARE: float = 0.5
 #  - xsect-first: vix_term_slope is market_wide_by_design (rank-eligible), so on
 #    the xsect arm it is a uniform market-level condition on WHEN the per-name
 #    rank fires -- thins the stream by TIME (VIX regime), not by name.
-#  - Primary restricted to trend-STRENGTH gates (adx/hurst -- the price axis the
-#    confirmed region conditions); this both (a) targets the confirmed pair and
-#    (b) is C1-safe by construction (trend_strength shares no family with
+#  - Primary restricted to HURST (v45/D319 tightening — Crucible
+#    FORGE_q46_readdesign_and_scope_refine_2026-07-21): on residual_momentum,
+#    hurst x resid converts 4.06-4.47% (the working base the confirmed blend
+#    fed) but adx x resid is DEAD (0.32-0.40%, both sides measured), so opening
+#    adx sprays the conditioner share onto a dead base and dilutes the in-book
+#    read. adx can ride as a later arm only if the hurst arm earns it. (v44
+#    fired on {adx,hurst}; the adx arm was ~13% of eligible resid draws.)
+#    C1-safe by construction (trend_strength shares no family with
 #    vix_term_slope=macro), so no macro x macro stack (market_state, market_rv)
 #    can arise.
 #  - NOT dormant: vix_term_slope is already registry-served (a live R2 gate), so
@@ -235,7 +240,24 @@ _REGIME_VETO_SHARE: float = 0.5
 # config (the golden re-pin scoping proof).
 _VIX_CONDITIONER_ID: str = "vix_term_slope"
 _VIX_CONDITIONER_SHARE: float = 0.125
-_VIX_CONDITIONER_PRIMARY_GATES: frozenset[str] = frozenset({"adx", "hurst"})
+# v45 (D319): hurst ONLY (was {adx, hurst} in v44) — adx x residual_momentum is
+# dead (see the block above); the pilot conditions the working hurst base only.
+_VIX_CONDITIONER_PRIMARY_GATES: frozenset[str] = frozenset({"hurst"})
+
+# v45 (D319) — residual_momentum pilot DIAL (Crucible
+# FORGE_q46_readdesign_and_scope_refine_2026-07-21 §5): lift the residual_momentum
+# directional draw ~2x so the hurst x vix double-gate cell lands ~600-800 decided
+# over the +2-week read window (~2x the natural ~375), enough honest components
+# (~20-30) for their in-book marginal-contribution lane (P2 incumbent_add_variants,
+# D213 — the load-bearing read). A MULTIPLIER on residual_momentum's weighted-draw
+# option weight (`_option_weight`), so it only touches the learned weighted path
+# (production); the cold-start path (rng.choice, no weights) is UNTOUCHED —
+# byte-identical (hard rule #6), the test_sampler goldens included. Deliberately
+# MODEST: ~2x share (donchian/rolling_sharpe still dominate) so the trend supply
+# does not become a monoculture (Crucible's P5 diversity KPIs — the very thing
+# this pilot exists to grow). RETIRE this dial when the +2-week in-book read
+# concludes (a future version drops it; the D287-pin-retire convention).
+_RESID_MOMENTUM_PILOT_WEIGHT: float = 2.0
 
 # D270 (v31) — the capitulation-bounce family (Crucible
 # FORGE_capitulation_bounce_generation_request_2026-07-12): `momentum` as a
@@ -1662,7 +1684,13 @@ def _select_bucket_directional_regime(
             weight = triples.get((hypothesis, directional, bucket_name))
             if weight is None:
                 weight = pairs.get((hypothesis, bucket_name), _BUCKET_WEIGHT_PRIOR_MEAN)
-            return max(weight, _BUCKET_EXPLORATION_FLOOR)
+            weight = max(weight, _BUCKET_EXPLORATION_FLOOR)
+            # v45 (D319): the residual_momentum pilot dial — lift its draw ~2x to
+            # feed the hurst x vix double-gate cell for the +2-week in-book read.
+            # Weighted path only; cold-start (rng.choice) stays byte-identical.
+            if directional == _RESID_MOMENTUM_DIRECTIONAL_ID:
+                weight *= _RESID_MOMENTUM_PILOT_WEIGHT
+            return weight
 
         options = tuple(
             (d, b)

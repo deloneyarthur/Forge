@@ -3014,3 +3014,46 @@ timing. Contracts symmetric (their 1.33→1.34 rides the same window; we're
 already 1.34.0 as of v44).
 
 Related: [[D317]], [[D315]], [[D276]], [[D287]], [[D264]], [[D213]].
+
+## D319 — 2026-07-21 — v44 → v45 DEPLOYED: Q46 scope REFINEMENT (operator "yes do the v45 refinement"; Crucible both-operator go). (1) conditioner primary HURST-ONLY (adx dropped — dead on residual_momentum); (2) residual_momentum pilot DIAL ~2x for the in-book read's power. Emission-policy; goldens byte-identical; contracts stays 1.34.0
+
+**Trigger:** `FORGE_q46_readdesign_and_scope_refine_2026-07-21.md` (D318 triage) —
+Crucible re-derived the read after our D315 and inverted the baseline; both
+operators gave the v45 go. Two measured refinements to the deployed v44
+conditioner.
+
+**Change 1 — hurst-primary ONLY** (`_VIX_CONDITIONER_PRIMARY_GATES` {adx,hurst}
+→ {hurst}). Our verdicts + theirs agree: hurst×residual_momentum converts
+4.06–4.47% (the working base the confirmed blend fed) but adx×residual_momentum
+is DEAD (0.32–0.40%). v44 fired on {adx,hurst}, so the adx arm was ~13% of
+eligible resid double-gate draws — share sprayed on a dead base. The load-bearing
+read is the double-gate's IN-BOOK marginal contribution (their P2
+`incumbent_add_variants` lane, D213), not a solo conversion test; conversion-vs-
+the-4.06%-hurst-base is the supporting screen (our D315 named the wrong control —
+vix-as-primary is a VOLUME baseline, dead at solo grade 0.23–0.40%).
+
+**Change 2 — residual_momentum pilot DIAL** (`_RESID_MOMENTUM_PILOT_WEIGHT = 2.0`,
+applied in `_option_weight` in the weighted draw path). Lifts residual_momentum's
+draw ~2x so the hurst×vix double-gate cell lands ~600–800 decided over the
++2-week read (~2x the natural ~375) → ~20–30 honest components for the in-book
+lane (their sizing ask; thin at natural draw). Modest by design — NOT a trend
+monoculture (their P5 diversity KPIs; donchian/rolling_sharpe still dominate).
+RETIRE when the read concludes (D287-pin-retire convention).
+
+**Emission proof (live registry, v45, production seed, weighted path):**
+residual_momentum share 7.5% → **14.0% = 1.87x** (right at the ~2x target);
+hurst×vix double-gate = 20, **adx×vix = 0** (hurst-only confirmed). Both changes
+touch only the LEARNED weighted path + the served-registry conditioner, so the
+minimal-fixture cold path is untouched → the **210 sampler goldens are
+byte-identical** (no re-pin; the hard-rule-#6 proof). 12 conditioner/dial tests
+(the v44 file + 3 v45: adx-never, dial-lifts-share, dial-default-2.0).
+
+**Build/deploy:** grammar-gated → built in `../Forge-build` worktree (full suite
+green), transferred by patch to the clean live tree (HEAD 07b81b7); service
+stopped BEFORE the grammar patch (v44's hot-grammar-leak lesson), commit, restart.
+grammar bump v44→v45 + archive v45.yaml; the 21 `rules:` text unchanged;
+GRAMMAR.md S3 note corrected to hurst-only. Contracts stays 1.34.0 (co-adopted at
+v44). Crucible pins the +2-week in-book read to THIS deploy, not v44's 03:43Z.
+Deploy relay updated with the v45 timestamp + emission proof.
+
+Related: [[D318]], [[D317]], [[D315]], [[D276]], [[D287]], [[D264]], [[D213]], [[D104]].

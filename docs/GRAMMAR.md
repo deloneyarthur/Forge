@@ -48,8 +48,9 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 > one mutually-exclusive optional-second-gate slot (max 2 total): the calm-side
 > VETOES (dsj v25, ivol/market_rv v26/v29, ref_trailing_return v39 — dormant
 > until Crucible serves the id) and, since **v44 (D317)**, the `vix_term_slope`
-> CONDITIONER on the xsect trend arm (ANDed onto an adx/hurst trend-strength
-> primary — the confirmed resid_vix price-axis pair; active immediately, vix is
+> CONDITIONER on the xsect trend arm (ANDed onto a **hurst** trend-strength
+> primary — v45/D319 narrowed it from {adx,hurst} to hurst-only, adx×resid being
+> dead — the confirmed resid_vix price-axis pair; active immediately, vix is
 > already served). C1 keeps the second gate a different family from the primary.
 
 **What.** At least one signal has `role: regime_filter`.

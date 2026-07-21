@@ -169,7 +169,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D316 bumped v43 -> v44 (Q46 vix_term_slope second-gate conditioner on the xsect
     # trend arm; emission-policy add, the 21 `rules:` textually unchanged — S3 `>=1`
     # already permits a second gate).
-    assert grammar.grammar_version == "v44"  # type: ignore[attr-defined]
+    # D319 bumped v44 -> v45 (Q46 refinement: conditioner primary hurst-only + the
+    # residual_momentum pilot dial; emission-policy, rules text unchanged).
+    assert grammar.grammar_version == "v45"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

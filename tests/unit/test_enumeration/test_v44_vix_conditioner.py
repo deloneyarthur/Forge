@@ -1,22 +1,26 @@
-"""v44 (D317) — the Q46 optional SECOND regime gate: a vix_term_slope CONDITIONER.
+"""v44 (D317) + v45 (D319) — the Q46 optional SECOND regime gate: a vix_term_slope
+CONDITIONER, refined.
 
-Crucible `FORGE_q46_reply_repin_and_go_2026-07-21` GO on the scope. The §3.5
-`rules:` text is untouched (S3 `>=1` has always permitted a second gate; the
-v25/v26/v29/v39 vetoes exercise it) — this is an emission-policy add. On the
-xsect trend arm, `vix_term_slope` may be ANDed onto a trend-STRENGTH primary
-(adx/hurst) as the confirmed resid_vix price-axis pair — the double-gate the
-sampler never emitted (vix_term_slope was only ever an R2 PRIMARY).
+Crucible `FORGE_q46_reply_repin_and_go_2026-07-21` GO, then
+`FORGE_q46_readdesign_and_scope_refine_2026-07-21` (v45). The §3.5 `rules:` text is
+untouched (S3 `>=1` has always permitted a second gate) — emission-policy. On the
+xsect trend arm, `vix_term_slope` is ANDed onto a HURST primary (v45: hurst-only,
+was {adx,hurst} in v44 — adx x residual_momentum is dead) as the confirmed
+resid_vix price-axis pair — the double-gate the sampler never emitted
+(vix_term_slope was only ever an R2 PRIMARY). v45 also adds a residual_momentum
+pilot DIAL (~2x its weighted-draw share) for the in-book read's power.
 
 Design invariants under test:
-  - Fires ONLY on trend_continuation x cross_sectional_rank with an adx/hurst
-    primary; never MR, never single-name, never capitulation, never a macro
-    primary (C1 — no macro x macro stack).
+  - Fires ONLY on trend_continuation x cross_sectional_rank with a HURST primary
+    (v45); never adx, never MR, never single-name, never capitulation, never a
+    macro primary (C1 — no macro x macro stack).
   - Shares the SINGLE optional second-gate slot with the veto (mutually
     exclusive → max 2 regime gates total).
   - Dormant under a registry that does not serve vix_term_slope as a trend gate
     (the minimal fixture — byte-identical cold path, hard rule #6; the 210
     test_sampler goldens are the byte-identity proof).
   - Fires at ~the target share (0.125) of eligible configs.
+  - v45 dial: residual_momentum's weighted-path draw share ~doubles.
 """
 
 from __future__ import annotations
@@ -26,8 +30,10 @@ from pathlib import Path
 import pytest
 from crucible_contracts import IndicatorMetadata, RegistrySnapshot
 
+import forge.enumeration.sampler as sampler_mod
 from forge.enumeration import enumerate_candidates
 from forge.enumeration.sampler import (
+    _RESID_MOMENTUM_PILOT_WEIGHT,
     _VIX_CONDITIONER_ID,
     _VIX_CONDITIONER_PRIMARY_GATES,
     _VIX_CONDITIONER_SHARE,
@@ -239,6 +245,74 @@ def test_double_gate_configs_are_grammar_valid(v44_configs: list) -> None:
         and len(_gates(c)) == 2
     ]
     assert doubles  # yielded ⇒ grammar-valid
+
+
+# --- v45: hurst-only (adx dropped) --------------------------------------------
+
+
+def test_conditioner_never_on_adx_primary_since_v45(v44_configs: list) -> None:
+    """v45 restricts the conditioner primary to hurst. adx and vix_term_slope
+    therefore never co-occur as gates on a trend-xsect config (adx is neither a
+    conditioner primary nor a veto, so {adx, vix} can only have come from the
+    now-removed adx conditioner arm)."""
+    assert "adx" not in _VIX_CONDITIONER_PRIMARY_GATES  # the constant tightened
+    for c in _trend_xsect(v44_configs):
+        gates = _gates(c)
+        assert not ("adx" in gates and _VIX_CONDITIONER_ID in gates)
+
+
+# --- v45: residual_momentum pilot dial ----------------------------------------
+
+
+def test_resid_momentum_dial_lifts_share_in_weighted_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dial (~2x) multiplies residual_momentum's option weight in the LEARNED
+    weighted draw path. Isolate it: equal base bucket_weights (so every
+    directional falls back to the same pair weight), then residual_momentum's
+    realized trend-directional share ~doubles between mult=1.0 and mult=2.0.
+    Share is sub-linear in weight, so the band is loose — this guards direction +
+    rough magnitude, and confirms the dial touches only the weighted path."""
+    reg = _v44_registry(minimal_registry_snapshot())
+    grammar = _grammar()
+    bucket_weights = {
+        ("trend_continuation", b): 1.0 for b in ("swing_short", "swing_mid", "swing_long")
+    }
+
+    def _resid_share(mult: float) -> float:
+        monkeypatch.setattr(sampler_mod, "_RESID_MOMENTUM_PILOT_WEIGHT", mult)
+        n = 0
+        r = 0
+        for cfg in enumerate_candidates(
+            grammar=grammar,
+            registry=reg,
+            seed=7,
+            max_candidates=9000,
+            bucket_weights=bucket_weights,
+        ):
+            if cfg.hypothesis != "trend_continuation":
+                continue
+            n += 1
+            d = next((s.indicators[0] for s in cfg.signals if s.role == "directional"), None)
+            if d == "residual_momentum":
+                r += 1
+        return r / max(n, 1)
+
+    share_1x = _resid_share(1.0)
+    share_2x = _resid_share(2.0)
+    assert share_1x > 0.0, "residual_momentum must draw at all for the dial to test"
+    ratio = share_2x / share_1x
+    # Share lift is SUB-LINEAR in weight (the denominator grows too), and it
+    # depends on the base share — this synthetic equal-weight setup gives resid a
+    # ~17% base, so the 2x weight lands ~1.35x; at production's ~10% base the same
+    # weight gives ~1.8x (the double-gate cell target). Guard direction + that the
+    # lift is material; the production cell-count target is checked by emission
+    # proof at deploy, not here.
+    assert 1.25 <= ratio <= 2.3, f"dial lift {ratio:.2f} (share {share_1x:.3f}->{share_2x:.3f})"
+
+
+def test_dial_default_is_two() -> None:
+    assert _RESID_MOMENTUM_PILOT_WEIGHT == 2.0
 
 
 if __name__ == "__main__":
