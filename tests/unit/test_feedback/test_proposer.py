@@ -410,64 +410,6 @@ def test_t23_counterfactual_conservative_when_promotions_exist() -> None:
     assert cf.would_be_rejected_count == 5
 
 
-def test_t23_should_auto_apply_escalates_on_counterfactual() -> None:
-    """T2.3: should_auto_apply returns False when counterfactual would reject promoted."""
-    from forge.feedback.proposer import CounterfactualResult, should_auto_apply_proposal
-
-    failures = (GateFailureRow(gate_name="x", failure_count=500, failure_rate=0.95),)
-    report = _report(gate_failures=failures)
-    feedback = BatchFeedback(
-        batch_id=report.batch_id,
-        submitted_count=600,
-        outcomes=(_outcome(promote=True),),
-    )
-    p = propose(report, feedback, at=_AT)[0]
-    cf = CounterfactualResult(promoted_count=3, would_be_rejected_count=1, rejection_rate=1 / 3)
-    should_apply, reason = should_auto_apply_proposal(p, cf)
-    assert should_apply is False
-    assert reason is not None
-    assert "counterfactual" in reason
-
-
-def test_t23_should_auto_apply_escalates_on_low_confidence() -> None:
-    """T2.3: even with safe counterfactual, low confidence → escalate."""
-    from forge.feedback.proposer import CounterfactualResult, should_auto_apply_proposal
-
-    # Small sample → low confidence (<0.7)
-    failures = (GateFailureRow(gate_name="x", failure_count=10, failure_rate=0.95),)
-    report = _report(gate_failures=failures)
-    feedback = BatchFeedback(
-        batch_id=report.batch_id,
-        submitted_count=20,
-        outcomes=(_outcome(promote=True),),
-    )
-    p = propose(report, feedback, at=_AT)[0]
-    assert p.confidence < 0.7
-    cf = CounterfactualResult(promoted_count=0, would_be_rejected_count=0, rejection_rate=0.0)
-    should_apply, reason = should_auto_apply_proposal(p, cf)
-    assert should_apply is False
-    assert reason is not None
-    assert "confidence" in reason
-
-
-def test_t23_should_auto_apply_safe_with_high_confidence_and_no_promotions() -> None:
-    """T2.3 happy path: high confidence + no promotions → auto-apply."""
-    from forge.feedback.proposer import CounterfactualResult, should_auto_apply_proposal
-
-    failures = (GateFailureRow(gate_name="x", failure_count=500, failure_rate=0.95),)
-    report = _report(gate_failures=failures)
-    feedback = BatchFeedback(
-        batch_id=report.batch_id,
-        submitted_count=600,
-        outcomes=(_outcome(promote=True),),
-    )
-    p = propose(report, feedback, at=_AT)[0]
-    cf = CounterfactualResult(promoted_count=0, would_be_rejected_count=0, rejection_rate=0.0)
-    should_apply, reason = should_auto_apply_proposal(p, cf)
-    assert should_apply is True
-    assert reason is None
-
-
 # ---------------------------------------------------------------------------
 # D053 — counterfactual phase labeling (P1-1 honesty fix)
 # ---------------------------------------------------------------------------

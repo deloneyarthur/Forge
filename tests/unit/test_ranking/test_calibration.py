@@ -12,7 +12,6 @@ import math
 import pytest
 
 from forge.ranking.calibration import (
-    brier_decomposition,
     expected_calibration_error,
     logit,
     platt_apply,
@@ -90,28 +89,6 @@ def test_ece_is_frequency_weighted_across_bins() -> None:
     probs = [0.9] * 90 + [0.1] * 10
     expected = (90 / 100) * 0.1 + (10 / 100) * 0.9
     assert expected_calibration_error(labels, probs, n_bins=10) == pytest.approx(expected)
-
-
-# ---------------------------------------------------------------------------
-# brier_decomposition (Murphy)
-# ---------------------------------------------------------------------------
-
-
-def test_brier_decomposition_uncertainty_is_base_rate_variance() -> None:
-    labels = [1] * 30 + [0] * 70
-    probs = [0.5] * 100
-    _rel, _res, unc = brier_decomposition(labels, probs, n_bins=10)
-    assert unc == pytest.approx(0.3 * 0.7)
-
-
-def test_brier_decomposition_identity_holds() -> None:
-    # Murphy identity brier == reliability - resolution + uncertainty is EXACT when each
-    # bin holds a single forecast value; these 10 probs each land alone in a distinct bin.
-    labels = [1, 0, 1, 1, 0, 0, 1, 0, 1, 0] * 10
-    probs = [0.95, 0.25, 0.75, 0.65, 0.35, 0.15, 0.85, 0.45, 0.55, 0.05] * 10
-    rel, res, unc = brier_decomposition(labels, probs, n_bins=10)
-    brier = sum((p - y) ** 2 for p, y in zip(probs, labels, strict=True)) / len(labels)
-    assert brier == pytest.approx(rel - res + unc, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------

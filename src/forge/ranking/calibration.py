@@ -85,30 +85,6 @@ def expected_calibration_error(
     )
 
 
-def brier_decomposition(
-    labels: Sequence[int], probs: Sequence[float], *, n_bins: int = 10
-) -> tuple[float, float, float]:
-    """Murphy decomposition ``(reliability, resolution, uncertainty)``.
-
-    ``brier == reliability - resolution + uncertainty`` (exact when each bin holds a
-    single forecast value; approximate otherwise). Lower reliability = better calibration;
-    higher resolution = the forecaster separates outcomes; uncertainty is the irreducible
-    base-rate variance. 0/0/0 on empty input.
-    """
-    total = len(labels)
-    if total == 0:
-        return 0.0, 0.0, 0.0
-    base_rate = sum(labels) / total
-    uncertainty = base_rate * (1.0 - base_rate)
-    reliability = 0.0
-    resolution = 0.0
-    for _lo, n, mean_pred, rate in reliability_table(labels, probs, n_bins=n_bins):
-        weight = n / total
-        reliability += weight * (mean_pred - rate) ** 2
-        resolution += weight * (rate - base_rate) ** 2
-    return reliability, resolution, uncertainty
-
-
 def platt_fit(scores: Sequence[float], labels: Sequence[int]) -> tuple[float, float]:
     """Fit ``P = sigmoid(a * score + b)`` by 1-D IRLS on ``scores`` (pass model logits for
     classic Platt/temperature scaling). Returns ``(a, b)``. Deterministic — reuses the
@@ -128,7 +104,6 @@ def platt_apply(a: float, b: float, score: float) -> float:
 
 __all__ = [
     "ReliabilityRow",
-    "brier_decomposition",
     "expected_calibration_error",
     "logit",
     "platt_apply",

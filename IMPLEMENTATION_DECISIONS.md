@@ -3181,3 +3181,42 @@ standing reboot-surface risk).
 removal), [[D235]] (FLIP-2 refutation), [[D224]]/[[D226]] (FLIP-1 ship),
 [[D295]]/[[D302]] (the relay-archive pattern + RELAYS ledger), [[D320]] (the
 v46 wiring that closed the refutation-registry relay).
+
+## D322 — 2026-07-21 — Complexity-reduction pass (cont.): Tier-1 dead-code removal — two verified-dead exported symbols from the accreted-complexity audit (operator "lets do tier 1. make sure its a safe deletion through validation"). No daemon path touched; no grammar/contracts change; no restart required
+
+**Context.** Continuation of [[D321]]. The audit's tiered plan put two exported
+symbols in Tier-1 (delete-now, verified-dead). Deadness was re-confirmed
+independently at this HEAD before cutting — full-repo grep of each symbol across
+`src/ tests/ scripts/ docs/ *.md`, plus a check that no `import *` consumer pulls
+either via `__all__`. Both were reachable only from their own tests.
+
+**1. `should_auto_apply_proposal` REMOVED** (`feedback/proposer.py`). The D044/T2.3
+auto-apply decision gate — framework for a future auto-apply path that was never
+wired. No production caller auto-applies proposer proposals: the operator runs
+`forge grammar apply-proposal`, and hard-rule #4 keeps every loosening
+operator-gated (the daemon's proposal path writes `OPEN_PROPOSALS.md` and stops).
+The only references were 3 tests + its `__all__` entry. Removed the function, the
+`__all__` entry, and the 3 tests; reworded the one dangling docstring reference in
+the kept `evaluate_counterfactual` (which stays — `proposal_writer` imports it).
+
+**2. `brier_decomposition` REMOVED** (`ranking/calibration.py`). The Murphy
+`(reliability, resolution, uncertainty)` diagnostic. Its sibling calibration
+helpers (`expected_calibration_error`, `platt_fit/apply`, `reliability_table`) are
+imported by `ranking/evaluation.py`; this one never was — only 2 tests used it.
+Removed the function, the `__all__` entry, and the 2 tests. The historical D-log
+mention (this file, the D-entry that introduced it) left in place as provenance.
+
+**Deferred, NOT touched.** The rest of Tier-1 is tree hygiene over operator-owned
+UNTRACKED files (`scratchpad/` one-offs + 5 untracked `PROMPT_CRUCIBLE_*.md`) —
+no git safety net, so "delete" is not a safe operation on them; surfaced for the
+operator to commit/archive rather than cut (the relay files are live Q46 work, not
+stale). Tier-2 (`auto_tune.py` shrink, `--orthogonal-yield`, the superseded
+`compute_hypothesis_weights`) waits on the audit's open questions.
+
+**Gates.** 4 files, 144 deletions / 3 insertions. mypy --strict clean (108
+files); ruff check + format clean (no stale imports — F401 clean); full suite
+**2077 passed / 1 skipped** (the skip pre-exists — "no live refutations export").
+Both symbols were unreachable from the run loop, so the daemon is byte-unaffected;
+no restart. Related: [[D321]] (the pass this continues), [[D301]] (the prior
+dead-export cut), [[D044]] (the T2.3 auto-apply origin), [[D105]] (the proposer
+re-aim that left the gate unwired).

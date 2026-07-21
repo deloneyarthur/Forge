@@ -339,9 +339,9 @@ def evaluate_counterfactual(
 
     Conservative phase-1 interpretation:
     - 0 promoted → 0.0 rejection_rate, safe.
-    - >0 promoted → 1.0 rejection_rate (worst-case assumption); the
-      caller's `should_auto_apply_proposal` will escalate to operator
-      review.
+    - >0 promoted → 1.0 rejection_rate (worst-case assumption); a
+      non-zero rejection_rate is the caller's signal to escalate to
+      operator review.
 
     D053: the result carries `phase=PHASE_1_BINARY` so the call site
     can stamp evidence_json with structured phase metadata; operators
@@ -364,40 +364,6 @@ def evaluate_counterfactual(
         rejection_rate=1.0,
         phase=PHASE_1_BINARY,
     )
-
-
-def should_auto_apply_proposal(
-    proposal: GrammarProposal,
-    counterfactual: CounterfactualResult,
-    *,
-    min_confidence: float = 0.7,
-) -> tuple[bool, str | None]:
-    """T2.3 / D044 — decision gate for any future auto-apply path.
-
-    Returns ``(should_apply, escalation_reason)``. Today no caller
-    auto-applies proposer-generated proposals (operator runs
-    `forge grammar apply-proposal`); this function is the framework
-    a future auto-apply path consumes.
-
-    Decision rule (per draft Enhancement 8):
-    1. ``counterfactual.rejection_rate > 0.0`` → escalate (would harm
-       a promoted strategy).
-    2. ``proposal.confidence < min_confidence`` → escalate (insufficient
-       evidence; sample too small to act on without operator review).
-    3. Otherwise: safe to auto-apply.
-    """
-    if counterfactual.rejection_rate > 0.0:
-        return (
-            False,
-            f"counterfactual: would reject {counterfactual.would_be_rejected_count} "
-            f"of {counterfactual.promoted_count} recent promoted strategies",
-        )
-    if proposal.confidence < min_confidence:
-        return (
-            False,
-            f"confidence={proposal.confidence:.2f} below auto-apply threshold {min_confidence:.2f}",
-        )
-    return (True, None)
 
 
 # ---------------------------------------------------------------------------
@@ -472,5 +438,4 @@ __all__ = [
     "detect_persistent_proposals",
     "evaluate_counterfactual",
     "propose",
-    "should_auto_apply_proposal",
 ]
