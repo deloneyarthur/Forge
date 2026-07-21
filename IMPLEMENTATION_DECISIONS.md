@@ -2966,3 +2966,51 @@ the only pieces `1153f2c` did NOT capture, committed here.
 
 Related: [[D315]], [[D316]], [[D314]], [[D264]], [[D276]], [[D287]], [[D258]],
 [[D310]], [[D313]], [[D104]], [[D199]].
+
+## D318 — 2026-07-21 — Q46 read-inversion + hurst-only scope refinement TRIAGED (docs-only; v45 refinement RECOMMENDED, operator-gated — NOT built): Crucible re-derived the read after our D315 and inverted the baseline (the real control is hurst×residual_momentum 4.06%, not the dead vix-as-primary 0.23%) + asks hurst-primary-ONLY (adx dead on this directional) + a modest ~2× residual_momentum dial. Our verdicts reproduce their split. v44 (live, {adx,hurst}) → the settled scope rides v45
+
+**Trigger:** `FORGE_q46_readdesign_and_scope_refine_2026-07-21.md` — Crucible's
+response to our D315 confirmed-cell refinement. Their operator ALSO gives the
+v44 build word (§7), but the relay crossed our v44 deploy notice in flight, so
+it authorizes a scope we've refined past.
+
+**Verification (our verdicts reproduce their split — snapshot forge_snapD.db,
+trend × residual_momentum × xsect, honest clean era ≥07-11):**
+
+- residual_momentum × **hurst** (no vix): **4.47%** (92/2,058) — their 4.06%.
+  The working base.
+- residual_momentum × **adx** (no vix): **0.40%** (1/247) — their 0.32%. Dead.
+- residual_momentum × vix (any form): **0.40%** (3/759) — their 0.23–0.26%.
+  Dead at solo grade.
+
+Directions + magnitudes match. Their inversion is correct: our D315 named the
+wrong control (vix-as-primary is a VOLUME baseline, a non-converter at quality);
+the load-bearing question is "does vix ADD on a working hurst gate (4.06%)," and
+the primary read is IN-BOOK marginal contribution (their P2 `incumbent_add_variants`
+lane, D213), not a solo conversion test. Conversion vs 4.06% is the supporting
+screen.
+
+**The three accepted refinements (all → a v45, since each changes emission):**
+
+1. **hurst-primary ONLY** (drop adx from the conditioner eligibility). adx×resid
+   is dead (0.40%); the deployed v44 fires on {adx,hurst}, so the adx arm is ~13%
+   of eligible resid double-gate draws (247 vs 2,058) — real dilution. A one-line
+   change: `_VIX_CONDITIONER_PRIMARY_GATES` {adx,hurst} → {hurst}.
+2. **residual_momentum directional dial ~2×** — size the weight so the double-gate
+   cell lands ~600–800 decided over the 2wk window (~20–30 honest for the in-book
+   lane), NOT a monoculture (their P5 diversity KPIs — the delicate part; the
+   mechanism/magnitude wants operator sign-off).
+3. Pin the +2wk read at the **v45** deploy, not v44's 03:43Z.
+
+**Posture: NOT built — v45 is a SECOND operator-gated grammar deploy today, and
+the residual_momentum dial is a supply-diversity tradeoff Crucible flagged as
+delicate.** The deployed v44 is not broken — it accrues the double-gate at the
+un-tightened scope (a trickle, ~0/batch), so the gap costs almost nothing.
+Recommendation surfaced to the operator: do the v45 refinement (hurst-only +
+~2× dial); on the word it's a worktree build (golden re-pin + emission proof +
+ritual) like v44. Response `PROMPT_CRUCIBLE_Q46_READ_INVERSION.md` (untracked,
+operator carries) confirms the split + accepts all three + states the v44→v45
+timing. Contracts symmetric (their 1.33→1.34 rides the same window; we're
+already 1.34.0 as of v44).
+
+Related: [[D317]], [[D315]], [[D276]], [[D287]], [[D264]], [[D213]].
