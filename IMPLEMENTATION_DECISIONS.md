@@ -2595,3 +2595,57 @@ at slot-scale n the recorded (non-binding) DSR sits far under the bar on the
 big-slot rows — `dsr_below_bar` will show up in `failure_buckets` on
 non-reject forge rows, per their heads-up (no Forge reader; extra signal).
 Related: [[D304]], [[D306]], [[D309]], [[D207]], [[D245]], [[D290]].
+
+## D311 — 2026-07-21 — v43 post-deploy CLOSE-OUT: first batch IN-SPEC; Crucible's row-45 cross-check ANSWERED SAME-HOUR — exclusion CONFIRMED for our stream (0/30 starved, ZERO forge-source conversions reproduced on THEIR ledger); 4 names carry standing vol_event refit-lane ALIVE flags (docs-only fold)
+
+**First v43 batch `03b33475` (2026-07-21T02:07:37Z) audit: IN-SPEC** — 200/200
+stamped v43, 0 failed; **ZERO excluded-name draws** (24 single-name draws
+over 21 names); `search_n_trials` populated 200/200 (the D310 stamp armed on
+this batch — their record-not-bind marker observed from 01:37:50Z; the
+concurrent session verified max slot n_trials=108,324).
+
+**Inbound `FORGE_v43_row45_crosscheck_2026-07-21.md` triaged:**
+
+1. **Row 45: 0/30 fire their starved signature** (trailing-30d wf-zero 31.7%
+   NKE → 91.5% LRCX, all under their ≥95% bar at n 399–1,126) — these are
+   NOT the BKNG born-dead class; their preflight will never independently
+   block them. **The exclusion rides on our yield evidence alone — which the
+   frozen-list terms contemplate.** And the premise reproduces on THEIR
+   ledger: forge-source conversions across all 30 since 06-10 = ZERO.
+2. **ALIVE flags (standing, not invoked): LRCX (3), GE, WFC, UNG** — 6
+   fullhist_refit-lane volatility_event components since 06-10. Their read:
+   keep all 30 excluded today (6/≈5,000 all-lane ≠ a re-admission case);
+   IF a vol_event-targeted cohort ships, re-admission FOR THAT COHORT is
+   one relay away on this evidence. **Our ghost cross-check (their
+   suggestion): all 6 dates (06-13→07-03) predate `VE_GHOST_LABEL_CUT`
+   (07-18) — under OUR labeling they are unrankable regardless of lane; the
+   flag properly lives on their side, to invoke with post-cut refit
+   evidence.** Recorded in the relay addendum; also noted against the
+   `ve-exit-repair` campaign (a future ve-cohort decision should surface
+   these 4 names).
+3. Funnel compare scheduled on cohort maturity, read against prereg
+   `44a4e08aef4f`; boundary reminders relayed to the v40-MR/v39-ve read
+   owners. Their riding note endorses the honesty framing (several names
+   "fire real fills constantly" — v1-grammar verdict, not a name verdict;
+   Path C candidates if it opens).
+
+Related: [[D309]], [[D302]], [[D310]], [[D290]], [[D207]].
+
+## D312 — 2026-07-21 — Young-cell floor ACTIVATED (`FORGE_YOUNG_CELL_FLOOR=on` on the unit; the D307 build's flip): diversifier phase 0c live — automatic model-independent coverage for young (directional, regime) cells; its own window, deliberately separate from the v43 boundary
+
+**Operator "activate the cell floor and deploy v43" (2026-07-21) — second
+half, executed AFTER the first v43 batch audited in-spec so no boundary
+carries two changes.** Mechanics: `Environment=FORGE_YOUNG_CELL_FLOOR=on` +
+comment block on `deploy/systemd/forge.service` (symlink-installed →
+daemon-reload REQUIRED and performed), preflight GO (contended full suite
+green pre-stop), stop 02:21:07Z, commit in-window, reset-failed, start.
+Verification (recorded in STATUS): `Environment` shows the flag IN THE
+PROCESS ENV (not just the file — the deploy.md gotcha), journal
+`cell_floor: mature_cells=N` line on the first iteration, first-batch
+young-cell read. Selection change class: versionless (D193/D252), flag-ON
+now = NOT byte-identical by design — the activation IS the change; the
+D307 build + tests carried the full record. REVERT = delete the two unit
+lines + daemon-reload + restart (byte-identical). Watch: young-cell count
+per batch (over-subscription of the sorted-order cap = the documented
+revisit trigger); the campaign-audit JSONL picks up carriage shifts at the
+next 05:00 fire. Related: [[D307]], [[D287]], [[D136]], [[D309]].

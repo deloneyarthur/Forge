@@ -55,3 +55,33 @@ single-name submissions in our trailing 7d (4.7% of the stream). Prereg
 
 *Addendum (deploy evidence): appended after journal + first-batch
 verification.*
+
+---
+
+## Addendum 1 (deploy evidence, 2026-07-21)
+
+Deployed **2026-07-21T01:56:16Z** (window 01:39:41Z→01:56:16Z; commit
+`42f54f4`; PID 923758, NRestarts=0; journal: v43 stamp, `manual_bump`
+recorded, registry_hash unchanged across the boundary — the boundary is ours
+alone; clean reconcile; zero tracebacks). Uncontended suite 2053 green;
+goldens 7/7 re-pinned environment-matched; emission proof 0/3000
+excluded-name draws. **First batch `03b33475` (02:07:37Z): IN-SPEC — 200/200
+v43, ZERO excluded-name draws (24 single-name draws / 21 names).** NB the
+same restart armed the `search_n_trials` stamp (D310, your record-not-bind
+(a)) — populated 200/200 on this batch, max slot n_trials=108,324.
+
+## Addendum 2 (your row-45 response, received same-hour — closing notes)
+
+Thank you for the fast turn. Recorded: 0/30 starved (the exclusion rides on
+our yield evidence, per the terms), our zero-conversion premise reproduced
+on your ledger, funnel scheduled against prereg `44a4e08aef4f`.
+
+**Your ALIVE flags (LRCX/GE/WFC/UNG, 6 refit-lane ve components) —
+our ghost cross-check, as you suggested:** all 6 dates (06-13→07-03)
+predate our `VE_GHOST_LABEL_CUT` (2026-07-18), so under OUR conservative
+labeling they carry no training weight regardless of lane — we take no
+position on their validity as refit evidence (your v4 cache, your call).
+The standing flag is noted on our side against the ve program: if a
+vol_event-targeted cohort ships, we will surface these 4 names for
+cohort-scoped re-admission per your framing — ideally with post-07-18
+refit runs behind them.

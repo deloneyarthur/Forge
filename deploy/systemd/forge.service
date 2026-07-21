@@ -43,6 +43,14 @@ Environment=FORGE_REWIRE_P_FLOOR=0.02
 # component-rate). Clamped to [0, 0.10]; empty/unset => byte-identical (hard rule 6). REVERT =
 # delete this line + daemon-reload + restart.
 Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
+# FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
+# floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
+# cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
+# exempt; cap 10% of batch). The D287 protection made automatic: a novel pair cannot
+# be starved at selection even when both its arms are individually mature. Must be
+# exactly "on"; anything else = byte-identical (hard rule 6). REVERT = delete these
+# two lines + daemon-reload + restart. Journal line when active: `cell_floor: ...`.
+Environment=FORGE_YOUNG_CELL_FLOOR=on
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
