@@ -684,8 +684,56 @@ _EARNINGS_CALENDAR_ETF_INCOMPATIBLE: frozenset[str] = frozenset(
 # 641 decided / 0 components, COST 1,544 / 1) — the same dead-cell class,
 # measured on OUR verdicts this time. Same re-admission terms; flagged for
 # their row-45 cross-check in the response relay.
+# D309 (v43): +30 — the first `forge yield-audit` cohort (D302 detector,
+# operator "Ship all 30"): each ≥500 decided / 0 conversions since the clean
+# era (ghost-cut applied), all verified still-in-universe at ship time and
+# drawing 3,092 single-name submissions/7d (4.7% of the stream). Prereg
+# `44a4e08aef4f` (cohort cut 2026-07-21T00:00) is on record BEFORE this edit.
+# Same frozen-list terms: re-admission on Crucible's relay; the WHOLE list
+# retires when their queue-time liquidity preflight ships; their row-45
+# cross-check requested in the deploy relay.
 _STRUCTURALLY_UNTRADEABLE_UNDERLYINGS: frozenset[str] = frozenset(
-    {"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR", "ASML", "COST"}
+    {
+        "BKNG",
+        "BRK.B",
+        "SOXX",
+        "LLY",
+        "GS",
+        "MSTR",
+        "ASML",
+        "COST",
+        # D309 (v43) yield-audit cohort:
+        "AAL",
+        "ADBE",
+        "AMZN",
+        "ARKK",
+        "BSX",
+        "DIA",
+        "DVN",
+        "EEM",
+        "EFA",
+        "GE",
+        "INTC",
+        "KO",
+        "LRCX",
+        "LUV",
+        "MS",
+        "MSFT",
+        "NEM",
+        "NKE",
+        "PEP",
+        "TXN",
+        "UNG",
+        "UPS",
+        "VZ",
+        "WFC",
+        "XBI",
+        "XLF",
+        "XLI",
+        "XLP",
+        "XLV",
+        "XOM",
+    }
 )
 
 

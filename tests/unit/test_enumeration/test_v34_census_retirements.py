@@ -73,8 +73,51 @@ def test_v34_untradeable_exclusion_applies_to_the_pool_itself() -> None:
     # D286 (v37): +SOXX/LLY/GS/MSTR — the row-45 trailing-window guard cohort.
     # D292 (v41): +ASML/COST — the tier-unpin reply's dead tier-3 exemplars,
     # confirmed on OUR funnel (641 decided/0 components, 1,544/1).
+    # D309 (v43): +30 — the first yield-audit cohort (each >=500 decided / 0
+    # conversions since the clean era; operator "Ship all 30"; prereg 44a4e08aef4f).
     assert (
-        frozenset({"BKNG", "BRK.B", "SOXX", "LLY", "GS", "MSTR", "ASML", "COST"})
+        frozenset(
+            {
+                "BKNG",
+                "BRK.B",
+                "SOXX",
+                "LLY",
+                "GS",
+                "MSTR",
+                "ASML",
+                "COST",
+                "AAL",
+                "ADBE",
+                "AMZN",
+                "ARKK",
+                "BSX",
+                "DIA",
+                "DVN",
+                "EEM",
+                "EFA",
+                "GE",
+                "INTC",
+                "KO",
+                "LRCX",
+                "LUV",
+                "MS",
+                "MSFT",
+                "NEM",
+                "NKE",
+                "PEP",
+                "TXN",
+                "UNG",
+                "UPS",
+                "VZ",
+                "WFC",
+                "XBI",
+                "XLF",
+                "XLI",
+                "XLP",
+                "XLV",
+                "XOM",
+            }
+        )
         == sampler_mod._STRUCTURALLY_UNTRADEABLE_UNDERLYINGS
     )
 

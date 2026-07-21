@@ -2450,3 +2450,80 @@ third redistributes from batch `8cab6359` onward; split funnel reads on
 registry_hash. NB: committed by a follow-up session/agent — this session's
 shell could not run git (see item 3).
 Related: [[D303]], [[D258]], [[D261]], [[D245]], [[D240]].
+
+## D309 — 2026-07-21 — GRAMMAR v42 → v43 DEPLOYED: the 30-name yield-audit exclusion rider (operator "Ship all 30" → "deploy v43") — the first exclusion cohort DETECTED, PREREG'D, and SHIPPED entirely on our own funnel
+
+**The first end-to-end run of the D302 detector pipeline: `forge yield-audit`
+finding → decision homework (universe cross-check + draw rates) → operator
+approval → prereg `44a4e08aef4f` (cohort cut 2026-07-21T00:00, BEFORE any
+code) → v43 bump.** Evidence and staging: [[D307]] +
+`docs/proposals/v43-dead-name-rider.md`.
+
+- **Change:** `_STRUCTURALLY_UNTRADEABLE_UNDERLYINGS` 8 → 38 (+AAL ADBE AMZN
+  ARKK BSX DIA DVN EEM EFA GE INTC KO LRCX LUV MS MSFT NEM NKE PEP TXN UNG
+  UPS VZ WFC XBI XLF XLI XLP XLV XOM). Enumeration-policy bump — `rules:`
+  text untouched; frozen-list terms unchanged (re-admission on their relay;
+  whole list retires when their queue-time liquidity preflight ships).
+  Cannot keep the names out of xsect baskets (documented v34 limitation;
+  their preflight is the complete fix).
+- **Operator mid-window question ("exclude or fix the big names?") answered
+  in-session:** the exclusion is a verdict on OUR v1 long-options grammar ON
+  those names (500–1,139 decided configs each across every expressible
+  cell = a thorough v1 sweep; zero conversions is the space's answer), not
+  on the tickers. The "fix" is REPRESENTATIONAL — defined-risk spreads
+  (Path C) are the natural structure for liquid mega-caps/ETFs — and Path C
+  is parked as the operator's call; this cohort is fresh evidence FOR that
+  resume case. Fully reversible: relay re-admission, preflight retirement,
+  and any v2 structure bump revisits the list. Names stay in the universe +
+  xsect books.
+- **Goldens: 7/7 re-pinned environment-matched.** License: OLD code
+  reproduced every constant exactly at HEAD (2037-green preflight
+  pre-window). First divergences measured: every 7777-seed regime golden
+  @0 (first config taps the shrunken pool — the v37/v41 pool-shift
+  signature); cohort golden @2 with 5/15 positions surviving byte-identical
+  (per-index seeding). Landmark: first capitulation genome 30 → 71 (carriers
+  scan widened to 80, claim unchanged). Two non-golden adjustments, both
+  documented in place: the d105 fallback-pool tilt bound became inclusive
+  (DIA/MSFT/AMZN leave the 24-name fallback draw → the floored diversified
+  share lands exactly ON the 5% bound), and the d270 docstring updated.
+- **Emission proof (live registry, 3k cold): v43 stamp, ZERO excluded-name
+  draws (0/3000), 83 distinct single names, all 5 hypotheses reachable**
+  (event_momentum 616 / MR 608 / ve 605 / rv 601 / trend 570).
+- **Ritual:** preflight `deploy_preflight.sh` GO (full suite 2037 green,
+  deploy surface clean) → stop 2026-07-21T01:39:41Z → sampler +30 + census
+  test extension + grammar.yaml v43 bump + header note + archive
+  `config/grammar_archive/v43.yaml` + golden re-pin in the down-window →
+  uncontended full suite green (count in STATUS) → commit (this entry rides
+  it; NB the commit also carries the concurrent session's uncommitted D308
+  ledger/STATUS/RELAYS appends — same-file races, absorbed as-is) →
+  reset-failed → start. Journal verification + first-batch audit in STATUS.
+- **Deploy relay** `PROMPT_CRUCIBLE_V43_DEPLOYED.md` (held for carry): the
+  name list + evidence + the row-45 cross-check request + funnel ask
+  `--compare v42 v43`; boundary flagged clean (no universe/registry change
+  rides this restart) BUT the v39→v40 MR read (~07-22/23) and the ve
+  v38→v39 read land near the boundary — cohort-split reminders included.
+- **NEXT (separate window, deliberately):** the D307 young-cell floor
+  activation (`FORGE_YOUNG_CELL_FLOOR=on` + daemon-reload + restart) AFTER
+  the first v43 batch audits in-spec — no boundary carries two changes.
+
+Related: [[D302]], [[D307]], [[D286]], [[D293]], [[D278]], [[D207]],
+[[D104]].
+
+## D310 — 2026-07-21 — search_n_trials population BUILT self-gated (absorbed commit): per-slot cumulative stamp, DORMANT until Crucible's record-not-bind marker appears in verdicts — the D306 hazard resolved via their (a)
+
+**Attribution note:** this build was executed by a concurrent session that the
+2026-07-21 shell outage killed before its commit and ledger entry; it is
+absorbed here at the v43 deploy window (the D104 rule forbids restarting onto
+a dirty tree) with its number matching the architecture.md row it wrote
+(its in-code comment said D309 — renumbered, that was already taken).
+Content, as verified from the working tree + the 2053-green uncontended
+suite: `forge/submission/search_multiplicity.py` (slot-count query + stamp;
+hash-excluded field — idempotency/batch identity untouched, invariants test
+`test_search_n_trials_hash_excluded`), main.py submit-path wiring behind
+`crucible_record_not_bind_live(conn)` — configs ship UNSET (their n_trials=1
+path) until the marker is observed, because stamping against their old
+binding `_verdict_from_gates` predicate would flip the component stream to
+reject (the D306 finding); journal line `search_n_trials: dormant … /
+stamped …`. MANPAGE + architecture rows were already written by that
+session. The owning session should verify this absorption and extend this
+entry with its full record. Related: [[D304]], [[D306]], [[D309]].

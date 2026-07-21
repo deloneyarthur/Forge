@@ -15,6 +15,7 @@ ops-debt item 5b).
 | `PROMPT_CRUCIBLE_COMBINED_RELAY_RESPONSE.md` | → | held | carry; archive after the v39→v40 MR read (~07-22/23) | D291/D295 |
 | `PROMPT_CRUCIBLE_EV_DEREGISTRATION_RESPONSE.md` | → | answered + VERIFIED (their `FORGE_ev_deletion_executed_2026-07-20.md`: deletion 22:31–33Z, sequencing honored; dormancy verified by construction + count — 4 post-publish batches / 800 configs, 0 kelly, first `9cca352a` under id-less hash `83e9a01c`; carries the CLOSED banner w/ the export `other`-bucket note) | archive candidate next sweep | D303/D308 |
 | `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` | → | carried (07-20, operator) | their answer (additive field / decline); telemetry build follows only on a yes | D302 |
+| `PROMPT_CRUCIBLE_V43_DEPLOYED.md` | → | held (NEW 07-21) | carry; asks: row-45 cross-check on the 30 names + `funnel --compare v42 v43`; archive after both | D309 |
 | `PROMPT_CRUCIBLE_FUNDAMENTAL_VALUE_PRECHECK.md` | → | held (since 06-28) | operator relay decision | crucible-handoff |
 | `PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md` | → | held (NEW 07-20) | carry — BLOCKS the search_n_trials build (their Q2 "populate + no flip" contradicts their binding `_verdict_from_gates` predicate; their (a)/(b)/(c) choice needed) | D306 |
 | `PROMPT_CRUCIBLE_HOUSEKEEPING_ASKS.md` | → | answered (same-day: their `FORGE_housekeeping_answers_2026-07-20.md`) | archive candidate next sweep; all three asks closed (timer repurposed-not-meta-king — permanently answered, stop asking; sma_slope wired; DSR was answered 07-08) | D300/D304 |

@@ -844,10 +844,13 @@ def test_d105_underlying_class_weights_tilt_toward_high_idio_vol(
     counts = _pick_underlyings_against_fallback(weights)
     div = sum(n for t, n in counts.items() if underlying_class(t) == DIVERSIFIED)
     high = sum(n for t, n in counts.items() if underlying_class(t) == HIGH_IDIO_VOL)
-    # Fallback pool: 4 diversified / 20 high. Uniform would put ~17% on
-    # diversified; the tilt must crush that below 5% but NOT to zero.
+    # Fallback pool was 4 diversified / 20 high; D309 (v43) excludes
+    # DIA/MSFT/AMZN from the draw -> 3 div / 18 high, and the floored
+    # diversified share lands EXACTLY on the 5% bound (uniform would be ~14%).
+    # The claim is unchanged — crushed to the floor but NOT zero — so the
+    # bound becomes inclusive.
     assert div > 0
-    assert div / (div + high) < 0.05
+    assert div / (div + high) <= 0.05
 
 
 def test_d105_underlying_weights_respect_earnings_etf_exclusion(
@@ -1734,20 +1737,30 @@ _COHORT_TREND = "trend_continuation"
 # Licensing harness environment-matched: OLD code reproduced every constant
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
+# D309 (v43): re-pinned — the 30-name yield-audit exclusion shifts the
+# single-name underlying draw (drawable pool 38 names smaller). Licensing
+# harness environment-matched: OLD code reproduced every constant exactly at
+# HEAD (2037-green suite pre-window). First divergences: every 7777-seed
+# regime golden @0 (its first config taps the shrunken pool — the v37/v41
+# pool-shift signature); cohort @2 with 5/15 positions surviving byte-
+# identical (per-index seeding: configs whose draws miss the excluded pool
+# region reproduce exactly). The relational structure across variants is
+# re-asserted by the tests below; the first-capitulation landmark moved
+# 30 → 71 (scan window widened to 80).
 _COHORT_GOLDEN_PRE_REFACTOR = [
     "dc125d8f4e014630",
     "4710371b04fac3d0",
-    "e2f7c9195a56779e",
+    "a1eadf6610972fde",
     "174df1ffb521246b",
-    "36b8a31079ddc904",
-    "d14d8e348c41ffe5",
-    "b27164da92990650",
-    "32f37f67d065020b",
-    "1b10e763ad7550aa",
-    "5ae87eef8e30261b",
-    "f7ea923ed1c9af0a",
-    "219cedfd0ce11930",
-    "7e521fe9ac484bef",
+    "f2a482630fcd007f",
+    "1eacdf1ad745c968",
+    "f3592fe87adba865",
+    "93b37c85ca441618",
+    "db0c7dc221fe1e03",
+    "3a2b5acbcd940801",
+    "f5be27bb912b1906",
+    "be8502a632a295cb",
+    "e02445b5e875b478",
     "f32b391819e7feec",
     "2c77822f6dab10b8",
 ]
@@ -1968,21 +1981,21 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_PRE = [
-    "3a03ae07c809d1bf",
-    "7a7c188d7e42861c",
-    "dc031877bc52cbb0",
+    "46a8ac2975960a8a",
+    "031b7f53b9ae20d9",
+    "753a6e14f6e295a2",
     "d03b4b2aec3c9828",
-    "6a6828c44c4e7898",
-    "cfb40bf4d9c68995",
-    "ab55f4c434d05690",
-    "a63c317adb3932b9",
-    "dcebd1b0d426deb2",
-    "3a1aefda740c20da",
-    "8c089bd599fbe99e",
-    "6e84d9dfef9ed87b",
-    "843067f9aac8a403",
-    "40d53ce5f2752acf",
-    "311a20c5ef0bfe2c",
+    "b698c32b11f89f42",
+    "27c84ca8475e1a30",
+    "1e29ee8b7ffbe6ca",
+    "203b30431bc20181",
+    "3da8926aba415ede",
+    "df7dd0936dd34378",
+    "3fbb528f7c219d24",
+    "a32a66b9e0ae7052",
+    "9be7a8fffb82f4d1",
+    "6691b5dd63905ebf",
+    "28a04ecde3dd81bb",
 ]
 
 
@@ -2224,21 +2237,21 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_DSJ_ACTIVE = [
-    "3a03ae07c809d1bf",
-    "772ec0f03147a0da",
-    "8470301afda5136e",
-    "36c3b05127466086",
-    "cc6f15af3f16253c",
-    "3c579c5e2c9a3fd9",
-    "f119f0303636d50e",
-    "31e8f2e6b4cac834",
-    "54ee0cacd298ae82",
-    "7acd258aa3627076",
-    "e00ba338077f1809",
-    "fa9ede577e9843f1",
-    "01be4604fc013fcb",
-    "bf20f8a109143907",
-    "09c0cab4552cf81f",
+    "46a8ac2975960a8a",
+    "6e2aae4c38445bd7",
+    "d585f5142a081c5c",
+    "3c124c6246dad390",
+    "a5ff9765c597f914",
+    "3857978e54176701",
+    "2661dd62a1186ce3",
+    "da80dad036a5911a",
+    "69568b76d64a8dca",
+    "68262965442515a3",
+    "0ae64ad546cc6cc9",
+    "85bbe257c658d8c0",
+    "4ec92fd9c417712f",
+    "6691b5dd63905ebf",
+    "28a04ecde3dd81bb",
 ]
 
 
@@ -2400,21 +2413,21 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V26_ACTIVE = [
-    "3a03ae07c809d1bf",
-    "772ec0f03147a0da",
-    "8470301afda5136e",
-    "36c3b05127466086",
-    "cc6f15af3f16253c",
-    "3c579c5e2c9a3fd9",
-    "fe634b080998729d",
-    "44e52cec3fbc2c6c",
-    "ad4fa3dd4af6c6cf",
-    "b4d4b6faeb0de8b4",
-    "d77bff2b6e62f032",
-    "6c2ee2258c68a333",
-    "1794111d0170f565",
-    "bf20f8a109143907",
-    "09c0cab4552cf81f",
+    "46a8ac2975960a8a",
+    "6e2aae4c38445bd7",
+    "d585f5142a081c5c",
+    "3c124c6246dad390",
+    "8b635357e80771e8",
+    "3857978e54176701",
+    "2661dd62a1186ce3",
+    "da80dad036a5911a",
+    "69568b76d64a8dca",
+    "68262965442515a3",
+    "0ae64ad546cc6cc9",
+    "e070625657962a51",
+    "097fe501989214a8",
+    "5db222d388265b8e",
+    "2836741b9cf36bba",
 ]
 
 
@@ -2576,21 +2589,21 @@ def test_d264_new_ids_dormant_without_registry(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V27_ACTIVE = [
-    "3a03ae07c809d1bf",
-    "d9292ec04f673e26",
-    "8470301afda5136e",
-    "36c3b05127466086",
-    "d7f9a3f7c58dea33",
-    "4537a3f5e50b8bbd",
-    "979c2aed4560bc75",
-    "1d1ad02e19a83c0a",
-    "c757c989e2a95524",
-    "d77bff2b6e62f032",
-    "6c2ee2258c68a333",
-    "1794111d0170f565",
-    "bf20f8a109143907",
-    "ecc2178b870380f4",
-    "e603bcafd6443537",
+    "46a8ac2975960a8a",
+    "f6143d8bd52534b4",
+    "d585f5142a081c5c",
+    "789ab77dfb920a53",
+    "bc121c36ff6d1d37",
+    "a7860b07ebce7e72",
+    "e26bcafb3f88b1fa",
+    "71d3f69eeeacefad",
+    "0daba8a56a06f801",
+    "268876d2408406ff",
+    "94cb974184c1847c",
+    "097fe501989214a8",
+    "5db222d388265b8e",
+    "6a5d7bf5c5d38485",
+    "d6ecc660657225da",
 ]
 
 
@@ -2813,21 +2826,21 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V29_ACTIVE = [
-    "3a03ae07c809d1bf",
-    "772ec0f03147a0da",
-    "8470301afda5136e",
-    "36c3b05127466086",
-    "cc6f15af3f16253c",
-    "f160a81658969ba9",
-    "fe634b080998729d",
-    "44e52cec3fbc2c6c",
-    "764dde318f81e838",
-    "76e075cef80d0e5b",
-    "d77bff2b6e62f032",
-    "6c2ee2258c68a333",
-    "1794111d0170f565",
-    "bf20f8a109143907",
-    "09c0cab4552cf81f",
+    "46a8ac2975960a8a",
+    "6e2aae4c38445bd7",
+    "d585f5142a081c5c",
+    "3c124c6246dad390",
+    "8b635357e80771e8",
+    "3857978e54176701",
+    "2661dd62a1186ce3",
+    "da80dad036a5911a",
+    "69568b76d64a8dca",
+    "68262965442515a3",
+    "0ae64ad546cc6cc9",
+    "e070625657962a51",
+    "097fe501989214a8",
+    "c5de451f2caccc7d",
+    "2836741b9cf36bba",
 ]
 
 
@@ -3041,21 +3054,21 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V31_ACTIVE = [
-    "3a03ae07c809d1bf",
-    "772ec0f03147a0da",
-    "8470301afda5136e",
-    "36c3b05127466086",
-    "cc6f15af3f16253c",
-    "f160a81658969ba9",
-    "fe634b080998729d",
-    "44e52cec3fbc2c6c",
-    "764dde318f81e838",
-    "76e075cef80d0e5b",
-    "d77bff2b6e62f032",
-    "6c2ee2258c68a333",
-    "1794111d0170f565",
-    "bf20f8a109143907",
-    "09c0cab4552cf81f",
+    "46a8ac2975960a8a",
+    "6e2aae4c38445bd7",
+    "d585f5142a081c5c",
+    "3c124c6246dad390",
+    "8b635357e80771e8",
+    "3857978e54176701",
+    "2661dd62a1186ce3",
+    "da80dad036a5911a",
+    "69568b76d64a8dca",
+    "68262965442515a3",
+    "0ae64ad546cc6cc9",
+    "e070625657962a51",
+    "097fe501989214a8",
+    "8908c202b345dece",
+    "2836741b9cf36bba",
 ]
 
 
@@ -3065,23 +3078,27 @@ def test_d270_capitulation_active_cold_start_golden(
     """Byte-pin the v31 enumeration sequence (registry serving momentum on top
     of the v29 set). Diverges from _REGIME_GOLDEN_V29_ACTIVE at the first MR
     config touched by the widened directional pool — the D270 licensed change —
-    and a full capitulation genome appears within the first 30 draws."""
+    and a full capitulation genome appears within the scan window (position 71
+    since the D309/v43 pool shift; see the comment below)."""
     reg = _v31_registry(registry)
     active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
     assert active == _REGIME_GOLDEN_V31_ACTIVE
     # The D291/v40 stream re-pin moved the first capitulation genome (and with
     # it the v29-vs-v31 split) to position 30 — the 15-length goldens now
     # coincide, so the divergence claim is asserted on a live 40-window pair.
+    # D309 (v43): the 30-name exclusion's pool shift moved the first
+    # capitulation genome again, 30 → 71 — the carriers scan widens to 80
+    # (same landmark, same claim; the v29-vs-v31 divergence stays in-40).
     reg29 = _v29_registry(registry)
     s29 = [c.config_hash for c in enumerate_candidates(grammar, reg29, 7777, max_candidates=40)]
     s31 = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=40)]
     assert s31 != s29  # widened MR pool shifts the sequence
     carriers = [
         c
-        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=40)
+        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=80)
         if any(s.role == "directional" and s.indicators == ("momentum",) for s in c.signals)
     ]
-    assert carriers, "no capitulation genome in the first 40 draws"
+    assert carriers, "no capitulation genome in the first 80 draws"
 
 
 # ---------------------------------------------------------------------------
