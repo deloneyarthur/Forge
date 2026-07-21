@@ -2904,7 +2904,7 @@ NB: committed doc-only during the operator's concurrent code build
 (schemas/verdicts/consumer/submitter dirty — untouched, left for their commit).
 Related: [[D314]], [[D264]], [[D276]], [[D287]], [[D305]], [[D310]], [[D313]].
 
-## D316 — 2026-07-21 — v43 → v44 DEPLOYED: Q46 vix_term_slope second-gate CONDITIONER on the xsect trend arm (operator "Let's do v44"; Crucible GO). Co-adopts contracts 1.34.0. The confirmed resid_vix price-axis DOUBLE-GATE ({adx,hurst} primary × vix SECOND) — 0 in the stream before, because vix was only ever an R2 PRIMARY. Rules text unchanged; built in a worktree, full suite 2062 green
+## D317 — 2026-07-21 — v43 → v44 DEPLOYED: Q46 vix_term_slope second-gate CONDITIONER on the xsect trend arm (operator "Let's do v44"; Crucible GO). Co-adopts contracts 1.34.0. The confirmed resid_vix price-axis DOUBLE-GATE ({adx,hurst} primary × vix SECOND) — 0 in the stream before, because vix was only ever an R2 PRIMARY. Rules text unchanged; built in a worktree, full suite 2062 green
 
 **Trigger:** operator "Let's do v44 and contract adoption also do the prereg" on
 `FORGE_q46_reply_repin_and_go_2026-07-21.md` (Crucible GO on the D314/D315 scope).
@@ -2953,10 +2953,16 @@ optional-second-gate note; MANPAGE unchanged (no CLI/flag). Deploy relay
 deploy; the honest contrast is the NEW double-gate vs the EXISTING vix-as-primary
 baseline (both carry residual_momentum), NOT "cell vs empty."
 
-**D-number race:** D315 was doubly-assigned — the operator's Themes 2c+2d
-(`7060dc6`) and my Q46-GO confirm (`2f1b6ca`) both took it (concurrent sessions;
-both stand, cross-reference by content). v44 is D316; the sampler/grammar/test
-comments hard-code D316.
+**D-number race (chained, resolved):** D315 was first doubly-assigned — the
+operator's Themes 2c+2d (`7060dc6`) and my Q46-GO confirm (`2f1b6ca`). The
+operator's `1153f2c` resolved it by renumbering THEIR Themes D315 → **D316**
+(and, in the same broad commit, swept up my applied-but-uncommitted v44 code —
+sampler/contracts/test_v44/GRAMMAR.md/this-ledger — the live-tree concurrent-work
+hazard). That renumber then collided with my v44 D316, so per "commit-second
+renumbers" **v44 is D317** — my Q46-GO stays D315, the operator's Themes is D316,
+v44 is D317. All v44 code/doc D316 refs were sed'd to D317 (disjoint files from
+the Themes D316 refs); the grammar.yaml v44-bump + v44.yaml archive + uv.lock were
+the only pieces `1153f2c` did NOT capture, committed here.
 
-Related: [[D315]], [[D314]], [[D264]], [[D276]], [[D287]], [[D258]], [[D310]],
-[[D313]], [[D104]], [[D199]].
+Related: [[D315]], [[D316]], [[D314]], [[D264]], [[D276]], [[D287]], [[D258]],
+[[D310]], [[D313]], [[D104]], [[D199]].

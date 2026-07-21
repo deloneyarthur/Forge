@@ -203,7 +203,7 @@ _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 # market_realized_vol `macro`.
 _REGIME_VETO_SHARE: float = 0.5
 
-# D316 (v44) — Q46 optional SECOND regime gate as a CONDITIONER (not a veto):
+# D317 (v44) — Q46 optional SECOND regime gate as a CONDITIONER (not a veto):
 # vix_term_slope ANDed onto a trend-STRENGTH primary gate (adx/hurst) on the
 # xsect trend arm. This is the "price-axis x vix-residual" pair that C1/R2 have
 # always PERMITTED but the sampler never emitted, because vix_term_slope was only
@@ -969,7 +969,7 @@ def _vix_conditioner_eligible(
     combiner: CombinerSpec,
     space: SearchSpace,
 ) -> bool:
-    """§3.5 S3 optional second gate — the D316 (v44) vix_term_slope conditioner.
+    """§3.5 S3 optional second gate — the D317 (v44) vix_term_slope conditioner.
 
     True iff: trend_continuation on the cross_sectional_rank combiner, a
     non-capitulation directional, the mandatory primary regime gate is a
@@ -1023,7 +1023,7 @@ def _sample_veto_params(veto_id: str, rng: random.Random) -> dict[str, object]:
     return params
 
 
-def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional second-gate branches (D258/D316) are inherent, a refactor would be net harm
+def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional second-gate branches (D258/D317) are inherent, a refactor would be net harm
     space: SearchSpace,
     registry: RegistrySnapshot,
     rng: random.Random,
@@ -1323,7 +1323,7 @@ def sample_config(  # noqa: PLR0912 — CSP-style §4.2 sampler; the optional se
     # eligibility filter (no rng consumed), so non-gamma_flip paths draw
     # identically; gamma_flip-gated trend paths skip the share draw when the
     # (single-id) eligible set empties — licensed by the v33 bump.
-    # D316 (v44): the vix_term_slope conditioner shares the SINGLE optional
+    # D317 (v44): the vix_term_slope conditioner shares the SINGLE optional
     # second-gate slot with the veto (drawn FIRST → mutually exclusive → "max 2"
     # total gates). Eligible only on the xsect trend arm with an adx/hurst
     # (trend-strength) primary — the confirmed resid_vix price-axis pair. The

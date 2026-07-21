@@ -1,4 +1,4 @@
-"""v44 (D316) — the Q46 optional SECOND regime gate: a vix_term_slope CONDITIONER.
+"""v44 (D317) — the Q46 optional SECOND regime gate: a vix_term_slope CONDITIONER.
 
 Crucible `FORGE_q46_reply_repin_and_go_2026-07-21` GO on the scope. The §3.5
 `rules:` text is untouched (S3 `>=1` has always permitted a second gate; the
@@ -152,7 +152,7 @@ def test_conditioner_never_stacks_on_macro_primary(v44_configs: list) -> None:
         gates = _gates(c)
         if gates.count(_VIX_CONDITIONER_ID) and len(gates) >= 2:
             others = [g for g in gates if g != _VIX_CONDITIONER_ID]
-            # the D316 conditioner only ever pairs vix with adx/hurst; a macro
+            # the D317 conditioner only ever pairs vix with adx/hurst; a macro
             # 'other' would be a C1 violation. days_since_jump appears only as
             # the veto on a vix-PRIMARY config (pre-existing), never with a
             # trend-strength gate (conditioner ⇒ no veto, mutual exclusion).

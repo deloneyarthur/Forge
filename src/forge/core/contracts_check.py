@@ -158,7 +158,7 @@ from crucible_contracts import (
 # literal_error wedge), stale-guarded, empty-on-cold. PURELY ADDITIVE for Forge — nothing reads it
 # yet (refutations wiring is a separate operator-gated proposal). Pin-only adopt riding the v44
 # bump (the exact-match forcing test was red on 1.34.0-installed vs the 1.33.0 pin once the
-# editable source moved; v44 is the co-adoption window, as v41/v42 rode 1.32.0/1.33.0). See D316.
+# editable source moved; v44 is the co-adoption window, as v41/v42 rode 1.32.0/1.33.0). See D317.
 FORGE_EXPECTED_CONTRACT_VERSION: str = "1.34.0"
 
 
