@@ -11,6 +11,11 @@ ops-debt item 5b). Last sweep 2026-07-21 (D321): 7 closed-loop relays archived
 (ALPHA_BUDGET_DSR, EV_DEREGISTRATION_RESPONSE, HOUSEKEEPING_ASKS,
 SMA_SLOPE_NOT_COMPUTED, TIER_UNPIN_RESPONSE, XSECT_CORRECTION_RESPONSE,
 REFUTATION_REGISTRY_REPLY — the last on the v46 wiring decision shipping).
+Follow-through 2026-07-21 (D322): the 4 live untracked relays (Q46_GO_CONFIRM,
+Q46_MULTIGATE_SCOPING, Q46_READ_INVERSION, SEARCH_N_TRIALS_INTERACTION) committed
+to close the D104 tree-clean gap; V44_DEPLOYED archived (superseded by v45 — the
+read-pin lives in Q46_READ_INVERSION's v45 banner; boundary record preserved in
+`_archive/`).
 
 | File | Dir | State | Awaiting / archive condition | Ref |
 |---|---|---|---|---|
@@ -22,7 +27,6 @@ REFUTATION_REGISTRY_REPLY — the last on the v46 wiring decision shipping).
 | `PROMPT_CRUCIBLE_FUNDAMENTAL_VALUE_PRECHECK.md` | → | held (since 06-28) | operator relay decision | crucible-handoff |
 | `PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md` | → | answered + CLOSED; **carries a RESOLVED+receipts banner for the next carry** (stamp ARMED on the first v43 batch `03b33475` 02:07:37Z; slot spans 5,154–108,324; expect `dsr_below_bar` at volume immediately; stamp boundary = the v43 boundary) | carry the banner (bundles w/ `PROMPT_CRUCIBLE_V43_DEPLOYED.md`); archive after | D306/D310 |
 | `PROMPT_CRUCIBLE_Q46_GO_CONFIRM.md` | → | held (NEW 07-21) | carry (GO received: residual_momentum confirmed healthy + the double-gate refinement for their null-control read); supersedes the scoping relay's open questions | D315 |
-| `PROMPT_CRUCIBLE_V44_DEPLOYED.md` | → | SUPERSEDED by v45 (read pins at v45 05:23:22Z, not v44 03:43Z) | still carry for the v44 boundary record; the read-pin lives in Q46_READ_INVERSION's v45 banner | D317/D319 |
 | `PROMPT_CRUCIBLE_Q46_READ_INVERSION.md` | → | held (carries the ✔ v45 DEPLOYED banner) | carry (v45 live 05:23:22Z; pin the +2wk in-book read here; emission proof resid 7.5→14.0%/1.87×, hurst-vix 20/adx-vix 0); supersedes the v44 03:43Z pin | D318/D319 |
 | `PROMPT_CRUCIBLE_Q46_MULTIGATE_SCOPING.md` | → | held (NEW 07-21) | carry (Q46 scoping reply: slot already built → 1-id add; census-starving premise corrected to 34.5% live; asks their grammar_version re-split + the co-fire design Q); operator greenlight → v44 build | D315 |
 | `PROMPT_CRUCIBLE_PATHC_DEBIT_VERTICAL_SIZING.md` | → | parked | Path C is parked (operator 06-15); refresh before any resume | D152 |
