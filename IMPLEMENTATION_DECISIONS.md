@@ -3129,3 +3129,44 @@ per-entry suppressed share flows to the funnel/census keyed by entry id
 (the search-multiplicity tax this relieves), [[D290]] (ve-solo-density
 interaction), [[D317]]/[[D319]] (v44/v45, the base), [[D268]] (the
 earnings-manifest fingerprint precedent).
+
+## D321 — 2026-07-21 — Complexity-reduction pass: retire the `shadow-null` diagnostic harness + sweep 7 closed-loop relays (operator "recommended is good" — the top two items from the accreted-complexity audit). No daemon path touched; no grammar/contracts change; no restart required
+
+**Context.** The operator flagged accreted complexity and asked what no longer
+serves the stack. A read-only audit produced an inventory; the two highest
+value-for-lowest-risk items were executed here (env-flag cull and the inert
+`experiment_cells` floor were surfaced but NOT touched — half the flags are
+staged Theme-2 roadmap, and the floor reopens on the next campaign).
+
+**1. `shadow-null` harness RETIRED.** `forge/prefilters/shadow_null.py`,
+`forge/cli/shadow_null_cmd.py`, and their two tests deleted; the import +
+`add_typer(shadow_null_app, name="shadow-null")` removed from `cli/main.py`
+(lines were the only wiring — the module was a standalone Typer sub-app, never
+imported by the §5.2 battery or the daemon loop, so the run loop is byte-for-byte
+unaffected). It was built to shadow-count TWO permutation-test (§5.3.7) null
+corrections before their flips: FLIP-1 `cumulative_trading` (prereg 848a1f67 —
+SHIPPED to production, D224/D226) and FLIP-2 ve |move| (prereg e1a43ba8 —
+REFUTED + thesis-inverted, DROPPED D235, arm removed D301). Both flips are
+resolved; the harness only ever re-counted FLIP-1, already live — spent
+diagnostic. Docs cleaned same commit (`MANPAGE.md` §`forge shadow-null run`
+removed; `architecture.md` cli/ row clause removed). Reversible from git
+history if a future null correction wants the A/B rig again.
+
+**2. Relay sweep (7 files → `_archive/`).** Root `PROMPT_CRUCIBLE_*.md` count
+22 → 15. Archived exactly the relays whose loops are closed per RELAYS.md:
+`ALPHA_BUDGET_DSR`, `EV_DEREGISTRATION_RESPONSE`, `HOUSEKEEPING_ASKS`,
+`SMA_SLOPE_NOT_COMPUTED`, `TIER_UNPIN_RESPONSE`, `XSECT_CORRECTION_RESPONSE`
+(all "answered — archive candidate"), and `REFUTATION_REGISTRY_REPLY` (its
+"archive after the wiring decision" condition met — the wiring shipped as v46,
+D320). Ledger rows pruned + a sweep note added. Held back deliberately:
+`SEARCH_N_TRIALS_INTERACTION` (still owes an outbound carry — it carries the
+receipts banner) and `V43_DEPLOYED` (waits on the scheduled `funnel --compare
+v42 v43`). 3 of the 7 were untracked (D104 tree-clean hygiene — they were a
+standing reboot-surface risk).
+
+**Gates.** mypy --strict clean (108 files); ruff clean; `tests/unit/test_cli`
++ `tests/unit/test_prefilters` 394 green; full suite green (see STATUS).
+`forge --help` no longer lists `shadow-null`. Related: [[D301]] (FLIP-2 arm
+removal), [[D235]] (FLIP-2 refutation), [[D224]]/[[D226]] (FLIP-1 ship),
+[[D295]]/[[D302]] (the relay-archive pattern + RELAYS ledger), [[D320]] (the
+v46 wiring that closed the refutation-registry relay).

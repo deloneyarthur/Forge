@@ -100,32 +100,6 @@ case) → **exit 1 (NO-GO)**. Run for any grammar bump adopting a new directiona
 forge check-activations --indicators sma_slope,ad_slope   # [INERT] both → exit 1
 ```
 
-### forge shadow-null run
-
-Shadow-count a permutation-test (§5.3.7) null correction (strategy-audit P1-2). Runs the §5.2
-battery over the LIVE feature cache and scores `permutation_test` under TWO nulls on the very
-same configs — A = production (whatever `prefilter.yaml` ships), B = `cumulative_trading`
-(**FLIP-1**, prereg 848a1f67, since shipped to production) — and prints a per-family
-survival-delta table (`gained` = before-FAIL → after-PASS, `lost` = the reverse; `net` = after −
-before). (The FLIP-2 ve |move| arm — prereg e1a43ba8 — was refuted and dropped at D235; its code
-path was removed at D301.) Submits nothing, never writes `prefilter.yaml`, leaves the daemon
-untouched — a read-only telemetry pass. The set of configs reaching the last filter is identical
-under both nulls, so it's a clean within-population A/B; the per-family **delta** is the decision
-signal, absolute rates are diagnostic (fixed seed, empty priors). Appends one JSONL record per run
-(key `flip1_cumulative_trading` with `per_family` + `totals`).
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `--seed` | int | `0` | RNG root seed (fixed → reproducible, family-diverse sample). |
-| `--max`, `-n` | int | `2000` | Configs to enumerate through the battery (min 1). Bump if the `volatility_event` `reached` count is too small to trust. |
-| `--config` | path | `config/forge.yaml` | Supplies the telemetry-dir default. |
-| `--out` | path | `<config db_path parent>/shadow_null/shadow_null.jsonl` | Telemetry JSONL. |
-| `--synthetic-cache` | flag | off | Force `SyntheticFeatureCache` (offline smoke only — survival numbers are noise). |
-
-```
-forge shadow-null run -n 3000        # live-cache shadow-count before the D220-gated flip
-```
-
 ### forge run
 
 The full cycle: enumerate → prefilter → rank → submit. With `--loop` it runs as a
