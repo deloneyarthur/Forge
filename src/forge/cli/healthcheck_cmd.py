@@ -546,6 +546,51 @@ def check_activation_probe(
     return HealthResult(label, Level.OK, f"activation probe ok ({probed} ids probed, none inert)")
 
 
+def check_search_multiplicity_census(
+    latest: dict[str, object] | None,
+    now: datetime,
+    *,
+    stale_warn_hours: float = 30.0,
+    dead_flow_warn: float = 0.05,
+) -> HealthResult:
+    """D328: the daily grammar-freeze metric. `search_multiplicity_census.jsonl`
+    carries freeze metric B — the dead-unprotected share of current submission
+    flow (still-emitted cells with ~0 conversion, not protected by a farming
+    campaign). Baseline 2.8%; the stream is efficient, so a RISE past the bar
+    means a new dead axis started flowing (or a farming campaign that used to
+    protect a cell was retired) — WARN so the freeze ledger stays honest.
+    `dead_flow_warn` is the operator-tunable bar (freeze-criterion condition B);
+    a stale/unparseable file WARNs (a silently dead census is the failure this
+    exists to catch); no rows yet is OK-with-note."""
+    label = "freeze census"
+    if latest is None:
+        return HealthResult(label, Level.OK, "freeze census: no census rows yet (first 05:00 fire)")
+    try:
+        ts = datetime.fromisoformat(str(latest.get("ts")))
+    except (TypeError, ValueError):
+        return HealthResult(label, Level.WARN, "freeze census: latest row has no parseable ts")
+    age_hours = (now - ts).total_seconds() / 3600.0
+    if age_hours > stale_warn_hours:
+        return HealthResult(
+            label, Level.WARN, f"freeze census stale: last row {age_hours:.0f}h ago"
+        )
+    metric = latest.get("metric_b_flow")
+    if not isinstance(metric, (int, float)):
+        return HealthResult(label, Level.WARN, "freeze census: latest row has no metric_b_flow")
+    n_dead = latest.get("n_dead_cells")
+    if metric > dead_flow_warn:
+        return HealthResult(
+            label,
+            Level.WARN,
+            f"freeze metric B rose to {100 * metric:.1f}% of flow (> {100 * dead_flow_warn:.0f}% "
+            f"bar; {n_dead} dead cells) — a dead axis is flowing or a protection retired; "
+            f"re-run the census ledger",
+        )
+    return HealthResult(
+        label, Level.OK, f"freeze metric B {100 * metric:.1f}% of flow ({n_dead} dead cells)"
+    )
+
+
 def check_registry_unknown_family(journal: JournalState) -> HealthResult:
     """D261: the registry loader dropped an indicator whose `family` Literal is unknown to
     Forge's installed contracts — a Crucible family added to a live registry snapshot ahead
@@ -841,6 +886,13 @@ def cmd_healthcheck(
     # live carriage (the ref_trailing_return class) or a dead probe both WARN.
     results.append(
         check_activation_probe(_read_last_json_line(eval_dir / "activation_probe.jsonl"), now)
+    )
+    # D328: the daily grammar-freeze metric (dead-unprotected share of flow) — a
+    # rise past the operator bar or a stale census both WARN.
+    results.append(
+        check_search_multiplicity_census(
+            _read_last_json_line(eval_dir / "search_multiplicity_census.jsonl"), now
+        )
     )
     if journal is not None:
         results.append(check_hypothesis_weights_fallback(journal))

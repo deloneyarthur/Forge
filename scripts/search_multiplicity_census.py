@@ -45,6 +45,7 @@ from typing import Any
 
 import duckdb
 
+from forge.core.clock import utc_now
 from forge.enumeration.search_space import (
     _DIRECTIONAL_POOL_EXCLUDED_IDS,
     _REGIME_GATE_GLOBALLY_EXCLUDED_IDS,
@@ -207,11 +208,55 @@ def _load_cells(db: duckdb.DuckDBPyConnection) -> list[Cell]:
     return list(cells.values())
 
 
-def _report(cells: list[Cell], out_path: Path | None) -> None:
+def _flow_summary(cells: list[Cell]) -> dict[str, Any]:
+    """The metric row shared by the report, the --out JSON, and the daily JSONL.
+
+    Freeze metric B lives here: dead-unprotected share of CURRENT FLOW (recent
+    submissions) — the only mass a prune can act on.
+    """
     total = sum(c.n_trials for c in cells)
     by_class: dict[str, int] = defaultdict(int)
     for c in cells:
         by_class[c.classify()] += c.n_trials
+    flow_total = sum(c.submitted_recent for c in cells)
+    flow_dead = sum(c.submitted_recent for c in cells if c.classify() == _DEAD_UNPROTECTED)
+    return {
+        "recent_days": _RECENT_DAYS,
+        "total_n_trials": total,
+        "class_mass": dict(by_class),
+        "flow_total_recent": flow_total,
+        "flow_dead_unprotected_recent": flow_dead,
+        "freeze_metric_dead_flow_fraction": flow_dead / flow_total if flow_total else 0.0,
+        "n_dead_cells": sum(1 for c in cells if c.classify() == _DEAD_UNPROTECTED),
+        "dead_unprotected_share": (by_class.get(_DEAD_UNPROTECTED, 0) / total) if total else 0.0,
+        "converting_share": (by_class.get(_CONVERTING, 0) / total) if total else 0.0,
+        "farming_campaigns": [c.name for c in CAMPAIGNS if c.status == "farming"],
+    }
+
+
+def _append_jsonl(cells: list[Cell], path: Path) -> None:
+    """One compact metric-B row per run — the standing freeze series the daily
+    timer appends and `forge healthcheck` reads."""
+    summ = _flow_summary(cells)
+    row = {
+        "ts": utc_now().isoformat(),
+        "metric_b_flow": summ["freeze_metric_dead_flow_fraction"],
+        "flow_dead": summ["flow_dead_unprotected_recent"],
+        "flow_total": summ["flow_total_recent"],
+        "n_dead_cells": summ["n_dead_cells"],
+        "dead_unprotected_share": summ["dead_unprotected_share"],
+        "converting_share": summ["converting_share"],
+        "farming_campaigns": summ["farming_campaigns"],
+    }
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+    print(f"appended census row to {path}: metric_b_flow={row['metric_b_flow']:.4f}")
+
+
+def _report(cells: list[Cell], out_path: Path | None) -> None:
+    summ = _flow_summary(cells)
+    total = summ["total_n_trials"]
+    by_class = summ["class_mass"]
 
     # Slot-level rollup.
     slots: dict[tuple[str, str, str], dict[str, int]] = defaultdict(
@@ -251,9 +296,9 @@ def _report(cells: list[Cell], out_path: Path | None) -> None:
 
     # Freeze metric — computed over CURRENT FLOW (recent submissions), the only
     # mass a prune can act on: what share of what we emit today is dead.
-    flow_total = sum(c.submitted_recent for c in cells)
-    flow_dead = sum(c.submitted_recent for c in cells if c.classify() == _DEAD_UNPROTECTED)
-    flow_frac = flow_dead / flow_total if flow_total else 0.0
+    flow_total = summ["flow_total_recent"]
+    flow_dead = summ["flow_dead_unprotected_recent"]
+    flow_frac = summ["freeze_metric_dead_flow_fraction"]
     print(
         f"\n>>> FREEZE METRIC (B): dead-unprotected share of CURRENT FLOW "
         f"(last {_RECENT_DAYS}d submissions) = {100 * flow_frac:.2f}%  "
@@ -281,13 +326,7 @@ def _report(cells: list[Cell], out_path: Path | None) -> None:
 
     if out_path is not None:
         payload = {
-            "recent_days": _RECENT_DAYS,
-            "total_n_trials": total,
-            "class_mass": dict(by_class),
-            "flow_total_recent": flow_total,
-            "flow_dead_unprotected_recent": flow_dead,
-            "freeze_metric_dead_flow_fraction": flow_frac,
-            "farming_campaigns": [c.name for c in CAMPAIGNS if c.status == "farming"],
+            **summ,
             "cells": [
                 {
                     "hypothesis": c.hypothesis,
@@ -320,6 +359,11 @@ def main(argv: list[str] | None = None) -> int:
         help="cp this live DB to --db first (default target: <db> or ./forge_snap.db)",
     )
     parser.add_argument("--out", type=Path, help="write the full cell JSON here")
+    parser.add_argument(
+        "--jsonl-out",
+        type=Path,
+        help="append one compact metric-B row here (the daily freeze series)",
+    )
     args = parser.parse_args(argv)
 
     db_path = args.db or Path("forge_snap.db")
@@ -335,6 +379,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         con.close()
     _report(cells, args.out)
+    if args.jsonl_out is not None:
+        _append_jsonl(cells, args.jsonl_out)
     return 0
 
 

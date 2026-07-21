@@ -457,7 +457,10 @@ F3/wf_p25 models silently stale until the `model` check CRITs ~2 days later), an
 campaign is STARVED at selection (the D287 class) or the audit row has gone stale;
 OK-with-note before the first 05:00 fire). Plus **activation probe** (D316: the daily
 writer-activation probe row — WARN on INERT directionals, the ref_trailing_return/D254
-drawn-then-killed class, or a stale probe file).
+drawn-then-killed class, or a stale probe file). Plus **freeze census** (D328: the daily
+grammar-freeze metric-B row — WARN when the dead-unprotected share of submission flow
+rises past the operator bar (a dead axis started flowing or a farming protection retired)
+or the census file is stale).
 Authoritative list: the `check_*` calls in
 `src/forge/cli/healthcheck_cmd.py`. Reads the journal + filesystem +
 version + the ranker-eval clocks — no DB snapshot.
@@ -658,9 +661,12 @@ region-carriage audit (`forge.ranking.campaign_audit`) appends one row to
 `~/forge_data/ranker_eval/campaign_audit.jsonl`; the healthcheck's `campaign carriage` check
 WARNs on a starved campaign or a stale file. D316 adds the writer-activation probe:
 `forge check-activations` daily → `~/forge_data/ranker_eval/activation_probe.jsonl` (the
-`activation probe` healthcheck WARNs on INERT ids). Deterministic (no LLM, hard rule #5);
-telemetry-only — never touches grammar/weights/config/ranking. Trap-cleans the snapshot +
-staging on every exit. No args.
+`activation probe` healthcheck WARNs on INERT ids). D328 adds the grammar-freeze census:
+`scripts/search_multiplicity_census.py --db $SNAP --jsonl-out …` reuses the same snapshot →
+`~/forge_data/ranker_eval/search_multiplicity_census.jsonl` (one metric-B row/day; the
+`freeze census` healthcheck WARNs on a rise past the bar or a stale file). Deterministic
+(no LLM, hard rule #5); telemetry-only — never touches grammar/weights/config/ranking.
+Trap-cleans the snapshot + staging on every exit. No args.
 
 ```
 scripts/daily_ranker_eval.sh        # or: systemctl --user start forge-ranker-eval.service

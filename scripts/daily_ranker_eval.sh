@@ -453,4 +453,16 @@ print(
 )
 PY
 
+# --- grammar-freeze metric-B census (D328) -------------------------------------
+# The convergence-toward-freeze instrument: one metric-B row/day (dead-unprotected
+# share of current submission flow) appended to search_multiplicity_census.jsonl.
+# Reuses the snapshot already taken above ($SNAP) — no second cp. The
+# healthcheck's `freeze census` check WARNs on a rise past the bar or a stale
+# file. Non-fatal (a census hiccup must never fail the ranker eval).
+echo "daily-ranker-eval: freeze census"
+uv run python "$(dirname "$0")/search_multiplicity_census.py" \
+    --db "$SNAP" --jsonl-out "$OUT_DIR/search_multiplicity_census.jsonl" \
+    > "$OUT_DIR/search_multiplicity_census_last_run.txt" 2>&1 \
+    || echo "daily-ranker-eval: freeze census failed -- continuing" >&2
+
 echo "daily-ranker-eval: done"

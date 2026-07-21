@@ -314,3 +314,39 @@ def test_activation_probe_levels() -> None:
 
     # Unparseable ts -> WARN.
     assert check_activation_probe({"inert": []}, _NOW).level is Level.WARN
+
+
+def test_search_multiplicity_census_levels() -> None:
+    """D328: the daily grammar-freeze metric-B JSONL row -> healthcheck. Metric B
+    (dead-unprotected share of current flow) rising past the operator bar means a
+    dead axis started flowing or a farming campaign that protected a cell retired;
+    a stale/unparseable census WARNs (a silently dead freeze instrument)."""
+    from forge.cli.healthcheck_cmd import check_search_multiplicity_census
+
+    fresh_ts = (_NOW - timedelta(hours=5)).isoformat()
+    stale_ts = (_NOW - timedelta(hours=40)).isoformat()
+
+    # No rows yet -> OK note.
+    result = check_search_multiplicity_census(None, _NOW)
+    assert result.level is Level.OK
+    assert "no census rows" in result.message
+
+    # Fresh, below the bar -> OK, metric surfaced.
+    ok = {"ts": fresh_ts, "metric_b_flow": 0.028, "n_dead_cells": 13}
+    assert check_search_multiplicity_census(ok, _NOW).level is Level.OK
+
+    # Fresh, above the bar -> WARN.
+    bad = {"ts": fresh_ts, "metric_b_flow": 0.09, "n_dead_cells": 40}
+    result = check_search_multiplicity_census(bad, _NOW)
+    assert result.level is Level.WARN
+    assert "metric B" in result.message
+
+    # Stale -> WARN.
+    fresh_metric = {"ts": stale_ts, "metric_b_flow": 0.02}
+    assert check_search_multiplicity_census(fresh_metric, _NOW).level is Level.WARN
+
+    # Unparseable ts -> WARN.
+    assert check_search_multiplicity_census({"metric_b_flow": 0.02}, _NOW).level is Level.WARN
+
+    # Missing metric -> WARN.
+    assert check_search_multiplicity_census({"ts": fresh_ts}, _NOW).level is Level.WARN
