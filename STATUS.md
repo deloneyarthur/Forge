@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.4 (D326, ON BRANCH — NEEDS A RESTART TO LAND): slimmed `AutoTuneCalibration` to its one live field. Operator (AskUserQuestion): "Prep now, land on next deploy"
+
+- **⚠️ REQUIRES RESTART (unlike D322–D325):** removes `prefilter.yaml` `auto_tune` keys (`enabled`/`min_promotion_rate`/`max_promotion_rate`/`max_cumulative_adjustment`) the RUNNING daemon's OLD code still `_require`s — it re-reads the yaml every iteration (`main.py:1897`), so a live-tree yaml change → crash-loop. New loader ignores extras (new-code+old-yaml safe); only OLD-code+NEW-yaml crashes.
+- **LANDING (operator, next restart-deploy — e.g. next grammar bump, daemon DOWN):** `git merge --ff-only simplify/d326-autotunecfg-slim` → restart → verify journal. Do NOT merge while the daemon runs old code. Main's prefilter.yaml is untouched until then.
+- **Done (branch `simplify/d326-autotunecfg-slim`, 6 files):** slimmed dataclass + loader + prefilter.yaml (one key: `adjustment_pct_per_step`) + 5 test constructions/fixtures. `apply_tightening`/`propose_adjustment`/`cmd_apply_proposal` untouched (still read `adjustment_pct_per_step`).
+- **Gates:** ruff + format clean; mypy --strict clean (108 files); full suite **2038 passed / 1 skipped** (field-slim only, no tests removed).
+
 ## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.3 (D325, BUILT IN WORKTREE — NOT YET LANDED): deleted the dead §5.5 auto-tune TRIGGER + extracted its bundled live helpers. Operator (AskUserQuestion): "Extract to honest homes". Behavior-identical; awaiting FF-merge
 
 - **Auto-tune (tightening) confirmed NEVER used:** live `grammar_versions` = 44 rows, ALL `manual_bump`/"auto-recorded on first load" (incl. v44/45/46 today); 0 from auto-tune or apply-proposal; thresholds yaml empty; `enabled: false`. `auto_tune()` ran every batch but returned immediately (disarmed no-op).

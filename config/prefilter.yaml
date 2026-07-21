@@ -58,13 +58,8 @@ prefilter:
     # trend/event_momentum/ve survival up. Resolve the prereg on the POST-FLIP cohort.
     forward_return_mode: cumulative_trading
   auto_tune:
-    # DISARMED 2026-07-02 (D218, strategy-audit P0-1): the §5.5 self-apply is keyed on
-    # a per-config verdict-level promotion rate — a dead estimand under book-level
-    # promotion — and its trigger becomes reachable the day the first book promotes
-    # (which D216 is chasing), likely at tiny denominators. Disarm the unattended
-    # tracked-file write path until the estimand is re-keyed. Re-enable = flip to true.
-    enabled: false
-    min_promotion_rate: 0.005          # 0.5%
-    max_promotion_rate: 0.05           # 5%
+    # The §5.5 auto-tune TRIGGER was disarmed (D218/D298) then deleted (D325); its
+    # enabled/min_promotion_rate/max_promotion_rate/max_cumulative_adjustment fields
+    # were removed from the schema (D326). The one surviving key is the step size for
+    # the manual `grammar apply-proposal` prefilter-tighten path.
     adjustment_pct_per_step: 0.10
-    max_cumulative_adjustment: 0.30
