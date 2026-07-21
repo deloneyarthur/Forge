@@ -159,7 +159,14 @@ from crucible_contracts import (
 # yet (refutations wiring is a separate operator-gated proposal). Pin-only adopt riding the v44
 # bump (the exact-match forcing test was red on 1.34.0-installed vs the 1.33.0 pin once the
 # editable source moved; v44 is the co-adoption window, as v41/v42 rode 1.32.0/1.33.0). See D317.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.34.0"
+# 1.35.0 (2026-07-21, Crucible f5631d7): adds a `lot_floor` SizerSpec mode (small-capital
+# tradeability). Additive sizer mode. NO-OP for Forge — Forge never constructs SizerSpec; it
+# passes `config.sizer.mode` through as a string (novelty.py bucketing) and enumerates whatever
+# sizer_modes the registry export offers (Crucible-controlled), so a new mode needs no read-face
+# change. No consumed model/hash changed → no major-guard trip; enumeration byte-identical.
+# Pin-only adopt per the D262/D267 discipline — adopted in a dedicated restart-deploy alongside the
+# D326 config-slim (which forced the restart). See D327.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.35.0"
 
 
 def check_contracts_version() -> str:

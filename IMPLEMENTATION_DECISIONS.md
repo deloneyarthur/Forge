@@ -3407,3 +3407,36 @@ suite **2038 passed / 1 skipped** (no tests removed — field-slim only). Relate
 [[D325]] (the trigger deletion this follows), [[D298]]/[[D206]] (the retirement), and
 the H-6 atomic-write audit note in `write_calibration_yaml`'s docstring (same crash
 hazard).
+
+## D327 — 2026-07-21 — DEPLOY (restart): adopt `crucible_contracts` 1.35.0 (pin-only) + land the D326 config-slim in the same window (operator: "bring in the latest pin and merge to master")
+
+**Two changes, one restart.** [[D326]] (AutoTuneCalibration slim) needed the daemon
+down (it removes `prefilter.yaml` keys the old code `_require`s), so the pending
+contracts adoption rode the same deploy window.
+
+**Contracts 1.35.0 — pin-only adopt** (Crucible `f5631d7`, "add `lot_floor` SizerSpec
+mode for small-capital tradeability"). Purely additive. NO-OP for Forge: Forge never
+constructs `SizerSpec` — it reads `config.sizer.mode` as a passthrough string
+(`novelty.py` bucketing) and enumerates whatever `sizer_modes` the registry export
+offers (Crucible-controlled), so a new mode needs no read-face change. No consumed
+model/hash changed → `§13.5` major-guard already passes; enumeration byte-identical.
+Bumped `FORGE_EXPECTED_CONTRACT_VERSION` 1.34.0 → 1.35.0 + `uv.lock` (editable source
+was already 1.35.0). The exact-match `test_expected_contract_version_matches_installed`
+was the forcing function — RED (preflight NO-GO) until adopted, GREEN after. Per the
+D262/D267 pin-hygiene discipline.
+
+**Deploy ritual (deploy.md / D104).** `deploy_preflight.sh` → NO-GO (the expected
+contracts-red) → `stop` (clean SIGTERM exit 143) → merged `simplify/d326-autotunecfg-slim`
+(only STATUS.md conflicted — resolved: D326→LANDED, pending banner dropped) → pin bump +
+D327 → **full uncontended suite GREEN (2038 passed / 1 skipped)** against installed 1.35.0
++ pin 1.35.0 → commit → `reset-failed` + `start` → verified journal (contracts line 1.35.0,
+grammar_version, registry_loaded_from_export, no traceback / SchemaVersionMismatch).
+No unit-file change → no `daemon-reload` needed. `simplify/d326-autotunecfg-slim` branch
+retired post-merge.
+
+**Coordination note (D245).** Additive minor — the tolerant readers
+(`parse_forward_compatible` / `parse_skipping_unknown_literals`) mean no asymmetric-wedge
+risk in either direction even if Crucible's daemon adopts on its own cadence. Crucible
+published 1.35.0 (editable source moved), so their side is already moving to it. Related:
+[[D326]] (the co-landed slim), [[D317]] (the prior 1.34.0 adopt), [[D267]]/[[D262]] (the
+pin-hygiene discipline), [[D245]] (the both-directions contracts-restart lesson).
