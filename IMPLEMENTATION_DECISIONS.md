@@ -3135,8 +3135,19 @@ earnings-manifest fingerprint precedent).
 **Context.** The operator flagged accreted complexity and asked what no longer
 serves the stack. A read-only audit produced an inventory; the two highest
 value-for-lowest-risk items were executed here (env-flag cull and the inert
-`experiment_cells` floor were surfaced but NOT touched — half the flags are
-staged Theme-2 roadmap, and the floor reopens on the next campaign).
+`experiment_cells` floor were surfaced but NOT touched — the floor reopens on
+the next campaign; the flag cull was subsequently ABORTED, see correction below).
+
+**CORRECTION (env-flag cull aborted).** The audit's "4 never-activated flags"
+was a code-DEFAULT read, not runtime truth. Verifying against the live
+`forge.service` unit + `/proc/<MainPID>/environ`: 3 of the 4 are LIVE in
+production — `FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20` (D216),
+`FORGE_EXPLORATION_HOLDOUT_FRAC=0.05` (D256, prereg 61837dd2),
+`FORGE_YOUNG_CELL_FLOOR=on` (D312); only `FORGE_YOUNG_CELL_EXPLORE_SLOTS` is
+unset (deliberately-staged 2d, D316). Deleting either proposed target would
+have removed a live steering lever. No orphaned `FORGE_*` flag exists — every
+runtime flag is live or staged. Lesson: check the service unit + live environ,
+never the code default, before culling a flag.
 
 **1. `shadow-null` harness RETIRED.** `forge/prefilters/shadow_null.py`,
 `forge/cli/shadow_null_cmd.py`, and their two tests deleted; the import +
