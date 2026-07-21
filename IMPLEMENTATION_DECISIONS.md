@@ -3368,3 +3368,42 @@ tests; the 5 moved tests pass in their new homes). Behavior-identical: the remov
 way from its new home. **NOT landed** — awaiting the FF-merge (no restart needed).
 Related: [[D324]] (Tier-2 pt.2, same pass), [[D298]] (auto_tune disarmed permanent),
 [[D206]] (prefilter-tightening retired), [[D051]] (the grammar-version-audit origin).
+
+## D326 — 2026-07-21 — Complexity-reduction pass, Tier-2 (part 4): slim `AutoTuneCalibration` to its one live field (operator via AskUserQuestion: "Prep now, land on next deploy"). REQUIRES A RESTART — built on a branch, NOT merged to main
+
+**Context.** After [[D325]] deleted the §5.5 auto-tune trigger, four
+`AutoTuneCalibration` fields (`enabled`, `min_promotion_rate`, `max_promotion_rate`,
+`max_cumulative_adjustment`) became config-present-but-unread — only
+`adjustment_pct_per_step` survives (the manual `apply-proposal` tighten step size).
+This slims the schema, the loader, `prefilter.yaml`, and the test constructions to
+that one field.
+
+**Why this one needs a restart (unlike D322–D325).** The daemon calls
+`load_calibration(prefilter_yaml)` at `main.py:1897` EVERY iteration, and the loader
+`_require`s each key (raises on missing — the H-6 crash-loop hazard). The running
+daemon executes its OLD cached code, which requires all five keys, but re-reads
+`prefilter.yaml` from disk each cycle. So the moment the yaml loses `enabled`/`min`/
+`max`, the old code's next iteration raises → crash-loop. The new loader reads the
+one key and IGNORES extras, so new-code + old-or-new-yaml is safe; only OLD-code +
+NEW-yaml crashes. Therefore the yaml change cannot touch the live tree until the
+daemon restarts onto the new code.
+
+**Landing protocol (operator, on the next restart-deploy — e.g. the next grammar
+bump).** With the daemon DOWN: `git merge --ff-only simplify/d326-autotunecfg-slim`
+→ restart → verify journal. Do NOT merge while the daemon runs old code. Main's
+`prefilter.yaml` is untouched until then, so the running daemon keeps reading its
+five-key yaml fine. A STATUS pointer on main flags the pending branch.
+
+**Done (branch `simplify/d326-autotunecfg-slim`, 6 files).** Slimmed the dataclass +
+the loader construction; `prefilter.yaml` auto_tune block → one key (comment updated);
+`write_calibration_yaml` needs no change (`asdict` adapts); slimmed 5 test
+constructions/fixtures (`test_batch_reproducibility`, `test_permutation_test`,
+`test_calibration` ×3 fixtures + assertions, `test_grammar_cmd`,
+`test_learned_ranker_invariants`). `apply_tightening`/`propose_adjustment`/
+`cmd_apply_proposal` untouched (still live; still read `adjustment_pct_per_step`).
+
+**Gates (worktree venv).** ruff + format clean; mypy --strict clean (108 files); full
+suite **2038 passed / 1 skipped** (no tests removed — field-slim only). Related:
+[[D325]] (the trigger deletion this follows), [[D298]]/[[D206]] (the retirement), and
+the H-6 atomic-write audit note in `write_calibration_yaml`'s docstring (same crash
+hazard).

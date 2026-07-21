@@ -55,11 +55,7 @@ def test_calibration_nested_shape_matches_yaml() -> None:
     assert c.permutation_test.p_value_threshold == 0.10
     # D075: forward-horizon parameter for the return comparison.
     assert c.permutation_test.forward_horizon_days == 5
-    assert c.auto_tune.enabled is False  # D218: §5.5 auto-tune disarmed (strategy-audit P0-1)
-    assert c.auto_tune.min_promotion_rate == 0.005
-    assert c.auto_tune.max_promotion_rate == 0.05
-    assert c.auto_tune.adjustment_pct_per_step == 0.10
-    assert c.auto_tune.max_cumulative_adjustment == 0.30
+    assert c.auto_tune.adjustment_pct_per_step == 0.10  # D326: only surviving field
 
 
 # ---------------------------------------------------------------------------
@@ -92,11 +88,7 @@ prefilter:
     n_permutations: 100
     p_value_threshold: 0.10
   auto_tune:
-    enabled: true
-    min_promotion_rate: 0.005
-    max_promotion_rate: 0.05
     adjustment_pct_per_step: 0.10
-    max_cumulative_adjustment: 0.30
   mystery_filter:
     threshold: 0.5
 """,
@@ -151,11 +143,7 @@ prefilter:
     n_permutations: 100
     p_value_threshold: 0.10
   auto_tune:
-    enabled: true
-    min_promotion_rate: 0.005
-    max_promotion_rate: 0.05
     adjustment_pct_per_step: 0.10
-    max_cumulative_adjustment: 0.30
 """,
         encoding="utf-8",
     )
@@ -184,11 +172,7 @@ prefilter:
     n_permutations: 100
     p_value_threshold: 0.10
   auto_tune:
-    enabled: true
-    min_promotion_rate: 0.005
-    max_promotion_rate: 0.05
     adjustment_pct_per_step: 0.10
-    max_cumulative_adjustment: 0.30
 """,
         encoding="utf-8",
     )

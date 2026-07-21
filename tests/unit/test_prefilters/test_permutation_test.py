@@ -422,13 +422,7 @@ def test_d075_leading_indicator_passes_only_with_horizon() -> None:
                 p_value_threshold=0.10,
                 forward_horizon_days=horizon,
             ),
-            auto_tune=AutoTuneCalibration(
-                enabled=True,
-                min_promotion_rate=0.005,
-                max_promotion_rate=0.05,
-                adjustment_pct_per_step=0.10,
-                max_cumulative_adjustment=0.30,
-            ),
+            auto_tune=AutoTuneCalibration(adjustment_pct_per_step=0.10),
         )
 
     f = PermutationTestFilter()

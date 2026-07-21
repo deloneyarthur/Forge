@@ -65,11 +65,7 @@ prefilter:
     p_value_threshold: 0.10
     forward_horizon_days: 0
   auto_tune:
-    enabled: true
-    min_promotion_rate: 0.005
-    max_promotion_rate: 0.05
     adjustment_pct_per_step: 0.10
-    max_cumulative_adjustment: 0.30
 """
 
 

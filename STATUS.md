@@ -1,6 +1,10 @@
 # Forge — Status
 
-> ⚠️ **PENDING RESTART-DEPLOY — branch `simplify/d326-autotunecfg-slim` (D326):** the `AutoTuneCalibration` config-slim is validated and waiting. It removes `prefilter.yaml` `auto_tune` keys the RUNNING daemon still `_require`s (it re-reads the yaml every iteration), so a live-tree change crash-loops the daemon. Merge ONLY with the daemon DOWN, on the next restart-deploy: `git merge --ff-only simplify/d326-autotunecfg-slim` → restart → verify journal. If main has advanced since 98c19a3, expect a STATUS/ledger append conflict — keep both. (D322–D325 already landed on main; only D326 waits.)
+## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.4 (D326, LANDED via the D327 restart-deploy): slimmed `AutoTuneCalibration` to its one live field. Operator (AskUserQuestion): "Prep now, land on next deploy"
+
+- **Landed on a restart** (unlike D322–D325): removed `prefilter.yaml` `auto_tune` keys (`enabled`/`min_promotion_rate`/`max_promotion_rate`/`max_cumulative_adjustment`) the old code `_require`d — the daemon re-reads the yaml every iteration (`main.py:1897`), so it needed the service down; done in the D327 deploy window.
+- **Done (6 files):** slimmed dataclass + loader + prefilter.yaml (one key: `adjustment_pct_per_step`) + 5 test constructions/fixtures. `apply_tightening`/`propose_adjustment`/`cmd_apply_proposal` untouched (still read `adjustment_pct_per_step`).
+- **Gates:** ruff + format clean; mypy --strict clean; full suite green (revalidated in the deploy window against contracts 1.35.0).
 
 ## 2026-07-21 — COMPLEXITY-REDUCTION PASS, Tier-2 pt.3 (D325, LANDED 98c19a3, no restart): deleted the dead §5.5 auto-tune TRIGGER + extracted its bundled live helpers. Operator (AskUserQuestion): "Extract to honest homes". Behavior-identical; FF-merged to main
 

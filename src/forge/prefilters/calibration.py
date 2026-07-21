@@ -110,11 +110,11 @@ class PermutationTestCalibration:
 
 @dataclass(frozen=True, slots=True)
 class AutoTuneCalibration:
-    enabled: bool
-    min_promotion_rate: float
-    max_promotion_rate: float
+    # Only `adjustment_pct_per_step` survives — the step size for the manual
+    # `grammar apply-proposal` prefilter-tighten path. The §5.5 auto-tune trigger's
+    # enabled/min/max fields were removed (D326) after the trigger itself was
+    # deleted (D325); nothing read them once the trigger was gone.
     adjustment_pct_per_step: float
-    max_cumulative_adjustment: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,26 +341,10 @@ def load_calibration(path: Path) -> Calibration:
             ),
         ),
         auto_tune=AutoTuneCalibration(
-            enabled=bool(_require(at, "auto_tune", "enabled")),
-            min_promotion_rate=_validate_unit_float(
-                _require(at, "auto_tune", "min_promotion_rate"),
-                "auto_tune",
-                "min_promotion_rate",
-            ),
-            max_promotion_rate=_validate_unit_float(
-                _require(at, "auto_tune", "max_promotion_rate"),
-                "auto_tune",
-                "max_promotion_rate",
-            ),
             adjustment_pct_per_step=_validate_unit_float(
                 _require(at, "auto_tune", "adjustment_pct_per_step"),
                 "auto_tune",
                 "adjustment_pct_per_step",
-            ),
-            max_cumulative_adjustment=_validate_unit_float(
-                _require(at, "auto_tune", "max_cumulative_adjustment"),
-                "auto_tune",
-                "max_cumulative_adjustment",
             ),
         ),
     )
