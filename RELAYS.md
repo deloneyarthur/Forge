@@ -17,7 +17,7 @@ ops-debt item 5b).
 | `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` | → | carried (07-20, operator) | their answer (additive field / decline); telemetry build follows only on a yes | D302 |
 | `PROMPT_CRUCIBLE_V43_DEPLOYED.md` | → | held (NEW 07-21) | carry; asks: row-45 cross-check on the 30 names + `funnel --compare v42 v43`; archive after both | D309 |
 | `PROMPT_CRUCIBLE_FUNDAMENTAL_VALUE_PRECHECK.md` | → | held (since 06-28) | operator relay decision | crucible-handoff |
-| `PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md` | → | answered + CLOSED (their (a) shipped `69f9c25`; build `babb148`; **stamp ARMED on the first v43 batch** — marker verdicts from 01:37:50Z, first stamped batch `03b33475` 02:07:37Z, max slot 108,324 verified) | archive candidate next sweep | D306/D310 |
+| `PROMPT_CRUCIBLE_SEARCH_N_TRIALS_INTERACTION.md` | → | answered + CLOSED; **carries a RESOLVED+receipts banner for the next carry** (stamp ARMED on the first v43 batch `03b33475` 02:07:37Z; slot spans 5,154–108,324; expect `dsr_below_bar` at volume immediately; stamp boundary = the v43 boundary) | carry the banner (bundles w/ `PROMPT_CRUCIBLE_V43_DEPLOYED.md`); archive after | D306/D310 |
 | `PROMPT_CRUCIBLE_HOUSEKEEPING_ASKS.md` | → | answered (same-day: their `FORGE_housekeeping_answers_2026-07-20.md`) | archive candidate next sweep; all three asks closed (timer repurposed-not-meta-king — permanently answered, stop asking; sma_slope wired; DSR was answered 07-08) | D300/D304 |
 | `PROMPT_CRUCIBLE_PATHC_DEBIT_VERTICAL_SIZING.md` | → | parked | Path C is parked (operator 06-15); refresh before any resume | D152 |
 | `PROMPT_CRUCIBLE_SECTOR_ETF_XSECT_PRECHECK.md` | → | held (since 07-12) | operator relay decision (companion research = D269 DON'T-BUILD) | D269 |
