@@ -1,11 +1,14 @@
 # Proposal: v47 — retire the dead single-name axes (single-name trend/MR + relative_value; single-name event_momentum pending)
 
-**Status: STAGED + HELD (Path B) — operator "let's do Path b" 2026-07-21.** The first
-prune of the freeze program (`docs/proposals/grammar-freeze-criterion.md`), now bundling
-the Crucible-greenlit single-name trend/MR retirement. HELD until Crucible answers the
-event_momentum relay (`PROMPT_CRUCIBLE_EVENT_MOMENTUM_SOXL_DEGENERATE.md`) so a fast yes
-folds single-name `event_momentum` into the same deploy; a slow answer ships v47 without
-it (em retires in a small v48). Deploys on the operator's word via `docs/tasks/deploy.md`.
+**Status: STAGED + HELD (Path B, bundle) — operator "bundle all into v47" 2026-07-21.**
+The first prune of the freeze program (`docs/proposals/grammar-freeze-criterion.md`).
+Crucible greenlit all: single-name trend/MR (`FORGE_single_name_trend_mr_retirement_read`),
+single-name event_momentum (`FORGE_event_momentum_soxl_degenerate_reply` — SOXL leg
+confirmed degenerate, xsect-PEAD withdrawn). **HELD on ONE open item:** the blanket
+single-name-MR retirement would kill the **capitulation** cell (single-name-only), so the
+MR half waits on `PROMPT_CRUCIBLE_CAPITULATION_IN_SINGLE_NAME_MR_RETIREMENT.md` (retire vs
+exempt). relval + single-name em + single-name trend are unaffected and ride the same
+bump. Deploys on the operator's word via `docs/tasks/deploy.md`.
 
 Source: the D1 census (`scripts/search_multiplicity_census.py`) + Crucible
 `FORGE_single_name_trend_mr_retirement_read_2026-07-21.md`. Relates to:
@@ -14,18 +17,27 @@ Class: **auto-tightening** (hard rule #4 permits without approval; the deploy is
 
 ## The change (three prunes, two mechanisms)
 
+Asymmetric mechanism (the sampler read settled it — confluence=named by default, switch
+to `cross_sectional_rank`=xsect only if `p_xsect>0` AND the recipe has no rank-excluded id):
+
 1. **`relative_value` → `DISABLED_HYPOTHESES`** (`search_space.py:102`; the
-   `regime_arbitrage`/D098 pattern). Fully removed from enumeration — dormant + refuted
-   (D215/D276: xsect rank-IC negative, corr-to-MR 0.88). Code paths stay intact for a
-   one-line reopener.
-2. **Single-name (per-name) `trend_continuation` + `mean_reversion` → xsect-only.** A
-   scoped **sampler** change: force these two rank-coherent hypotheses to enumerate only
-   the cross-sectional form (`combiner.type == cross_sectional_rank`, `underlying=None`);
-   drop the named/single-underlying path. Their xsect form — the converting core — is
-   untouched. (Exact lever designed at build time: the named-vs-universe branch in
-   `_pick_underlying` / the combiner choice; determinism-critical → goldens re-pin.)
-3. **Single-name `event_momentum` → xsect-only (PENDING Crucible ask #2).** Same
-   mechanism as (2). Folded in only on a Crucible yes; otherwise deferred to v48.
+   `regime_arbitrage`/D098 pattern). Fully removed — dormant + refuted (D215/D276). One-line
+   reopener.
+2. **`event_momentum` → `DISABLED_HYPOTHESES`** (SAME clean mechanism). It is
+   single-name-**only**: its directional `sue` is `rank_per_name_coherent=False` → it can
+   never go xsect (Crucible: "no cross-sectional PEAD form exists"), so retiring single-name
+   em = disabling the hypothesis. Confirmed dead (~3 components, 0 conversion) + the
+   pure_sue175 "SUE sleeve" is the D268 degenerate.
+3. **Single-name `trend_continuation` + `mean_reversion` → xsect-only.** The real sampler
+   change: pin `p_xsect=1.0` for these hypotheses (the D276 residual_momentum-pin pattern in
+   `_cohort_xsect_probability`) AND pool-exclude their rank-excluded ids (so every built
+   recipe is rank-eligible and always takes the rank branch — the named path disappears).
+   Their xsect form — the converting core — is untouched. Determinism-critical → goldens
+   re-pin. **CAPITULATION CARVE-OUT (pending the relay):** the `momentum` directional is
+   rank-excluded (`_RANK_POLICY_EXCLUDED_IDS`), so the capitulation cell is single-name-only;
+   a hypothesis-scoped MR retirement kills it (v31/v35/v36, D279 +slot-delta). Per the relay
+   answer, either fold it in (hypothesis-scoped) or **exempt** it (directional-scoped: MR
+   xsect-only EXCEPT the `momentum` cell stays single-name).
 
 ## Evidence
 
