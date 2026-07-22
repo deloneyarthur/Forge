@@ -9,7 +9,7 @@
 - **Full suite 2046 passed / 1 skipped; ruff + mypy --strict clean.** Determinism untouched (`search_n_trials` is hash-excluded; stamping is post-ranking) — no grammar bump, no golden re-pin.
 - **Bounded honestly:** worth **0.000285 sd** on the bar. This is a correctness fix, not a remedy for saturation. **The saturation is not fixable from our side** — the bar at N=105,000 is **1.974 annualized Sharpe vs a population max of 1.964**; even N=200 excludes 93.4%. The durable fix is Crucible's single `blocking_failures(gate_results, source)` consumer, relayed and now asked for by the operator.
 - **LEFT OPEN deliberately** (joint, recorded in the module docstring): whether cumulative-all-time is the right denominator, given Forge takes no cross-batch argmax and Crucible already charges `selection_n_trials` at assembly.
-- **NOT DEPLOYED** — inert until the next restart; the running daemon still stamps indices.
+- **DEPLOYED + VERIFIED 15:52:49 PDT** — uncontended suite 2046/1 skipped → restart clean (`active`, NRestarts=0, v48, no traceback). First batch `8de7a790` (200/200, 0 failed): `search_n_trials: stamped 200 configs (max slot n_trials=114353)`, and **every slot batch-constant on submitted rows** — MR-xsect-swing_mid 119 configs/**1 value**, trend-xsect-swing_mid 64/1, ve-named-swing_short 14/1, ve-named-swing_mid 2/1, MR-xsect-swing_short 1/1. Pre-D330 the same batch would have shown 119-, 64- and 14-wide index ranges.
 
 ## 2026-07-22 (later⁴) — `search_n_trials` (D310) INVESTIGATED: intended semantic, one real defect, and **D310 + v48 jointly turned off measurement** (D330 cont.)
 
