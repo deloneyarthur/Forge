@@ -105,44 +105,21 @@ def test_rank_combiner_emitted_when_forced() -> None:
     assert dirs == {"long_only", "long_short"}
 
 
-def test_rank_combiner_emitted_for_event_momentum() -> None:
-    """§2.4 said event_momentum's productive form is cross-sectional PEAD —
-    D118 (v15) re-pin: em structurally never ranks. Crucible's indicator→mode
-    map (`rank_gate_class_map.json`) classifies H2's WHOLE signal set as broken
-    on the rank path: `sue` and `days_since_earnings` are per-name events keyed
-    on ``params["symbol"]``, which the rank path never threads — the sue
-    directional would rank the universe on NaN (the dealer-directional 0/8
-    pattern) and the timing gate is inert fail-open. Every em draw stays
-    single-name confluence (the composable path pins the symbol; both
-    indicators are coherent there) until Crucible threads per-name symbols on
-    the rank path. Keep-side asserted: the sue directional + dse gate pair is
-    still emitted single-name at full weight."""
+def test_event_momentum_retired_not_rank_forceable() -> None:
+    """D328 (v47): event_momentum is retired into DISABLED_HYPOTHESES (§2.4's
+    cross-sectional PEAD form never materialized — `sue` is rank-excluded, so em
+    was single-name-only + dead; Crucible withdrew the xsect-PEAD ask). It is no
+    longer samplable, so forcing it raises — the rank-vs-single-name question is
+    moot."""
+    import pytest
+
+    from forge.enumeration.sampler import SamplerError
+
     grammar = _grammar()
     reg = minimal_registry_snapshot()
     space = build_search_space(grammar, reg)
-    share = {"event_momentum": 1.0}
-    seen_sue_directional = seen_dse_gate = 0
-    for seed in range(120):
-        cfg = sample_config(
-            space,
-            reg,
-            random.Random(seed),
-            forced_hypothesis="event_momentum",
-            rank_combiner_share=share,
-        )
-        assert cfg.combiner.type == "confluence", cfg.name
-        assert cfg.underlying is not None, cfg.name
-        assert validate(cfg, grammar, reg).valid  # type: ignore[arg-type]
-        if any(s.role == "directional" and "sue" in s.indicators for s in cfg.signals):
-            seen_sue_directional += 1
-        if any(
-            s.role == "regime_filter" and "days_since_earnings" in s.indicators for s in cfg.signals
-        ):
-            seen_dse_gate += 1
-    # Non-vacuous: the H2 signal pair is still drawn — the cut moved the
-    # combiner, not the hypothesis's single-name emission.
-    assert seen_sue_directional > 0
-    assert seen_dse_gate > 0
+    with pytest.raises(SamplerError):
+        sample_config(space, reg, random.Random(0), forced_hypothesis="event_momentum")
 
 
 def test_rank_draw_blocked_for_kelly_ev_sizer_chain() -> None:

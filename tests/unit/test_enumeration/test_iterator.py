@@ -95,7 +95,11 @@ def test_rejection_counter_zero_on_v1_fixture(grammar: Grammar, registry: Regist
             rejection_counter=counter,
         )
     )
-    assert sum(counter.values()) == 0, f"unexpected rejections on v1 fixture: {dict(counter)}"
+    # D328 (v47): the single-name-retirement filter legitimately rejects
+    # confluence trend/MR (emission policy, not a construction failure) — allow
+    # those; assert no OTHER (grammar-invalid) rejections remain.
+    other = {k: v for k, v in counter.items() if k != "retired_single_name"}
+    assert sum(other.values()) == 0, f"unexpected non-policy rejections on v1 fixture: {other}"
 
 
 def test_rejection_counter_populates_on_sparse_registry(

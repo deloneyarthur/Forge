@@ -54,6 +54,39 @@ _MAX_ATTEMPTS_FACTOR = 100
 _DEFAULT_MIN_HYPOTHESIS_FRACTION: float = 0.0
 _PRODUCTION_MIN_HYPOTHESIS_FRACTION: float = 0.02
 
+# v47 (D328) — single-name trend/MR retirement (emission-policy filter).
+# Crucible's consumption read (FORGE_single_name_trend_mr_retirement_read): 0 of
+# 106 assemblies ever selected a single-name trend or MR component (363 xsect-
+# trend / 142 xsect-MR slots vs 0 single-name). Confluence combiner == single-
+# name (a pinned underlying); cross_sectional_rank == xsect == the converting
+# core, kept. The momentum/capitulation cell is EXEMPTED per
+# FORGE_capitulation_exempt_v47 (single-name-only since `momentum` is rank-
+# excluded; the program's only positive-slot-delta cell, an un-refuted named
+# live successor candidate, with a defined close-out). This filters the DRAWN
+# config, never the sampler — `sample_config` stays byte-identical (hard rule
+# #6), so the sampler goldens hold; only the yielded set changes (and the
+# version bump moves enumeration_inputs_hash). Retirement never touches
+# `forced_failures`: trend/MR remain satisfiable via their xsect form, so
+# stratification just retries — a confluence draw is not an unsatisfiable slot.
+_XSECT_ONLY_HYPOTHESES: frozenset[str] = frozenset({"trend_continuation", "mean_reversion"})
+_SINGLE_NAME_EXEMPT_DIRECTIONALS: frozenset[str] = frozenset({"momentum"})  # capitulation
+_XSECT_COMBINER_TYPE = "cross_sectional_rank"
+
+
+def _is_retired_single_name(config: StrategyConfig) -> bool:
+    """v47: True for a single-name (confluence) trend/MR config that is retired.
+
+    Kept: xsect (cross_sectional_rank) trend/MR, and the momentum/capitulation
+    single-name cell. Every other single-name config in these two hypotheses is
+    dropped.
+    """
+    if config.hypothesis not in _XSECT_ONLY_HYPOTHESES:
+        return False
+    if config.combiner.type == _XSECT_COMBINER_TYPE:
+        return False
+    directional = next((s.indicators[0] for s in config.signals if s.role == "directional"), None)
+    return directional not in _SINGLE_NAME_EXEMPT_DIRECTIONALS
+
 
 class EnumerationCapped(RuntimeError):
     """Raised when the iterator exhausts its retry budget without yielding
@@ -84,7 +117,7 @@ def _compute_stratification_floor(
     return min(requested, cap)
 
 
-def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches; refactor would be net harm
+def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v47 filter; refactor would be net harm
     grammar: Grammar,
     registry: RegistrySnapshot,
     seed: int,
@@ -237,6 +270,15 @@ def enumerate_candidates(  # noqa: PLR0912 — D037 stratification adds branches
             if rejection_counter is not None:
                 rejection_counter["sampler"] += 1
             _logger.debug("sample_rejected", reason=str(exc))
+            continue
+
+        # v47 (D328) — drop retired single-name trend/MR (keep xsect + the
+        # capitulation exemption). NOT a forced_failures event: the hypothesis
+        # is satisfiable via its xsect form, so stratification retries.
+        if _is_retired_single_name(cfg):
+            if rejection_counter is not None:
+                rejection_counter["retired_single_name"] += 1
+            _logger.debug("retired_single_name_rejected", hypothesis=cfg.hypothesis)
             continue
 
         result = validate(cfg, grammar, registry)

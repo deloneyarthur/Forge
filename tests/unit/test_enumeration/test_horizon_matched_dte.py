@@ -130,10 +130,11 @@ def test_relative_value_pairs_short_or_mid_unchanged(
     """relative_value keeps a uniform bucket pick among its S4-permitted set
     (pairs_zscore is medium-class -> swing_short/mid); Crucible adapts the real
     DTE per pair at runtime off the live half-life."""
+    # D328 (v47): relative_value is retired (DISABLED_HYPOTHESES) — refuted
+    # (D215/D276: xsect rank-IC negative, corr-to-MR 0.88) + dormant. It is no
+    # longer enumerated, so none should be sampled.
     rv = [cfg for cfg in _sample_many(grammar, registry) if cfg.hypothesis == "relative_value"]
-    assert rv, "no relative_value configs sampled"
-    buckets = {cfg.dte_bucket for cfg in rv}
-    assert buckets <= {"swing_short", "swing_mid"}, f"relative_value reached {buckets}"
+    assert not rv, f"relative_value should be disabled but sampled {len(rv)}"
 
 
 # ---------------------------------------------------------------------------

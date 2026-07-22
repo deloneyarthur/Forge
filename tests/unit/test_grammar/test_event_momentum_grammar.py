@@ -213,11 +213,15 @@ def test_s5_event_momentum_forbids_hard_profit_target() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_event_momentum_is_enumerable() -> None:
+def test_event_momentum_is_disabled() -> None:
+    # D328 (v47): event_momentum retired into DISABLED_HYPOTHESES — single-name-
+    # only (rank-excluded `sue`), dead (3 components, 0 conversion), its only book
+    # use the D268 SOXL degenerate. It stays in space.hypotheses (grammar.yaml S1
+    # lists it, hard rule #1) but is never enumerated, like regime_arbitrage.
     grammar = _grammar()
     space = build_search_space(grammar, minimal_registry_snapshot())
     assert "event_momentum" in space.hypotheses
-    assert "event_momentum" not in NON_ENUMERABLE_HYPOTHESES
+    assert "event_momentum" in NON_ENUMERABLE_HYPOTHESES
 
 
 def test_event_momentum_directional_pool_is_sue() -> None:

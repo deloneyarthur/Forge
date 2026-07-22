@@ -246,9 +246,11 @@ def test_rank_decoupled_event_db_indicators_are_universe_excluded(grammar: Gramm
         elif any(ind in decoupled for sig in cfg.signals for ind in sig.indicators):
             seen_single_used += 1
     assert seen_rank > 0
-    assert seen_pairs > 0
+    # D328 (v47): relative_value is disabled, so the pairs/universe-scan path
+    # (underlying=None, non-xsect) is empty — seen_pairs is 0 by construction.
     # Keep-side guard: the cut must not over-reach — single-name configs
-    # using a decoupled id (incl. the X2 kelly EV chain) must still be emitted.
+    # using a decoupled id (volatility_event iv_structure/dealer, the X2 kelly
+    # chain) must still be emitted (single-name ve is not retired).
     assert seen_single_used > 0
 
 
@@ -336,7 +338,11 @@ def test_v1_fixture_rejection_rate_is_zero(grammar: Grammar) -> None:
             rejection_counter=counter,
         )
     )
-    assert sum(counter.values()) == 0, f"unexpected rejections: {dict(counter)}"
+    # D328 (v47): the single-name-retirement filter legitimately rejects
+    # confluence trend/MR (emission policy, not a construction failure); allow
+    # those and assert no OTHER (grammar-invalid) rejections.
+    other = {k: v for k, v in counter.items() if k != "retired_single_name"}
+    assert sum(other.values()) == 0, f"unexpected non-policy rejections: {other}"
 
 
 # ---------------------------------------------------------------------------
@@ -441,19 +447,13 @@ def test_d098_no_disabled_hypothesis_in_any_yielded_config(grammar: Grammar) -> 
     )
 
 
-def test_d098_relative_value_underlying_is_none_at_scale(grammar: Grammar) -> None:
-    """Every enumerated relative_value config carries underlying=None — it's a
-    pairs strategy whose legs Crucible resolves itself (reverts D079)."""
+def test_d328_relative_value_disabled_at_scale(grammar: Grammar) -> None:
+    """D328 (v47): relative_value is retired (DISABLED_HYPOTHESES) — refuted
+    (D215/D276) + dormant. No relative_value config is enumerated at scale
+    (supersedes the D098 underlying=None assertion)."""
     registry = demo_registry()
-    seen_relative_value = False
     for cfg in enumerate_candidates(grammar, registry, seed=2026, max_candidates=500):
-        if cfg.hypothesis == "relative_value":
-            seen_relative_value = True
-            assert cfg.underlying is None, (
-                f"D098 violated: relative_value config {cfg.config_hash} has "
-                f"underlying={cfg.underlying!r}, expected None"
-            )
-    assert seen_relative_value, "expected at least one relative_value config in 500"
+        assert cfg.hypothesis != "relative_value", cfg.config_hash
 
 
 def test_capped_is_loud_for_unsatisfiable_registries(grammar: Grammar) -> None:
@@ -499,6 +499,9 @@ def test_d037_stratification_floor_guarantees_each_hypothesis(grammar: Grammar) 
             seed=137,
             max_candidates=max_candidates,
             min_hypothesis_fraction=fraction,
+            # D328 (v47): single-name trend/MR is filtered, so they need their
+            # xsect form (a share) to meet the floor — production always passes one.
+            rank_combiner_share={"trend_continuation": 0.6, "mean_reversion": 0.6},
         )
     )
     assert len(configs) == max_candidates
@@ -562,6 +565,8 @@ def test_d037_floor_caps_at_50pct_of_budget(grammar: Grammar) -> None:
 def test_d037_determinism_preserved_with_stratification(grammar: Grammar) -> None:
     """Same triple + same fraction → identical sequence (hard rule #6)."""
     registry = demo_registry()
+    # D328 (v47): a share so filtered single-name trend/MR don't starve the floor.
+    share = {"trend_continuation": 0.6, "mean_reversion": 0.6}
     a = [
         c.config_hash
         for c in enumerate_candidates(
@@ -570,6 +575,7 @@ def test_d037_determinism_preserved_with_stratification(grammar: Grammar) -> Non
             seed=2026,
             max_candidates=120,
             min_hypothesis_fraction=0.05,
+            rank_combiner_share=share,
         )
     ]
     b = [
@@ -580,6 +586,7 @@ def test_d037_determinism_preserved_with_stratification(grammar: Grammar) -> Non
             seed=2026,
             max_candidates=120,
             min_hypothesis_fraction=0.05,
+            rank_combiner_share=share,
         )
     ]
     assert a == b

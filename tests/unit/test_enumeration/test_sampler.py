@@ -880,12 +880,12 @@ def test_sampler_reaches_every_hypothesis(grammar: Grammar, registry: RegistrySn
     for seed in range(300):
         cfg = _sample(grammar, registry, seed=seed)
         seen.add(cfg.hypothesis)
+    # D328 (v47): relative_value + event_momentum joined DISABLED_HYPOTHESES
+    # (no productive form) → no longer enumerable, like regime_arbitrage.
     assert seen == {
         "trend_continuation",
         "mean_reversion",
-        "relative_value",
         "volatility_event",
-        "event_momentum",
     }
 
 
@@ -908,17 +908,16 @@ def test_d098_regime_arbitrage_blocked_when_forced(
         sample_config(space, registry, random.Random(0), forced_hypothesis="regime_arbitrage")
 
 
-def test_d098_relative_value_underlying_is_none(
+def test_d328_relative_value_retired_not_samplable(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """D098 (v5): relative_value is a pairs strategy — its underlying is the
-    pair itself (resolved Crucible-side), so the config must carry
-    ``underlying=None``. Reverts D079's single-ticker anchor (no longer needed
-    after Crucible 4f5271f loads all pair legs regardless of tier)."""
+    """D328 (v47): relative_value is retired into DISABLED_HYPOTHESES — refuted
+    (D215/D276: xsect rank-IC negative, corr-to-MR 0.88) + dormant. It stays in
+    grammar.yaml S1 (hard rule #1) but is never enumerated, so forcing it raises
+    (supersedes the D098 underlying=None enumeration assertion)."""
     space = build_search_space(grammar, registry)
-    rv = sample_config(space, registry, random.Random(3), forced_hypothesis="relative_value")
-    assert rv.hypothesis == "relative_value"
-    assert rv.underlying is None
+    with pytest.raises(SamplerError):
+        sample_config(space, registry, random.Random(3), forced_hypothesis="relative_value")
 
 
 def test_d098_non_pairs_hypothesis_still_gets_underlying(
@@ -1581,21 +1580,21 @@ _COHORT_TREND = "trend_continuation"
 # re-asserted by the tests below; the first-capitulation landmark moved
 # 30 → 71 (scan window widened to 80).
 _COHORT_GOLDEN_PRE_REFACTOR = [
-    "dc125d8f4e014630",
-    "4710371b04fac3d0",
-    "a1eadf6610972fde",
-    "174df1ffb521246b",
-    "f2a482630fcd007f",
-    "1eacdf1ad745c968",
-    "f3592fe87adba865",
-    "93b37c85ca441618",
-    "db0c7dc221fe1e03",
-    "3a2b5acbcd940801",
-    "f5be27bb912b1906",
-    "be8502a632a295cb",
-    "e02445b5e875b478",
-    "f32b391819e7feec",
-    "2c77822f6dab10b8",
+    "b2cb105a96be80d5",
+    "c4099fe9ceac113c",
+    "432ef537c42ca05a",
+    "94381b5eb06e6d02",
+    "9461fa3ff188a0c0",
+    "d1a1b7012db30dac",
+    "ac60afca453cf6a0",
+    "d9fabeee01e4f2b5",
+    "8af323f08855cab6",
+    "7db1518c533f8abd",
+    "fbacf70ee9c15b54",
+    "20f830943843c81d",
+    "b487551ab9a17b75",
+    "014ce0e5602ae1e6",
+    "9de1fdcb83deae44",
 ]
 
 
@@ -1813,22 +1812,33 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 # Licensing harness environment-matched: OLD code reproduced every constant
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
+# D328 (v47): re-pinned — single-name trend/MR retirement (the iterator's
+# emission-policy filter) + relative_value/event_momentum disable. `sample_config`
+# is byte-identical (this is an enumerate-side filter, not a sampler change), but
+# the enumerate_candidates sequence legitimately shifts: disabling em/relval drops
+# them from `samplable_hypotheses` (the unforced hypothesis pick moves), and the
+# filter drops confluence trend/MR (retry advances the rng). The flag-off
+# invariants (none_run == empty_run) were re-verified BEFORE re-pinning. The
+# active-golden relational splits moved to position 0 (a served-registry veto's
+# eligibility rng draw on a now-FILTERED trend/MR config diverges the retry
+# sequence earlier) — documented per test. All 7 goldens re-pinned off the pinned
+# universe fixture. See D328.
 _REGIME_GOLDEN_PRE = [
-    "46a8ac2975960a8a",
-    "031b7f53b9ae20d9",
-    "753a6e14f6e295a2",
-    "d03b4b2aec3c9828",
-    "b698c32b11f89f42",
-    "27c84ca8475e1a30",
-    "1e29ee8b7ffbe6ca",
-    "203b30431bc20181",
-    "3da8926aba415ede",
-    "df7dd0936dd34378",
-    "3fbb528f7c219d24",
-    "a32a66b9e0ae7052",
-    "9be7a8fffb82f4d1",
-    "6691b5dd63905ebf",
-    "28a04ecde3dd81bb",
+    "73932a3bb6897934",
+    "fd067aa010c15678",
+    "f37bee02255117ad",
+    "66b72b434c1b466e",
+    "fb703dadd797e327",
+    "4dcaf88253b6f4ce",
+    "9e80f8335b574b15",
+    "5b77ae8008072ca3",
+    "08b0c86e4e079f9c",
+    "c05d0f78b549c1a3",
+    "e1fffb3db6f1cbdd",
+    "2803381a7ff3fc20",
+    "4be47b590a2a43cc",
+    "922393beda7adce6",
+    "d942d55650b4448f",
 ]
 
 
@@ -2070,21 +2080,21 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_DSJ_ACTIVE = [
-    "46a8ac2975960a8a",
-    "6e2aae4c38445bd7",
-    "d585f5142a081c5c",
-    "3c124c6246dad390",
-    "a5ff9765c597f914",
-    "3857978e54176701",
-    "2661dd62a1186ce3",
-    "da80dad036a5911a",
-    "69568b76d64a8dca",
-    "68262965442515a3",
-    "0ae64ad546cc6cc9",
-    "85bbe257c658d8c0",
-    "4ec92fd9c417712f",
-    "6691b5dd63905ebf",
-    "28a04ecde3dd81bb",
+    "4ef13271b509bd9b",
+    "79ef7900584be424",
+    "fb39601217f27c99",
+    "4dcaf88253b6f4ce",
+    "9e80f8335b574b15",
+    "a385d495a6f9850c",
+    "f559b676b5125f19",
+    "57229b32438c076a",
+    "3700e79ebd3683e3",
+    "2803381a7ff3fc20",
+    "4be47b590a2a43cc",
+    "d68ae89893f62345",
+    "978680d3f23fb4f1",
+    "a3c9580554a6b8e1",
+    "232154f3b6fc0a1c",
 ]
 
 
@@ -2100,9 +2110,12 @@ def test_d258_dsj_active_cold_start_golden(grammar: Grammar, registry: RegistryS
     assert active == _REGIME_GOLDEN_DSJ_ACTIVE
     # the served registry legitimately shifts the sequence vs dormant (D258)
     assert active != _REGIME_GOLDEN_PRE
-    # D290 (v39): mutual split moved to position 1 — position 0 is a ve config
-    # whose rng consumption changed under the new exit schema.
-    assert active[:1] == _REGIME_GOLDEN_PRE[:1]
+    # v47 (D328): single-name trend is retired (the iterator filter), but a
+    # dsj-served trend config still consumes its veto-eligibility rng draw before
+    # being filtered — so the dormant-vs-served RETRY sequences now diverge from
+    # position 0 (was position 1 under v39, when position 0 was a shared ve
+    # config). The core invariant stays `active != PRE`; there is no shared prefix.
+    assert active[0] != _REGIME_GOLDEN_PRE[0]
 
 
 # ---------------------------------------------------------------------------
@@ -2207,7 +2220,9 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
     (dsj may still appear on trend — that's the v25 veto, a different pool.)"""
     reg = _v26_registry(registry)
     space = build_search_space(grammar, reg)
-    for hypothesis in ("trend_continuation", "volatility_event", "event_momentum"):
+    # D328 (v47): event_momentum dropped — it's DISABLED_HYPOTHESES now, so
+    # forcing it raises (not samplable). trend + ve still exercise the scope guard.
+    for hypothesis in ("trend_continuation", "volatility_event"):
         for seed in range(150):
             cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis=hypothesis)
             ids = {ind for s in cfg.signals for ind in s.indicators}
@@ -2246,21 +2261,21 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V26_ACTIVE = [
-    "46a8ac2975960a8a",
-    "6e2aae4c38445bd7",
-    "d585f5142a081c5c",
-    "3c124c6246dad390",
-    "8b635357e80771e8",
-    "3857978e54176701",
-    "2661dd62a1186ce3",
-    "da80dad036a5911a",
-    "69568b76d64a8dca",
-    "68262965442515a3",
-    "0ae64ad546cc6cc9",
-    "e070625657962a51",
-    "097fe501989214a8",
-    "5db222d388265b8e",
-    "2836741b9cf36bba",
+    "754c0268b578cd00",
+    "e010ddd6639644bb",
+    "3b43fd7342013488",
+    "7a1151e3f8353573",
+    "465fd6a56a91528f",
+    "f559b676b5125f19",
+    "94edf76c71341716",
+    "75d17656a613a5a3",
+    "270c5da463424bff",
+    "d68ae89893f62345",
+    "dd69c9ce38deb87d",
+    "ec2c3c6001917973",
+    "c65f316af910e1b9",
+    "6211b701087cb10c",
+    "b86b3cc9307f8479",
 ]
 
 
@@ -2274,12 +2289,15 @@ def test_d263_ivol_active_cold_start_golden(grammar: Grammar, registry: Registry
     active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
     assert active == _REGIME_GOLDEN_V26_ACTIVE
     assert active != _REGIME_GOLDEN_DSJ_ACTIVE  # ivol on MR shifts the sequence
-    # at least one config actually carries the ivol veto in this slice (the
-    # D291/v40 stream re-pin pushed the first carrier from the 15-window to
-    # position 16 — widened to 25, same reachability claim)
+    # v47 (D328): ivol is an MR second gate, and single-name MR is retired — so it
+    # only manifests on xsect MR, which needs a rank_combiner_share. The no-share
+    # byte-pin slice above no longer carries it; verify reachability on the xsect
+    # (production) path. Dedicated coverage: test_d263_ivol_veto_active_on_mr.
     assert any(
         any("ivol" in s.indicators for s in c.signals)
-        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=25)
+        for c in enumerate_candidates(
+            grammar, reg, 7777, max_candidates=25, rank_combiner_share={"mean_reversion": 0.6}
+        )
     )
 
 
@@ -2422,21 +2440,21 @@ def test_d264_new_ids_dormant_without_registry(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V27_ACTIVE = [
-    "46a8ac2975960a8a",
-    "f6143d8bd52534b4",
-    "d585f5142a081c5c",
-    "789ab77dfb920a53",
-    "bc121c36ff6d1d37",
-    "a7860b07ebce7e72",
-    "e26bcafb3f88b1fa",
-    "71d3f69eeeacefad",
-    "0daba8a56a06f801",
-    "268876d2408406ff",
-    "94cb974184c1847c",
-    "097fe501989214a8",
-    "5db222d388265b8e",
-    "6a5d7bf5c5d38485",
-    "d6ecc660657225da",
+    "d7f9a3f7c58dea33",
+    "26d318b70b6157ef",
+    "546c5f09b6fc4b40",
+    "94c11a5870b7542d",
+    "9af608af3f9311f4",
+    "2dfb8a013599d8fb",
+    "1a67e9c676c269a9",
+    "7a2b04389ddf6985",
+    "bceae95f6b5ba5b8",
+    "f559b676b5125f19",
+    "94edf76c71341716",
+    "75d17656a613a5a3",
+    "270c5da463424bff",
+    "55a43515d605d317",
+    "4754afa717d583fd",
 ]
 
 
@@ -2452,8 +2470,10 @@ def test_d264_resid_vix_active_cold_start_golden(
     active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
     assert active == _REGIME_GOLDEN_V27_ACTIVE
     assert active != _REGIME_GOLDEN_V26_ACTIVE  # widened trend pools shift the sequence
-    # D290 (v39): mutual split moved to position 1 (ve rng shift; see above).
-    assert active[:1] == _REGIME_GOLDEN_V26_ACTIVE[:1]
+    # v47 (D328): residual_momentum is xsect-pinned (single-name trend retired), so
+    # the resid xsect config leads at position 0 — the v27 slice now diverges from
+    # v26 from position 0 (was position 1). Core invariant: active != V26.
+    assert active[0] != _REGIME_GOLDEN_V26_ACTIVE[0]
     # at least one config in this slice actually carries a v27 id
     assert any(
         any(
@@ -2659,21 +2679,21 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V29_ACTIVE = [
-    "46a8ac2975960a8a",
-    "6e2aae4c38445bd7",
-    "d585f5142a081c5c",
-    "3c124c6246dad390",
-    "8b635357e80771e8",
-    "3857978e54176701",
-    "2661dd62a1186ce3",
-    "da80dad036a5911a",
-    "69568b76d64a8dca",
-    "68262965442515a3",
-    "0ae64ad546cc6cc9",
-    "e070625657962a51",
-    "097fe501989214a8",
-    "c5de451f2caccc7d",
-    "2836741b9cf36bba",
+    "754c0268b578cd00",
+    "e010ddd6639644bb",
+    "3b43fd7342013488",
+    "7a1151e3f8353573",
+    "465fd6a56a91528f",
+    "f559b676b5125f19",
+    "5c836b9f7cd9ce90",
+    "bc623b1e6b67996c",
+    "e1fffb3db6f1cbdd",
+    "6156245a267fa224",
+    "dad2cfb1991412cc",
+    "d68ae89893f62345",
+    "dd69c9ce38deb87d",
+    "ec2c3c6001917973",
+    "c65f316af910e1b9",
 ]
 
 
@@ -2688,10 +2708,14 @@ def test_d266_market_rv_active_cold_start_golden(
     assert active == _REGIME_GOLDEN_V29_ACTIVE
     assert active != _REGIME_GOLDEN_V26_ACTIVE
     assert active[:3] == _REGIME_GOLDEN_V26_ACTIVE[:3]  # split at the first eligible MR config
-    # at least one config in this slice actually carries the market gate
+    # v47 (D328): market_realized_vol is an MR primary gate; single-name MR is
+    # retired, so it manifests only on xsect MR (needs a share). Verify on the
+    # xsect (production) path. Dedicated coverage: the reachable test above.
     assert any(
         any("market_realized_vol" in s.indicators for s in c.signals)
-        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)
+        for c in enumerate_candidates(
+            grammar, reg, 7777, max_candidates=15, rank_combiner_share={"mean_reversion": 0.6}
+        )
     )
 
 
@@ -2887,21 +2911,21 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V31_ACTIVE = [
-    "46a8ac2975960a8a",
-    "6e2aae4c38445bd7",
-    "d585f5142a081c5c",
-    "3c124c6246dad390",
-    "8b635357e80771e8",
-    "3857978e54176701",
-    "2661dd62a1186ce3",
-    "da80dad036a5911a",
-    "69568b76d64a8dca",
-    "68262965442515a3",
-    "0ae64ad546cc6cc9",
-    "e070625657962a51",
-    "097fe501989214a8",
-    "8908c202b345dece",
-    "2836741b9cf36bba",
+    "754c0268b578cd00",
+    "e010ddd6639644bb",
+    "3b43fd7342013488",
+    "7a1151e3f8353573",
+    "465fd6a56a91528f",
+    "f559b676b5125f19",
+    "5c836b9f7cd9ce90",
+    "bc623b1e6b67996c",
+    "e1fffb3db6f1cbdd",
+    "d27ed0d03bd5c5d1",
+    "6156245a267fa224",
+    "dad2cfb1991412cc",
+    "d68ae89893f62345",
+    "f46993e2ee829fb4",
+    "983c3aa178cbff88",
 ]
 
 

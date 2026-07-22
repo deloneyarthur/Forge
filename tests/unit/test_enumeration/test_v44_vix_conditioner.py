@@ -289,6 +289,10 @@ def test_resid_momentum_dial_lifts_share_in_weighted_path(
             seed=7,
             max_candidates=9000,
             bucket_weights=bucket_weights,
+            # D328 (v47): single-name trend is retired, so non-resid trend must go
+            # xsect to survive the filter — otherwise the only surviving trend is
+            # the xsect-pinned residual_momentum and its share is trivially 1.0.
+            rank_combiner_share={"trend_continuation": 0.6},
         ):
             if cfg.hypothesis != "trend_continuation":
                 continue

@@ -99,7 +99,22 @@ OVERLAY_ONLY_HYPOTHESES: frozenset[str] = frozenset({"tail_hedge"})
 # edit: grammar.yaml S1 still lists `regime_arbitrage` (hard rule #1 — the
 # operator owns the rule set), so a hand-authored regime_arbitrage config still
 # validates. Forge simply never enumerates one. Re-admit by removing it here.
-DISABLED_HYPOTHESES: frozenset[str] = frozenset({"regime_arbitrage"})
+#
+# v47 (D328) — freeze-program retirements of two hypotheses with no productive
+# form (Crucible reads: FORGE_single_name_trend_mr_retirement_read +
+# FORGE_event_momentum_soxl_degenerate_reply):
+#   relative_value — refuted (D215/D276: xsect rank-IC negative, corr-to-MR
+#     0.88) + dormant (0 recent submission flow).
+#   event_momentum — single-name-ONLY (its `sue` directional is
+#     rank_per_name_coherent=False → no xsect form; Crucible "no cross-sectional
+#     PEAD form exists" + xsect-PEAD ask WITHDRAWN) and dead (3 components, 0
+#     conversion). Its only book use — pure_sue175's SOXL leg — is the D268
+#     degenerate (inert sue/days_since_earnings → naked long-SOXL calls, 0 PEAD;
+#     unreproducible since SOXL is excluded from earnings-gated configs). A
+#     generation change never de-promotes that frozen book.
+DISABLED_HYPOTHESES: frozenset[str] = frozenset(
+    {"regime_arbitrage", "relative_value", "event_momentum"}
+)
 
 # The union Forge never enumerates as a standalone StrategyConfig: overlay-only
 # (D066) + disabled-by-policy (D098). Every enumeration-path filter reads this.

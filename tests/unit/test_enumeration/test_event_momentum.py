@@ -19,7 +19,7 @@ from forge.enumeration.indicator_thresholds import (
 )
 from forge.enumeration.sampler import _K_MULTIPLIERS, _dte_target, sample_config
 from forge.enumeration.search_space import build_search_space
-from forge.grammar import load_grammar, validate
+from forge.grammar import load_grammar
 from forge.grammar.signal_horizon import horizon_class, signal_horizon_days
 from tests.fixtures.strategy_configs import minimal_registry_snapshot
 
@@ -98,41 +98,23 @@ def test_event_momentum_dte_target_is_k_times_drift_window() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_sample_config_event_momentum_is_grammar_valid() -> None:
-    grammar = _grammar()
-    registry = minimal_registry_snapshot()
-    space = build_search_space(grammar, registry)
-    for seed in range(100):
-        cfg = sample_config(
-            space, registry, random.Random(seed), forced_hypothesis="event_momentum"
-        )
-        result = validate(cfg, grammar, registry)  # type: ignore[arg-type]
-        assert result.valid, f"seed={seed}: {result.errors}"
-        assert cfg.hypothesis == "event_momentum"
-        directional = next(s for s in cfg.signals if s.role == "directional")
-        regime = next(s for s in cfg.signals if s.role == "regime_filter")
-        assert directional.indicators == ("sue",)
-        assert regime.indicators == ("days_since_earnings",)
-        assert cfg.dte_bucket in ("swing_short", "swing_mid")
+def test_event_momentum_retired_not_samplable() -> None:
+    """D328 (v47): event_momentum is retired into DISABLED_HYPOTHESES — it is
+    single-name-only (its `sue` directional is rank-excluded → no xsect/PEAD form,
+    Crucible-confirmed), dead (3 components, 0 conversion), and its only book use
+    (pure_sue175's SOXL leg) is the D268 degenerate (naked long-SOXL, 0 PEAD,
+    unreproducible). It is no longer enumerated, so forcing it raises. The dse-gate
+    / sue-threshold / _NO_EARNINGS_UNDERLYINGS SPEC tests below still pass — the
+    hypothesis stays in grammar.yaml S1 (hard rule #1), just never enumerated."""
+    import pytest
 
-
-def test_event_momentum_is_single_name_never_etf() -> None:
-    """PEAD is an earnings-event thesis: days_since_earnings NaN-fills on ETFs
-    (no earnings), so the gate never blocks and a confluence passthrough backfills
-    a naked long-call — the degenerate leg Crucible flagged 2026-07-12 (SOXL). The
-    sampler must pick an earnings-covered single name, never a no-earnings ETF/
-    leveraged/index product, over the LIVE universe (D268)."""
-    from forge.enumeration.sampler import _NO_EARNINGS_UNDERLYINGS
+    from forge.enumeration.sampler import SamplerError
 
     grammar = _grammar()
     registry = minimal_registry_snapshot()
     space = build_search_space(grammar, registry)
-    for seed in range(200):
-        cfg = sample_config(
-            space, registry, random.Random(seed), forced_hypothesis="event_momentum"
-        )
-        assert cfg.underlying is not None
-        assert cfg.underlying not in _NO_EARNINGS_UNDERLYINGS, cfg.name
+    with pytest.raises(SamplerError):
+        sample_config(space, registry, random.Random(0), forced_hypothesis="event_momentum")
 
 
 def test_no_earnings_set_covers_the_flagged_etfs_but_not_real_companies() -> None:
@@ -173,10 +155,6 @@ def test_pick_underlying_excludes_no_earnings_for_earnings_gated_configs(monkeyp
     assert unfiltered & {"SOXL", "XLK", "SPY", "TQQQ"}, unfiltered
 
 
-def test_event_momentum_sampling_is_deterministic() -> None:
-    grammar = _grammar()
-    registry = minimal_registry_snapshot()
-    space = build_search_space(grammar, registry)
-    a = sample_config(space, registry, random.Random(42), forced_hypothesis="event_momentum")
-    b = sample_config(space, registry, random.Random(42), forced_hypothesis="event_momentum")
-    assert a == b
+# test_event_momentum_sampling_is_deterministic removed (D328/v47): event_momentum
+# is retired (DISABLED_HYPOTHESES) — forcing it raises, covered by
+# test_event_momentum_retired_not_samplable above.
