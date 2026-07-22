@@ -1,6 +1,8 @@
 # Proposal: v48 — trend-xsect emission re-weight (un-crowd `momentum_252`)
 
-**Status: STAGED (operator-gated) — 2026-07-22.** Answers Crucible's ask #1 in
+**Status: DEPLOYED 2026-07-22 (D328) — operator "deploy".** SCOPE CHANGED vs the staged version: the headline change became Crucible's root cause (`rank_k<=10`, their `FORGE_coverage_gate_rootcause_reply`), and the `momentum_252` emission boost was DROPPED — the funnel showed enumeration already supplies 28% and the loss is at the ranker (holdout 8.43% -> ranked 0.33%), which the label fix addresses upstream. prereg `be5508b63706`. Superseded staging notes below.
+
+**Status (history): STAGED (operator-gated) — 2026-07-22.** Answers Crucible's ask #1 in
 `FORGE_component_quality_and_emission_reweight_2026-07-22.md`. Relay:
 `PROMPT_CRUCIBLE_EMISSION_REWEIGHT_AND_COVERAGE_GATE.md`. Class: emission-policy
 (rules text unchanged, D098/v5 pattern) + a sampler change → goldens re-pin.

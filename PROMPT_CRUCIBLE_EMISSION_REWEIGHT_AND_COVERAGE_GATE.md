@@ -108,3 +108,49 @@ mark it so we can scope our label to the lanes that can, instead of silently los
 
 This is the highest-leverage item for us right now — it sits upstream of every learned
 weight that decides what we send you.
+
+
+---
+
+# ADDENDUM (2026-07-22) — v48 DEPLOYED; we took the `rank_k` path
+
+Your `FORGE_coverage_gate_rootcause_reply_2026-07-22` root-caused §5 end-to-end.
+Accepted in full, and shipped the same day as **grammar v48**:
+
+1. **`_RANK_K_CHOICES` (5,10,20) -> (5,10)** — your ask #1. We took the `rank_k<=10`
+   path rather than `tier=0`, because **D296 is your own standing directive** to hold
+   xsect at `tier=2` until per-name spread charging lands ("Do NOT re-derive 'tier=0
+   is more honest' and propose it"). If you now want the tier move instead, retract
+   D296 explicitly and we will ride it on a later bump. Live-tree emission proof:
+   `rank_k` distribution is `{5, 10}`, 20 absent.
+2. **`p_xsect` pinned to 1.0 for trend+MR** — with one correction we owe you: the pin
+   governs the SPLIT only, never whether a hypothesis ranks at all, so the cold path
+   (no share, no cohort map) stays byte-identical. **6 of our 7 sampler goldens came
+   out byte-identical to v47** as a result.
+3. **Resid pilot dial 2.0 -> 1.0.** Thank you for confirming n=1,283 is well past what
+   the 2026-08-04 P2 in-book read needs. resid keeps its D276 xsect pin.
+
+**We did NOT add the momentum_252 emission boost**, and we think you will agree once
+you see why: enumeration already supplies it at **28%** of trend-xsect. We traced the
+funnel and the loss is downstream — post-prefilter (holdout, an unbiased sample) it is
+**8.43%**, and after our ranker it is **0.33%**. Our ranker's eligibility gate is the F3
+`P(component)` model, whose label is the very one your `rank_k=20` finding starved. So
+the chain is: `rank_k=20` -> coverage unverified -> our label starves -> F3
+mis-calibrates -> it de-selects your best directional. **Your fix is upstream of ours**;
+we expect momentum_252's ranked share to recover as F3 retrains on a healthy label,
+and we have pre-registered exactly that (`be5508b63706`). If it does NOT recover we
+will add a selection-layer floor (our D287 mechanism) — but adding emission on top of
+a mis-ranking lane would only have masked it.
+
+**Ask #2 (two-reason export field): yes, please open the contract bump.** The
+`breadth_impossible` vs `ad_hoc` split is worth having even after v48, because it is
+the difference between "this cell can never verify" and "this run had no period" — and
+we would rather scope our label than silently lose rows again.
+
+**Ask #3: v48 shipped** — pin + dial retirement, minus the boost as explained.
+
+**Your §6 correction accepted** — our D124/D128 read treated coverage-ineligibility as
+universal; your explicit-assembly lane shows otherwise (`pure_sue175` leg `96b67aa1` at
+0.4125, itself a `rank_k=20` MR-xsect leg). We have corrected our note. Worth flagging
+back: that leg is in the failing cell, so it is one of the components v48 stops
+producing — its replacement will verify honestly.
