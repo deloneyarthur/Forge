@@ -1580,73 +1580,76 @@ _COHORT_TREND = "trend_continuation"
 # re-asserted by the tests below; the first-capitulation landmark moved
 # 30 → 71 (scan window widened to 80).
 _COHORT_GOLDEN_PRE_REFACTOR = [
-    "b2cb105a96be80d5",
-    "c4099fe9ceac113c",
-    "432ef537c42ca05a",
-    "94381b5eb06e6d02",
-    "9461fa3ff188a0c0",
-    "d1a1b7012db30dac",
-    "ac60afca453cf6a0",
-    "d9fabeee01e4f2b5",
-    "8af323f08855cab6",
-    "7db1518c533f8abd",
-    "fbacf70ee9c15b54",
-    "20f830943843c81d",
-    "b487551ab9a17b75",
-    "014ce0e5602ae1e6",
-    "9de1fdcb83deae44",
+    "1feb1dc81f4427f4",
+    "dde5703b72f300a1",
+    "c8e89ddaae894a65",
+    "c598508e3411f43f",
+    "69f050e79be4e717",
+    "9773f97a5028e439",
+    "2b224014c71781a1",
+    "219cedfd0ce11930",
+    "ed16b154735434b9",
+    "8de56f5d1f462da5",
+    "13ac6ad099175be2",
+    "d1dd5478e6beb9f0",
+    "906af3289a51e4e6",
+    "3e3fc290110bab4c",
+    "d5a3956a56e6206f",
 ]
 
 
 def test_cohort_xsect_probability_yield_driven_and_clamped() -> None:
     """Yield-driven cohort probability: p = w_xsect / (w_xsect + w_single),
-    clamped to the exploration band so neither cohort is starved to 0."""
+    clamped to the exploration band so neither cohort is starved to 0.
+
+    D328 (v48): asserted on event_momentum — trend/MR are pinned to 1.0 (their
+    single-name form is retired), so the yield-driven branch no longer governs them."""
     from forge.enumeration.sampler import _COHORT_EXPLORATION_FLOOR, _cohort_xsect_probability
 
-    fav_xsect = {
-        (_COHORT_TREND, "momentum_252", "swing_long", "xsect"): 0.40,
-        (_COHORT_TREND, "momentum_252", "swing_long", "single"): 0.01,
-    }
+    key = ("event_momentum", "sue", "swing_short")
+    fav_xsect = {(*key, "xsect"): 0.40, (*key, "single"): 0.01}
     p = _cohort_xsect_probability(
-        _COHORT_TREND,
-        "momentum_252",
-        "swing_long",
-        cohort_yield_weights=fav_xsect,
-        rank_combiner_share={_COHORT_TREND: 0.33},
+        *key, cohort_yield_weights=fav_xsect, rank_combiner_share={"event_momentum": 0.33}
     )
     assert p == pytest.approx(1.0 - _COHORT_EXPLORATION_FLOOR)  # 0.976 -> ceiling
-    fav_single = {
-        (_COHORT_TREND, "momentum_252", "swing_long", "xsect"): 0.01,
-        (_COHORT_TREND, "momentum_252", "swing_long", "single"): 0.40,
-    }
+    fav_single = {(*key, "xsect"): 0.01, (*key, "single"): 0.40}
     p_rev = _cohort_xsect_probability(
-        _COHORT_TREND,
-        "momentum_252",
-        "swing_long",
-        cohort_yield_weights=fav_single,
-        rank_combiner_share={_COHORT_TREND: 0.33},
+        *key, cohort_yield_weights=fav_single, rank_combiner_share={"event_momentum": 0.33}
     )
     assert p_rev == pytest.approx(_COHORT_EXPLORATION_FLOOR)  # 0.024 -> floor
 
 
 def test_cohort_xsect_probability_falls_back_to_fixed_share() -> None:
     """No cohort map, or a map with no evidence for THIS recipe -> the fixed
-    rank_combiner_share (byte-identical to the pre-cohort H1 draw)."""
+    rank_combiner_share (byte-identical to the pre-cohort H1 draw).
+
+    D328 (v48): trend + MR are now PINNED to 1.0 (their single-name form is retired,
+    so the cohort split is meaningless), so the fallback is exercised on the one
+    remaining RANK_COMBINER member, event_momentum."""
     from forge.enumeration.sampler import _cohort_xsect_probability
 
+    # the pin wins for the xsect-only hypotheses
     assert _cohort_xsect_probability(
         _COHORT_TREND,
         "momentum_252",
         "swing_long",
         cohort_yield_weights=None,
         rank_combiner_share={_COHORT_TREND: 0.33},
+    ) == pytest.approx(1.0)
+    # the share fallback still governs a non-pinned rank hypothesis
+    assert _cohort_xsect_probability(
+        "event_momentum",
+        "sue",
+        "swing_short",
+        cohort_yield_weights=None,
+        rank_combiner_share={"event_momentum": 0.33},
     ) == pytest.approx(0.33)
     assert _cohort_xsect_probability(
-        _COHORT_TREND,
-        "momentum_252",
-        "swing_long",
+        "event_momentum",
+        "sue",
+        "swing_short",
         cohort_yield_weights={("mean_reversion", "rsi_2", "swing_short", "xsect"): 0.5},
-        rank_combiner_share={_COHORT_TREND: 0.33},
+        rank_combiner_share={"event_momentum": 0.33},
     ) == pytest.approx(0.33)
 
 
@@ -1669,11 +1672,13 @@ def test_cohort_xsect_probability_zero_for_non_rank_hypothesis() -> None:
         )
         == 0.0
     )
+    # D328 (v48): the cold path (no map, no share) still yields 0.0 — asserted on
+    # event_momentum, since trend/MR are now pinned to 1.0 by the xsect-only rule.
     assert (
         _cohort_xsect_probability(
-            _COHORT_TREND,
-            "momentum_252",
-            "swing_long",
+            "event_momentum",
+            "sue",
+            "swing_short",
             cohort_yield_weights=None,
             rank_combiner_share=None,
         )
@@ -1718,20 +1723,19 @@ def test_cohort_yield_cold_start_byte_identical(
 def test_cohort_yield_tilts_cohort_draw_by_yield(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """End-to-end through sample_config: cohort weights favoring xsect for the
-    momentum_252 trend recipe raise the cross_sectional_rank share well above the
-    fixed 0.5 baseline; weights favoring single push it below. The cohort draw is
-    now driven by learned component-yield, not a constant."""
+    """D328 (v48): trend + MR are PINNED xsect-only, so the cohort tilt is INERT for
+    them — a map screaming "single" produces the same xsect share as no map at all.
+    (The tilt mechanism itself is unit-tested on event_momentum in
+    test_cohort_xsect_probability_yield_driven_and_clamped.) The residual non-xsect
+    configs are the rank-INELIGIBLE draws that the call-site guard keeps confluence;
+    the v47 iterator filter drops those downstream."""
     space = build_search_space(grammar, registry)
-    fav_xsect = {}
-    fav_single = {}
+    fav_single: dict[tuple[str, str, str, str], float] = {}
     for bucket in ("swing_long", "swing_mid"):
-        fav_xsect[(_COHORT_TREND, "momentum_252", bucket, "xsect")] = 0.40
-        fav_xsect[(_COHORT_TREND, "momentum_252", bucket, "single")] = 0.01
         fav_single[(_COHORT_TREND, "momentum_252", bucket, "xsect")] = 0.01
         fav_single[(_COHORT_TREND, "momentum_252", bucket, "single")] = 0.40
 
-    def _xsect_share(cohort_weights: dict | None) -> float:
+    def _xsect_share(cohort_weights: dict | None) -> tuple[int, int]:
         xs = total = 0
         for seed in range(400):
             cfg = sample_config(
@@ -1748,14 +1752,15 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
             total += 1
             if cfg.combiner.type == "cross_sectional_rank":
                 xs += 1
-        return xs / total if total else 0.0
+        return xs, total
 
-    baseline = _xsect_share(None)
-    xsect_tilted = _xsect_share(fav_xsect)
-    single_tilted = _xsect_share(fav_single)
-    assert 0.0 < baseline < 1.0  # the fixed-share baseline draws both cohorts
-    assert xsect_tilted > baseline + 0.2  # yield evidence pulls strongly to xsect
-    assert single_tilted < baseline - 0.2  # and the reverse pulls to single
+    xs_none, total_none = _xsect_share(None)
+    xs_single, total_single = _xsect_share(fav_single)
+    assert total_none > 0
+    # the pin overrides the map entirely: identical outcome either way
+    assert (xs_none, total_none) == (xs_single, total_single)
+    # and the pinned share is high — every rank-ELIGIBLE draw went xsect
+    assert xs_none / total_none > 0.6
 
 
 # ---------------------------------------------------------------------------
@@ -2112,9 +2117,9 @@ def test_d258_dsj_active_cold_start_golden(grammar: Grammar, registry: RegistryS
     assert active != _REGIME_GOLDEN_PRE
     # v47 (D328): single-name trend is retired (the iterator filter), but a
     # dsj-served trend config still consumes its veto-eligibility rng draw before
-    # being filtered — so the dormant-vs-served RETRY sequences now diverge from
-    # position 0 (was position 1 under v39, when position 0 was a shared ve
-    # config). The core invariant stays `active != PRE`; there is no shared prefix.
+    # being filtered — so the dormant-vs-served RETRY sequences diverge from
+    # position 0. UNCHANGED by v48: this slice is the cold path (no share), which
+    # v48 leaves byte-identical. Core invariant stays `active != PRE`.
     assert active[0] != _REGIME_GOLDEN_PRE[0]
 
 

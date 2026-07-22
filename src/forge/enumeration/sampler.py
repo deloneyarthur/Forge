@@ -66,6 +66,7 @@ from forge.enumeration.refutations import (
 from forge.enumeration.search_space import (
     NON_ENUMERABLE_HYPOTHESES,
     RANK_COMBINER_HYPOTHESES,
+    XSECT_ONLY_HYPOTHESES,
 )
 from forge.enumeration.underlying_class import DIVERSIFIED, underlying_class
 from forge.grammar.signal_horizon import (
@@ -192,7 +193,22 @@ _VOL_EVENT_POST_WINDOW_TD: int = 12
 # floor. These are the enumerated knobs; the gate on whether to draw a rank
 # combiner at all is the per-hypothesis `rank_combiner_share` (None/empty → never,
 # byte-identical cold path, hard rule #6).
-_RANK_K_CHOICES: tuple[int, ...] = (5, 10, 20)
+# v48 (D328): 20 DROPPED. Crucible's coverage resolver computes a breadth floor
+# `n_min = 2 x rank_k` chain-live members before ranking counts as a SELECTION
+# rather than an enumeration (their design_rank_regime_coverage_floor, 2026-06-09).
+# Our xsect configs stamp tier=2 (D294/D296) and tier 2 has 20 members, so
+# rank_k=20 needs n_min=40 from a 20-name pool -> floor unresolvable -> the
+# regime_coverage gate degrades to `coverage_unverified` -> our D128 honest label
+# (component AND honest coverage) never fires. Measured their side: rank_k=20 x
+# tier 2 = 16,843 components, 100.0% unverified; rank_k=10 x tier 2 = 7,030
+# components, 0.2% unverified. That single cell is 99.8% of the whole starve —
+# and it is why `residual_momentum` (pinned to {5,10} by D276) was the one
+# directional whose components verified. Ranking the top 20 of a 20-name universe
+# is an enumeration, not a selection; the gate was right. NB tier=0 (124 members,
+# would support rank_k<=62) is the other fix they offered, but D296 is a STANDING
+# directive to hold xsect at tier=2 until their per-name spread charging lands —
+# so we take the rank_k path, which needs no tier change.
+_RANK_K_CHOICES: tuple[int, ...] = (5, 10)
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 
@@ -263,7 +279,15 @@ _VIX_CONDITIONER_PRIMARY_GATES: frozenset[str] = frozenset({"hurst"})
 # does not become a monoculture (Crucible's P5 diversity KPIs — the very thing
 # this pilot exists to grow). RETIRE this dial when the +2-week in-book read
 # concludes (a future version drops it; the D287-pin-retire convention).
-_RESID_MOMENTUM_PILOT_WEIGHT: float = 2.0
+# v48 (D328): RETIRED to 1.0 (neutral) — the dial's own retirement condition, met.
+# It was sized to accrue ~600-800 decided resid configs for Crucible's +2wk in-book
+# read; v47 alone produced 891 resid trend-xsect runs, and resid reached 40.8% of
+# trend-xsect emission (v44 9.55% -> v46 19.82% -> v47 40.80%) while momentum_252
+# — Crucible's best trend component (lift 4.11 vs resid's 0.15) — fell to 0.64%.
+# The dial x the v47 filter meeting resid's xsect pin above was the crowding
+# mechanism. Retiring the DIAL is not calling the PILOT: the sample is banked and
+# their 2026-08-04 P2 in-book read is unaffected; resid keeps its D276 xsect pin.
+_RESID_MOMENTUM_PILOT_WEIGHT: float = 1.0
 
 # D270 (v31) — the capitulation-bounce family (Crucible
 # FORGE_capitulation_bounce_generation_request_2026-07-12): `momentum` as a
@@ -959,15 +983,36 @@ def _cohort_xsect_probability(
     # the backstop (chained draws host no resid — `_compatible_regimes`).
     if directional_id == _RESID_MOMENTUM_DIRECTIONAL_ID:
         return 1.0
+    # v48 (D328) — trend/MR are XSECT-ONLY since v47 retired their single-name form,
+    # so the learned xsect-vs-single cohort split is meaningless: its "single" mass
+    # is drawn and then dropped by the iterator filter, and (worse) it applied
+    # ASYMMETRICALLY — residual_momentum is pinned above, so every resid draw
+    # survived while every other trend directional lost its single half. That is the
+    # measured cause of the momentum_252 collapse (trend-xsect mix v44->v47: resid
+    # 9.55->40.80%, momentum_252 7.54->0.64%; Crucible
+    # FORGE_component_quality_and_emission_reweight_2026-07-22 puts momentum_252 at
+    # lift 4.11 and residual_momentum at 0.15). Pinning both hypotheses levels the
+    # field and recovers the drawn-then-filtered draws. The capitulation cell is
+    # unaffected: `momentum` is rank-excluded, so the call-site guard keeps it
+    # single-name regardless of this probability (no rng consumed there).
+    # The base probability the pre-v48 logic would have produced.
+    base = 0.0
     if cohort_yield_weights:
         w_xsect = cohort_yield_weights.get((hypothesis, directional_id, bucket, "xsect"))
         w_single = cohort_yield_weights.get((hypothesis, directional_id, bucket, "single"))
         if w_xsect is not None and w_single is not None and (w_xsect + w_single) > 0.0:
             p = w_xsect / (w_xsect + w_single)
-            return min(max(p, _COHORT_EXPLORATION_FLOOR), 1.0 - _COHORT_EXPLORATION_FLOOR)
-    if rank_combiner_share:
-        return rank_combiner_share.get(hypothesis, 0.0)
-    return 0.0
+            base = min(max(p, _COHORT_EXPLORATION_FLOOR), 1.0 - _COHORT_EXPLORATION_FLOOR)
+        elif rank_combiner_share:
+            base = rank_combiner_share.get(hypothesis, 0.0)
+    elif rank_combiner_share:
+        base = rank_combiner_share.get(hypothesis, 0.0)
+    # v48: the pin governs the SPLIT, never whether the hypothesis ranks at all —
+    # so a zero base (cold path: no map and no share; or an explicit share of 0.0)
+    # stays zero and the confluence cold path remains byte-identical (hard rule #6).
+    if base > 0.0 and hypothesis in XSECT_ONLY_HYPOTHESES:
+        return 1.0
+    return base
 
 
 def _eligible_regime_vetoes(

@@ -86,7 +86,10 @@ def test_rank_combiner_emitted_when_forced() -> None:
             # covered by the skip tests below.
             continue
         assert cfg.combiner.type == "cross_sectional_rank"
-        assert cfg.combiner.rank_k in (5, 10, 20)
+        # D328 (v48): 20 dropped — Crucible's coverage floor needs n_min=2*rank_k
+        # chain-live members and our xsect configs stamp tier=2 (20 members), so
+        # rank_k=20 made regime_coverage structurally unverifiable.
+        assert cfg.combiner.rank_k in (5, 10)
         assert cfg.combiner.rebalance_frequency in ("weekly", "monthly")
         assert cfg.combiner.direction_mode in ("long_only", "long_short")
         # The runner ranks the universe; a single underlying is meaningless.
@@ -100,7 +103,7 @@ def test_rank_combiner_emitted_when_forced() -> None:
         rebs.add(cfg.combiner.rebalance_frequency)
         dirs.add(cfg.combiner.direction_mode)
     # All option values are exercised over the seed sweep.
-    assert ks == {5, 10, 20}
+    assert ks == {5, 10}  # D328 (v48): 20 dropped (coverage breadth floor, tier=2)
     assert rebs == {"weekly", "monthly"}
     assert dirs == {"long_only", "long_short"}
 
@@ -475,3 +478,24 @@ def test_rank_configs_hash_distinctly() -> None:
     }
     # Confluence + 4 distinct rank variants → 5 distinct identity hashes.
     assert len(hashes) == 5
+
+
+def test_d328_rank_k_respects_the_tier2_breadth_floor() -> None:
+    """D328 (v48): Crucible's coverage resolver treats ranking as a SELECTION only
+    when the pool has `n_min = 2 * rank_k` chain-live members; below that the floor
+    is unresolvable, `regime_coverage` degrades to `coverage_unverified`, and our
+    D128 honest label (component AND honest coverage) never fires.
+
+    Our xsect configs stamp tier=2 (D294/D296) and tier 2 has 20 members, so every
+    emitted rank_k must satisfy 2*rank_k <= 20. Measured on their ledger before the
+    fix: rank_k=20 x tier2 = 16,843 components at 100.0% unverified, vs rank_k=10 at
+    0.2% — 99.8% of the entire label starve. Guard against re-admitting 20 without
+    also moving the tier stamp (which D296 currently forbids)."""
+    from forge.enumeration.sampler import _RANK_K_CHOICES, _RESID_RANK_K_CHOICES
+
+    tier2_members = 20
+    for k in (*_RANK_K_CHOICES, *_RESID_RANK_K_CHOICES):
+        assert 2 * k <= tier2_members, (
+            f"rank_k={k} needs {2 * k} chain-live members but tier 2 has "
+            f"{tier2_members} -> coverage would be structurally unverifiable"
+        )

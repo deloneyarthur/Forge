@@ -20,7 +20,11 @@ import structlog
 
 from forge.core.seed import SeedHierarchy
 from forge.enumeration.sampler import SamplerError, sample_config
-from forge.enumeration.search_space import NON_ENUMERABLE_HYPOTHESES, build_search_space
+from forge.enumeration.search_space import (
+    NON_ENUMERABLE_HYPOTHESES,
+    XSECT_ONLY_HYPOTHESES,
+    build_search_space,
+)
 from forge.grammar import validate
 
 if TYPE_CHECKING:
@@ -68,7 +72,6 @@ _PRODUCTION_MIN_HYPOTHESIS_FRACTION: float = 0.02
 # version bump moves enumeration_inputs_hash). Retirement never touches
 # `forced_failures`: trend/MR remain satisfiable via their xsect form, so
 # stratification just retries — a confluence draw is not an unsatisfiable slot.
-_XSECT_ONLY_HYPOTHESES: frozenset[str] = frozenset({"trend_continuation", "mean_reversion"})
 _SINGLE_NAME_EXEMPT_DIRECTIONALS: frozenset[str] = frozenset({"momentum"})  # capitulation
 _XSECT_COMBINER_TYPE = "cross_sectional_rank"
 
@@ -80,7 +83,7 @@ def _is_retired_single_name(config: StrategyConfig) -> bool:
     single-name cell. Every other single-name config in these two hypotheses is
     dropped.
     """
-    if config.hypothesis not in _XSECT_ONLY_HYPOTHESES:
+    if config.hypothesis not in XSECT_ONLY_HYPOTHESES:
         return False
     if config.combiner.type == _XSECT_COMBINER_TYPE:
         return False

@@ -120,6 +120,15 @@ DISABLED_HYPOTHESES: frozenset[str] = frozenset(
 # (D066) + disabled-by-policy (D098). Every enumeration-path filter reads this.
 NON_ENUMERABLE_HYPOTHESES: frozenset[str] = OVERLAY_ONLY_HYPOTHESES | DISABLED_HYPOTHESES
 
+# v47 (D328) — hypotheses whose SINGLE-NAME (confluence) form is retired: only the
+# cross_sectional_rank form is emitted (Crucible: 0 single-name trend/MR consumed
+# across all 106 assemblies). The `momentum`/capitulation cell is the one exemption
+# and is handled at the iterator filter. Shared by the iterator (which drops the
+# retired configs) and the sampler (v48: which pins their cohort draw to xsect, so
+# the retired half is never drawn in the first place) — one definition so the two
+# cannot drift.
+XSECT_ONLY_HYPOTHESES: frozenset[str] = frozenset({"trend_continuation", "mean_reversion"})
+
 # H1 (v12 / D109) — hypotheses that may use the cross_sectional_rank combiner as
 # a breadth-manufacturing OPTION (vs the default confluence). Scoped to the
 # breadth-starved DIRECTIONAL archetypes: trend_continuation + mean_reversion

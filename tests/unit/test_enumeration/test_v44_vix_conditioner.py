@@ -315,8 +315,11 @@ def test_resid_momentum_dial_lifts_share_in_weighted_path(
     assert 1.25 <= ratio <= 2.3, f"dial lift {ratio:.2f} (share {share_1x:.3f}->{share_2x:.3f})"
 
 
-def test_dial_default_is_two() -> None:
-    assert _RESID_MOMENTUM_PILOT_WEIGHT == 2.0
+def test_dial_retired_to_neutral() -> None:
+    """D328 (v48): the v45 pilot dial is RETIRED to 1.0 (neutral). Its accrual
+    target was met (891 resid trend-xsect runs in v47 alone) and at 2.0 it had
+    crowded resid to 40.8% of trend-xsect while momentum_252 fell to 0.64%."""
+    assert _RESID_MOMENTUM_PILOT_WEIGHT == 1.0
 
 
 if __name__ == "__main__":
