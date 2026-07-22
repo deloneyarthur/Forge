@@ -112,12 +112,24 @@ cell range sits below *half* the promotion gate. Forge deliberately does **not**
 this, because the five versions carrying our largest structural changes (v43–v48) have
 zero stage-two rows. Declaring exhaustion on a series ending at v42 is the basis trap.
 
-**The blocking constraint is measurement, not optimization.** Stage-one intake ~8,000/day
-against stage-two throughput 480/day is a **divergence, not a backlog** (all-time 28.5:1)
-— the validator falls further behind every day, and no stratification fixes that.
-Forge's half of the fix is a **stage-one intake cut** (proposed: ~1,500/day), which is
-purely a Forge parameter and *lowers* our DSR hurdle; Crucible's half is stratifying
-stage-two selection by grammar version.
+**The blocking constraint is the stage-two FEED, not throughput and not optimization.**
+(Corrected 2026-07-22 — an earlier version of this paragraph proposed a stage-one intake
+cut on a "divergence, not a backlog" argument. That was **wrong**: Crucible's scanner is
+`ORDER BY pd.decided_at DESC`, re-derived every pass, so new work never queues behind old
+work and cutting intake would not have improved v47/v48 coverage. Operator refused it on
+exactly that ground.)
+
+The real mechanism: `_triggers_rederive` admits a stage-one row into stage two via
+`reject → coverage_blocked_component` or `component → not-honest-coverage`. **The reject
+path has contributed ZERO all along** — `deflated_sharpe` fails ~100% of forge rows and is
+absent from `_COMPONENT_ELIGIBLE_GATE_FAILURES`, failing the subset test. So *every*
+version's stage-two feed came from the component path: the `rank_k=20` unverified bypass.
+**v48 closed that bypass, so v48 feeds ZERO rows into stage two** (v46 508, v47 509,
+**v48 0**). Crucible's DESIGN.md §20 `dsr-record-not-binding-forge-minimal` already ruled
+DSR must not bind here; the exemption landed in `_verdict_from_gates` but never reached
+`fullhist_refit.coverage_blocked_component`. Honoring it (source-scoped, `wf>0`/`cpcv>0`
+untouched, so **not** a gate relaxation) would take v48 from 0 to 368 eligible rows in our
+window sample. **Until that lands, condition (C) cannot be evaluated on v48 at any n.**
 
 Freeze is declared when **(A), (B) and (C) hold**, A and B re-derived on the stage-two
 basis, and (C) evaluated on a set that includes **v47 and v48**.
