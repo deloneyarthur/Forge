@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-07-22 (later⁵) — `search_n_trials` stamp FIXED to batch-constant cardinality (D330; operator "Let's make the change") — **built + green, NOT yet deployed**
+
+- **The defect:** D310 stamped each config its **index** in the slot's cumulative census, so declared multiplicity depended on **queue position within the batch**. DSR's `n_trials` is the **cardinality of the set the selection was drawn from**; every config a batch emits for one slot is **one selection event** and must carry the same value.
+- **The change:** two-pass — count each slot's batch contribution, then stamp `prior_count + n_in_batch` for every candidate in that slot. `or 1` floor and the all-time cumulative basis preserved.
+- **TDD:** 3 new tests written first, confirmed red (`[41,42,43,44,45,46] != [46]*6`), then green — including an order-invariance test, the exact property the index violated.
+- **Live proof** (replaying batch `646378f1`, 200 configs): trend-xsect-swing_mid OLD `114,290..114,445` → NEW `114,445`; all six slots collapse to one value each.
+- **Full suite 2046 passed / 1 skipped; ruff + mypy --strict clean.** Determinism untouched (`search_n_trials` is hash-excluded; stamping is post-ranking) — no grammar bump, no golden re-pin.
+- **Bounded honestly:** worth **0.000285 sd** on the bar. This is a correctness fix, not a remedy for saturation. **The saturation is not fixable from our side** — the bar at N=105,000 is **1.974 annualized Sharpe vs a population max of 1.964**; even N=200 excludes 93.4%. The durable fix is Crucible's single `blocking_failures(gate_results, source)` consumer, relayed and now asked for by the operator.
+- **LEFT OPEN deliberately** (joint, recorded in the module docstring): whether cumulative-all-time is the right denominator, given Forge takes no cross-batch argmax and Crucible already charges `selection_n_trials` at assembly.
+- **NOT DEPLOYED** — inert until the next restart; the running daemon still stamps indices.
+
 ## 2026-07-22 (later⁴) — `search_n_trials` (D310) INVESTIGATED: intended semantic, one real defect, and **D310 + v48 jointly turned off measurement** (D330 cont.)
 
 - **Crucible asked us to check whether the stamp is bugged.** It is doing exactly what D310 declares — per-slot **cumulative, all-time**, each config stamped with its **index** in that census (`search_multiplicity.py:98`; `slot_counts()` is an unbounded `count(*)` over `submissions`). Reproduced: v41/v42 NULL, v43 [5,154–108,464], v48 [5,338–113,660]; per batch×slot the values are a contiguous run, span = n−1, all gaps 1. Armed at v43 because it **self-gates** on their `recorded_not_binding` marker — correct D306-hazard behaviour.

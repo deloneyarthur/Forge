@@ -1,10 +1,13 @@
-"""Tests for ``forge.submission.search_multiplicity`` (D310).
+"""Tests for ``forge.submission.search_multiplicity`` (D310, D330).
 
 Per-slot cumulative ``search_n_trials`` stamping, self-gated on Crucible's
 record-not-bind deployment marker (their (a) resolution to the D306
 interaction finding). Slot = hypothesis x dte_bucket x xsect-vs-named,
 their Q1 measure, counted from OUR submissions table (deliberately
 slightly ahead of their decided-count).
+
+D330: the stamp is batch-CONSTANT (the slot's search cardinality), not a
+per-config index — see ``TestStamp``.
 """
 
 from __future__ import annotations
@@ -181,7 +184,17 @@ class TestMarkerPredicate:
 
 
 class TestStamp:
-    def test_stamps_position_aware_within_batch(self) -> None:
+    """D330: the stamp is the slot's search CARDINALITY, batch-constant.
+
+    DSR's ``n_trials`` is the size of the set the selection was drawn from,
+    not the index of a member within it. Every config a batch emits for a
+    given slot is one selection event and must therefore carry the SAME
+    value — the slot's post-batch cumulative count. The prior per-config
+    increment made a config's deflation depend on its queue position
+    (Crucible, `crucible_search_n_trials_looks_like_a_counter_2026-07-22`).
+    """
+
+    def test_stamps_batch_constant_slot_cardinality(self) -> None:
         base = {("mean_reversion", "swing_short", "named"): 100}
         cands = [
             _candidate(_config(name="a")),
@@ -190,8 +203,44 @@ class TestStamp:
         ]
         stamped = stamp_search_n_trials(cands, base)
         values = [c.report.config.search_n_trials for c in stamped]
-        # Same slot: 101 then 102; unseen slot starts at 1.
-        assert values == [101, 102, 1]
+        # MR slot contributes 2 configs -> both carry 100 + 2 = 102.
+        # The unseen trend slot contributes 1 -> 0 + 1 = 1 (the `or 1` floor).
+        assert values == [102, 102, 1]
+
+    def test_same_slot_same_batch_configs_carry_identical_n(self) -> None:
+        # The defect this replaces: two configs from one selection event
+        # must not differ in declared multiplicity by queue position.
+        base = {("mean_reversion", "swing_short", "named"): 5_000}
+        cands = [_candidate(_config(name=f"c{i}")) for i in range(50)]
+        stamped = stamp_search_n_trials(cands, base)
+        values = {c.report.config.search_n_trials for c in stamped}
+        assert values == {5_050}
+
+    def test_slots_are_counted_independently(self) -> None:
+        base = {
+            ("mean_reversion", "swing_short", "named"): 10,
+            ("mean_reversion", "swing_short", "xsect"): 700,
+        }
+        cands = [
+            _candidate(_config(name="n1")),
+            _candidate(_config(name="n2")),
+            _candidate(_config(xsect=True, name="x1")),
+        ]
+        stamped = stamp_search_n_trials(cands, base)
+        by_axis = {slot_key(c.report.config)[2]: c.report.config.search_n_trials for c in stamped}
+        assert by_axis == {"named": 12, "xsect": 701}
+
+    def test_ordering_does_not_change_any_stamp(self) -> None:
+        # Queue position must be irrelevant — the property the old
+        # per-config index violated.
+        base = {("mean_reversion", "swing_short", "named"): 40}
+        cands = [_candidate(_config(name=f"c{i}")) for i in range(6)]
+        forward = [c.report.config.search_n_trials for c in stamp_search_n_trials(cands, base)]
+        reverse = [
+            c.report.config.search_n_trials
+            for c in stamp_search_n_trials(list(reversed(cands)), base)
+        ]
+        assert forward == reverse == [46] * 6
 
     def test_input_counts_mapping_not_mutated(self) -> None:
         base = {("mean_reversion", "swing_short", "named"): 5}
