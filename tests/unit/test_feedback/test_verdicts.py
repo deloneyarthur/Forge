@@ -36,6 +36,8 @@ def _gated_run(
     decided_at: datetime | None = None,
     trade_count: int = 42,
     grammar_version: str | None = "v12",
+    measurement_basis: str | None = None,
+    fullhist_refit_of: str | None = None,
 ):
     from crucible_contracts import GatedRun
     from crucible_contracts.models import GateResult, PromotionDecision, RunResult
@@ -50,6 +52,8 @@ def _gated_run(
             period_start=date(2021, 6, 2),
             period_end=date(2026, 6, 1),
             grammar_version=grammar_version,
+            measurement_basis=measurement_basis,
+            fullhist_refit_of=fullhist_refit_of,
         ),
         decision=PromotionDecision(
             run_id=rid,
@@ -117,6 +121,11 @@ def test_verdicts_table_created_by_ensure_schema() -> None:
         # D316 (2c) — label provenance
         "source_export",
         "contracts_version",
+        # D330 — LANE provenance. Crucible's two-stage design means the lane
+        # decides whether a row CAN carry an honest label at all; without these
+        # the D128 label cannot be scoped. On the wire since contracts 1.27.0.
+        "measurement_basis",
+        "fullhist_refit_of",
     }
 
 
@@ -355,3 +364,41 @@ def test_provenance_source_export_nullable(tmp_path: Path) -> None:
     assert row is not None
     assert row[0] is None
     assert row[1] is not None  # contracts version always known locally
+
+
+# ---------------------------------------------------------------------------
+# D330 — lane provenance (measurement_basis / fullhist_refit_of)
+# ---------------------------------------------------------------------------
+
+
+def test_records_lane_provenance_from_the_run() -> None:
+    """Crucible's two-stage design: `standard_window` is a cheap SCREEN that
+    structurally cannot produce an honest-coverage component; `fullhist_refit`
+    is the validator. 94% of our gated feed is the screen, and 98%+ of honest
+    labels come from the 6% that is not — so the D128 label is DILUTED, not
+    starved. Scoping it requires the lane on the row, and until D330 Forge
+    dropped both fields on the floor (they existed only in a comment)."""
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="bbbb000011112222")
+        record_verdicts(
+            conn,
+            [
+                _gated_run(
+                    config_hash="bbbb000011112222",
+                    measurement_basis="fullhist_refit",
+                    fullhist_refit_of="parent-run-id-0001",
+                )
+            ],
+        )
+        row = conn.execute("SELECT measurement_basis, fullhist_refit_of FROM verdicts").fetchone()
+    assert row == ("fullhist_refit", "parent-run-id-0001")
+
+
+def test_lane_provenance_is_nullable_for_legacy_and_stage_one_rows() -> None:
+    """Pre-1.27.0 rows and any run whose producer omits the fields stay NULL —
+    a missing lane must not be silently read as a lane."""
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="cccc000011112222")
+        record_verdicts(conn, [_gated_run(config_hash="cccc000011112222")])
+        row = conn.execute("SELECT measurement_basis, fullhist_refit_of FROM verdicts").fetchone()
+    assert row == (None, None)

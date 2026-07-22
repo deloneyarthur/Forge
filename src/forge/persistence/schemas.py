@@ -149,6 +149,19 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     # = the installed crucible_contracts at recording time. Idempotent ALTERs.
     "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS source_export VARCHAR",
     "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS contracts_version VARCHAR(20)",
+    # D330 — LANE provenance. Crucible evaluates in two stages: `standard_window`
+    # (a cheap 5yr SCREEN that structurally cannot produce an honest-coverage
+    # component) and `fullhist_refit` (the floor-anchored validator, the only
+    # path into the component pool). 94% of our gated feed is the screen, whose
+    # honest-label rate is 0.077%, while 98%+ of all honest labels come from the
+    # ~9% that is not — so the D128 label is DILUTED by a lane that cannot
+    # produce it, not merely starved. Worse, a config appears in BOTH lanes with
+    # OPPOSITE labels (26 of 363 paired configs measured 2026-07-22). Scoping the
+    # label needs the lane recorded per row. Both fields have been on the wire
+    # since contracts 1.27.0 and existed in Forge only as a comment until D330.
+    # Idempotent ALTERs; NULL on legacy rows and on any producer that omits them.
+    "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS measurement_basis VARCHAR",
+    "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS fullhist_refit_of VARCHAR",
     """
     CREATE TABLE IF NOT EXISTS promoted_patterns (
         pattern_id          UUID PRIMARY KEY,

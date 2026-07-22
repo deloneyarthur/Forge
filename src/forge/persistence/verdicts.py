@@ -47,6 +47,13 @@ def record_verdicts(
     Idempotent: rows whose `crucible_run_id` already exists are ignored, so the
     sweep is safe on every reconcile pass over an overlapping window.
 
+    ``measurement_basis`` / ``fullhist_refit_of`` (D330, LANE provenance): which
+    of Crucible's two evaluation stages produced this verdict. The
+    `standard_window` screen structurally cannot yield an honest-coverage
+    component, so a row's lane decides whether its D128 label carries
+    information at all — without these columns the label cannot be scoped.
+    NULL on legacy rows and on any producer that omits them.
+
     ``source_export`` (D316/2c, label provenance): the gated-runs export
     filename these runs were read from — stamped per row with the installed
     contracts version, so a future era cut (the ve ghost class) filters on a
@@ -87,7 +94,22 @@ def record_verdicts(
     }
     recorded_at = utc_now().replace(tzinfo=None)
     contracts_version = CONTRACT_VERSION
-    rows: list[tuple[str, str, str, object, int, str | None, str, object, str | None, str]] = []
+    rows: list[
+        tuple[
+            str,
+            str,
+            str,
+            object,
+            int,
+            str | None,
+            str,
+            object,
+            str | None,
+            str,
+            str | None,
+            str | None,
+        ]
+    ] = []
     for gr, decided in candidates:
         if gr.run.run_id in existing_run_ids:
             continue
@@ -107,6 +129,8 @@ def record_verdicts(
                 recorded_at,
                 source_export,
                 contracts_version,
+                gr.run.measurement_basis,
+                gr.run.fullhist_refit_of,
             )
         )
     if not rows:
@@ -118,8 +142,8 @@ def record_verdicts(
         INSERT OR IGNORE INTO verdicts
         (crucible_run_id, config_hash, decision, decided_at, trade_count,
          grammar_version, gate_results, recorded_at, source_export,
-         contracts_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         contracts_version, measurement_basis, fullhist_refit_of)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rows,
     )

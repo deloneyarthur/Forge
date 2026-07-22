@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-22 (later⁹) — D331 Part A SHIPPED: lane provenance on `verdicts`; Part B measured, design changed, **held for operator**
+
+- **Part A (built, not deployed):** `measurement_basis` + `fullhist_refit_of` now persisted on `verdicts` — on the wire since contracts 1.27.0, previously present in Forge **only as a comment**. Idempotent ALTERs (D316 precedent), wired through `record_verdicts`. TDD red→green. **Migration verified on a real 409,153-row copy: both columns added, row delta 0, 1.12s, all legacy NULL.** 715 scoped tests pass; ruff + mypy clean.
+- **Part B design CHANGED after measurement.** Scoping the label to `measurement_basis='fullhist_refit'` would not work: **396,123 legacy rows carry NULL lane forever** (INSERT-OR-IGNORE never back-updates), so the scoped frame would be empty for months.
+- **Better formulation, works on legacy rows today: honest coverage as the POPULATION FILTER, not part of the LABEL.** Today a stage-one row is labelled negative *regardless of quality* — **91.0% of the frame is structurally unable to be positive**, and **26 of 363 configs appear in both lanes with OPPOSITE labels**. Reframed: **35,674 rows carrying the SAME 19,759 positives — prevalence 4.988% → 55.4% (11×)**, 91% of mislabelled mass gone, no lane column needed.
+- **Estimand shift, stated plainly:** F3 would estimate `P(component | honestly evaluated)` rather than `P(component | emitted)` — arguably the better question, but a different one, and it changes the training population of EVERY learned model. **Operator-gated; not built.**
+
 ## 2026-07-22 (later⁸) — URGENT resolved: **deploy gap, not code gap**; first v48 components exist; Forge adds a deploy-staleness check (D330)
 
 - **Our urgent diagnosis pointed at code that was already correct.** Crucible's `c35c10f` keys the DSR exemption on `search_n_trials >= (selection_n_trials or 1)` — **no `source` test** — i.e. exactly the deflation-basis scoping we asked for, written before our note arrived. **It was inert because both runner shards had been up 19h before the fix committed.** Of v48 children decided after the fix: **84/84 still failed DSR, 0 admitted.** Our 315/315 correctly measured a process running 19-hour-old code.
