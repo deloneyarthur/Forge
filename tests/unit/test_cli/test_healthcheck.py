@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from forge.cli.healthcheck_cmd import (
     Level,
     check_contracts_pin,
+    check_deployed_code_staleness,
     check_file_freshness,
     check_inbox_rejections,
     check_learning_drift,
@@ -350,3 +351,35 @@ def test_search_multiplicity_census_levels() -> None:
 
     # Missing metric -> WARN.
     assert check_search_multiplicity_census({"ts": fresh_ts}, _NOW).level is Level.WARN
+
+
+def test_deployed_code_staleness_ok_when_service_newer_than_src() -> None:
+    """Service restarted after the last src commit -> it is running HEAD."""
+    started = datetime(2026, 7, 22, 16, 0, tzinfo=UTC)
+    committed = datetime(2026, 7, 22, 15, 0, tzinfo=UTC)
+    assert check_deployed_code_staleness(started, committed).level is Level.OK
+
+
+def test_deployed_code_staleness_warns_when_src_newer_than_service() -> None:
+    """The 2026-07-22 failure class, ours and Crucible's: shipped != deployed.
+
+    Crucible committed the DSR deflation-basis exemption while both runner shards
+    had been up 19h; the fix produced zero effect for 84 decisions and surfaced as
+    an urgent cross-repo bug report against code that was already correct. Neither
+    repo's invariant tests could catch it - they assert facts about the REPOSITORY,
+    never about the running PROCESS.
+    """
+    started = datetime(2026, 7, 21, 21, 4, tzinfo=UTC)
+    committed = datetime(2026, 7, 22, 15, 49, tzinfo=UTC)
+    result = check_deployed_code_staleness(started, committed)
+    assert result.level is Level.WARN
+    assert "19" in result.message or "stale" in result.message.lower()
+
+
+def test_deployed_code_staleness_unknown_when_either_timestamp_missing() -> None:
+    assert (
+        check_deployed_code_staleness(None, datetime(2026, 7, 22, tzinfo=UTC)).level is Level.WARN
+    )
+    assert (
+        check_deployed_code_staleness(datetime(2026, 7, 22, tzinfo=UTC), None).level is Level.WARN
+    )

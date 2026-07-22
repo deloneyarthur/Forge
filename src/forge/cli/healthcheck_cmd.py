@@ -37,7 +37,7 @@ import shutil
 import subprocess
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
 
@@ -145,6 +145,60 @@ def check_service_active(is_active: bool) -> HealthResult:
         return HealthResult("service", Level.OK, "forge.service active")
     return HealthResult(
         "service", Level.CRITICAL, "forge.service is NOT active (crashed / stopped)"
+    )
+
+
+def check_deployed_code_staleness(
+    service_started_at: datetime | None,
+    last_src_commit_at: datetime | None,
+) -> HealthResult:
+    """Is the RUNNING daemon executing code older than HEAD? (D330)
+
+    The 2026-07-22 failure class, hit by both repos in one afternoon: **shipped is
+    not deployed.** Crucible committed the DSR deflation-basis exemption at 15:49
+    while both runner shards had been up since 21:04 the previous day. The fix was
+    correct, unit-tested, invariant-tested and in their Decision Log — and produced
+    zero effect for 84 decisions, because a long-running daemon holds its modules in
+    memory. It surfaced as an urgent cross-repo bug report against code that was
+    already right, which is the most expensive kind of correct measurement: it sends
+    the other side hunting a bug that does not exist.
+
+    Neither repo's new enforcement tests can catch this. Ours pins the ranker's
+    feature signature, theirs pins the single blocking-failure derivation; both are
+    true of the *repository* and say nothing about the *process*. Hence the rule
+    this check exists to enforce: **a claim about deployed behaviour needs a check on
+    the running process, the same way an architectural claim needs a test and a
+    numeric claim needs a reproduction.**
+
+    Forge is more exposed than Crucible here, not less: this working tree IS
+    production (D104), so a commit is live-on-reboot but inert until restart —
+    the window where the tree and the process disagree is opened by every commit.
+
+    Scope, and its deliberate imprecision: the comparison is against the newest
+    commit touching `src/`, not a computed import graph. `forge.cli.main` (the
+    daemon entry) imports 57 forge modules including this one, so nearly all of
+    `src/` really is in the running process. It will still over-warn on a commit
+    the daemon's behaviour does not depend on — accepted, because the message is
+    actionable ("restart to deploy it"), the deploy ritual ends in a restart
+    anyway, and a check that occasionally says "restart" is a cheaper failure than
+    one that stays silent while 84 decisions run stale code.
+    """
+    if service_started_at is None or last_src_commit_at is None:
+        return HealthResult(
+            "deploy_staleness",
+            Level.WARN,
+            "cannot compare service start to last src commit (missing timestamp)",
+        )
+    if service_started_at >= last_src_commit_at:
+        return HealthResult(
+            "deploy_staleness", Level.OK, "running daemon started after the last src commit"
+        )
+    hours = (last_src_commit_at - service_started_at).total_seconds() / 3600.0
+    return HealthResult(
+        "deploy_staleness",
+        Level.WARN,
+        f"service is running STALE code: started {hours:.0f}h before the last "
+        f"src/ commit — restart to deploy it",
     )
 
 
@@ -717,6 +771,49 @@ def _service_is_active() -> bool:
     return proc.stdout.strip() == "active"
 
 
+def _service_started_at() -> datetime | None:
+    """When the RUNNING daemon started. None = unavailable."""
+    try:
+        proc = subprocess.run(
+            ["systemctl", "--user", "show", "forge.service", "-p", "ActiveEnterTimestamp"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    raw = proc.stdout.strip().partition("=")[2].strip()
+    if not raw:
+        return None
+    try:  # systemd emits e.g. "Wed 2026-07-22 15:52:49 PDT"
+        return datetime.strptime(raw, "%a %Y-%m-%d %H:%M:%S %Z").astimezone(UTC)
+    except ValueError:
+        return None
+
+
+def _last_src_commit_at() -> datetime | None:
+    """Commit time of the newest commit touching `src/` — the code the daemon imports."""
+    try:
+        proc = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", "--", "src"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            cwd=Path(__file__).resolve().parents[3],
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    raw = proc.stdout.strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw).astimezone(UTC)
+    except ValueError:
+        return None
+
+
 def cmd_healthcheck(
     data_root: Path = typer.Option(
         Path("~/forge_data").expanduser(), "--data-root", help="Forge data root"
@@ -758,7 +855,10 @@ def cmd_healthcheck(
     from forge.core.contracts_check import FORGE_EXPECTED_CONTRACT_VERSION
 
     now = utc_now()
-    results: list[HealthResult] = [check_service_active(_service_is_active())]
+    results: list[HealthResult] = [
+        check_service_active(_service_is_active()),
+        check_deployed_code_staleness(_service_started_at(), _last_src_commit_at()),
+    ]
 
     journal = _gather_journal(window_hours=max(submission_critical_hours, 48.0))
     if journal is None:

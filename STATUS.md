@@ -1,5 +1,13 @@
 # Forge — Status
 
+## 2026-07-22 (later⁸) — URGENT resolved: **deploy gap, not code gap**; first v48 components exist; Forge adds a deploy-staleness check (D330)
+
+- **Our urgent diagnosis pointed at code that was already correct.** Crucible's `c35c10f` keys the DSR exemption on `search_n_trials >= (selection_n_trials or 1)` — **no `source` test** — i.e. exactly the deflation-basis scoping we asked for, written before our note arrived. **It was inert because both runner shards had been up 19h before the fix committed.** Of v48 children decided after the fix: **84/84 still failed DSR, 0 admitted.** Our 315/315 correctly measured a process running 19-hour-old code.
+- **VERIFIED after their restart:** 346 v48 stage-two rows, `{component: 11, reject: 335}` — **the first v48 components in existence**, with `deflated_sharpe` still computed and failing but **non-binding**, exactly as §20 says.
+- **FOURTH PATTERN: `shipped ≠ deployed`.** Correct, committed, unit-tested, invariant-tested, Decision-Logged — and inert. **Neither repo's enforcement test can catch it**: ours pins a signature, theirs pins a derivation; both describe the REPOSITORY, not the PROCESS. Rule is now three-deep: **numeric claim → reproduction; architectural claim → test; deployed-behaviour claim → a check on the running process.**
+- **Built the mirror (healthcheck-only, no daemon change):** `check_deployed_code_staleness` WARNs when `forge.service`'s `ActiveEnterTimestamp` predates the newest `src/` commit. TDD (3 tests, red→green); live `[ OK ] deploy_staleness`. **Forge is MORE exposed than Crucible** — this tree IS production (D104), so every commit opens a tree-vs-process window. Scope deliberately imprecise and documented (over-warns rather than stays silent).
+- **v48 read HELD despite the n≥300 trigger.** Their full ledger reproduces ours exactly on p90 (0.8237) and max (1.5231). **But the comparison crosses a feed-basis boundary:** v39's cohort could only contain DSR-*passing* parents (nothing else could reach stage two pre-fix) while v48's is the unfiltered feed — **v39 got the cream, v48 gets the whole distribution**. So the lower centre is not evidence about the grammar; the notable read is that v48's p90/max hold up *despite* a broader population. Not repairable by restriction (v48 has no DSR-passing parents). Wait for the cohort to re-accumulate under the deployed exemption.
+
 ## 2026-07-22 (later⁷) — STAGE-TWO FEED REOPENED (v48: 0 → 315, honest coverage) — but **v48 is rejected 315/315: the child inherits the D310 stamp** (D330)
 
 - **The v48 `rank_k<=10` fix WORKS.** All 315 v48 stage-two rows carry **honest** `regime_coverage`. Decision 001's trigger fired; n=315 clears the charter §6 n≥300 bar.
