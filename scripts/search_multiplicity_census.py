@@ -46,6 +46,7 @@ from typing import Any
 import duckdb
 
 from forge.core.clock import utc_now
+from forge.enumeration.sampler import _NO_EARNINGS_UNDERLYINGS
 from forge.enumeration.search_space import (
     _DIRECTIONAL_POOL_EXCLUDED_IDS,
     _REGIME_GATE_GLOBALLY_EXCLUDED_IDS,
@@ -58,6 +59,14 @@ from forge.ranking.campaigns import (
     config_cell_from_json,
 )
 from forge.submission.search_multiplicity import _XSECT_COMBINER_TYPE
+
+# Earnings-event regime gates: on a NO-EARNINGS underlying they NaN/sentinel-fill
+# and never gate (the D268 SOXL degenerate — days_since_earnings -> allow=True ->
+# a passthrough backfills a naked long call). Such a config is (a) unreproducible
+# post-D268/v32 (the sampler excludes _NO_EARNINGS_UNDERLYINGS from earnings-gated
+# draws) and (b) a mislabeled leg if it sits in a promoted book.
+_EARNINGS_GATE_IDS = frozenset({"days_to_earnings", "days_since_earnings", "pre_earnings_setup"})
+_DEFAULT_EXPORTS_DIR = Path.home() / "optbt_data" / "exports"
 
 # Recent-window length for the conversion read. Derived from the data's own
 # max(decided_at) so the census is reproducible off a snapshot (no clock).
@@ -94,6 +103,47 @@ def _is_already_pruned(hypothesis: str, directional: str, regime: str) -> bool:
     return directional in _DIRECTIONAL_POOL_EXCLUDED_IDS.get(hypothesis, frozenset())
 
 
+def _is_degenerate_leg(config: dict[str, Any]) -> bool:
+    """True for a D268-class degenerate: an earnings-event gate on a no-earnings
+    underlying (e.g. the pure_sue175 SOXL leg). Its earnings signals are inert, so
+    a passthrough backfills a naked long call — mislabeled alpha, and unreproducible
+    since the sampler now excludes these underlyings from earnings-gated draws."""
+    underlying = config.get("underlying")
+    if underlying not in _NO_EARNINGS_UNDERLYINGS:
+        return False
+    return any(
+        signal.get("role") in ("regime_filter", "directional")
+        and any(ind in _EARNINGS_GATE_IDS for ind in (signal.get("indicators") or ()))
+        for signal in config.get("signals", ())
+    )
+
+
+def _load_promoted_cells(exports_dir: Path) -> set[tuple[str, str, str, str, str]]:
+    """The (hypothesis, dte_bucket, axis, directional, regime) cells of every
+    component in a currently-promoted book — GROUND-TRUTH protection (a live book
+    leg is never a prune target). Read via the blessed contracts loader; fail-open
+    (an absent/unreadable export just yields no promoted protections)."""
+    try:
+        from datetime import UTC, datetime
+
+        from crucible_contracts import load_promoted_portfolios_from_export
+
+        portfolios = load_promoted_portfolios_from_export(
+            exports_dir, datetime(2020, 1, 1, tzinfo=UTC)
+        )
+    except Exception:
+        return set()
+    cells: set[tuple[str, str, str, str, str]] = set()
+    for portfolio in portfolios:
+        for component in portfolio.components:
+            config = component.strategy_config.model_dump()
+            directional, regime = _cell_key(config)
+            cells.add(
+                (config["hypothesis"], config["dte_bucket"], _axis(config), directional, regime)
+            )
+    return cells
+
+
 @dataclass(slots=True)
 class Cell:
     """One (slot, directional, regime) enumeration cell's census tally."""
@@ -105,10 +155,12 @@ class Cell:
     regime: str
     n_trials: int = 0  # all-time distinct configs (== count; config_hash unique)
     submitted_recent: int = 0  # submissions in the recent window — the liveness signal
+    degenerate_recent: int = 0  # recent submissions that are D268-class degenerate legs
     decided_recent: int = 0
     comp_recent: int = 0
     comp_alltime: int = 0
     promote_alltime: int = 0
+    promoted_book: bool = False  # a component of this cell sits in a live promoted book
     protecting_campaigns: set[str] = field(default_factory=set)
 
     @property
@@ -125,18 +177,24 @@ class Cell:
             if recent:
                 self.comp_recent += 1
 
+    @property
+    def live_recent(self) -> int:
+        """Recent submissions minus D268-class degenerate legs — the latter are
+        already excluded emission-side, so they are an aging tail, never live dead."""
+        return self.submitted_recent - self.degenerate_recent
+
     def classify(self) -> str:
         if self.hypothesis in NON_ENUMERABLE_HYPOTHESES:
             return _DISABLED_LEGACY
         if _is_already_pruned(self.hypothesis, self.directional, self.regime):
             return _ALREADY_PRUNED
-        if self.protecting_campaigns:
-            return _PROTECTED
+        if self.promoted_book or self.protecting_campaigns:
+            return _PROTECTED  # ground truth: a live book leg / farming cell — never a prune target
         if self.comp_recent > 0 or self.promote_alltime > 0:
             return _CONVERTING
-        if self.submitted_recent == 0:
+        if self.live_recent <= 0:
             return _LEGACY_INACTIVE
-        if self.submitted_recent >= _MIN_SUBMITTED_FOR_DEAD:
+        if self.live_recent >= _MIN_SUBMITTED_FOR_DEAD:
             return _DEAD_UNPROTECTED
         return _THIN
 
@@ -162,8 +220,12 @@ def _cell_key(config: dict[str, Any]) -> tuple[str, str]:
     return (directional, "(nogate)")
 
 
-def _load_cells(db: duckdb.DuckDBPyConnection) -> list[Cell]:
+def _load_cells(
+    db: duckdb.DuckDBPyConnection,
+    promoted_cells: set[tuple[str, str, str, str, str]] | None = None,
+) -> list[Cell]:
     """One pass over submissions (+ verdict join) → per-cell tallies."""
+    promoted_cells = promoted_cells or set()
     decided_row = db.execute("SELECT max(decided_at) FROM verdicts").fetchone()
     submitted_row = db.execute("SELECT max(submitted_at) FROM submissions").fetchone()
     if not decided_row or decided_row[0] is None or not submitted_row or submitted_row[0] is None:
@@ -196,6 +258,7 @@ def _load_cells(db: duckdb.DuckDBPyConnection) -> list[Cell]:
         cell = cells.get(key)
         if cell is None:
             cell = Cell(*key)
+            cell.promoted_book = key in promoted_cells
             for name, fn in member_fns:
                 if fn is not None and fn(config):
                     cell.protecting_campaigns.add(name)
@@ -203,6 +266,8 @@ def _load_cells(db: duckdb.DuckDBPyConnection) -> list[Cell]:
         cell.n_trials += 1
         if submitted_at >= submitted_cutoff:
             cell.submitted_recent += 1
+            if _is_degenerate_leg(config):
+                cell.degenerate_recent += 1
         for decision, decided_at in verdicts.get(config_hash, ()):
             cell.add_verdict(decision, recent=decided_at >= decided_cutoff)
     return list(cells.values())
@@ -218,8 +283,10 @@ def _flow_summary(cells: list[Cell]) -> dict[str, Any]:
     by_class: dict[str, int] = defaultdict(int)
     for c in cells:
         by_class[c.classify()] += c.n_trials
-    flow_total = sum(c.submitted_recent for c in cells)
-    flow_dead = sum(c.submitted_recent for c in cells if c.classify() == _DEAD_UNPROTECTED)
+    # Flow is over LIVE submissions (degenerate D268-class legs are excluded — they
+    # are an aging tail the sampler no longer emits).
+    flow_total = sum(c.live_recent for c in cells)
+    flow_dead = sum(c.live_recent for c in cells if c.classify() == _DEAD_UNPROTECTED)
     return {
         "recent_days": _RECENT_DAYS,
         "total_n_trials": total,
@@ -228,6 +295,8 @@ def _flow_summary(cells: list[Cell]) -> dict[str, Any]:
         "flow_dead_unprotected_recent": flow_dead,
         "freeze_metric_dead_flow_fraction": flow_dead / flow_total if flow_total else 0.0,
         "n_dead_cells": sum(1 for c in cells if c.classify() == _DEAD_UNPROTECTED),
+        "n_promoted_book_cells": sum(1 for c in cells if c.promoted_book),
+        "degenerate_flow_recent": sum(c.degenerate_recent for c in cells),
         "dead_unprotected_share": (by_class.get(_DEAD_UNPROTECTED, 0) / total) if total else 0.0,
         "converting_share": (by_class.get(_CONVERTING, 0) / total) if total else 0.0,
         "farming_campaigns": [c.name for c in CAMPAIGNS if c.status == "farming"],
@@ -244,6 +313,8 @@ def _append_jsonl(cells: list[Cell], path: Path) -> None:
         "flow_dead": summ["flow_dead_unprotected_recent"],
         "flow_total": summ["flow_total_recent"],
         "n_dead_cells": summ["n_dead_cells"],
+        "n_promoted_book_cells": summ["n_promoted_book_cells"],
+        "degenerate_flow_recent": summ["degenerate_flow_recent"],
         "dead_unprotected_share": summ["dead_unprotected_share"],
         "converting_share": summ["converting_share"],
         "farming_campaigns": summ["farming_campaigns"],
@@ -300,10 +371,29 @@ def _report(cells: list[Cell], out_path: Path | None) -> None:
     flow_dead = summ["flow_dead_unprotected_recent"]
     flow_frac = summ["freeze_metric_dead_flow_fraction"]
     print(
-        f"\n>>> FREEZE METRIC (B): dead-unprotected share of CURRENT FLOW "
-        f"(last {_RECENT_DAYS}d submissions) = {100 * flow_frac:.2f}%  "
+        f"\n>>> FREEZE METRIC (B): dead-unprotected share of CURRENT LIVE FLOW "
+        f"(last {_RECENT_DAYS}d submissions, degenerate excluded) = {100 * flow_frac:.2f}%  "
         f"({flow_dead}/{flow_total}; target: below an operator-set bar, stable)"
     )
+    print(
+        f"    promoted-book-protected cells: {summ['n_promoted_book_cells']}  |  "
+        f"D268-degenerate legs in recent flow: {summ['degenerate_flow_recent']} (excluded from B)"
+    )
+
+    degenerate = sorted(
+        (c for c in cells if c.degenerate_recent > 0), key=lambda c: -c.degenerate_recent
+    )
+    if degenerate:
+        print("\nDEGENERATE LEGS (D268-class: earnings gate on a no-earnings underlying; top 10)")
+        print(
+            f"{'hypothesis':20s} {'axis':6s} {'directional':16s} {'regime':18s} "
+            f"{'degen14d':>8s} {'promoted?':>9s}"
+        )
+        for c in degenerate[:10]:
+            print(
+                f"{c.hypothesis:20s} {c.axis:6s} {c.directional:16s} {c.regime:18s} "
+                f"{c.degenerate_recent:8d} {'YES' if c.promoted_book else '-':>9s}"
+            )
 
     dead = sorted(
         (c for c in cells if c.classify() == _DEAD_UNPROTECTED),
@@ -336,10 +426,13 @@ def _report(cells: list[Cell], out_path: Path | None) -> None:
                     "regime": c.regime,
                     "n_trials": c.n_trials,
                     "submitted_recent": c.submitted_recent,
+                    "live_recent": c.live_recent,
+                    "degenerate_recent": c.degenerate_recent,
                     "decided_recent": c.decided_recent,
                     "comp_recent": c.comp_recent,
                     "comp_alltime": c.comp_alltime,
                     "promote_alltime": c.promote_alltime,
+                    "promoted_book": c.promoted_book,
                     "classification": c.classify(),
                     "protecting_campaigns": sorted(c.protecting_campaigns),
                 }
@@ -364,6 +457,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="append one compact metric-B row here (the daily freeze series)",
     )
+    parser.add_argument(
+        "--exports-dir",
+        type=Path,
+        default=_DEFAULT_EXPORTS_DIR,
+        help="Crucible exports dir (for promoted-book-component protection)",
+    )
     args = parser.parse_args(argv)
 
     db_path = args.db or Path("forge_snap.db")
@@ -373,9 +472,11 @@ def main(argv: list[str] | None = None) -> int:
     if not db_path.exists():
         parser.error(f"snapshot not found: {db_path} (use --snapshot-from to make one)")
 
+    promoted_cells = _load_promoted_cells(args.exports_dir)
+    print(f"promoted-book cells for protection: {len(promoted_cells)}", file=sys.stderr)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        cells = _load_cells(con)
+        cells = _load_cells(con, promoted_cells)
     finally:
         con.close()
     _report(cells, args.out)

@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-22 — CENSUS ACCURACY FIXES (D328, tooling — daemon-inert, no deploy): the 3 gaps the SOXL/event_momentum case exposed, closed in `scripts/search_multiplicity_census.py`. Operator "Yes let's do those fixes"
+
+- **(1) Promoted-book-component protection:** reads the `promoted_portfolios` export (blessed loader `load_promoted_portfolios_from_export`, fail-open) → protects the 6 cells of live-book components by CELL match (ground truth, not a heuristic). protected share 11.2% → 21.3%.
+- **(2) Degenerate-leg detection:** `_is_degenerate_leg` = an earnings gate ({days_to_earnings, days_since_earnings, pre_earnings_setup}) on a `_NO_EARNINGS_UNDERLYINGS` name (the D268 SOXL class). New DEGENERATE-LEGS report section: **310 in recent flow**, incl. the pure_sue175 SOXL `event_momentum sue×days_since_earnings` leg flagged `promoted? YES` — the census false-positive is now correctly PROTECTED + surfaced-as-degenerate.
+- **(3) D268 exclusion from metric B:** degenerate configs are already excluded emission-side (aging tail) → subtracted from the LIVE flow. Metric B 2.80% → **2.43%** (`live_recent = submitted_recent − degenerate_recent`). JSONL row gains `n_promoted_book_cells` + `degenerate_flow_recent`; healthcheck reader unaffected.
+- Gates: ruff + mypy clean; healthcheck test green. Daemon-inert (scripts/ tool + daily-timer/healthcheck read it) → no restart. NB v47 just deployed, so metric B here still reflects mostly v46 single-name flow; it drops further as v47 flow accrues.
+
 ## 2026-07-22 — GRAMMAR v46 → v47 DEPLOYED + VERIFIED (D328): single-name-axis retirement — the first freeze prune. Operator "Deploy". `relative_value` + `event_momentum` disabled; single-name (confluence) trend/MR filtered (xsect core + capitulation kept). All three Crucible-greenlit (0 assembly consumption / 106 assemblies).
 
 - **Restart VERIFIED (PID 1174319, iteration 2637):** `grammar_version=v47` registry_hash=c4bc04f816712407, `registry_loaded_from_export`, `grammar_versions: recorded manual_bump row for v47`, `reconciled: batches=1`; **NRestarts=0, no traceback / SchemaVersionMismatch / GrammarVersionError**. `blocked: prev batch 62% gated` = the §7.3 limiter working (the pre-restart in-flight batch clears first; the FIRST v47-stamped batch submits once it hits ≥80% — natural watch, audit it for the v47 stamp + 0 single-name trend/MR outside capitulation).
