@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-07-22 (later⁶) — DSR thread CLOSED with Crucible: charge relocated to the PREFILTER; the load-bearing claim is now a TEST (D330)
+
+- **Where it landed.** **Ranker shift +0.220 = NOT a DSR charge** (we select on structural features fitted on other configs' verdicts → independent of this config's noise draw under the null; Crucible conceded their 0.569 order statistic, which assumed correlation 1.0). **Ranker regression −0.04 = period overfit**, needing no charge because their full-history stage two already reads the post-decay number — a model-quality metric for us. **Prefilter inflation = UNMEASURED and is the real charge** (`permutation_test` selects on the config's own in-sample notional return; its rejects are never submitted → survivorship).
+- **Agreed instrument:** a **prefilter-holdout campaign** — ~5 of 200 slots/batch, flagged in `submission_metadata`, time-boxed 2–3 weeks, not excluded from admission. Both repos record the state as **"a known, accepted, temporary under-deflation with an instrument in flight"**, never "the charge is zero."
+- **Cross-verified both ways:** their correction 3 reproduced from our export alone (theirs n=280/−0.0402/66.4%, **ours n=293/−0.0394/65.9%**); our pool-relative correction verified by them to four decimals.
+- **WE CAUGHT THEIR §2 OVERCLAIM — the thread's only error found by reading CODE, not reproducing a NUMBER.** They claimed the ranker's independence is architectural ("Forge does not run backtests"). False: `permutation_test` puts `real_notional` in `FilterResult.details`, `PreFilterReport` carries it, and the ranker gets the report — **one attribute access away**. The actual guarantee is the signature `extract_features(config, registry)`, a reversible design choice.
+- **So it is enforced now:** `tests/invariants/test_ranker_features_are_performance_blind.py` (4 tests, green, negative control verified) pins the signature, the annotations, the threat model, and the live model artifact's feature names. Same standard we asked of Crucible for `blocking_failures()`. **Test-only — no production code, no deploy.**
+- **Lesson recorded:** reproduce-the-number has a blind spot for claims about *mechanism*. **An architectural claim needs a test the way a numeric claim needs a reproduction.**
+- Precision fix owed and given: the live model targets **`target_wf_p25`**, not `cpcv_sharpe_p25` (code default).
+- **PENDING OPERATOR GO:** prefilter-holdout campaign (submission-policy change → deploy); `selection_rank`/`selection_pool_size`/flag emission (gated on their contract bump).
+
 ## 2026-07-22 (later⁵) — `search_n_trials` stamp FIXED to batch-constant cardinality (D330; operator "Let's make the change") — **built + green, NOT yet deployed**
 
 - **The defect:** D310 stamped each config its **index** in the slot's cumulative census, so declared multiplicity depended on **queue position within the batch**. DSR's `n_trials` is the **cardinality of the set the selection was drawn from**; every config a batch emits for one slot is **one selection event** and must carry the same value.
