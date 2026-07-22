@@ -19,6 +19,7 @@ read-pin lives in Q46_READ_INVERSION's v45 banner; boundary record preserved in
 
 | File | Dir | State | Awaiting / archive condition | Ref |
 |---|---|---|---|---|
+| `PROMPT_CRUCIBLE_CONTRACT_STALENESS_MONITOR_GAP.md` | → | held (NEW 07-22) | carry — D329 durable-fix ask: their `runner_contract_stale` check covers 2 of 10 contracts consumers (only the runners write `runner_status/*.json`), so the process that actually wedged us (inbox-watcher, strict first-ingest) is invisible and the alert's own remedy would NOT have cleared the outage; asks (1) status-write from all 10 consumers, (2) CRIT + consequence-naming for the ingest path, (3) opt. HEAD-sha to kill the working-tree false positive, (4) QuantIQ flagged as a third direction. Archive after their answer | D329 |
 | `PROMPT_CRUCIBLE_COMBINED_RELAY_RESPONSE.md` | → | held | carry; archive after the v39→v40 MR read (~07-22/23) | D291/D295 |
 | `PROMPT_CRUCIBLE_CORR_TO_BOOK_ASK.md` | → | carried (07-20, operator) | their answer (additive field / decline); telemetry build follows only on a yes | D302 |
 | `PROMPT_CRUCIBLE_SINGLE_NAME_AXIS_RETIREMENT_ASK.md` | → | **answered** (their `FORGE_single_name_trend_mr_retirement_read_2026-07-21`: single-name trend/MR = 0 consumption / 106 assemblies → GREENLIT retire; event_momentum FLIPPED to keep-single-name + want-xsect-PEAD, but on the D268-degenerate SOXL leg → re-read relayed) | archive after v47 deploys + the event_momentum re-read closes | D328 |
