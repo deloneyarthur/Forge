@@ -1,6 +1,31 @@
 # Grammar Freeze Criterion
 
-**Status: SCOPING (docs-only) — the measurable definition of "the grammar is done."**
+> **⚠️ RE-BASED 2026-07-22 (D330) — read this box before using anything below.**
+>
+> Conditions (A) and (B) below, and the baseline table, are computed from Forge's
+> `verdicts` ledger — which is **94% Crucible stage-one screen rows**
+> (`measurement_basis = 'standard_window'`). That lane yields coverage-honest labels at
+> **0.064%** and *structurally cannot* produce a component; the honest population is the
+> **stage-two `fullhist_refit`** lane (80.8% honest, 5.9% of the feed). So metric B
+> (2.11%) and the whole dead-mass ledger are **stage-one artifacts**, and the
+> `converting` / `dead_unprotected` classification is measured on the wrong basis.
+>
+> **Three corrections, all landed in the joint program (`~/proj/freeze`):**
+> 1. **Basis.** Grammar quality is measured on `measurement_basis = 'fullhist_refit'`,
+>    never stage-one (joint charter §2, signed).
+> 2. **Metric.** Component **admission is not a quality metric** — 593/593 stage-two rows
+>    fail `cpcv_sharpe_p25` while 80.8% are admitted. Admission is a pool bar. The quality
+>    axis is the **CPCV distribution**, and `GateResult.value` puts it within Forge's
+>    reach today (100% `config_hash` join to stage-two rows, no contract change).
+> 3. **Vocabulary.** `unverified` (could not evaluate) / `failed` (evaluated, failed) /
+>    `honest` (evaluated, passed) — never a two-way split. Conflating the first two
+>    inverted a conclusion on 2026-07-22 and set a bar ~250× too loose.
+>
+> **A new condition (C) is added below and is now the binding one.** Conditions A and B
+> survive as *surface/throughput* conditions and must be re-derived on the stage-two
+> basis before they mean anything.
+
+**Status: SUPERSEDED IN PART — the measurable definition of "the grammar is done."**
 Operator directive 2026-07-21: "optimize and maximize the grammar as much as possible … the
 search_n_trials and freeze criterion (without opening Path C)." Establishes when Forge stops
 bumping `grammar_version` and commits the search budget to the converting core. No code path,
@@ -64,7 +89,38 @@ baseline, not invented here — mirror the robustness-streak pattern (record the
 operator finalizes the bar). Baseline is 2.80%; a natural target is to drive it to the residual
 that remains after the deferred single-name-axis read resolves, then hold.
 
-Freeze is declared when **(A) and (B) both hold and B has been stable** across the census series.
+**(C) Quality ceiling, on the stage-two basis — ADDED 2026-07-22 (D330), and binding.**
+The grammar is exhausted when, on `measurement_basis = 'fullhist_refit'` at n ≥ 300 per
+version: (1) admitted **median** CPCV shows no improvement over N trailing versions,
+**and** (2) **p90** CPCV does not move — the ceiling, not the centre, since the centre
+drifts on cell mix alone — **and** (3) no newly-added component clears a pre-set
+within-cell lift bar on *both* admission and CPCV.
+
+**Where (C) already stands, measured (2026-07-22):**
+
+| reading | value | source |
+|---|---|---|
+| admitted median CPCV, v18 → v42 | 0.5881 → **0.4340** (declined; best figures are the oldest) | `freeze/analysis/forge_convergence_read_2026-07-22.txt` |
+| admitted p90 across 20 versions | **0.6695–0.8646, no trend** | same |
+| stage-two rows ever clearing CPCV 1.5 | **8 of 16,873** (0.047%) | `freeze/data/crucible/stage2_quality_by_version_2026-07-22.json` |
+| best / worst measurable cell (medCPCV) | `bb_pct` 0.5619 / `residual_momentum` 0.2406 | `freeze/data/forge/forge_cell_cpcv_scorecard_2026-07-22.json` |
+| stage-two coverage of v43–v48 | **zero** | Crucible per-version artifact |
+
+Read strictly, **(C)(1) and (C)(2) are already satisfied on the historical series** — the
+ceiling has not moved in 20 grammar versions and ~481k stage-one runs, and the entire
+cell range sits below *half* the promotion gate. Forge deliberately does **not** claim
+this, because the five versions carrying our largest structural changes (v43–v48) have
+zero stage-two rows. Declaring exhaustion on a series ending at v42 is the basis trap.
+
+**The blocking constraint is measurement, not optimization.** Stage-one intake ~8,000/day
+against stage-two throughput 480/day is a **divergence, not a backlog** (all-time 28.5:1)
+— the validator falls further behind every day, and no stratification fixes that.
+Forge's half of the fix is a **stage-one intake cut** (proposed: ~1,500/day), which is
+purely a Forge parameter and *lowers* our DSR hurdle; Crucible's half is stratifying
+stage-two selection by grammar version.
+
+Freeze is declared when **(A), (B) and (C) hold**, A and B re-derived on the stage-two
+basis, and (C) evaluated on a set that includes **v47 and v48**.
 
 ## The freeze ledger (how progress is tracked)
 
