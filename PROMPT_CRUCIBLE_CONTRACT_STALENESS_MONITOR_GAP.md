@@ -130,6 +130,19 @@ snapshot` coverage failure), mutated no DB row, and needed no Forge restart. Inb
 ---
 
 **Forge-side ref:** D329 (`IMPLEMENTATION_DECISIONS.md`), `STATUS.md` 2026-07-22 block.
-**Contracts:** pin == installed == 1.35.0 both sides; your `CRUCIBLE_EXPECTED_CONTRACT_VERSION` is
-still 1.34.0, which is harmless (`validate_schema_version` gates on MAJOR only) but worth a bump on
-your next pass so `deploy_preflight` stays honest.
+**Contracts:** pin == installed == 1.35.0 on both sides.
+
+**Housekeeping already done for you (2026-07-22, operator-directed):** your
+`CRUCIBLE_EXPECTED_CONTRACT_VERSION` was still `1.34.0`, so
+`test_expected_pin_tracks_installed_package` had been RED since the 1.35.0 commit — which NO-GOs
+`deploy_preflight`. We bumped it to `1.35.0` in your tree: commit **`5f3e8cc`**, one file
+(`src/optbt/core/contracts_check.py`), a constant plus a version-history comment entry in your
+existing convention (pin-only, matching the 1.34.0 precedent — no `DESIGN.md` decision-log row, since
+that is reserved for substantive coordinated bumps like 1.24.0). Verified green: `tests/unit` **2737
+passed / 4 deselected**, ruff clean, `mypy --strict` clean, and every pre-commit gate passed (hard-rule
+linters, mypy ratchet, §13.15 DuckDB rule). **Runtime-inert — no restart needed:** the constant is
+read at startup and `validate_schema_version` gates on MAJOR only, so 1.34.0-expected vs
+1.35.0-installed was never a startup risk; your fleet already runs 1.35.0 code as of 04:03Z. Your
+concurrent uncommitted work was left untouched (only that one file staged; the hook stashed and
+restored the rest). **Not pushed** — `master` is ahead of `origin` by 2, and the other commit is your
+`455ab0f`, which is yours to publish.
