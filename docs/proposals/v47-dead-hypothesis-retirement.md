@@ -1,6 +1,11 @@
 # Proposal: v47 — retire the dead single-name axes (single-name trend/MR + relative_value; single-name event_momentum pending)
 
-**Status: STAGED + HELD (Path B, bundle) — operator "bundle all into v47" 2026-07-21.**
+**Status: DEPLOYED 2026-07-22 (D328) — operator "Deploy".** Capitulation EXEMPTED
+(Crucible `FORGE_capitulation_exempt_v47`). grammar v46→v47 (`03de3f7` FF-merged);
+prereg `2c3d5ab6cc5a`; full suite 2042 green; 7 goldens re-pinned. Relay
+`PROMPT_CRUCIBLE_V47_DEPLOYED.md`. Superseded history below.
+
+**Status (history): STAGED + HELD (Path B, bundle) — operator "bundle all into v47" 2026-07-21.**
 The first prune of the freeze program (`docs/proposals/grammar-freeze-criterion.md`).
 Crucible greenlit all: single-name trend/MR (`FORGE_single_name_trend_mr_retirement_read`),
 single-name event_momentum (`FORGE_event_momentum_soxl_degenerate_reply` — SOXL leg
