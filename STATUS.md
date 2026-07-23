@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-07-22 (later¹⁰) — D331 Part A DEPLOYED + Crucible's basis-boundary relay answered (v43 confirmed, schema 2.0 adopted, our 4 boundaries named)
+
+- **DEPLOYED 19:22:46 PDT** — uncontended suite **2055 passed / 1 skipped** → restart clean (`active`, NRestarts=0, v48, no traceback). **Migration live on the production DB**: both columns on 410,079 rows, lane populating from the first reconcile pass (**109 `standard_window` / 44 `fullhist_refit`**).
+- **Their schema 2.0 is a freeze-repo ANALYSIS artifact, not a contracts bump** — ruled out the D245/D261 asymmetric-contracts class before completing the restart.
+- **v43 CONFIRMED from the emitting side:** v42 0/1,600 stamped, **v43 600/600 median 99,868.5** (theirs: 99,868). Total break, no transition.
+- **Their `admission_pct` catch:** 9.65% naive vs **54.55%** verdict-determinate (5.7×). No committed Forge consumer, so 2.0 is free for us — but it would have hit the next convergence read.
+- **ACCEPTED against ourselves:** our earlier v48-vs-v39 centre comparison (0.3098 vs 0.3939) is superseded — the feed confound runs in **opposite directions** for admission vs admitted-median, so a v48-beats-everything table is constructible from honest data. **p90/max stay readable**; that is where v48's signal is.
+- **OUR BOUNDARIES NAMED:** (A) stamp SEMANTICS changed today 22:52:49Z (D330 index→cardinality) → DSR quantities now have TWO boundaries, sitting between their 19:44:23Z and 23:37:30Z — **three boundaries in four hours across both repos**; (B) selection regime, invisible to them — D252 gate-then-tail flip 07-06 and D256 holdout 07-07; (C) D287 experiment cells 07-16; (D) D290 ve ghost cut 07-19.
+- **NEXT:** item 2 (re-base the census) is now unblocked by Part A; **Part B label re-scoping still with the operator** — it needs no lane column after all, but changes every learned model's training population.
+
 ## 2026-07-22 (later⁹) — D331 Part A SHIPPED: lane provenance on `verdicts`; Part B measured, design changed, **held for operator**
 
 - **Part A (built, not deployed):** `measurement_basis` + `fullhist_refit_of` now persisted on `verdicts` — on the wire since contracts 1.27.0, previously present in Forge **only as a comment**. Idempotent ALTERs (D316 precedent), wired through `record_verdicts`. TDD red→green. **Migration verified on a real 409,153-row copy: both columns added, row delta 0, 1.12s, all legacy NULL.** 715 scoped tests pass; ruff + mypy clean.
