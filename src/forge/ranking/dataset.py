@@ -99,11 +99,34 @@ def build_dataset(
     registry: RegistrySnapshot,
     *,
     era_cut: datetime = CLEAN_ERA_LABEL_CUT,
+    honest_scope: bool = False,
 ) -> pl.DataFrame:
     """One row per honest-era verdict: identity columns, label, wide features.
 
     Feature columns are the sorted union of names emitted across rows;
     absent features fill 0.0 (one-hots that did not fire).
+
+    ``honest_scope`` (D331 Part B, A/B flag — **default False is byte-identical**):
+    restrict the training POPULATION to honestly-evaluated rows.
+
+    Why: Crucible evaluates in two stages. The `standard_window` screen structurally
+    cannot produce an honest-coverage component, so under the default a screen row is
+    labelled NEGATIVE *regardless of quality* — **91.0% of the live frame is in that
+    state** (360,458 of 396,132 measured 2026-07-22), and the same `config_hash` can
+    appear in both lanes with OPPOSITE labels (26 of 363 paired configs). That is
+    mislabelled mass, not signal, and a supervised model cannot learn from it.
+
+    Scoping keeps the SAME positives (19,759) on 35,674 rows: prevalence 4.988% ->
+    55.4%, an 11x lift. Note it is a POPULATION filter, not a positives filter — an
+    honestly-evaluated REJECT is real negative evidence and is retained. On the scoped
+    population `label_for` reduces to "decision is positive", since honesty is true for
+    every row, so the label predicate itself is unchanged and cannot drift from
+    `forge.ranking.evaluation`.
+
+    ESTIMAND SHIFT, stated rather than buried: F3 then estimates
+    ``P(component | honestly evaluated)`` rather than ``P(component | emitted)``. We
+    believe that is the better question for deciding what to emit — it excludes our own
+    prefilter and lane plumbing from the target — but it IS a different quantity.
     """
     cut = era_cut
     if cut.tzinfo is not None:
@@ -131,6 +154,10 @@ def build_dataset(
         if is_ve_ghost_label(config.hypothesis, decided_at):
             continue
         gate_results = parse_gate_results(gate_results_json)
+        # D331 Part B: drop rows whose lane cannot carry a positive. Placed AFTER the
+        # ve-ghost cut and BEFORE featurization so the skipped rows cost nothing.
+        if honest_scope and not honest_regime_coverage_row(gate_results):
+            continue
         features = extract_features(config, registry).as_dict()
         feature_names.update(features)
         records.append(

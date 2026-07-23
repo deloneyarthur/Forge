@@ -326,3 +326,62 @@ def test_logistic_model_does_not_ingest_targets_or_coverage_flag() -> None:
     model = train_verdict_model(frame, era_cut=_POST_CUT)
     assert not any(name.startswith("target_") for name in model.feature_names)
     assert "coverage_verified" not in model.feature_names
+
+
+# ---------------------------------------------------------------------------
+# D331 Part B — honest-scope population filter (A/B flag, default OFF)
+# ---------------------------------------------------------------------------
+
+
+def _two_configs_one_honest(conn: object) -> None:
+    """A stage-one-shaped row (dishonest coverage) and a stage-two-shaped one."""
+    _insert_submission(conn, config_hash="aaaa000011112222")
+    _insert_submission(conn, config_hash="bbbb000011112222")
+    record_verdicts(
+        conn,
+        [
+            # Structurally unable to carry a positive: the screen lane.
+            _gated_run(config_hash="aaaa000011112222", decision="component", honest_coverage=False),
+            # Honestly evaluated: the validator lane.
+            _gated_run(config_hash="bbbb000011112222", decision="component", honest_coverage=True),
+        ],
+    )
+
+
+def test_honest_scope_off_is_byte_identical() -> None:
+    """Ritual requirement 1 (hard rule #6): flag OFF must change nothing."""
+    with db_connection() as conn:
+        _two_configs_one_honest(conn)
+        default = build_dataset(conn, _REGISTRY)
+        explicit_off = build_dataset(conn, _REGISTRY, honest_scope=False)
+    assert default.equals(explicit_off)
+    assert sorted(default["label"].to_list()) == [0, 1]
+    assert default.height == 2
+
+
+def test_honest_scope_on_drops_rows_that_cannot_carry_a_positive() -> None:
+    """The defect: a screen-lane row is labelled NEGATIVE regardless of quality,
+    because its lane structurally cannot produce an honest coverage row. 91.0% of
+    the live frame is in that state, and the same config_hash can appear in both
+    lanes with OPPOSITE labels. Scoping removes the mislabelled mass rather than
+    trying to learn from it."""
+    with db_connection() as conn:
+        _two_configs_one_honest(conn)
+        scoped = build_dataset(conn, _REGISTRY, honest_scope=True)
+    assert scoped.height == 1
+    assert scoped["label"].to_list() == [1]
+    assert scoped["config_hash"].to_list() == ["bbbb000011112222"]
+
+
+def test_honest_scope_keeps_honest_rejects_as_negatives() -> None:
+    """Scoping is a POPULATION filter, not a positives-only filter: a config that
+    WAS honestly evaluated and rejected is real negative evidence and must stay."""
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="cccc000011112222")
+        record_verdicts(
+            conn,
+            [_gated_run(config_hash="cccc000011112222", decision="reject", honest_coverage=True)],
+        )
+        scoped = build_dataset(conn, _REGISTRY, honest_scope=True)
+    assert scoped.height == 1
+    assert scoped["label"].to_list() == [0]

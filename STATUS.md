@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-07-23 — D331 Part B BUILT behind `FORGE_HONEST_LABEL_SCOPE` (default OFF, byte-identical); prereg `812d65bfbe86`; **NOT FLIPPED**
+
+- **Defect:** the D128 label is `positive AND honest`, so a stage-one screen row is labelled **negative regardless of quality** — **90.3% of the live frame cannot carry a positive**, and the same config appears in both lanes with opposite labels.
+- **Fix is a POPULATION filter, not a label change.** On the scoped population `label_for` reduces to "decision is positive" *by identity*, so the shared label predicate is untouched and cannot drift from `evaluation.py`. Honest **rejects are kept** — real negative evidence.
+- **Design changed after measurement:** scoping on Part A's `measurement_basis` would have left the frame empty for months (396k legacy rows are NULL forever under INSERT-OR-IGNORE). Honest coverage is recoverable from the stored gate payload, so this needs no lane column and no waiting.
+- **Emission proof, live DB:** OFF 364,545 rows / 19,641 pos / 5.388% → ON **35,320 / 19,641 / 55.609%**. **Positives preserved exactly**, 90.3% of rows dropped, **10.3× lift**. Features 119→116 — three one-hots fire only on dropped rows, so a few cells are invisible to a scoped model. Worth watching.
+- **Estimand shift on the record:** `P(component | honestly evaluated)` vs `P(component | emitted)`.
+- **Prereg `812d65bfbe86`** registered before any flip: predicts `bb_pct` delta_pp rises from −7.80pp and `residual_momentum` falls from +7.68pp. **If refuted, the label is not the problem and the tail model needs replacing.**
+- TDD 3 tests red→green; **full suite 2064 passed / 1 skipped**. **Deploy is byte-identical; the FLIP is a separate operator call.**
+
 ## 2026-07-22 (later¹²) — D331 item 4 SHIPPED (`forge_generation_by_version`); **item 3 BLOCKED on Crucible's contract bump**
 
 - **Item 3 (prefilter-holdout) cannot ship.** Their condition #1 is an explicit marker on the sampled configs, without which the rows silently contaminate their admission stats/funnel/component ledger. Contracts is **1.35.0** with `selection_rank`/`selection_pool_size`/sample-flag **absent**, and `submit_candidate` takes no metadata. `StrategyConfig.source` is free-form so a marker *could* be smuggled there — **deliberately not done**, since `source` drives their lane classification and that is the D261 hazard in reverse. **Waits for their bump.**

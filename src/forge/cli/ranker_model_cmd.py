@@ -15,6 +15,7 @@ artifacts), NOT from `--forge-db` — the snapshot's parent is /tmp.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -72,6 +73,16 @@ _TAIL_SPEARMAN_DELTA_CRITERION = 0.05
 # margin no longer gates the flip and is no longer provisional; +0.05 stays a modest
 # "meaningfully beats the deployed lane" bar for the eye. Raw delta is recorded per row.
 _REWIRE_DELTA_CRITERION = 0.05
+
+
+def _honest_scope_enabled() -> bool:
+    """D331 Part B A/B flag (ritual requirement 5): OFF by default = byte-identical.
+
+    Flipped later by editing the service unit, never by a code default — the D108
+    pattern. See `build_dataset(honest_scope=...)` for what it changes and the
+    estimand shift it implies.
+    """
+    return os.environ.get("FORGE_HONEST_LABEL_SCOPE", "").strip().lower() in {"1", "on", "true"}
 
 
 def _resolve_forge_db(forge_db: Path | None, config: Path) -> Path:
@@ -139,7 +150,7 @@ def cmd_dataset(
     registry = load_registry(exports_dir=exports_dir) if exports_dir else load_registry()
 
     with db_connection(forge_db) as conn:
-        frame = build_dataset(conn, registry, era_cut=cut)
+        frame = build_dataset(conn, registry, era_cut=cut, honest_scope=_honest_scope_enabled())
 
     out.parent.mkdir(parents=True, exist_ok=True)
     frame.write_parquet(out)
@@ -187,7 +198,7 @@ def cmd_train(
     registry = load_registry(exports_dir=exports_dir) if exports_dir else load_registry()
 
     with db_connection(forge_db) as conn:
-        frame = build_dataset(conn, registry, era_cut=cut)
+        frame = build_dataset(conn, registry, era_cut=cut, honest_scope=_honest_scope_enabled())
 
     positives = int(frame["label"].sum()) if frame.height else 0
     if frame.height < _MIN_TRAIN_ROWS or positives < _MIN_TRAIN_POSITIVES:
@@ -585,7 +596,7 @@ def cmd_train_robustness(
             )
             typer.echo(f"label-sourced frame: {len(label_map)} components [{label_col}]")
         else:
-            frame = build_dataset(conn, registry, era_cut=cut)
+            frame = build_dataset(conn, registry, era_cut=cut, honest_scope=_honest_scope_enabled())
 
     if target not in frame.columns:
         typer.echo(f"error: target column {target!r} not in dataset", err=True)
