@@ -128,6 +128,19 @@ def _insert_batch_summary(
     )
 
 
+_SELECTION_ARM_BY_MODE: dict[str, str | None] = {
+    # Our internal `selection_mode` -> Crucible's contracts-1.37.0 `selection_arm` enum.
+    "ranked": "ranked",
+    "holdout": "exploration_holdout",
+    # young_explore (D316 2d) is ranker-unselected but BIASED toward young cells, so it
+    # is neither `ranked` (not a merit pick) nor `exploration_holdout` (not uniform-random,
+    # which is the property that makes the holdout an unbiased grammar estimate). Mapping
+    # it to either contaminates that arm's meaning. It stays unset until Crucible names a
+    # fourth value; their export maps absent -> `unset`, never `ranked` (their 07-23 §3).
+    "young_explore": None,
+}
+
+
 def _submit_one(
     db: duckdb.DuckDBPyConnection,
     *,
@@ -135,6 +148,7 @@ def _submit_one(
     candidate: RankedCandidate,
     inbox_root: Path,
     selection_mode: str = "ranked",
+    selection_pool_size: int | None = None,
 ) -> SubmissionRecord:
     candidate_id = uuid.uuid4()
     config = candidate.report.config
@@ -170,7 +184,16 @@ def _submit_one(
     # crucible_contracts (>=1.14.0), so config_hash -- the inbox
     # filename, the submissions unique index (hard rule #9), and the
     # join-map key -- is byte-identical with or without the stamp.
-    config = config.model_copy(update={"grammar_version": batch.grammar_version})
+    # D097 grammar_version + D333 selection provenance (contracts 1.37.0). All three
+    # update fields are hash-excluded, so config_hash — the inbox identity and §13.4
+    # idempotency key — is unchanged; the stamp adds attribution, never a new config.
+    config = config.model_copy(
+        update={
+            "grammar_version": batch.grammar_version,
+            "selection_arm": _SELECTION_ARM_BY_MODE.get(selection_mode),
+            "selection_pool_size": selection_pool_size,
+        }
+    )
     config_json = config.model_dump_json()
 
     # M-10 (audit 2026-05-29): wrap INSERT(pending) -> submit_candidate -> UPDATE
@@ -325,6 +348,9 @@ def submit_batch(
             candidate=candidate,
             inbox_root=inbox_root,
             selection_mode=selection_mode,
+            # The pool this batch was ranked from = prefilter survivors (§6). One value
+            # for the whole batch; NULL on pre-D096 callers that omit survived_count.
+            selection_pool_size=survived_count,
         )
         records.append(record)
         if record.status == "submitted":

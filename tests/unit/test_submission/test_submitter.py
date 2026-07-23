@@ -732,3 +732,58 @@ def test_selection_mode_tags_young_explore(tmp_path: Path) -> None:
     assert rows[a.report.config.config_hash] == "ranked"
     assert rows[b.report.config.config_hash] == "holdout"
     assert rows[c.report.config.config_hash] == "young_explore"
+
+
+def test_emits_selection_arm_and_pool_size_on_inbox_config(tmp_path: Path) -> None:
+    """D333/1.37.0: the inbox config carries `selection_arm` so Crucible can scope
+    the freeze criterion to the honest arm, and `selection_pool_size` so it can
+    verify our selection claims (their 07-22 §6). Our internal `ranked`/`holdout`
+    maps to their enum `ranked`/`exploration_holdout`."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    a = _candidate("a", "dir_a")
+    b = _candidate("b", "dir_b")
+    holdout = frozenset({b.report.config.config_hash})
+    with db_connection(forge_db) as conn:
+        submit_batch(
+            conn,
+            batch=_ctx(),
+            candidates=(a, b),
+            inbox_root=inbox,
+            holdout_hashes=holdout,
+            survived_count=1850,
+        )
+    by_hash = {f.stem: json.loads(f.read_text()) for f in inbox.glob("*.json")}
+    ap = by_hash[a.report.config.config_hash]
+    bp = by_hash[b.report.config.config_hash]
+    assert ap["selection_arm"] == "ranked"
+    assert bp["selection_arm"] == "exploration_holdout"
+    assert ap["selection_pool_size"] == 1850
+    assert bp["selection_pool_size"] == 1850
+
+
+def test_selection_arm_absent_when_pool_size_unknown_is_still_marked(tmp_path: Path) -> None:
+    """The arm is always known (it is our own tag); only pool_size is optional."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    a = _candidate("a", "dir_a")
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=_ctx(), candidates=(a,), inbox_root=inbox)
+    payload = json.loads(next(inbox.glob("*.json")).read_text())
+    assert payload["selection_arm"] == "ranked"
+    assert payload["selection_pool_size"] is None
+
+
+def test_young_explore_does_not_map_to_a_crucible_arm(tmp_path: Path) -> None:
+    """young_explore (D316 2d) is ranker-unselected but BIASED toward young cells,
+    so it is neither `ranked` (not merit) nor `exploration_holdout` (not uniform).
+    Mapping it to either would contaminate that arm's meaning. It stays None until
+    Crucible names a fourth value; the export maps absent -> unset, never ranked."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    a = _candidate("a", "dir_a")
+    ye = frozenset({a.report.config.config_hash})
+    with db_connection(forge_db) as conn:
+        submit_batch(conn, batch=_ctx(), candidates=(a,), inbox_root=inbox, young_explore_hashes=ye)
+    payload = json.loads(next(inbox.glob("*.json")).read_text())
+    assert payload["selection_arm"] is None

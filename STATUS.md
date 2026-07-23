@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-23 — INCIDENT+RECOVERY (D334): emit `selection_arm` (1.37.0); recovered a ~3h `prefilter_sample` dead-loop
+
+- **INCIDENT:** `forge.service` failed EVERY iteration for ~3h (zero production since 10:51 PDT) — `StrategyConfig prefilter_sample: extra_forbidden`. The 10:51 daemon ran an intermediate emitter that stamped the 1.36.0 `prefilter_sample` bool; Crucible shipped 1.37.0 which **removed** it, the package updated under the running process, every enumeration failed. Loop kept polling → systemd never flagged it (NRestarts=0). **Deploy-staleness check did NOT catch it** (code-vs-package, not code-vs-HEAD) — gap flagged.
+- **FIX (D333 cont.):** emit `selection_arm` (`ranked`/`exploration_holdout`; `young_explore→None`, biased, no clean arm) + `selection_pool_size=survived_count`. `selection_rank` deferred (needs full pool ordering; a wrong rank is worse than null). All hash-excluded → idempotency/determinism untouched. This is what lets Crucible scope the freeze criterion to the honest arm (their 07-23 hard-rule-6 concern).
+- Pin 1.36.0→**1.37.0**. TDD 3 tests red→green; **full suite 2067 passed / 1 skipped**.
+- **Recovery:** commit (D104 clean) → restart onto correct code → verify arm on live rows.
+
 ## 2026-07-23 — **contracts 1.36.0 ADOPTED** (pin-only): selection provenance — unblocks the prefilter-holdout (D333)
 
 - Crucible shipped `ac9e8f5` mid-session; we were running **un-adopted** (installed 1.36.0 / pin 1.35.0), the D245/D261 class. Daemon was healthy (0 contract errors, inbox 2, not growing) but a reboot turns a minor mismatch into a hard halt.

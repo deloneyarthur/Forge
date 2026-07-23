@@ -177,7 +177,15 @@ from crucible_contracts import (
 # of the three; all are optional-with-None and verified HASH-EXCLUDED, so §13.4 idempotency and
 # hard-rule-#6 determinism are untouched and stamping them later is a separate, safe increment.
 # Sequencing is the agreed one (bump -> consumer adopts -> producer emits), and this is the adopt.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.36.0"
+# 1.37.0 (2026-07-23, Crucible 9d2d4a9): REPLACES the 1.36.0 `prefilter_sample` bool with
+# `selection_arm: Literal["ranked","exploration_holdout","prefilter_sample"] | None`. Forge
+# caught that the population axis is TERNARY, not binary: the exploration holdout is
+# ranker-unselected but prefilter-SELECTED (guards the ranker hazard only), while a true
+# grammar-honest estimate must be unselected by BOTH stages. A bool cannot name three arms.
+# The bool had zero emitted rows so nothing is lost. Forge EMITS this one (D333 cont.):
+# ranked->"ranked", holdout->"exploration_holdout", young_explore->None (biased, no clean
+# arm). Hash-excluded (verified) so idempotency/determinism untouched; adopt-before-emit.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.37.0"
 
 
 def check_contracts_version() -> str:
