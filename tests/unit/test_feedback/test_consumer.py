@@ -962,3 +962,40 @@ def test_d110_does_not_flush_recent_row_within_stranded_margin(
         ).fetchone()
     assert row[0] == "submitted"  # untouched — still legitimately in flight
     assert row[1] is None
+
+
+def test_reconcile_tolerates_stored_config_with_removed_contract_field(tmp_path: Path) -> None:
+    """D334: Forge's OWN stored config_json must survive contracts field churn.
+
+    Regression for the 2026-07-23 incident: configs submitted while contracts
+    1.36.0 stamped the `prefilter_sample` bool sit in `submissions.config_json`;
+    contracts 1.37.0 removed that field, and reconcile's strict
+    `StrategyConfig.model_validate_json` then raised `extra_forbidden` on every
+    pass — wedging the whole loop (~4h of zero production). A stored payload that
+    references a since-removed field is the read-side additive-forbid trap
+    (1.26.0), and re-reading our own history must be tolerant, not strict.
+    """
+    from forge.feedback.consumer import _load_submissions
+
+    forge_db = tmp_path / "forge.db"
+    batch_id = uuid.uuid4()
+    with db_connection(forge_db) as conn:
+        _insert_batch_summary(conn, batch_id=batch_id, batch_size=1)
+        cid = _insert_forge_submission(
+            conn, config=minimal_strategy_config(name="a"), batch_id=batch_id
+        )
+        # Simulate the 1.36.0-era row: inject the since-removed field into the
+        # stored JSON exactly as the intermediate emitter wrote it.
+        row = conn.execute(
+            "SELECT config_json FROM submissions WHERE forge_candidate_id = ?", [str(cid)]
+        ).fetchone()
+        doc = json.loads(row[0])
+        doc["prefilter_sample"] = None
+        conn.execute(
+            "UPDATE submissions SET config_json = ? WHERE forge_candidate_id = ?",
+            [json.dumps(doc), str(cid)],
+        )
+        # Must not raise, and must recover the config (hash unchanged).
+        out = _load_submissions(conn, batch_id)
+    assert len(out) == 1
+    assert out[0][0] == cid

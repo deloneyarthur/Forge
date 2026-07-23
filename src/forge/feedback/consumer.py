@@ -47,6 +47,7 @@ from crucible_contracts import (
     get_recent_gated_runs,
     load_recent_failed_runs_from_export,
     load_recent_gated_runs_from_export,
+    parse_forward_compatible,
 )
 
 from forge.feedback.types import BatchFeedback, CandidateOutcome
@@ -143,7 +144,16 @@ def _load_submissions(
     ).fetchall()
     out: list[tuple[uuid.UUID, StrategyConfig, str]] = []
     for cid, cfg_json, status in rows:
-        cfg = StrategyConfig.model_validate_json(cfg_json)
+        # D334: TOLERANT re-read of Forge's OWN stored config_json. A config
+        # submitted while an older contracts version was installed can carry a
+        # field that a later version removed (the 2026-07-23 `prefilter_sample`
+        # incident: 1.36.0 stamped the bool, 1.37.0 removed it, and a strict
+        # model_validate here raised extra_forbidden on every reconcile pass,
+        # wedging the loop for ~4h). This is the read-side additive-forbid trap
+        # the 1.26.0 export loaders already fixed with parse_forward_compatible;
+        # re-reading our own history must be equally tolerant. Strict validation
+        # still guards first ingest at submit time — this is a RE-read.
+        cfg = parse_forward_compatible(StrategyConfig, json.loads(cfg_json))
         out.append((uuid.UUID(str(cid)), cfg, str(status)))
     return out
 
