@@ -813,3 +813,32 @@ def test_selection_rank_is_1based_over_ranked_arm_only(tmp_path: Path) -> None:
     assert by_hash[a.report.config.config_hash]["selection_rank"] == 1
     assert by_hash[c.report.config.config_hash]["selection_rank"] == 2
     assert by_hash[b.report.config.config_hash]["selection_rank"] is None  # holdout
+
+
+def test_prefilter_sample_arm_tags_and_maps(tmp_path: Path) -> None:
+    """D335 two-arm campaign: configs the PREFILTER rejected, submitted anyway and
+    tagged `prefilter_sample` — the only arm unselected by BOTH prefilter and ranker,
+    hence the grammar-honest population the freeze criterion is written to. Internal
+    mode `prefilter_sample` -> Crucible enum `prefilter_sample`; rank is None (never
+    rank-selected); pool_size is None (not drawn from the ranked survivor pool)."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    a = _candidate("a", "dir_a")  # ranked
+    ps = _candidate("z", "dir_z")  # a prefilter-rejected config, submitted as a sample
+    with db_connection(forge_db) as conn:
+        submit_batch(
+            conn,
+            batch=_ctx(),
+            candidates=(a, ps),
+            inbox_root=inbox,
+            survived_count=1850,
+            prefilter_sample_hashes=frozenset({ps.report.config.config_hash}),
+        )
+    by_hash = {f.stem: json.loads(f.read_text()) for f in inbox.glob("*.json")}
+    ap = by_hash[a.report.config.config_hash]
+    zp = by_hash[ps.report.config.config_hash]
+    assert ap["selection_arm"] == "ranked"
+    assert ap["selection_rank"] == 1
+    assert zp["selection_arm"] == "prefilter_sample"
+    assert zp["selection_rank"] is None  # not rank-selected
+    assert zp["selection_pool_size"] is None  # not from the ranked survivor pool

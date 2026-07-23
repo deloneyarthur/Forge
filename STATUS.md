@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-23 (later³) — PREFILTER-SAMPLE TWO-ARM CAMPAIGN built (D335); ships flag-OFF, then activate
+
+- **The grammar-honest arm.** The freeze criterion must read the population unselected by BOTH stages. `ranked` = both; `exploration_holdout` = ranker-unselected but prefilter-SELECTED (ranker hazard only). `prefilter_sample` submits a uniform draw of prefilter REJECTS, tagged `selection_arm='prefilter_sample'` — the first population neither Forge stage chose. Closes Crucible's 07-23 hard-rule-6 concern.
+- **Flag `FORGE_PREFILTER_SAMPLE_N`** (default 0 = OFF = byte-identical). N>0 → uniform seed-hierarchy draw from rejects, ADDED to the batch (extra slots, §7.3 self-limits at the ceiling), tagged prefilter_sample, rank+pool None, NOT excluded from admission (a reject clearing the gates = a component = the campaign's best result). Clamp 40.
+- TDD + emission proof (uniform, deterministic per seed); **363 tests pass** incl. the main.py monkeypatch set; ruff+mypy clean. Hash-excluded → idempotency/determinism untouched.
+- **Conditions met:** marker ✓, time-box 2–3 wk (operator), admission-inclusive ✓. **Activation flag goes in `forge.service` (the DAEMON — submit-path, NOT the trainer unit like D331B).** Recommended start N=5, widen later.
+
 ## 2026-07-23 (later²) — `selection_rank` shipped + verified live; the 1.36.0/1.37.0 field set now complete (D334)
 
 - **selection_rank added for the `ranked` arm** — Crucible's one flagged gap. Correct within-pool rank IS available at submit: candidates = [*selected, *holdout], `selected` is the ranker top-N in rank order = the ranked arm, so position among ranked = pool rank. **Verified live (batch `fff4007f`): ranked 1..190, holdout null.** Hash-excluded. Closes the field set's original purpose (Crucible verifying our per-config selected-vs-pool inflation directly).

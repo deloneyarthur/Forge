@@ -132,6 +132,9 @@ _SELECTION_ARM_BY_MODE: dict[str, str | None] = {
     # Our internal `selection_mode` -> Crucible's contracts-1.37.0 `selection_arm` enum.
     "ranked": "ranked",
     "holdout": "exploration_holdout",
+    # D335 two-arm campaign: configs the PREFILTER rejected, submitted anyway to
+    # measure the population unselected by BOTH stages — the grammar-honest estimate.
+    "prefilter_sample": "prefilter_sample",
     # young_explore (D316 2d) is ranker-unselected but BIASED toward young cells, so it
     # is neither `ranked` (not a merit pick) nor `exploration_holdout` (not uniform-random,
     # which is the property that makes the holdout an unbiased grammar estimate). Mapping
@@ -300,6 +303,7 @@ def submit_batch(
     enumerated_by_hypothesis: Mapping[str, int] | None = None,
     holdout_hashes: frozenset[str] = frozenset(),
     young_explore_hashes: frozenset[str] = frozenset(),
+    prefilter_sample_hashes: frozenset[str] = frozenset(),
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
@@ -347,7 +351,14 @@ def submit_batch(
         # on 'holdout' meaning uniform-random). Holdout wins on overlap.
         config_hash = candidate.report.config.config_hash
         selection_rank: int | None = None
-        if config_hash in holdout_hashes:
+        # D335: prefilter_sample carries NO pool_size — it was never drawn from the
+        # ranked survivor pool that `survived_count` describes. Passing survived_count
+        # would falsely imply it competed in that selection.
+        pool_size: int | None = survived_count
+        if config_hash in prefilter_sample_hashes:
+            selection_mode = "prefilter_sample"
+            pool_size = None
+        elif config_hash in holdout_hashes:
             selection_mode = "holdout"
         elif config_hash in young_explore_hashes:
             selection_mode = "young_explore"
@@ -363,7 +374,7 @@ def submit_batch(
             selection_mode=selection_mode,
             # The pool this batch was ranked from = prefilter survivors (§6). One value
             # for the whole batch; NULL on pre-D096 callers that omit survived_count.
-            selection_pool_size=survived_count,
+            selection_pool_size=pool_size,
             selection_rank=selection_rank,
         )
         records.append(record)

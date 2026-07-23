@@ -19,6 +19,7 @@ from forge.cli.main import (
     _effective_seed,
     _next_iteration_number,
     _resolve_exploration_holdout_frac,
+    _resolve_prefilter_sample_n,
     app,
 )
 from forge.persistence.db import db_connection
@@ -905,6 +906,24 @@ def test_exploration_holdout_frac_resolver(monkeypatch: pytest.MonkeyPatch) -> N
     # Malformed -> 0.0 (degrade-never-crash), no raise.
     monkeypatch.setenv("FORGE_EXPLORATION_HOLDOUT_FRAC", "not-a-float")
     assert _resolve_exploration_holdout_frac() == 0.0
+
+
+def test_prefilter_sample_n_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Unset / empty -> 0 (flag-OFF: byte-identical, no prefilter-sample draw).
+    monkeypatch.delenv("FORGE_PREFILTER_SAMPLE_N", raising=False)
+    assert _resolve_prefilter_sample_n() == 0
+    # A valid count passes through.
+    monkeypatch.setenv("FORGE_PREFILTER_SAMPLE_N", "5")
+    assert _resolve_prefilter_sample_n() == 5
+    # Clamped to the ceiling (a degenerate flag must not flood the inbox).
+    monkeypatch.setenv("FORGE_PREFILTER_SAMPLE_N", "9999")
+    assert _resolve_prefilter_sample_n() == 40
+    # Negative clamps to 0.
+    monkeypatch.setenv("FORGE_PREFILTER_SAMPLE_N", "-3")
+    assert _resolve_prefilter_sample_n() == 0
+    # Malformed -> 0 (degrade-never-crash), no raise.
+    monkeypatch.setenv("FORGE_PREFILTER_SAMPLE_N", "not-an-int")
+    assert _resolve_prefilter_sample_n() == 0
 
 
 def test_run_dry_run_exploration_holdout_prints_line(

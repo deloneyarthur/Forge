@@ -727,6 +727,43 @@ _EXPLORATION_HOLDOUT_PARSE_FAILED_LOGGED: bool = False
 # drives the stream (the audit suggests 2-5%); a degenerate value clamps to this ceiling.
 _MAX_EXPLORATION_HOLDOUT_FRAC = 0.10
 
+_PREFILTER_SAMPLE_PARSE_FAILED_LOGGED: bool = False
+# D335 two-arm campaign: ceiling on prefilter-sample slots per batch. These are configs
+# the prefilter REJECTED, submitted anyway to measure the grammar-honest population
+# (unselected by BOTH prefilter and ranker) that the freeze criterion is written to. They
+# ADD to the batch (extra stage-one slots — the resource we have most of, Crucible 07-23
+# §5), never steal ranked throughput. Cap keeps a degenerate flag from flooding the inbox.
+_MAX_PREFILTER_SAMPLE_N = 40
+
+
+def _resolve_prefilter_sample_n() -> int:
+    """Parse ``FORGE_PREFILTER_SAMPLE_N`` (D335): count of prefilter-REJECTED configs to
+    submit per batch as a uniform-random draw, tagged ``prefilter_sample``. This is the
+    ONLY arm unselected by both the prefilter and the ranker, so it is the grammar-honest
+    estimate Crucible's freeze criterion reads (their 07-23 hard-rule-6 concern).
+
+    Unset/empty/0 → 0 (flag-OFF → byte-identical: no draw, no submission change). Degrades
+    to 0 on a malformed value (warn-once) rather than crash-looping the daemon; a valid
+    value is clamped to ``[0, _MAX_PREFILTER_SAMPLE_N]``."""
+    import os
+
+    raw = os.environ.get("FORGE_PREFILTER_SAMPLE_N", "").strip()
+    if not raw:
+        return 0
+    try:
+        n = int(raw)
+    except ValueError:
+        global _PREFILTER_SAMPLE_PARSE_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
+        if not _PREFILTER_SAMPLE_PARSE_FAILED_LOGGED:
+            typer.echo(
+                f"prefilter_sample: FORGE_PREFILTER_SAMPLE_N={raw!r} is not an int — "
+                "using 0 (campaign OFF). Subsequent parse failures will be silent this process.",
+                err=True,
+            )
+            _PREFILTER_SAMPLE_PARSE_FAILED_LOGGED = True
+        return 0
+    return max(0, min(n, _MAX_PREFILTER_SAMPLE_N))
+
 
 def _resolve_young_explore_slots() -> int:
     """Parse ``FORGE_YOUNG_CELL_EXPLORE_SLOTS`` (D316 / Theme 2d): extra seeded-random
@@ -2327,6 +2364,41 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         _young_hashes = frozenset()
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
+
+    # D335 two-arm campaign — prefilter-sample draw. The `ranked`/`holdout` arms both draw
+    # from prefilter SURVIVORS; the freeze criterion needs the population unselected by BOTH
+    # stages, so we submit a uniform-random sample of the configs the prefilter REJECTED,
+    # tagged `prefilter_sample`. They ADD to the batch (extra slots, not stolen ranked
+    # throughput) and are NOT excluded from admission — if a prefilter-reject clears
+    # Crucible's gates on merit it is a component, which is itself the campaign's most
+    # interesting possible result. Uniform via the seed hierarchy (hard rule #6: same
+    # (grammar, registry, seed) → same sample). Flag-OFF (N=0) → empty draw → byte-identical.
+    _prefilter_sample_n = _resolve_prefilter_sample_n()
+    _prefilter_sample_hashes: frozenset[str] = frozenset()
+    if _prefilter_sample_n > 0:
+        _rejects = [r for r in reports if not r.passed]
+        _submitted_hashes = {c.report.config.config_hash for c in ranked}
+        # Never double-submit: exclude any reject whose hash already rides the batch.
+        _reject_pool = [r for r in _rejects if r.config.config_hash not in _submitted_hashes]
+        _draw_n = min(_prefilter_sample_n, len(_reject_pool))
+        if _draw_n > 0:
+            from forge.ranking.types import RankedCandidate
+
+            _ps_rng = SeedHierarchy(seed).rng("prefilter_sample")
+            _drawn = _ps_rng.sample(_reject_pool, _draw_n)
+            _ps_candidates = [
+                RankedCandidate(report=r, prior_promotion_score=0.0, composite_score=0.0)
+                for r in _drawn
+            ]
+            ranked = [*ranked, *_ps_candidates]
+            _prefilter_sample_hashes = frozenset(
+                c.report.config.config_hash for c in _ps_candidates
+            )
+            typer.echo(
+                f"prefilter_sample: {len(_ps_candidates)} of {len(ranked)} submitted "
+                f"(quota {_prefilter_sample_n}, uniform draw from {len(_reject_pool)} "
+                f"prefilter-rejects; tagged prefilter_sample — the two-arm campaign)"
+            )
     # D287 — per-batch audit line for the pinned experiment cells: how many
     # submitted configs occupy each pinned (directional, regime) cell.
     _cell_counts = {
@@ -2415,6 +2487,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             enumerated_by_hypothesis=_enumerated_by_hypothesis(reports),
             holdout_hashes=_holdout_hashes,
             young_explore_hashes=_young_hashes,
+            prefilter_sample_hashes=_prefilter_sample_hashes,
         )
         # D062 + D064: persist per-filter rejection counts to batch_summaries
         # (aggregate + per-hypothesis breakdown). Same connection so the
