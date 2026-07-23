@@ -167,7 +167,17 @@ from crucible_contracts import (
 # iterations post-restart vs the old daemon's lot_floor aborts). No consumed model/hash changed →
 # no major-guard trip; a valid lot_floor config enumerates byte-identically, it just no longer
 # throws. Adopted in the D326 restart-deploy. See D327.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.35.0"
+# 1.36.0 (2026-07-23, Crucible ac9e8f5 "selection provenance on StrategyConfig"): adds THREE
+# OPTIONAL fields — `selection_rank`, `selection_pool_size`, `prefilter_sample`. This is the bump
+# WE asked for: Crucible could not verify any Forge selection claim because a submitted config
+# carried no rank and no pool size, making our measurements "unverifiable assertions" from their
+# side (their 2026-07-22 §6). `prefilter_sample` is the explicit marker their condition #1 required
+# before we may run the prefilter-holdout campaign — the instrument for the ONE DSR charge both
+# repos agree is real and currently unmeasured (D330). PIN-ONLY adopt: Forge does not yet EMIT any
+# of the three; all are optional-with-None and verified HASH-EXCLUDED, so §13.4 idempotency and
+# hard-rule-#6 determinism are untouched and stamping them later is a separate, safe increment.
+# Sequencing is the agreed one (bump -> consumer adopts -> producer emits), and this is the adopt.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.36.0"
 
 
 def check_contracts_version() -> str:

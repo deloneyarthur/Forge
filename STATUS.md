@@ -1,5 +1,13 @@
 # Forge — Status
 
+## 2026-07-23 — **contracts 1.36.0 ADOPTED** (pin-only): selection provenance — unblocks the prefilter-holdout (D333)
+
+- Crucible shipped `ac9e8f5` mid-session; we were running **un-adopted** (installed 1.36.0 / pin 1.35.0), the D245/D261 class. Daemon was healthy (0 contract errors, inbox 2, not growing) but a reboot turns a minor mismatch into a hard halt.
+- **The bump we asked for:** `selection_rank`, `selection_pool_size`, **`prefilter_sample`** — the last is the explicit marker Crucible's condition #1 required. **D331 item 3 (prefilter-holdout) is UNBLOCKED.**
+- **Pin-only adopt.** All three are optional and **verified hash-excluded** (stamped config hashes identically), so §13.4 idempotency and determinism are untouched; emitting them is a separate safe increment.
+- Deploy: uncontended suite **2064 passed / 1 skipped**, **read before restarting** (correcting the v49 sequencing error), restart clean, no wedge.
+- **Re-target HELD, not shipped** — evidence strong (**6/6 holdout splits**; wf-targeted goes *negative* at 30/40% while cpcv-targeted holds) but it would contaminate v49's clean ranker boundary and would stack on an un-adopted contracts transition. **Ship as v50.** Prereg `7f675a79ca57`.
+
 ## 2026-07-23 — **v49 DEPLOYED** (attribution-only; `rules:` byte-identical to v48) + first honest-scoped retrain; prereg reads AGAINST us (D332)
 
 - **v49 marks a boundary WE created.** Label flag live 22:26 PDT… flip at **23:26 PDT**, Crucible's v48 baseline window closed **22:09 PDT** — **baseline intact by 77 min**, but post-flip output would have drifted it. v49 gives that cohort its own key. **`rules:` byte-identical, `config_hash` version-independent** → no determinism/idempotency impact. **v49-vs-v48 tests the RANKER, not the grammar; first grammar comparator is v50.**
