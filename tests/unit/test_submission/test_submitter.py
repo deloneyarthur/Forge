@@ -787,3 +787,29 @@ def test_young_explore_does_not_map_to_a_crucible_arm(tmp_path: Path) -> None:
         submit_batch(conn, batch=_ctx(), candidates=(a,), inbox_root=inbox, young_explore_hashes=ye)
     payload = json.loads(next(inbox.glob("*.json")).read_text())
     assert payload["selection_arm"] is None
+
+
+def test_selection_rank_is_1based_over_ranked_arm_only(tmp_path: Path) -> None:
+    """D334 (Crucible 07-23 §3): `selection_rank` = a ranked config's 1-based
+    position in the pool it was selected from. The caller passes candidates as
+    [*selected, *holdout], `selected` in rank order, so ranked configs get 1,2,3…
+    and the holdout (not rank-selected) stays None. Closes the field's original
+    purpose: Crucible verifying our per-config selected-vs-pool inflation."""
+    forge_db = tmp_path / "forge.db"
+    inbox = tmp_path / "inbox"
+    a, b, c = _candidate("a", "dir_a"), _candidate("b", "dir_b"), _candidate("c", "dir_c")
+    # b is the holdout draw; a and c are the ranked arm, in this order.
+    holdout = frozenset({b.report.config.config_hash})
+    with db_connection(forge_db) as conn:
+        submit_batch(
+            conn,
+            batch=_ctx(),
+            candidates=(a, c, b),
+            inbox_root=inbox,
+            holdout_hashes=holdout,
+            survived_count=1850,
+        )
+    by_hash = {f.stem: json.loads(f.read_text()) for f in inbox.glob("*.json")}
+    assert by_hash[a.report.config.config_hash]["selection_rank"] == 1
+    assert by_hash[c.report.config.config_hash]["selection_rank"] == 2
+    assert by_hash[b.report.config.config_hash]["selection_rank"] is None  # holdout

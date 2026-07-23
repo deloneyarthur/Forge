@@ -149,6 +149,7 @@ def _submit_one(
     inbox_root: Path,
     selection_mode: str = "ranked",
     selection_pool_size: int | None = None,
+    selection_rank: int | None = None,
 ) -> SubmissionRecord:
     candidate_id = uuid.uuid4()
     config = candidate.report.config
@@ -192,6 +193,7 @@ def _submit_one(
             "grammar_version": batch.grammar_version,
             "selection_arm": _SELECTION_ARM_BY_MODE.get(selection_mode),
             "selection_pool_size": selection_pool_size,
+            "selection_rank": selection_rank,
         }
     )
     config_json = config.model_dump_json()
@@ -328,6 +330,14 @@ def submit_batch(
     failed = 0
     dropped_overlay = 0
 
+    # D334: selection_rank for the `ranked` arm (Crucible 07-23 §3). The caller passes
+    # candidates as [*selected, *holdout, *young]; `selected` is the ranker's top-N in
+    # RANK ORDER and is exactly the `ranked` arm, so a ranked config's 1-based position
+    # among ranked configs IS its rank within the survivor pool (the selected are the
+    # pool's top-N). This lets Crucible reproduce the per-config selected-vs-pool
+    # inflation directly. holdout/young are not rank-selected → rank stays None.
+    ranked_rank = 0
+
     for candidate in candidates:
         # P3.3 (B7): tag the exploration-holdout draw so evals can split biased-vs-unbiased
         # labels. Empty `holdout_hashes` (default / flag-OFF) → every row is 'ranked'.
@@ -336,12 +346,15 @@ def submit_batch(
         # (the holdout estimand and the campaign-audit denominator both depend
         # on 'holdout' meaning uniform-random). Holdout wins on overlap.
         config_hash = candidate.report.config.config_hash
+        selection_rank: int | None = None
         if config_hash in holdout_hashes:
             selection_mode = "holdout"
         elif config_hash in young_explore_hashes:
             selection_mode = "young_explore"
         else:
             selection_mode = "ranked"
+            ranked_rank += 1
+            selection_rank = ranked_rank
         record = _submit_one(
             db,
             batch=batch,
@@ -351,6 +364,7 @@ def submit_batch(
             # The pool this batch was ranked from = prefilter survivors (§6). One value
             # for the whole batch; NULL on pre-D096 callers that omit survived_count.
             selection_pool_size=survived_count,
+            selection_rank=selection_rank,
         )
         records.append(record)
         if record.status == "submitted":
