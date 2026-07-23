@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-23 (later²) — `selection_rank` shipped + verified live; the 1.36.0/1.37.0 field set now complete (D334)
+
+- **selection_rank added for the `ranked` arm** — Crucible's one flagged gap. Correct within-pool rank IS available at submit: candidates = [*selected, *holdout], `selected` is the ranker top-N in rank order = the ranked arm, so position among ranked = pool rank. **Verified live (batch `fff4007f`): ranked 1..190, holdout null.** Hash-excluded. Closes the field set's original purpose (Crucible verifying our per-config selected-vs-pool inflation directly).
+- Deploy: stop → full suite **2069 passed / 1 skipped** (read before restart) → restart clean, contracts 1.37.0 in sync, 0 errors, NRestarts=0.
+- **Freeze criterion plumbing is DONE.** Honest-arm scoping unblocked both sides; arm emitted + inheritance proven (Crucible's regression test) + rank present. Remaining: the **prefilter_sample two-arm campaign** (our move, deliberate not rushed) and the reads it enables. `exploration_holdout` starts accumulating stage-two rows within hours — first population-honest-vs-ranker read ever.
+- Relay `FORGE_selection_rank_shipped_gap_closed_2026-07-23.md` (held) also discloses the D334 outage to Crucible (their ingest prunes the ~400 stray prefilter_sample rows cleanly).
+
 ## 2026-07-23 (later) — D334 RECOVERED: reconcile tolerant-reparse fix deployed; production restored after ~4h dead-loop
 
 - **Root cause was in RECONCILE, not the emitter.** Restarting onto the correct `selection_arm` emitter did NOT clear the loop — `feedback.consumer._load_submissions` strict-parsed Forge's OWN stored `config_json`, and **400 rows (220 `submitted`) carried `prefilter_sample`** from the 1.36.0 window before the package bumped to 1.37.0. Every reconcile pass re-validated them → `extra_forbidden` → wedge. The read-side additive-forbid trap (1.26.0) applied to the wrong surface.
