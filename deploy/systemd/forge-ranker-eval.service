@@ -5,6 +5,15 @@ Documentation=file://%h/proj/Forge/scripts/daily_ranker_eval.sh
 [Service]
 Type=oneshot
 WorkingDirectory=%h/proj/Forge
+# D331 Part B (prereg 812d65bfbe86) — scope the F3/tail TRAINING POPULATION to
+# honestly-evaluated rows. Crucible's stage-one screen structurally cannot produce
+# an honest-coverage component, so 90.3% of the frame was labelled negative
+# regardless of quality. ON => 364,545 rows/5.388% prevalence -> 35,320/55.609%,
+# with the same 19,641 positives. Estimand shifts to P(component | honestly
+# evaluated). Set HERE and not in forge.service: `build_dataset` is called only by
+# the `ranker-model` CLI this unit runs, so the flag in the daemon unit would be a
+# silent no-op (the shipped != deployed class, D330).
+Environment=FORGE_HONEST_LABEL_SCOPE=on
 ExecStart=%h/proj/Forge/scripts/daily_ranker_eval.sh
 # Train on a ~10k-row frame is minutes of pure-Python IRLS; snapshot + eval add a
 # little. Generous ceiling so a slow snapshot never wedges the timer.
