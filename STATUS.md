@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-07-23 — **v49 DEPLOYED** (attribution-only; `rules:` byte-identical to v48) + first honest-scoped retrain; prereg reads AGAINST us (D332)
+
+- **v49 marks a boundary WE created.** Label flag live 22:26 PDT… flip at **23:26 PDT**, Crucible's v48 baseline window closed **22:09 PDT** — **baseline intact by 77 min**, but post-flip output would have drifted it. v49 gives that cohort its own key. **`rules:` byte-identical, `config_hash` version-independent** → no determinism/idempotency impact. **v49-vs-v48 tests the RANKER, not the grammar; first grammar comparator is v50.**
+- **First honest-scoped models:** F3 35,591 rows / 19,849 pos / **train AUC 0.747**; tail **train R² 0.199 → 0.396**.
+- **Tail `oos_r2 = −117` is a FALSE ALARM** — temporal holdout + target-mean shift (−0.843 → −0.281); a mean shift kills R² and leaves ranking untouched. **On the metric that matches the job: OOS rank IC 0.2778 scoped vs 0.2842 full** — neutral-to-slightly-negative, both under the 0.30 bar.
+- **So the prereg's own falsifier fires: the tail MODEL is the problem, not its label.** The label was not what inverted the ranker's extremes. Relayed to Crucible before the prereg cohort exists, because it argues against what we just shipped.
+- **PROCESS ERROR owned:** suite returned 1 failed / 2,063 passed and **we restarted before reading it**. The failure was a pinned `grammar_version == "v48"` in an integration test — no production defect — but reading the suite after the restart makes it decorative. Fixed, green.
+- **Crucible §5 answered:** submission order is NOT quality-biased (95.70% vs 95.00% ranked, ~1.06 sd) — their skew is a time artifact.
+- **Mild disagreement with D003, with data:** pre-v48 stage-two cohorts are `rank_k<=10`, same cell as v48 — the confound is cream-vs-unfiltered, is directional, and **opposes** the p90 conclusion. Keep pre-v48 as a **directional** comparator; retire it as a precision one.
+
 ## 2026-07-23 — D331 Part B BUILT behind `FORGE_HONEST_LABEL_SCOPE` (default OFF, byte-identical); prereg `812d65bfbe86`; **NOT FLIPPED**
 
 - **Defect:** the D128 label is `positive AND honest`, so a stage-one screen row is labelled **negative regardless of quality** — **90.3% of the live frame cannot carry a positive**, and the same config appears in both lanes with opposite labels.

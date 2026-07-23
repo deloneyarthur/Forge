@@ -174,7 +174,7 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D320 bumped v45 -> v46 (refutation-registry wiring: three threaded effects
     # routing generation mass off Crucible-proven-dead cells; emission-policy,
     # cold-start byte-identical, rules text unchanged).
-    assert grammar.grammar_version == "v48"  # type: ignore[attr-defined]
+    assert grammar.grammar_version == "v49"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
