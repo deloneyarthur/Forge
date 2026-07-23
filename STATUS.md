@@ -1,5 +1,13 @@
 # Forge — Status
 
+## 2026-07-22 (later¹²) — D331 item 4 SHIPPED (`forge_generation_by_version`); **item 3 BLOCKED on Crucible's contract bump**
+
+- **Item 3 (prefilter-holdout) cannot ship.** Their condition #1 is an explicit marker on the sampled configs, without which the rows silently contaminate their admission stats/funnel/component ledger. Contracts is **1.35.0** with `selection_rank`/`selection_pool_size`/sample-flag **absent**, and `submit_candidate` takes no metadata. `StrategyConfig.source` is free-form so a marker *could* be smuggled there — **deliberately not done**, since `source` drives their lane classification and that is the D261 hazard in reverse. **Waits for their bump.**
+- **Item 4 shipped:** per-version enumeration mix, prefilter survival + rejection reasons, **ranked vs holdout per cell**, `selection_loss`, and `f3_label` with basis **stamped MIXED** until re-scoping ships.
+- **FINDING 1 — the v48 coverage fix bought a 176× label lift.** v47: 511 positives, **2 honest** (0.047%). v48: 355 positives, **all 355 honest** (**8.287%**).
+- **FINDING 2 — the ranker's largest bets are inverted.** `bb_pct` (best cell, medCPCV 0.5619) **−7.80pp**; `residual_momentum` (worst, 0.2406) **+7.68pp**; middle of the table mildly positive. Consistent with the tail model's negative OOS R². **Second independent line of evidence pointing at the ranker, not the grammar.**
+- **Caveats stated, and one was a defect in our own artifact fixed before publishing:** the holdout is drawn from UNSELECTED survivors, so the pool is depleted of cells the ranker likes — every |delta| is inflated, worst at the extremes. Written into the artifact's note. **Read the sign, not the magnitude.** Plus era mismatch and small holdout n.
+
 ## 2026-07-22 (later¹¹) — D331 item 2: CENSUS RE-BASED onto honest evidence — metric B **2.11% → 0.85%**, and that is a definitional change, not progress
 
 - **The defect:** the census awarded `converting` on stage-one positives (unverified-admission artifacts), so **freeze metric B — the number the freeze criterion turns on — was a stage-one artifact**.
