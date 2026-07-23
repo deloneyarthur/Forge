@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-07-23 (later) — D334 RECOVERED: reconcile tolerant-reparse fix deployed; production restored after ~4h dead-loop
+
+- **Root cause was in RECONCILE, not the emitter.** Restarting onto the correct `selection_arm` emitter did NOT clear the loop — `feedback.consumer._load_submissions` strict-parsed Forge's OWN stored `config_json`, and **400 rows (220 `submitted`) carried `prefilter_sample`** from the 1.36.0 window before the package bumped to 1.37.0. Every reconcile pass re-validated them → `extra_forbidden` → wedge. The read-side additive-forbid trap (1.26.0) applied to the wrong surface.
+- **Fix:** `_load_submissions` uses `parse_forward_compatible` (tolerant re-read; prunes since-removed fields, same `config_hash`). Strict validation still guards first ingest at submit. TDD red→green; full suite **2067 passed** (+1 pre-existing flaky).
+- **RECOVERED + VERIFIED:** restart → `reconciled: batches=2 newly_gated_total=400` (stuck rows drained), fresh batch `f045b46a` submitted 181/0 failed, and **selection_arm stamps correctly on live rows** — `ranked→ranked pool=1850`, `holdout→exploration_holdout pool=1850`. `active`, NRestarts=0, no `prefilter_sample` errors post-restart.
+- **Lesson:** Forge's own persisted `config_json` must be re-readable regardless of contracts field churn — strict re-validation of history is a latent wedge on every field REMOVAL (symmetric to the additive trap). The deploy-staleness check (D330) missed this because the mismatch was code-vs-installed-package, not code-vs-HEAD — a real gap in that check.
+
 ## 2026-07-23 — INCIDENT+RECOVERY (D334): emit `selection_arm` (1.37.0); recovered a ~3h `prefilter_sample` dead-loop
 
 - **INCIDENT:** `forge.service` failed EVERY iteration for ~3h (zero production since 10:51 PDT) — `StrategyConfig prefilter_sample: extra_forbidden`. The 10:51 daemon ran an intermediate emitter that stamped the 1.36.0 `prefilter_sample` bool; Crucible shipped 1.37.0 which **removed** it, the package updated under the running process, every enumeration failed. Loop kept polling → systemd never flagged it (NRestarts=0). **Deploy-staleness check did NOT catch it** (code-vs-package, not code-vs-HEAD) — gap flagged.
