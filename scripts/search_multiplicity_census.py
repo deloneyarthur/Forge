@@ -87,7 +87,16 @@ _PROTECTED = "protected"
 _DISABLED_LEGACY = "disabled_legacy"  # regime_arbitrage / tail_hedge (not enumerated)
 _ALREADY_PRUNED = "already_pruned"  # emission-excluded cell (v31/v33/v34); recent = aging tail
 _LEGACY_INACTIVE = "legacy_inactive"  # 0 recent submissions — already gone, nothing to prune
-_DEAD_UNPROTECTED = "dead_unprotected"  # still emitted, still not converting — the prune backlog
+_DEAD_UNPROTECTED = (
+    "dead_unprotected"  # honestly evaluated, still not converting — the prune backlog
+)
+# D331 item 2 — flow exists but NOTHING in this cell has been honestly evaluated yet.
+# Crucible's stage-one lane structurally cannot produce an honest-coverage component,
+# so "no honest positive" here means UNMEASURED, not bad. A brand-new cell is always in
+# this state by construction; classifying it dead would prune it before it is ever
+# measured — the v17 cold-start mistake. Never a prune target, and excluded from
+# freeze metric B (which counts dead mass, not unmeasured mass).
+_UNEVALUATED = "unevaluated"
 _THIN = "thin"
 
 
@@ -160,6 +169,11 @@ class Cell:
     comp_recent: int = 0
     comp_alltime: int = 0
     promote_alltime: int = 0
+    # D331 item 2 — the HONEST basis. `honest_decided_recent` is the denominator that
+    # says whether this cell has had a fair hearing at all; `honest_comp_recent` is the
+    # only conversion signal that survives Crucible's two-stage design.
+    honest_decided_recent: int = 0
+    honest_comp_recent: int = 0
     promoted_book: bool = False  # a component of this cell sits in a live promoted book
     protecting_campaigns: set[str] = field(default_factory=set)
 
@@ -167,15 +181,19 @@ class Cell:
     def slot(self) -> tuple[str, str, str]:
         return (self.hypothesis, self.dte_bucket, self.axis)
 
-    def add_verdict(self, decision: str, *, recent: bool) -> None:
+    def add_verdict(self, decision: str, *, recent: bool, honest: bool = False) -> None:
         if recent:
             self.decided_recent += 1
+            if honest:
+                self.honest_decided_recent += 1
         if decision == "promote":
             self.promote_alltime += 1
         if decision in ("component", "promote"):
             self.comp_alltime += 1
             if recent:
                 self.comp_recent += 1
+                if honest:
+                    self.honest_comp_recent += 1
 
     @property
     def live_recent(self) -> int:
@@ -190,13 +208,35 @@ class Cell:
             return _ALREADY_PRUNED
         if self.promoted_book or self.protecting_campaigns:
             return _PROTECTED  # ground truth: a live book leg / farming cell — never a prune target
-        if self.comp_recent > 0 or self.promote_alltime > 0:
+        # D331 item 2: conversion must rest on an HONEST component. A stage-one
+        # positive is an unverified-admission artifact, not evidence of quality.
+        if self.honest_comp_recent > 0 or self.promote_alltime > 0:
             return _CONVERTING
         if self.live_recent <= 0:
             return _LEGACY_INACTIVE
+        # Flow, but no fair hearing yet -> UNMEASURED, never a prune target.
+        if self.honest_decided_recent <= 0:
+            return _UNEVALUATED
         if self.live_recent >= _MIN_SUBMITTED_FOR_DEAD:
             return _DEAD_UNPROTECTED
         return _THIN
+
+
+def _honest_coverage(gate_results: str | None) -> bool:
+    """D128 honesty on a raw gate_results payload — byte-equivalent to
+    `forge.feedback.rejection_weights.honest_regime_coverage_row`, applied to the
+    JSON as stored so it works on every LEGACY row (no lane column required).
+
+    This is why the re-base needed no waiting: `measurement_basis` (D331 Part A)
+    only populates going forward, but honest coverage is recoverable from the
+    gate payload we have always stored.
+    """
+    if not gate_results:
+        return False
+    row = (json.loads(gate_results) or {}).get("regime_coverage")
+    if row is None:
+        return False
+    return bool(row.get("passed")) and "coverage_unverified" not in (row.get("detail") or "")
 
 
 def _axis(config: dict[str, Any]) -> str:
@@ -234,11 +274,11 @@ def _load_cells(
     decided_cutoff = decided_row[0] - timedelta(days=_RECENT_DAYS)
     submitted_cutoff = submitted_row[0] - timedelta(days=_RECENT_DAYS)
 
-    verdicts: dict[str, list[tuple[str, Any]]] = defaultdict(list)
-    for config_hash, decision, decided_at in db.execute(
-        "SELECT config_hash, decision, decided_at FROM verdicts"
+    verdicts: dict[str, list[tuple[str, Any, bool]]] = defaultdict(list)
+    for config_hash, decision, decided_at, gate_results in db.execute(
+        "SELECT config_hash, decision, decided_at, gate_results FROM verdicts"
     ).fetchall():
-        verdicts[config_hash].append((decision, decided_at))
+        verdicts[config_hash].append((decision, decided_at, _honest_coverage(gate_results)))
 
     member_fns = [(c.name, campaign_member_fn(c)) for c in CAMPAIGNS if c.status == "farming"]
 
@@ -268,8 +308,8 @@ def _load_cells(
             cell.submitted_recent += 1
             if _is_degenerate_leg(config):
                 cell.degenerate_recent += 1
-        for decision, decided_at in verdicts.get(config_hash, ()):
-            cell.add_verdict(decision, recent=decided_at >= decided_cutoff)
+        for decision, decided_at, honest in verdicts.get(config_hash, ()):
+            cell.add_verdict(decision, recent=decided_at >= decided_cutoff, honest=honest)
     return list(cells.values())
 
 
@@ -355,6 +395,7 @@ def _report(cells: list[Cell], out_path: Path | None) -> None:
     print("\nCLASS BREAKDOWN (share of all-time multiplicity)")
     for cls in (
         _CONVERTING,
+        _UNEVALUATED,
         _PROTECTED,
         _DISABLED_LEGACY,
         _ALREADY_PRUNED,

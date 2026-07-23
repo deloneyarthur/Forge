@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-07-22 (later¹¹) — D331 item 2: CENSUS RE-BASED onto honest evidence — metric B **2.11% → 0.85%**, and that is a definitional change, not progress
+
+- **The defect:** the census awarded `converting` on stage-one positives (unverified-admission artifacts), so **freeze metric B — the number the freeze criterion turns on — was a stage-one artifact**.
+- **Measured before changing:** only **2 of 84** converting cells flip out under the re-base, and **both had zero honest evaluations (100% of flips would be misclassified as dead)**. Small now; the case it protects is a NEW cell — flow but no honest evidence yet — where pruning is the v17 cold-start mistake.
+- **Change:** `converting` requires an **honest** component; new **`unevaluated`** class (flow, zero honest evaluations) that is never a prune target and is excluded from B. Works on all 410k **legacy** rows because honest coverage is recoverable from the stored gate payload — no dependence on D331 Part A's lane column.
+- **Result:** converting 41.3% → 38.1%, dead_unprotected 3.1% → **1.2%**, new **`unevaluated` 11.0%**, **metric B 2.11% → 0.85%**.
+- **B falling is NOT progress — it is a definitional change** (unevaluated mass no longer counted as dead). The operator threshold must be **re-set**; the 2.80%/2.11% series belongs to the old basis. **Recorded as a Forge-side basis boundary** per charter §2b.
+- **The more actionable number is the new 11.0%:** that share of all-time multiplicity has never had a fair hearing — it says where measurement is missing, not where waste is.
+- TDD: 6 new tests red→green; 26 in scope pass; ruff + mypy clean. **Daemon-inert — no deploy needed.**
+
 ## 2026-07-22 (later¹⁰) — D331 Part A DEPLOYED + Crucible's basis-boundary relay answered (v43 confirmed, schema 2.0 adopted, our 4 boundaries named)
 
 - **DEPLOYED 19:22:46 PDT** — uncontended suite **2055 passed / 1 skipped** → restart clean (`active`, NRestarts=0, v48, no traceback). **Migration live on the production DB**: both columns on 410,079 rows, lane populating from the first reconcile pass (**109 `standard_window` / 44 `fullhist_refit`**).

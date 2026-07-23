@@ -83,7 +83,18 @@ with *unmeasured* promotion potential. Operationally: the census `dead_unprotect
 empty of any cell that has not been either (i) pruned via a version bump, or (ii) explicitly
 deferred with a named open decision (a Crucible relay or a farming campaign).
 
-**(B) Multiplicity efficiency.** The dead-unprotected share of current flow (metric B) is below
+**(B) Multiplicity efficiency — RE-BASED 2026-07-22 (D331 item 2); the pre-re-base series is
+NOT comparable.** The census now requires an **honest** component before calling a cell
+`converting`, and adds an `unevaluated` class for cells with flow but zero honest
+evaluations (never a prune target — a new cell is in that state by construction, and
+pruning it is the v17 cold-start mistake). **Metric B moved 2.11% → 0.85% on the same
+snapshot. That is a definitional change, not progress:** the drop is `unevaluated` mass
+no longer being counted as dead. The operator threshold must be re-set against the new
+baseline, and the 2.80% / 2.11% readings belong to the old basis. **A third number is now
+visible and is arguably the more actionable one: 11.0% of all-time multiplicity sits in
+cells that have never had a fair hearing.**
+
+The dead-unprotected share of current flow (metric B) is below
 an **operator-set threshold** and **stable over N census runs**. The threshold is set from the
 baseline, not invented here — mirror the robustness-streak pattern (record the raw series first,
 operator finalizes the bar). Baseline is 2.80%; a natural target is to drive it to the residual
