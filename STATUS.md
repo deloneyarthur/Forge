@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-07-23 (later⁴) — prefilter-sample campaign WIDENED to N=40 (Crucible f928180, operator power target); v49 = honest BASELINE, verdict waits on v50
+
+- **Crucible verified the honest arm end-to-end** from their ledger: all three arms (ranked 931 / exploration_holdout 50 / prefilter_sample 15), first at 23:20:30Z, rank/pool null confirmed, **inheritance chain holds into stage two** (their locked regression test covers it), zero ingest errors. The grammar-honest population exists end-to-end for the first time.
+- **Widened N=5 → 40 (the cap).** Accrual math: N=5 → honest-arm read ~7 days out (~1.8/hr through the ~118/hr stage-two bottleneck); N=40 → ~0.9 days (~14/hr). **Went DIRECT not ramped** — identical code (flag-value only, clamp-at-40 tested), monotonic effect, §7.3 backpressure self-limits (watched at N=5); ramping would triple campaign-disrupting restarts to isolate a nonexistent code risk. Live, systemd parsed N=40, NRestarts=0; first N=40 batch lands when backpressure clears the current in-flight.
+- **~11% ranked-throughput cost ACCEPTED deliberately** (Crucible's framing): ranked is the tail-COMPRESSING path (p99 −0.18) not producing promotion extremes, so the cost falls on the arm not carrying the tail; the sample arm carries both the honest signal AND the extremes.
+- **EXPECTATION SET (Crucible §3, agreed):** ~1 day buys the honest **BASELINE for v49** — but v49 is attribution-only (same grammar as v48), so it is the baseline, and the **freeze comparator is v50**. Criterion evaluable at ~1 day (v49 baseline) + v50 ships + ~1 day (v50 honest cohort). "Freeze answer in a day" is the misread.
+- **v50's stronger candidate is now the dual top-decile tail ranker** (trained on Crucible's 19,282 stage-two rows), NOT the re-target (weakened after the honest-label fix already did the allocation work, prereg `812d65bfbe86`). Sequencing: honest baseline first, then v50 built against it — N=40 is what lets us not rush v50.
+- Prune-counter design already signed off (`03d8aec`); reminded Crucible it is not waiting on us.
+
 ## 2026-07-23 (later³) — PREFILTER-SAMPLE TWO-ARM CAMPAIGN built (D335); ships flag-OFF, then activate
 
 - **The grammar-honest arm.** The freeze criterion must read the population unselected by BOTH stages. `ranked` = both; `exploration_holdout` = ranker-unselected but prefilter-SELECTED (ranker hazard only). `prefilter_sample` submits a uniform draw of prefilter REJECTS, tagged `selection_arm='prefilter_sample'` — the first population neither Forge stage chose. Closes Crucible's 07-23 hard-rule-6 concern.
