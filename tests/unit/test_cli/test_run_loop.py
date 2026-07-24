@@ -917,7 +917,7 @@ def test_prefilter_sample_n_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _resolve_prefilter_sample_n() == 5
     # Clamped to the ceiling (a degenerate flag must not flood the inbox).
     monkeypatch.setenv("FORGE_PREFILTER_SAMPLE_N", "9999")
-    assert _resolve_prefilter_sample_n() == 40
+    assert _resolve_prefilter_sample_n() == 350  # D335: cap raised 40->350 (2026-07-24 accel)
     # Negative clamps to 0.
     monkeypatch.setenv("FORGE_PREFILTER_SAMPLE_N", "-3")
     assert _resolve_prefilter_sample_n() == 0

@@ -732,8 +732,12 @@ _PREFILTER_SAMPLE_PARSE_FAILED_LOGGED: bool = False
 # the prefilter REJECTED, submitted anyway to measure the grammar-honest population
 # (unselected by BOTH prefilter and ranker) that the freeze criterion is written to. They
 # ADD to the batch (extra stage-one slots — the resource we have most of, Crucible 07-23
-# §5), never steal ranked throughput. Cap keeps a degenerate flag from flooding the inbox.
-_MAX_PREFILTER_SAMPLE_N = 40
+# §5). Cap RAISED 40 → 350 (2026-07-24, operator: accelerate the n≥300 honest baseline
+# from ~1.5 days to ~5h). 350 is the principled ceiling: batch = 200 ranked + N, and it
+# must stay under the §7.3 in-flight cap of 600 (D196/D200) so a single batch never
+# self-wedges — 200+350=550 < 600. At high N the honest arm DOES displace ranked
+# production (the cost Crucible accepted); the operator reverts N after the baseline lands.
+_MAX_PREFILTER_SAMPLE_N = 350
 
 
 def _resolve_prefilter_sample_n() -> int:
