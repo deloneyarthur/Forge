@@ -48,9 +48,14 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 # uniform-random prefilter-REJECTED configs/batch tagged selection_arm='prefilter_sample'
 # — the ONLY population unselected by both prefilter and ranker, the grammar-honest
 # estimate the freeze criterion reads. On forge.service (the DAEMON/submit path), NOT the
-# trainer unit. Start conservative (5 = ~5/200, we sit at 333/hr vs the ~355/hr ceiling;
-# §7.3 self-limits); widen for Crucible's power+tail-production argument once it accrues.
-Environment=FORGE_PREFILTER_SAMPLE_N=5
+# trainer unit. WIDENED 5->40 (2026-07-23, Crucible f928180: operator power target = the
+# cap): at N=5 the honest-arm read was ~7 days out through the ~118/hr stage-two bottleneck;
+# N=40 is ~0.9 days (~14/hr). ~11% ranked-throughput drop at the ceiling ACCEPTED deliberately
+# — ranked is the tail-COMPRESSING path (our p99 -0.18) that is not producing promotion
+# extremes anyway, so the cost falls on the path not carrying the tail. Went direct not ramped:
+# identical code (flag-value only, clamp-at-40 tested), monotonic effect, §7.3 self-limits
+# (watched at N=5). REVERT/END = delete this line + daemon-reload + restart (time-box ~08-13).
+Environment=FORGE_PREFILTER_SAMPLE_N=40
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
