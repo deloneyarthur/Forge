@@ -49,7 +49,8 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 # — the ONLY population unselected by both prefilter and ranker, the grammar-honest
 # estimate the freeze criterion reads. On forge.service (the DAEMON/submit path), NOT the
 # trainer unit. ACCELERATED to N=300 (2026-07-24, operator: complete the n>=300 honest
-# baseline in ~5h vs ~1.5 days). At N=300 the honest arm is ~60% of the submitted stream,
+# baseline (operator accepted ~6.5-7h ETA — the runner gate throughput ~300-333/hr CAPS
+# accrual, so 5h is not reachable by N; N=300 lands n>=300 ~07:00 PDT). Honest arm ~60% of stream,
 # so it TEMPORARILY displaces ranked PRODUCTION by a similar amount - accepted for the ~5h
 # accrual window, REVERT to a low N (or delete) once the baseline lands. Batch = 200+300 =
 # 500 < the 600 in-flight cap. This is a MEASURE-AND-ADJUST value: the exact N->accrual
