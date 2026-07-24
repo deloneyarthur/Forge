@@ -14,6 +14,12 @@ target can win one and lose the other:
       and flat on (2). `min_oos_trade_count` is carried as the deliberate control:
       params mechanically determine trade count, so it should ace (1) and do nothing
       on (2).
+  (3) HEADROOM     - the share of the population the gate ADMITS. Added 2026-07-24 on
+      Crucible's correction: a gate almost nothing fails has no discriminating power
+      left to optimize toward, however learnable it is. This is what independently
+      disqualifies `regime_stress_p25_return` (admits 98.7%) and it is why our own
+      incumbent `wf_sharpe_p25` was a dead end -- it is a NON-BINDING enrichment label
+      Crucible computes FOR our ranker (threshold 0.0, admits 100%), not a gate.
 
 CANDIDATES are not hand-picked: every numeric metric present in `gate_results` on the
 honest lane is swept, plus derived composites. Metrics that are 0-by-construction for
@@ -68,6 +74,19 @@ _NON_QUALITY = frozenset({"regime_coverage"})
 # The metric Crucible actually gates promotion on. Alignment is measured against it.
 _DECISION_METRIC = "cpcv_sharpe_p25"
 
+# The BINDING walk-forward gate (threshold 2.0, ~0.7% pass). Distinct from
+# `wf_sharpe_p25`, which is a non-binding enrichment label Crucible computes FOR our
+# ranker (threshold 0.0, 100% pass) -- their 2026-07-24 correction. Composites pair
+# the decision metric with this one, never with the enrichment field.
+_BINDING_WF_GATE = "walk_forward_sharpe_median"
+
+# A gate almost nothing fails has no discriminating power left to optimize toward,
+# however learnable it is. Crucible's stage-two pass rates put `wf_sharpe_p25`,
+# `wf_sharpe_p10`, `pbo`, `regime_coverage` and `ablation_arm` at 100%, and
+# `regime_stress_p25_return` at 98.7% -- the reason they declined it as a target.
+# Flagged in the output so headroom is visible beside learnability and alignment.
+_NEAR_INERT_PASS_RATE = 0.95
+
 
 def _gate_value(gate_results: object, key: str) -> float | None:
     """One metric out of a verdict's `gate_results`, tolerant of both stored shapes
@@ -102,6 +121,26 @@ def _gates_passed(gate_results: object) -> float | None:
         if isinstance(v, dict) and v.get("passed") is True:
             n += 1
     return float(n)
+
+
+def _pass_flags(gate_results: object) -> dict[str, float]:
+    """Per-gate `passed` as 0/1, so the sweep can report HEADROOM: the share of the
+    population a gate admits. A gate admitting ~everything cannot be usefully
+    optimized toward no matter how predictable it is -- the third axis, after
+    learnability and alignment."""
+    if gate_results is None:
+        return {}
+    if isinstance(gate_results, dict):
+        d: dict[str, Any] = gate_results
+    elif isinstance(gate_results, (str, bytes, bytearray)):
+        d = json.loads(gate_results)
+    else:
+        return {}
+    out: dict[str, float] = {}
+    for k, v in d.items():
+        if isinstance(v, dict) and isinstance(v.get("passed"), bool):
+            out[k] = 1.0 if v["passed"] else 0.0
+    return out
 
 
 def _dte_bucket(dte_max: float | None) -> str:
@@ -229,7 +268,7 @@ def _feature_keys(rows: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def load(db_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
+def load(db_path: Path) -> tuple[list[dict[str, Any]], list[str], dict[str, float]]:
     """Every honest-lane verdict joined to its config, with every numeric
     `gate_results` metric discovered (not hand-listed) and derived targets attached."""
     con = duckdb.connect(str(db_path), read_only=True)
@@ -255,6 +294,7 @@ def load(db_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
     metrics = sorted(discovered - _STRUCTURALLY_CONSTANT)
 
     recs: list[dict[str, Any]] = []
+    passes: dict[str, list[float]] = defaultdict(list)
     for cfg_json, gate_results, decision, arm in raw:
         try:
             cfg = json.loads(cfg_json)
@@ -276,16 +316,22 @@ def load(db_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
             rec[m] = -v if m in _LOWER_IS_BETTER else v
         if not ok or rec.get(_DECISION_METRIC) is None:
             continue
+        for m, p in _pass_flags(gate_results).items():
+            passes[m].append(p)
         recs.append(rec)
 
-    # Derived composites, standardized WITHIN cell (the gate is a joint AND, so
-    # `both_min_z` is the AND-shaped composite; `both_rankavg` the OR-ish one).
+    # Derived composites, standardized WITHIN cell (the promotion criterion is a joint
+    # AND over the two BINDING gates, so `both_min_z` is the AND-shaped composite and
+    # `both_rankavg` the OR-ish one). Composed against `walk_forward_sharpe_median` --
+    # the gate that actually binds -- NOT `wf_sharpe_p25`, which is a non-binding
+    # enrichment label Crucible computes for our ranker (100% pass; their 2026-07-24
+    # correction). Composing against a field nothing fails would inject pure noise.
     by_cell: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
     for r in recs:
         by_cell[r["cell"]].append(r)
     for rows in by_cell.values():
         cp = np.array([r[_DECISION_METRIC] for r in rows])
-        wf = np.array([r.get("wf_sharpe_p25", 0.0) for r in rows])
+        wf = np.array([r.get(_BINDING_WF_GATE, 0.0) for r in rows])
         zc = (cp - cp.mean()) / (cp.std() + 1e-9)
         zw = (wf - wf.mean()) / (wf.std() + 1e-9)
         pc = _rank(cp) / max(len(cp) - 1, 1)
@@ -296,7 +342,8 @@ def load(db_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
 
     targets = [m for m in metrics if m not in _NON_QUALITY]
     targets += ["component", "n_gates_passed", "both_min_z", "both_rankavg"]
-    return recs, targets
+    headroom = {m: float(np.mean(v)) for m, v in passes.items() if v}
+    return recs, targets, headroom
 
 
 def _run_a(
@@ -305,6 +352,7 @@ def _run_a(
     by_cell: dict[tuple[Any, ...], list[dict[str, Any]]],
     fat: list[tuple[Any, ...]],
     rng: np.random.RandomState,
+    headroom: dict[str, float],
 ) -> None:
     """Powered read: per-cell learnability + realized-outcome alignment."""
     print(
@@ -316,12 +364,12 @@ def _run_a(
 
     base_c = np.array([r[_DECISION_METRIC] for r in recs])
     hdr = (
-        f"{'target':>28} {'cells>null':>11} {'medIC':>7} | "
+        f"{'target':>28} {'pass%':>7} {'cells>null':>11} {'medIC':>7} | "
         f"{'top10% cpcv med':>15} {'p90':>7} {'frac>=1.0':>10}"
     )
     print(hdr)
     print(
-        f"{'(baseline: no model)':>28} {'-':>11} {'-':>7} | "
+        f"{'(baseline: no model)':>28} {'-':>7} {'-':>11} {'-':>7} | "
         f"{float(np.median(base_c)):>15.3f} {float(np.percentile(base_c, 90)):>7.3f} "
         f"{float(np.mean(base_c >= 1.0)):>9.1%}"
     )
@@ -363,10 +411,20 @@ def _run_a(
         )
 
     for t, beat, med_ic, med_c, p90_c, frac in sorted(summary, key=lambda s: -s[3]):
+        rate = headroom.get(t)
+        if rate is None:
+            pct = "-"
+        else:
+            pct = f"{rate:.1%}" + ("!" if rate >= _NEAR_INERT_PASS_RATE else "")
         print(
-            f"{t:>28} {f'{beat}/{len(fat)}':>11} {med_ic:>7.3f} | "
+            f"{t:>28} {pct:>7} {f'{beat}/{len(fat)}':>11} {med_ic:>7.3f} | "
             f"{med_c:>15.3f} {p90_c:>7.3f} {frac:>9.1%}"
         )
+    print(
+        f"\n  pass% = share of the honest lane the gate ADMITS (headroom). "
+        f"'!' marks >={_NEAR_INERT_PASS_RATE:.0%}:"
+    )
+    print("  near-inert -- nothing to optimize toward, however learnable it is.")
 
 
 def _run_b(honest: list[dict[str, Any]], targets: list[str], rng: np.random.RandomState) -> None:
@@ -409,7 +467,7 @@ def _run_b(honest: list[dict[str, Any]], targets: list[str], rng: np.random.Rand
 
 
 def run(db_path: Path) -> int:
-    recs, targets = load(db_path)
+    recs, targets, headroom = load(db_path)
     honest = [r for r in recs if r["arm"] == "prefilter_sample"]
     counts = f"honest-lane rows: {len(recs)}   honest ARM rows: {len(honest)}"
     print(f"{counts}   candidates: {len(targets)}")
@@ -420,7 +478,7 @@ def run(db_path: Path) -> int:
     fat = [c for c in by_cell if len(by_cell[c]) >= _MIN_CELL_N]
 
     rng = np.random.RandomState(0)
-    _run_a(recs, targets, by_cell, fat, rng)
+    _run_a(recs, targets, by_cell, fat, rng, headroom)
     _run_b(honest, targets, rng)
     return 0
 
