@@ -238,6 +238,69 @@ honest arm shows zero — that is the null, not a bug.
    there would spend honest-arm throughput manufacturing rejects. So this doc's
    lever stands alone; there is no multi-objective merge to plan for.
 
+## 8.1 Prototype BUILT + shadow-diff PASSED — 2026-07-24
+
+The artifact and the shadow gate exist and are committed. **Nothing is wired into the
+sampler**; the shadow-diff was the gate and it reads positive.
+
+- `src/forge/ranking/winner_prior.py` (`e298f67`) — frozen, content-addressed artifact
+  on the `RobustnessModel` conventions. 15 tests pin the safety properties: bounded
+  weights, exploration floor, Beta-shrinkage, hand-pinned-cell exemption, and
+  `WinnerPrior.neutral()` returning exactly 1.0 everywhere so the flag-off path is
+  byte-identical (hard rule #6).
+- `scripts/winner_prior_shadow.py` (`d082b40`) — fits on the honest lane and reports
+  the pre-registered judge.
+
+**Shadow result** — config-level (draw weight = product over a config's params, since
+the sampler draws them all), out-of-sample, fit on 50% of honest rows and read on the
+held-out 50%, 5 splits:
+
+| | uniform | prior-weighted | delta |
+|---|---:|---:|---:|
+| median | 0.351 | 0.380 | **+0.0290** |
+| **p90 (the judge)** | 0.797 | 0.842 | **+0.0455** |
+| effective sample size | — | — | **88.3%** |
+
+Positive in every split. Invariant to `max_weight` from 2.0 to 20.0 — the bounds are
+not what limits the effect, the fitted tilts simply never approach the cap.
+
+**Two findings that changed the design:**
+
+1. **A per-param MARGINAL read understates this ~10×** (+0.003 vs +0.029). Weighting one
+   param at a time ignores that the sampler draws every param, so the marginal number
+   is not the quantity the sampler realizes. The script now reports the config-level
+   judge first and labels the marginal view as a diagnostic.
+2. **The learned prior does not compete with the hand-tuned priors — it covers their
+   complement.** On the timer axis the observed values are only {8..12}, i.e. D291's own
+   `U[8,12]` pin, so that axis has no residual variance left to learn from and the
+   fitted weights inside the window are mild (0.88–1.42), consistent with D291's
+   "plateau" finding. The lift comes from the params **nobody has ever hand-tuned** —
+   directional/regime thresholds, `delta_target`, `per_trade_risk_pct`, `rank_k`,
+   percentile windows. This answers §9(c) in the opposite direction from the one
+   anticipated: hand-pinned cells need exempting not because the prior would
+   double-count them, but because their axes are already harvested.
+
+**Honest bound, unchanged:** +0.0455 p90 is 3.96% of the 1.149 gap to the 1.5 gate.
+Pool-quality / component-rate, not a promotion unlock.
+
+## 8.2 Staging — its own bump, AFTER the IWM+SLB rider
+
+Operator decision 2026-07-24: relay the shadow result for Crucible's read first, then
+ship as a **separate** `grammar_version` bump behind the rider, so funnel attribution
+stays clean (a dead-name prune and a generation-prior change in one bump would be
+inseparable in `funnel --compare`).
+
+- **Prereg `916d79109b4d`** is on record BEFORE any wiring code (D207), predicting an
+  honest-arm p90 lift `>= 0.02` — half the shadow's OOS estimate — with the explicit
+  null written in: no p90 movement retires the lever rather than retuning it.
+- **Wiring, when it lands:** the prior becomes one more weight source on the intra-cell
+  param draws, behind `FORGE_WINNER_PRIOR` (D108 pattern), default OFF. Flag-off must be
+  proven byte-identical over N seeds (`test_sampler` goldens included) before the flag
+  is ever flipped; the `prior_id` folds into `enumeration_inputs_hash` so same-seed
+  reproduction stays honest (hard rule #6).
+- **Order of operations:** IWM+SLB rider bump → verify → this bump → flip the flag →
+  accrue an honest cohort at n≥300 → resolve `916d79109b4d`.
+
 ## 9. Open questions
 
 - **(a)** Pooled empirical density vs a light GBM over `(cell, param) →
