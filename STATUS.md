@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-07-24 — honest baseline accruing (~1.5d to n≥300); anchor-skip is a SIZE not COMPOSITION problem; SEQUENCING LOCKED
+
+- **Export refreshed:** `stage_two_outcomes_2026-07-24.json` (20,969 rows / 36 versions) with `selection_arm` POPULATED. Ready for the tail-model target decision at n≥300.
+- **Timeline corrected by Crucible to ~1.5 days** (not ~1d): their stage-two accelerator (arm-priority scan) built but ~142/209 honest candidates SKIP at refit anchor/floor resolution, so the honest arm accrues at ~7.6/hr. They're diagnosing it as focused work.
+- **Forge checked whether the anchor-skip BIASES the yardstick — it does NOT.** The honest arm that REACHED stage two is **33 xsect / 1 named (97% xsect)** — representative of the converting core (enumeration ~91% xsect), even more concentrated than what we submit (76% xsect). So the skip is a SIZE problem (slow accrual), not a COMPOSITION problem (biased yardstick); the honest read is usable when it lands. The worry that it measures the retired named minority is refuted.
+- **Rate ≠ count correction handed to Crucible:** their "101/142 skipped are xsect" is count-weighted (xsect dominates the pool); by RATE xsect reaches ~25% vs named ~2% (n=34, early) — **named resolves anchors WORSE**, opposite of the count read. Diagnose skip rate BY AXIS. Offered to characterise skipped config structure (one join) if they share the hashes.
+- **SEQUENCING LOCKED (operator +1):** tail-model ORDERING target (cpcv/wf/both) first = v50 substance, decided on the honest arm; generation model second; both gated on n≥300, both judged on the un-gameable `prefilter_sample` arm.
+- Relays held: `bf7ee3f` (anchor-skip data correction), `150deb4` (generation accept), `f0d6a3e` (target data request).
+
 ## 2026-07-24 — GENERATION-MODEL track ACCEPTED (Crucible proposal) with a training-population fix; both v50 levers now gate on the honest baseline
 
 - **Crucible proposed a generation model** trained + judged on the honest arm — the first time generation is TESTABLE, because the honest arm is the one population selection never touched (their 2.9× centre lift shows most pipeline quality is SELECTION, not generation). ACCEPTED: honest arm as un-gameable target + yardstick, p90 judgement, honest null first-class, Forge builds / Crucible judges, wait for n≥300.
