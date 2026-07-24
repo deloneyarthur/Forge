@@ -132,6 +132,41 @@ criterion and Crucible's generation yardstick:
 - **Never judged on the ranked arm** — it improves mechanically as the pool
   improves; that is selection re-measuring itself (Crucible's proposal §3).
 
+## 4.1 Premise probe — VALIDATED 2026-07-24
+
+Before committing search budget, we ran the standing pre-build gate
+(`scripts/winner_prior_signal_probe.py`) to answer: *does the training target carry
+real signal, or would we be fitting noise?* Method — for each fat honest cell
+(hypothesis × directional × regime × xsect × dte-bucket), fit `params →
+cpcv_sharpe_p25` with 5-fold ridge, measure **out-of-sample rank-IC** vs a
+40-permutation **shuffled-label null**, then **ablate the dte features** (which proxy
+the bucket the sampler already steers) to isolate the *marginal* intra-cell signal.
+Population: `measurement_basis='fullhist_refit'` (n≈4.9k, 12 cells).
+
+| cell (mid bucket unless noted) | n | IC full | **IC no-dte (marginal)** | null95 |
+|---|---:|---:|---:|---:|
+| MR keltner_pct | 931 | 0.44 | **0.31** | 0.08 |
+| MR rsi / rsi_14 | 727–808 | 0.40–0.46 | **0.22–0.26** | 0.07–0.08 |
+| trend donchian | 658 | 0.55 | **0.32** | 0.08 |
+| trend rolling_sharpe | 591 | 0.49 | **0.38** | 0.07 |
+| trend residual_momentum | 481 | 0.26 | **0.26** | 0.09 |
+| MR bb_pct | 163 | 0.30 | **0.22** | 0.15 |
+| MR rsi_2 (short) | 83 | 0.01 | 0.09 | 0.19 (~null) |
+
+**7 of 8 fat cells keep OOS param signal well above null after removing the bucket
+proxies** — the target is real, out-of-sample, and *marginal* over everything the
+sampler already steers (the cell-level weights never touch these knobs, so a
+constant cell-mean predictor scores 0). **Green to build the prototype.**
+
+Two bounds the probe does NOT lift (both are §6, restated so the green is not
+over-read): (1) it measures within-cell *rank* of cpcv — max honest cpcv in these
+cells is ~1.45, so concentration does **not** cross the 1.5 gate; this confirms the
+*mechanism* is learnable, not that it breaks the magnitude wall. (2) it cannot
+separate automatable signal from the v36/v38/v40 hand-tuned priors already baked into
+these cells — only the honest-arm shadow-diff (§8, step 2) settles marginal value over
+hand-tuning. Re-run this probe on the honest slice before each build cycle; if a
+future grammar flattens these cells the IC collapses and the lever is done.
+
 ## 5. The box — what keeps it allowed
 
 | Rule | Posture |
