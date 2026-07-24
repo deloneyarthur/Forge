@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-07-24 — GENERATION-MODEL track ACCEPTED (Crucible proposal) with a training-population fix; both v50 levers now gate on the honest baseline
+
+- **Crucible proposed a generation model** trained + judged on the honest arm — the first time generation is TESTABLE, because the honest arm is the one population selection never touched (their 2.9× centre lift shows most pipeline quality is SELECTION, not generation). ACCEPTED: honest arm as un-gameable target + yardstick, p90 judgement, honest null first-class, Forge builds / Crucible judges, wait for n≥300.
+- **Forge fix to their §3:** the honest arm is prefilter-REJECTS specifically, so `features → prefilter_sample CPCV` learns the map on the reject subpopulation only. Train instead on the UNION of both ranker-unselected arms (`exploration_holdout ∪ prefilter_sample`) — both ranker-free, together they span enumeration, and pooling doesn't bias the conditional `E[CPCV|features]`; judge on `prefilter_sample` alone (purest yardstick). Free diagnostic: do the two arms share a features→CPCV map? (holdout 0.112 ≈ prefilter_sample 0.135 at current n — if it holds at n≥300, the prefilter carries little CPCV signal).
+- **p90 is the verdict** — selection can't manufacture a tail (the v49 compression finding: ranker raised the floor, left p90), so p90 is generation's UNIQUE lever; centre is a secondary diagnostic (a floor lift helps the ranker but isn't a promotion).
+- **The null is our PRIOR, not just possible** — p90 flat across 20 versions, King-model wall — we expect generation likely confirms the magnitude wall. The value is DECIDABILITY: 20 versions of "did the grammar help?" were on selection-contaminated data; this one is not.
+- **Build shape named:** a learned honest-CPCV draw-multiplier in the existing sampler machinery (cohort/regime-gate/directional weights), deterministic (hard rule #6), no LLM (rule #5), flag-gated default-off.
+- **SEQUENCING — two v50 levers, both gated on n≥300 honest arm:** (1) tail-model ORDERING target (cpcv/wf/both — `f0d6a3e` data request) FIRST (small, ready, improves use of the current pool); (2) generation model SECOND/parallel (larger, same honest-arm judgement). Doing the target first means a correctly-aimed ranker selects from the lifted pool — the two levers compound rather than confound. Neither builds against a moving baseline.
+- Relays held: `f0d6a3e` (tail-target data request), `150deb4` (generation-model accept).
+
 ## 2026-07-23 (later⁴) — prefilter-sample campaign WIDENED to N=40 (Crucible f928180, operator power target); v49 = honest BASELINE, verdict waits on v50
 
 - **Crucible verified the honest arm end-to-end** from their ledger: all three arms (ranked 931 / exploration_holdout 50 / prefilter_sample 15), first at 23:20:30Z, rank/pool null confirmed, **inheritance chain holds into stage two** (their locked regression test covers it), zero ingest errors. The grammar-honest population exists end-to-end for the first time.
