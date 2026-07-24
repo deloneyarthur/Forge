@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-07-24 — honest-arm limit root-caused (TRIGGER not anchor); prefilter survivorship now MEASURED; a candidate THIRD lever; holding N=40
+
+- **Crucible corrected their own prior relay:** the ~142 stuck honest candidates are NOT anchor-skipped (all resolve) — they fail the refit TRIGGER (`_triggers_rederive` fires only for a coverage-blocked would-be-component; all 142 fail HARD gates on merit). No bug; the two-stage design correctly never refits genuinely-bad configs.
+- **Yardstick is DOUBLY conditioned:** honest arm = `prefilter-rejected` AND `5yr-soft-fail-only`. Biased HIGH (top slice of unselected, centre ~0.13 overstates raw output) AND blind to "5yr-hard-fail-but-full-history-good" configs. Both truncations symmetric across versions → **read DELTAS not absolutes**; both v50 tracks are comparisons so unaffected. `150deb4` union-train/prefilter-judge holds.
+- **THE FINDING — prefilter survivorship, previously "unmeasurable" (DSR thread), now measured:** would-be-component rate is ranked 34% / prefilter_sample 19% / exploration_holdout 13%. 19% of prefilter-rejects are would-be-components → **~12% of ALL enumeration is discarded as component-grade-but-for-coverage before the ranker sees it.**
+- **A candidate THIRD lever:** prefilter_sample (19%) > exploration_holdout (13%), z≈1.2 — a lead, not a result. If it holds at n≥300, the prefilter discards good configs at a HIGHER rate than the ranker deprioritizes → the PREFILTER is a lever (recalibration = Forge-side threshold, no grammar bump, no new model — cheapest of the three axes). The honest arm made the prefilter testable, not just generation.
+- **Accrual is PRODUCTION-limited at 19% (Crucible's prioritization is moot); N is the only knob and it's ours.** HOLDING N=40 (~1.5d): the wait is absorbed building the three-target comparison harness; raising the cap trades ~11%+ ranked production for ~0.5d on a non-critical-path baseline. **Operator can override to accelerate.**
+- Relay held: `6840978`.
+
 ## 2026-07-24 — honest baseline accruing (~1.5d to n≥300); anchor-skip is a SIZE not COMPOSITION problem; SEQUENCING LOCKED
 
 - **Export refreshed:** `stage_two_outcomes_2026-07-24.json` (20,969 rows / 36 versions) with `selection_arm` POPULATED. Ready for the tail-model target decision at n≥300.
