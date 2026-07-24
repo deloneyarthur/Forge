@@ -43,6 +43,14 @@ Environment=FORGE_REWIRE_P_FLOOR=0.02
 # component-rate). Clamped to [0, 0.10]; empty/unset => byte-identical (hard rule 6). REVERT =
 # delete this line + daemon-reload + restart.
 Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
+# D335 prefilter-sample two-arm campaign — ACTIVATED 2026-07-23, TIME-BOX ~2026-08-13
+# (2-3wk per Crucible's condition; operator removes this line to end it). Submits N
+# uniform-random prefilter-REJECTED configs/batch tagged selection_arm='prefilter_sample'
+# — the ONLY population unselected by both prefilter and ranker, the grammar-honest
+# estimate the freeze criterion reads. On forge.service (the DAEMON/submit path), NOT the
+# trainer unit. Start conservative (5 = ~5/200, we sit at 333/hr vs the ~355/hr ceiling;
+# §7.3 self-limits); widen for Crucible's power+tail-production argument once it accrues.
+Environment=FORGE_PREFILTER_SAMPLE_N=5
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells

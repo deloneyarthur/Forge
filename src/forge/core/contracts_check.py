@@ -185,7 +185,15 @@ from crucible_contracts import (
 # The bool had zero emitted rows so nothing is lost. Forge EMITS this one (D333 cont.):
 # ranked->"ranked", holdout->"exploration_holdout", young_explore->None (biased, no clean
 # arm). Hash-excluded (verified) so idempotency/determinism untouched; adopt-before-emit.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.37.0"
+# 1.38.0 (2026-07-23, Crucible b07e42e): forward-compatible promoted-portfolio READER —
+# `load_promoted_portfolios_from_export` now tolerates additive fields on re-read instead of
+# strict-validating (the same read-side hardening as the 1.26.0 gated/failed loaders). NO
+# StrategyConfig model change, so PIN-ONLY adopt, no Forge code change; a forward-compatible
+# reader is strictly safer for our promoted-config consumption. Also carries the D334 prune-
+# message reword (1d80109). Minor mismatch does NOT halt startup (validate_schema_version
+# raises on MAJOR only), so the un-adopted window was benign — adopting to keep pin==installed
+# per the bump->adopt discipline and to pick up the safer reader.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.38.0"
 
 
 def check_contracts_version() -> str:
