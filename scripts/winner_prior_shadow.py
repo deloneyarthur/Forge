@@ -120,11 +120,18 @@ def _cell_and_params(cfg: dict[str, Any]) -> tuple[tuple[str, ...], dict[str, fl
         params["per_trade_risk_pct"] = float(sizer["per_trade_risk_pct"])
     if isinstance(combiner.get("rank_k"), (int, float)):
         params["rank_k"] = float(combiner["rank_k"])
+    # Exits key on `id` (NOT `type`) and carry their knobs under `params` --
+    # `time_stop.n_bars`, `chandelier_exit.atr_multiplier`,
+    # `trailing_atr.activate_after_gain_pct`. Read generically so any future exit knob
+    # becomes fittable without another edit. This is the exit-DURATION axis the
+    # hand-tuned priors D282/D288/D291 all act on, so it must be in the surface.
+    # NB exit CLASS mix (which exits attach at all) is categorical and a different
+    # lever -- this prior reshapes param VALUES only.
     for ex in cfg.get("exits", []):
-        if ex.get("type") == "time_stop":
-            n_bars = (ex.get("params") or {}).get("n_bars", ex.get("n_bars"))
-            if isinstance(n_bars, (int, float)) and not isinstance(n_bars, bool):
-                params["time_stop_n_bars"] = float(n_bars)
+        exit_id = ex.get("id")
+        for k, v in (ex.get("params") or {}).items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                params[f"exit_{exit_id}_{k}"] = float(v)
 
     cell = (
         str(cfg.get("hypothesis")),
