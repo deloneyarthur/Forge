@@ -115,9 +115,13 @@ neighborhood priors adds one weight source on the intra-cell param axis:
 
 ## 4. Target and judge — the honest arm on both sides
 
+**Target CONFIRMED 2026-07-24: `cpcv_sharpe_p25`.** Settled by the exhaustive
+14-candidate sweep (`scripts/target_sweep.py`, §4.2) and **endorsed by Crucible**
+(`CRUCIBLE_wf_cpcv_reproduced_but_you_tested_the_enrichment_field_not_our_gate`).
+One objective for the ranker's ordering AND this prior — no composite.
+
 **Train on** the honest slice — `(cell, param-neighborhood) → honest outcome`, where
-the outcome is the honest-basis component rate (or honest `cpcv_sharpe_p25`), NOT
-gate-pass and NOT ranked CPCV. This is `generation-model-levers.md` §4 made
+the outcome is honest `cpcv_sharpe_p25`, NOT gate-pass and NOT ranked CPCV. This is `generation-model-levers.md` §4 made
 concrete: the target is the *verified* outcome, on the population selection never
 touched.
 
@@ -222,9 +226,17 @@ honest arm shows zero — that is the null, not a bug.
    change (the `generation-model-levers.md` §6.1 shadow-diff discipline). No deploy
    until the tail-target lands and the shadow shows a real, honest-slice-attributed
    shift.
-3. **Assembly-complement (its sibling)** stays gated on the Crucible book-map; if
-   that map arrives, the two merge into one multi-objective generation prior (solo
-   honest-CPCV × decorrelation-contribution).
+3. ~~**Assembly-complement (its sibling)** stays gated on the Crucible book-map~~
+   **NULLED 2026-07-24 — PARKED, do not build.** The book-map arrived same-day
+   (`CRUCIBLE_book_map_delivered_the_uncovered_direction_exists_and_is_structurally_v1_blocked`)
+   and returned that axis's stated null *with data*: the uncovered orthogonal
+   direction **is** identifiable and it is `volatility_event` / `event_momentum`
+   (median |corr| to book 0.03–0.07; 87–100% below 0.2) — and it converts at
+   **0.3% / 0%** against 25.2% / 17.2% for MR / trend. Mechanism: vol-event P&L is
+   ~90% direction, so harvesting it needs a direction-neutral structure (straddle),
+   which v1 forbids. **No enumeration reweighting can reach it** — steering draws
+   there would spend honest-arm throughput manufacturing rejects. So this doc's
+   lever stands alone; there is no multi-objective merge to plan for.
 
 ## 9. Open questions
 
