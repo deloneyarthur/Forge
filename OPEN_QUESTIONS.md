@@ -1241,3 +1241,62 @@ the D034 wording. (2) Guard `param_no_promotion` at source the way D034 guarded
 `gate_failure_concentration` — a promotion-denominator trigger cannot be meaningful while
 the global promotion count is 4. If a cell-kill trigger is wanted, base it on COMPONENT
 conversion, which has a real base rate (42,212), not promotion.
+
+## Q59 — the collider is IN THE LIVE RANKER MODEL, not just in our analyses (2026-07-25, severity: high)
+
+**Finding.** Reverting the v50 sampler bias did NOT restore v49 behaviour, and the reason
+is that the collider propagated one layer deeper than either side realised.
+
+| version | submitted k5 share (trend xsect) | σ vs 0.50 |
+|---|---:|---:|
+| v49 | 0.4942 | −0.86 (= the draw rate) |
+| v50 | 0.7834 | +21.72 (the sampler bias) |
+| **v51 (post-revert)** | **0.5714** | **+4.44** |
+
+The DRAW is uniform — 0.4921 (−1.0σ) over 3,973 cold-enumerated non-resid trend configs —
+so the sampler is already at v49 behaviour. **The residual elevation is SELECTION.**
+
+**Cause: the cpcv robustness model learned `rank_k` backwards.**
+
+| model | `rank_k` coefficient | |
+|---|---:|---|
+| `target_cpcv_p25` (live since v50) | **−0.0423** | its 4th-largest \|coef\|; prefers k=5 |
+| `target_wf_p25` (live through v49) | +0.0034 | ~zero, no preference |
+
+Negative = higher `rank_k` → lower predicted cpcv, i.e. it ranks k=5 ABOVE k=10 — the
+relationship stage-one data says is backwards (k5−k10 = −0.1712 in swing_mid). This is why
+v49 submitted at the draw rate and v51 does not: the sampler was fixed, the ranker
+independently learned the same wrong thing.
+
+**Mechanism: the trainer's population is coverage-conditioned.**
+`FORGE_HONEST_LABEL_SCOPE=on` is live on `forge-ranker-eval.service`, and
+`dataset.py:159` drops every row failing `honest_regime_coverage_row`. Measured survival
+through that filter (decided ≥ 2026-07-10, xsect):
+
+```
+rank_k=5    6,609 / 65,816 = 10.0%
+rank_k=10  10,531 / 57,753 = 18.2%
+```
+
+**Correction to our own first hypothesis:** we guessed k=5 would survive MORE often (the
+D328 breadth floor `n_min = 2 × rank_k` is easier for k=5). It is the opposite. That makes
+the collider WORSE rather than better — the k=5 survivors are a far more heavily selected
+10% minority, so within the filtered population they look artificially good. That is
+exactly the stage-two sign flip we measured (swing_mid k5−k10 = **+0.0776** conditioned vs
+**−0.1712** unconditioned), and the model fit it.
+
+**Scope — this is the part that matters.** `rank_k` is only the coefficient we can check
+against known stage-one ground truth. **Every feature correlated with coverage-resolution
+probability is biased the same way.** The live cpcv model has 29,419 training rows drawn
+entirely from the conditioned population.
+
+**Not yet actioned, deliberately.** The fix is a trainer-population change and D331 Part B
+turned `FORGE_HONEST_LABEL_SCOPE` ON for a measured reason (it fixed the ranker's inverted
+cell allocation via F3's eligibility gate). Turning it off may regress that, and the F3
+classifier and the robustness regressor may not want the same population. Needs a designed
+increment, not a 07:30 flag flip.
+
+**Options to weigh.** (a) Scope honest-label filtering to the F3 classifier only and train
+the robustness regressor on the unconditioned population. (b) Retrain the robustness model
+on stage one explicitly. (c) Revert the ranker to `target_wf_p25` — rejected: wf is inert
+on the cpcv gate (Run C: +0.009 vs +0.178), so that trades a biased signal for no signal.
