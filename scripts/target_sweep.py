@@ -37,6 +37,21 @@ POPULATIONS, and the tie-break rule:
 Reads a SNAPSHOT of forge.db, never the live RW-locked DB (`docs/tasks/investigate-live.md`):
 
     cp ~/forge_data/forge.db ~/.cache/rv/forge_snap.db   # ~6s, delete when done
+
+⚠️ COLLIDER WARNING — READ BEFORE TRUSTING ANY PARAMETER EFFECT FROM THIS SCRIPT.
+`measurement_basis='fullhist_refit'` is STAGE TWO, and stage-two admission is the refit
+TRIGGER — a function of config quality. Conditioning on it is a COLLIDER, so a parameter
+correlated with trigger probability gets a biased and sometimes SIGN-FLIPPED estimate.
+This is not hypothetical: on 2026-07-24 a rank_k=5 effect measured +0.0776 here and
+-0.1712 on stage one (same metric, same configs, only the conditioning differs), we
+shipped the bias in v50, and it had to be reverted in v51 the next night (D337). Berkson's
+paradox. Stratifying WITHIN this population does NOT help — the collider is at its
+boundary.
+
+RULE: parameter effects are estimated on STAGE ONE (all decided verdicts, unselected)
+ONLY. The stage-two honest arm remains valid as a yardstick for grammar-VERSION deltas,
+because the conditioning is identical on both sides of that comparison. Those are
+different uses; do not conflate them.
 """
 
 from __future__ import annotations
