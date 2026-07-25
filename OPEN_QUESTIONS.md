@@ -1142,3 +1142,35 @@ side is the operator's and the shadow already detects it. Parked until their
 answer; the reference-NAV declaration itself is an operator choice.
 
 **↳ ANSWERED 2026-07-20 (same day, `FORGE_v42_ack_and_answers_2026-07-20.md`): shape (b), narrowed to an ANNOTATION.** The check lives Crucible-side at queue time next to the row-45 liquidity preflight (chain truth already in hand; (a) declined — no new cross-system surface for a LOW item). It will be an exported annotation (`min_contracts_at_reference_nav` on the verdict surface), NOT a reject — fractional sizing at engine capital is legitimate research; a non-statistical reject-class is not added quietly. **Build is gated on the OPERATOR declaring the reference NAV** (ties to the live-deposit decision); until then shape (c) is the operating truth — the shadow detects. Nothing Forge-side; Q52 stays open only as the operator-NAV tickler.
+
+## Q57 — the v44 vix-conditioner fires at ~22% against a 12.5% target constant (2026-07-24, severity: medium)
+
+**Question.** `_VIX_CONDITIONER_SHARE = 0.125`, but the realized fire rate measured by
+`test_conditioner_fires_near_target_share` is **~0.22 across every seed tried** (v50 code,
+6 seeds: 0.208 / 0.212 / 0.215 / 0.221 / 0.221 / 0.244). That is ~5.7σ above the constant
+at the test's n, i.e. systematic rather than sampling noise.
+
+**How it surfaced.** The v50 rank_k trend bias changed rng consumption for trend-xsect
+draws, moving the sample from 0.22 to 0.223 and tripping the old `<= 0.22` ceiling. So v50
+**re-sampled** the discrepancy into view; it did not cause it — the pre-v50 code produces
+~0.22 as well, which is precisely why the old band ceiling sat at 0.22. The band had been
+fitted to the realized rate, not to the target constant.
+
+**Most likely cause (unverified).** The TEST's `eligible` predicate (trend-xsect, exactly
+one adx/hurst primary, no gate outside the allowed set) is probably **narrower** than the
+sampler's own eligibility check, so `fired / test_eligible` divides by a smaller
+denominator and inflates the rate. If so the sampler is honouring 0.125 correctly and only
+the test's denominator is wrong — but the opposite (the sampler over-firing the
+conditioner onto ~76% more configs than intended) would be a real supply-mix issue on the
+resid_vix pilot cell, so this needs resolving rather than assuming.
+
+**What I did instead.** Re-pinned the band to `[0.05, 0.28]` as a sequence re-pin (same
+class as the golden re-pin in the same commit) with an inline warning that the band tracks
+the realized rate and must NOT be read as evidence the share constant is honoured.
+Deliberately did NOT silently widen without recording it, and did NOT chase it inside a
+deploy window.
+
+**To resolve.** Instrument the sampler's own conditioner-eligibility branch and compare its
+denominator against the test's predicate over one enumeration; if they differ, fix the test
+predicate (cheap) — if they agree, the share constant is not being applied as written and
+that is a v-bump-worthy supply correction on the resid_vix cell.

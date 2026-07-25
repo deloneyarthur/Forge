@@ -2251,8 +2251,18 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     if quality_rank and not _quality_off and verdict_scorer is not None:
         from forge.ranking.model import load_latest_robustness_model, robustness_tail_norm
 
+        # v50 RETARGET (2026-07-24, versionless — this is SELECTION, not enumeration):
+        # target_wf_p25 -> target_cpcv_p25. `wf_sharpe_p25` turned out to be a NON-BINDING
+        # enrichment label Crucible computes FOR this ranker (threshold 0.0, admits 100% of
+        # stage two — their correction; it is not a gate), and on the honest ARM it is
+        # ~ORTHOGONAL to the metric that does gate: sp(cpcv_p25, wf_p25) = +0.031, vs +0.39
+        # on the ranker-selected pool, which is a SELECTION ARTIFACT. Measured consequence
+        # (scripts/target_sweep.py Run C — train on non-honest, rank the unseen honest arm):
+        # ordering by wf_p25 lifts realized cpcv +0.009 (i.e. baseline), by cpcv +0.178.
+        # Endorsed by Crucible. The trainer publishes BOTH targets (daily_ranker_eval.sh), so
+        # reverting is this one line with no gap in either artifact.
         _qmodel = load_latest_robustness_model(
-            forge_db_path.parent / "models", target="target_wf_p25"
+            forge_db_path.parent / "models", target="target_cpcv_p25"
         )
         if _qmodel is not None:
             _qm = _qmodel  # non-None binding for the closure

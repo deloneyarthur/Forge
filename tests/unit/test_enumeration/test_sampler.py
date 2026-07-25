@@ -1569,6 +1569,19 @@ _COHORT_TREND = "trend_continuation"
 # Licensing harness environment-matched: OLD code reproduced every constant
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
+# v50 (2026-07-24): re-pinned — TWO changes contribute, and their signatures are
+# separable. (a) The IWM+SLB yield-audit round-2 exclusion shrinks the single-name
+# drawable pool again (38 -> 40 excluded), which is the v37/v41/v43 pool-shift
+# signature: verified that EVERY first divergence here is a `volatility_event`
+# single-name confluence config (the only single-name hypothesis left after v47),
+# @0 for the seed-7777 goldens whose first config taps the pool and @2-@3 otherwise.
+# (b) The rank_k=5 trend bias replaces one `rng.choice(_RANK_K_CHOICES)` with one
+# `rng.random()` on trend-xsect draws, so trend rank positions diverge downstream.
+# Environment-matched per the D286/D290/D309 discipline: at the pre-edit preflight
+# the OLD code reproduced every constant below EXACTLY (the full suite was green
+# except the contracts pin), so this re-pin carries no unrelated drift. 7-11 of 15
+# positions survive byte-identical in each golden — the per-index seeding signature,
+# configs whose draws miss both the shrunken pool and the trend rank path.
 # D309 (v43): re-pinned — the 30-name yield-audit exclusion shifts the
 # single-name underlying draw (drawable pool 38 names smaller). Licensing
 # harness environment-matched: OLD code reproduced every constant exactly at
@@ -1583,18 +1596,18 @@ _COHORT_GOLDEN_PRE_REFACTOR = [
     "1feb1dc81f4427f4",
     "dde5703b72f300a1",
     "c8e89ddaae894a65",
-    "c598508e3411f43f",
+    "acd95b51437b132e",
     "69f050e79be4e717",
     "9773f97a5028e439",
-    "2b224014c71781a1",
-    "219cedfd0ce11930",
+    "c4b9a3f54e771c9f",
+    "c49237433f85513b",
     "ed16b154735434b9",
-    "8de56f5d1f462da5",
+    "05e71b18c2056b11",
     "13ac6ad099175be2",
     "d1dd5478e6beb9f0",
     "906af3289a51e4e6",
     "3e3fc290110bab4c",
-    "d5a3956a56e6206f",
+    "1df8847bf39cabe8",
 ]
 
 
@@ -1831,8 +1844,8 @@ def test_cohort_yield_tilts_cohort_draw_by_yield(
 _REGIME_GOLDEN_PRE = [
     "73932a3bb6897934",
     "fd067aa010c15678",
-    "f37bee02255117ad",
-    "66b72b434c1b466e",
+    "7248bfffdcbd22c8",
+    "b192ee728dc459fb",
     "fb703dadd797e327",
     "4dcaf88253b6f4ce",
     "9e80f8335b574b15",
@@ -1842,8 +1855,8 @@ _REGIME_GOLDEN_PRE = [
     "e1fffb3db6f1cbdd",
     "2803381a7ff3fc20",
     "4be47b590a2a43cc",
-    "922393beda7adce6",
-    "d942d55650b4448f",
+    "4ca710af62108eda",
+    "8b5bbc192c9a25a3",
 ]
 
 
@@ -2087,19 +2100,19 @@ def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
 _REGIME_GOLDEN_DSJ_ACTIVE = [
     "4ef13271b509bd9b",
     "79ef7900584be424",
-    "fb39601217f27c99",
+    "1525c6460c2e6baf",
     "4dcaf88253b6f4ce",
     "9e80f8335b574b15",
     "a385d495a6f9850c",
     "f559b676b5125f19",
-    "57229b32438c076a",
+    "b094fbdbedff6798",
     "3700e79ebd3683e3",
     "2803381a7ff3fc20",
     "4be47b590a2a43cc",
+    "d0506c7863226f5e",
     "d68ae89893f62345",
     "978680d3f23fb4f1",
     "a3c9580554a6b8e1",
-    "232154f3b6fc0a1c",
 ]
 
 
@@ -2266,21 +2279,21 @@ def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V26_ACTIVE = [
-    "754c0268b578cd00",
-    "e010ddd6639644bb",
+    "a44cd8f2c4edb745",
+    "f9695f0ff64a0775",
     "3b43fd7342013488",
     "7a1151e3f8353573",
     "465fd6a56a91528f",
     "f559b676b5125f19",
-    "94edf76c71341716",
-    "75d17656a613a5a3",
+    "5e3d288ae9134cda",
+    "d7acbf9c2e787039",
     "270c5da463424bff",
     "d68ae89893f62345",
     "dd69c9ce38deb87d",
-    "ec2c3c6001917973",
-    "c65f316af910e1b9",
-    "6211b701087cb10c",
-    "b86b3cc9307f8479",
+    "53163b623425f893",
+    "6e6e0bc6ba2776ea",
+    "37fad70c7af734a3",
+    "b42d8da37f55d162",
 ]
 
 
@@ -2447,16 +2460,16 @@ def test_d264_new_ids_dormant_without_registry(
 _REGIME_GOLDEN_V27_ACTIVE = [
     "d7f9a3f7c58dea33",
     "26d318b70b6157ef",
-    "546c5f09b6fc4b40",
-    "94c11a5870b7542d",
+    "a045c8ed725b63c0",
+    "8286541b66527cac",
     "9af608af3f9311f4",
-    "2dfb8a013599d8fb",
+    "b9344d0800f2a3b4",
     "1a67e9c676c269a9",
     "7a2b04389ddf6985",
-    "bceae95f6b5ba5b8",
+    "92a3816d0baf6053",
     "f559b676b5125f19",
-    "94edf76c71341716",
-    "75d17656a613a5a3",
+    "5e3d288ae9134cda",
+    "d7acbf9c2e787039",
     "270c5da463424bff",
     "55a43515d605d317",
     "4754afa717d583fd",
@@ -2684,8 +2697,8 @@ def test_d266_veto_generalization_leaves_single_id_pools_byte_identical(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V29_ACTIVE = [
-    "754c0268b578cd00",
-    "e010ddd6639644bb",
+    "a44cd8f2c4edb745",
+    "f9695f0ff64a0775",
     "3b43fd7342013488",
     "7a1151e3f8353573",
     "465fd6a56a91528f",
@@ -2693,12 +2706,12 @@ _REGIME_GOLDEN_V29_ACTIVE = [
     "5c836b9f7cd9ce90",
     "bc623b1e6b67996c",
     "e1fffb3db6f1cbdd",
-    "6156245a267fa224",
-    "dad2cfb1991412cc",
+    "d51562fab64f945d",
+    "4bacb2bec16db27d",
     "d68ae89893f62345",
     "dd69c9ce38deb87d",
-    "ec2c3c6001917973",
-    "c65f316af910e1b9",
+    "53163b623425f893",
+    "6e6e0bc6ba2776ea",
 ]
 
 
@@ -2916,8 +2929,8 @@ def test_d270_v29_golden_byte_identical_without_momentum(
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
 _REGIME_GOLDEN_V31_ACTIVE = [
-    "754c0268b578cd00",
-    "e010ddd6639644bb",
+    "a44cd8f2c4edb745",
+    "f9695f0ff64a0775",
     "3b43fd7342013488",
     "7a1151e3f8353573",
     "465fd6a56a91528f",
@@ -2926,11 +2939,11 @@ _REGIME_GOLDEN_V31_ACTIVE = [
     "bc623b1e6b67996c",
     "e1fffb3db6f1cbdd",
     "d27ed0d03bd5c5d1",
-    "6156245a267fa224",
-    "dad2cfb1991412cc",
+    "d51562fab64f945d",
+    "4bacb2bec16db27d",
     "d68ae89893f62345",
-    "f46993e2ee829fb4",
-    "983c3aa178cbff88",
+    "a887f0edab4f3842",
+    "cde55c964da3d4ae",
 ]
 
 

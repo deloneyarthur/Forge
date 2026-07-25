@@ -75,9 +75,13 @@ def test_v34_untradeable_exclusion_applies_to_the_pool_itself() -> None:
     # confirmed on OUR funnel (641 decided/0 components, 1,544/1).
     # D309 (v43): +30 — the first yield-audit cohort (each >=500 decided / 0
     # conversions since the clean era; operator "Ship all 30"; prereg 44a4e08aef4f).
+    # v50: +IWM/+SLB — yield-audit round 2 (IWM 502 decided/0 converted, SLB 540/0
+    # since the clean-era cut; prereg 8eaa7e4aca93).
     assert (
         frozenset(
             {
+                "IWM",
+                "SLB",
                 "BKNG",
                 "BRK.B",
                 "SOXX",

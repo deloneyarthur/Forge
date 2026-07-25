@@ -174,7 +174,9 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # D320 bumped v45 -> v46 (refutation-registry wiring: three threaded effects
     # routing generation mass off Crucible-proven-dead cells; emission-policy,
     # cold-start byte-identical, rules text unchanged).
-    assert grammar.grammar_version == "v49"  # type: ignore[attr-defined]
+    # v50 (2026-07-24): IWM+SLB dead-name rider (prereg 8eaa7e4aca93) + the rank_k=5
+    # trend bias (prereg b13b0f893a11) — both emission-policy, rules text unchanged.
+    assert grammar.grammar_version == "v50"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

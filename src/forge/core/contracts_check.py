@@ -193,7 +193,20 @@ from crucible_contracts import (
 # message reword (1d80109). Minor mismatch does NOT halt startup (validate_schema_version
 # raises on MAJOR only), so the un-adopted window was benign — adopting to keep pin==installed
 # per the bump->adopt discipline and to pick up the safer reader.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.38.0"
+# 1.39.0 (2026-07-24, Crucible c625ba8): `generation_arm` ("prior_on"/"prior_off") +
+# `generation_prior_id` on StrategyConfig — a SEPARATE axis from `selection_arm` (that says
+# which selection population a config came from; this says how its params were drawn), added
+# for a prior-ON/prior-OFF generation A/B. Additive and hash-excluded, which for that A/B is
+# the precondition rather than tidiness: the two arms differ only in draw weights over one
+# population, so if the arm entered the hash an identical config drawn both ways would dedup
+# as two strategies and the comparison would measure dedup instead of the prior.
+# PIN-ONLY adopt, no Forge code change — and note we deliberately EMIT NEITHER FIELD: the
+# generation prior those fields exist for was PARKED on 2026-07-24 (its honest-arm effect is
+# p90 +0.0087, needing ~20k/arm to resolve — `v50-winner-neighborhood-priors.md` §8.0), so the
+# A/B is withdrawn and Crucible's "clear to emit" GO stands deliberately unused. Adopting
+# anyway to keep pin==installed per the bump->adopt discipline; the fields default to None and
+# their absence maps to "unset", never to the control arm.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.39.0"
 
 
 def check_contracts_version() -> str:

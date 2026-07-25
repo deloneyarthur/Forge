@@ -85,17 +85,27 @@ fi
 #     logistic train above -- it can refuse (no wf_p25 rows) without affecting it. wf_p25
 #     is gate-emitted as a metric in gate_results from 2026-06-19 (Crucible), so the
 #     continuous gate_results path (D192) trains it -- no --label dependency.
-echo "daily-ranker-eval: train-robustness (wf_p25)"
-if uv run forge ranker-model train-robustness --target target_wf_p25 --forge-db "$SNAP" --models-dir "$STAGING"; then
-    shopt -s nullglob
-    for art in "$STAGING"/robustness_model_*.json; do
-        mv -f -- "$art" "$MODELS_DIR/"   # same fs -> atomic rename
-        echo "daily-ranker-eval: published $(basename "$art")"
-    done
-    shopt -u nullglob
-else
-    echo "daily-ranker-eval: train-robustness non-zero (insufficient wf_p25 rows or registry) -- continuing" >&2
-fi
+#     v50 (2026-07-24): BOTH targets are trained. The production quality lane retargeted
+#     to target_cpcv_p25 (main.py -- wf_p25 is a non-binding enrichment label that admits
+#     100% and is ~orthogonal to the cpcv gate on the honest arm), so cpcv MUST refresh
+#     daily or the lane would load the last hand-trained artifact and silently freeze.
+#     wf_p25 keeps training too: it costs one extra fit, keeps the observational
+#     eval-robustness lane below intact, and makes the retarget revertible by a one-line
+#     daemon change with no gap in either artifact. `load_latest_robustness_model` filters
+#     BY target, so both coexist in one models dir without shadowing each other.
+for _target in target_cpcv_p25 target_wf_p25; do
+    echo "daily-ranker-eval: train-robustness ($_target)"
+    if uv run forge ranker-model train-robustness --target "$_target" --forge-db "$SNAP" --models-dir "$STAGING"; then
+        shopt -s nullglob
+        for art in "$STAGING"/robustness_model_*.json; do
+            mv -f -- "$art" "$MODELS_DIR/"   # same fs -> atomic rename
+            echo "daily-ranker-eval: published $(basename "$art")"
+        done
+        shopt -u nullglob
+    else
+        echo "daily-ranker-eval: train-robustness $_target non-zero (insufficient rows or registry) -- continuing" >&2
+    fi
+done
 
 # --- eval + streak (single DB pass; criterion constant imported from the CLI so
 #     it cannot drift from the manual `forge ranker-model eval`) ----------------
