@@ -52,6 +52,19 @@ RULE: parameter effects are estimated on STAGE ONE (all decided verdicts, unsele
 ONLY. The stage-two honest arm remains valid as a yardstick for grammar-VERSION deltas,
 because the conditioning is identical on both sides of that comparison. Those are
 different uses; do not conflate them.
+
+TWO FURTHER RULES (Crucible 2026-07-25, after `swing_long` died the same day rank_k did):
+  * DATE-FILTER any claim resting on an EXTREME value against known data-defect windows.
+    Their strongest swing_long argument was a max CPCV of +1.8747 decided 2026-07-02 02:16,
+    inside the pre-07-02 CPCV defect window; post-fix the ranking reverses. NB our own
+    exposure here is ZERO -- `measurement_basis` only exists from D331 (2026-07-22), so our
+    stage-two population starts after that window -- but the rule stands for any analysis
+    that reaches further back through NULL-basis rows.
+  * PAIR THE QUALITY METRIC WITH THE YIELD METRIC. A cell can win CPCV and lose
+    components-per-submission, and the ranker optimises the second. swing_long won the
+    honest-arm median and lost yield 42.5 vs 54.6 per 1k submissions -- which is why the
+    ranker preferring swing_mid was correct, not a defect. The ALIGNMENT axis in this
+    script measures realized QUALITY of the top decile; it does not measure yield.
 """
 
 from __future__ import annotations
