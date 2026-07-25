@@ -1201,3 +1201,43 @@ deploy window.
 denominator against the test's predicate over one enumeration; if they differ, fix the test
 predicate (cheap) — if they agree, the share constant is not being applied as written and
 that is a v-bump-worthy supply correction on the resid_vix cell.
+
+## Q58 — the `param_no_promotion` proposer trigger is degenerate in a 0-promotion regime, and it just targeted our BEST cell (2026-07-25, severity: high)
+
+**What happened.** At 2026-07-25T04:41:18Z the daemon auto-wrote proposal
+`f59812c7-6cc2-4e90-ad42-f84b3300386a` (`proposal_type: tighten`, `status: PENDING`):
+*"0 of 243 (trend_continuation, swing_mid) candidates promoted; propose tightening
+grammar to skip this cell"*, confidence 0.807.
+
+**Why it is degenerate.** **Total promotions in the entire ledger: 4**, against 385,770
+rejects + 42,212 components (~428k verdicts). Expected promotions at n=243 is therefore
+~0.002. **Observing zero is the expected outcome for EVERY cell**, so this trigger fires
+on any cell that merely accumulates samples — it measures sample size, not quality.
+
+**This is a known class with an existing guard elsewhere.** D034 already guarded the
+`gate_failure_concentration` trigger with a `promoted_count == 0` check for exactly this
+reason — four proposals were declined 2026-06-24 as *"degenerate pre-D034 …
+100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded
+off at source."* `param_no_promotion` appears to lack the equivalent guard. This is the
+first `param_no_promotion` proposal ever emitted.
+
+**Why the target makes it urgent rather than academic.** `(trend_continuation,
+swing_mid)` is the highest-weighted converting cell in the same batch's own learned
+weights — `directional_bucket_weights` resid×swing_mid **0.306 (highest)**,
+`cohort_yield_weights` …×xsect **0.338 (highest)**, `bucket_weights` **0.142 (2nd)** —
+and it is exactly where v50's `rank_k=5` change just landed. Applying it would delete
+the cell the current grammar work is built on.
+
+**Not urgent in the safety sense.** Verified there is no auto-apply path: `apply-proposal`
+is a separate CLI command, called ZERO times from the run loop, and the daemon's
+ExecStart is only `forge run --loop`. Hard rule #4's structural enforcement holds — the
+proposal sits PENDING until a human acts.
+
+**What I did instead.** Nothing to the proposal (declining is operator-gated) and nothing
+to the proposer (a real code change deserving its own increment). Logged here.
+
+**Recommended.** (1) DECLINE `f59812c7` with the 0-promotion-regime rationale, reusing
+the D034 wording. (2) Guard `param_no_promotion` at source the way D034 guarded
+`gate_failure_concentration` — a promotion-denominator trigger cannot be meaningful while
+the global promotion count is 4. If a cell-kill trigger is wanted, base it on COMPONENT
+conversion, which has a real base rate (42,212), not promotion.
