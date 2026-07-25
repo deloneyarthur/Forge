@@ -94,9 +94,27 @@ def run_shadow_scoring(
                 tail_score = (
                     score_robustness(robustness, features) if robustness is not None else None
                 )
-                hygiene_score = (
-                    hygiene_scorer(candidate.report) if hygiene_scorer is not None else None
-                )
+                # A report the scorer cannot score records NULL rather than killing the
+                # batch. `Ranker.score` raises by design on an incomplete short-circuit
+                # report, and the D335 honest arm submits prefilter REJECTS — whose
+                # `filter_results` are incomplete for exactly that reason. Before this
+                # guard the exception escaped to the batch handler and ROLLED BACK every
+                # row, so one honest-arm config silently discarded the whole batch's
+                # shadow scores including all the ranked ones; the lane went dark for
+                # ~11,600 submissions over two days (2026-07-23 → 07-24) before anyone
+                # noticed, because the only symptom was a warning. NULL is already this
+                # column's "unavailable" value (pre-fix callers leave it NULL), so a
+                # per-row miss degrades telemetry by one row instead of by one batch.
+                hygiene_score: float | None = None
+                if hygiene_scorer is not None:
+                    try:
+                        hygiene_score = hygiene_scorer(candidate.report)
+                    except Exception as exc:
+                        _LOG.debug(
+                            "hygiene_score_unavailable",
+                            config_hash=config_hash,
+                            error=str(exc),
+                        )
                 conn.execute(
                     "INSERT OR IGNORE INTO shadow_scores (forge_candidate_id, model_id, "
                     "model_score, composite_score, scored_at, tail_score, tail_model_id, "

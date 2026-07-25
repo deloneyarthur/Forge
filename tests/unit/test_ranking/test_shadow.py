@@ -192,6 +192,60 @@ def test_hygiene_score_recorded_when_scorer_passed(tmp_path: Path) -> None:
     assert rows[0][0] == pytest.approx(0.42)
 
 
+def test_one_unscoreable_report_does_not_discard_the_whole_batch(tmp_path: Path) -> None:
+    """REGRESSION (2026-07-24): the D335 honest arm wraps prefilter-REJECTED reports,
+    whose `filter_results` are incomplete because the prefilter short-circuits on the
+    first failure. `Ranker.score` raises on such a report by design, the exception
+    escaped to the batch-level handler, and the whole transaction ROLLED BACK — so a
+    single honest-arm config silently discarded shadow scores for every RANKED row too.
+    Shadow scoring went dark for ~11,600 submissions across two days before this was
+    caught. A row the hygiene scorer cannot score must record hygiene_score NULL (the
+    column's existing 'unavailable' value) and the batch must still commit."""
+    models_dir = _toy_model_dir(tmp_path)
+    good = _candidate(composite=0.7)
+    bad = RankedCandidate(
+        report=PreFilterReport(
+            config=minimal_strategy_config(name="unscoreable_reject"),
+            passed=False,  # a prefilter REJECT: short-circuited, incomplete results
+            filter_results={},
+            diagnostic_notes=(),
+        ),
+        prior_promotion_score=0.0,
+        composite_score=0.0,
+    )
+    batch_id = str(uuid.uuid4())
+
+    def _raises_on_bad(report: object) -> float:
+        cfg_hash = report.config.config_hash  # type: ignore[attr-defined]
+        if cfg_hash == bad.report.config.config_hash:
+            msg = "Ranker.score: PreFilterReport missing filter result 'novelty'"
+            raise ValueError(msg)
+        return 0.42
+
+    with db_connection() as conn:
+        for c in (good, bad):
+            _insert_submission(conn, batch_id=batch_id, config_hash=c.report.config.config_hash)
+        recorded = run_shadow_scoring(
+            conn,
+            models_dir=models_dir,
+            candidates=[good, bad],
+            registry=_REGISTRY,
+            batch_id=batch_id,
+            scored_at=_SCORED_AT,
+            hygiene_scorer=_raises_on_bad,
+        )
+        rows = dict(
+            conn.execute(
+                "SELECT s.config_hash, sc.hygiene_score FROM shadow_scores sc "
+                "JOIN submissions s ON s.forge_candidate_id = sc.forge_candidate_id"
+            ).fetchall()
+        )
+
+    assert recorded == 2, "both rows must be recorded; the batch must not roll back"
+    assert rows[good.report.config.config_hash] == pytest.approx(0.42)
+    assert rows[bad.report.config.config_hash] is None, "unscoreable -> NULL, not a crash"
+
+
 def test_hygiene_score_null_without_scorer(tmp_path: Path) -> None:
     """No hygiene scorer (pre-fix callers, historical rows) -> NULL, not a fabricated 0."""
     models_dir = _toy_model_dir(tmp_path)
