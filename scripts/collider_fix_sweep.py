@@ -31,6 +31,15 @@ FIVE ARMS, each answering a way the claim could be WRONG:
      on stage one. Crucible's design is theoretically right; that is not the same as
      empirically better, and it is cheap to check.
 
+  F. ENCODING x CONDITIONING, VALIDATED OUT OF SAMPLE — added 2026-07-25 after arm C's
+     "refutation" turned out to be incomplete. `rank_k`'s relation to conversion is
+     NON-MONOTONIC (P(label): k5 0.073, k10 0.133, k20 0.000 — the D004 breadth floor),
+     so a LINEAR feature averages the peak against the cliff and comes out negative. And
+     the drop deletes the entire k=20 stratum (55,820 rows -> 0), so a conditioned model
+     cannot learn the cliff at any encoding. Both fixes are needed and only together do
+     they work. Judged on OOS AUC, never train AUC: one-hot ADDS parameters, so the
+     in-sample gain is confounded by construction.
+
   E. D331 REGRESSION — D331 Part B turned the drop ON and measured a benefit (it fixed
      the ranker's inverted cell allocation). Removing it must not undo that. A fix that
      trades one inversion for another is the week's mistake pattern repeating.
