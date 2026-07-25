@@ -74,6 +74,10 @@ _NON_QUALITY = frozenset({"regime_coverage"})
 # The metric Crucible actually gates promotion on. Alignment is measured against it.
 _DECISION_METRIC = "cpcv_sharpe_p25"
 
+# The honest ARM (selection), NOT the honest LANE (measurement_basis). The lane is
+# ~94% ranker-selected; judging on it measures the ranker's pool, not the grammar's.
+_HONEST_ARM = "prefilter_sample"
+
 # The BINDING walk-forward gate (threshold 2.0, ~0.7% pass). Distinct from
 # `wf_sharpe_p25`, which is a non-binding enrichment label Crucible computes FOR our
 # ranker (threshold 0.0, 100% pass) -- their 2026-07-24 correction. Composites pair
@@ -480,7 +484,62 @@ def run(db_path: Path) -> int:
     rng = np.random.RandomState(0)
     _run_a(recs, targets, by_cell, fat, rng, headroom)
     _run_b(honest, targets, rng)
+    _run_c(recs, honest, targets, headroom)
     return 0
+
+
+def _run_c(
+    recs: list[dict[str, Any]],
+    honest: list[dict[str, Any]],
+    targets: list[str],
+    headroom: dict[str, float],
+) -> None:
+    """Train on non-honest rows, rank the UNSEEN honest arm, measure realized cpcv of
+    the top decile. The decision read: Run A's pool is ~94% ranker-selected, which
+    range-restricts the incumbent target's variance and biases the comparison."""
+    non_honest = [r for r in recs if r["arm"] != _HONEST_ARM]
+    print("\n=== RUN C: train on non-honest, rank the UNSEEN honest arm (DECISION READ) ===")
+    print(f"(train n={len(non_honest)}, judge n={len(honest)})\n")
+    if len(honest) < 100 or not non_honest:
+        print("  honest arm too thin for a Run C read.")
+        return
+    keys = _feature_keys(non_honest)
+    x_tr = _matrix(non_honest, keys)
+    x_te = _matrix(honest, keys)
+    if x_tr is None or x_te is None:
+        return
+    y_true = np.array([r[_DECISION_METRIC] for r in honest])
+    base_med, base_p90 = float(np.median(y_true)), float(np.percentile(y_true, 90))
+    print(f"{'target':>28} {'pass%':>7} | {'top10% med':>11} {'p90':>8} {'vs base':>9}")
+    print(f"{'(baseline: no model)':>28} {'-':>7} | {base_med:>11.3f} {base_p90:>8.3f} {'-':>9}")
+    out: list[tuple[float, str, float, float]] = []
+    for t in targets:
+        raw = [r.get(t) for r in non_honest]
+        if any(v is None for v in raw):
+            continue
+        y = np.array(raw, dtype=float)
+        if y.std() < 1e-9:
+            continue
+        mean = y.mean()
+        w = np.linalg.solve(
+            x_tr.T @ x_tr + _RIDGE_ALPHA * np.eye(x_tr.shape[1]), x_tr.T @ (y - mean)
+        )
+        pred = x_te @ w + mean
+        k = max(1, int(_TOP_FRAC * len(honest)))
+        top = np.argsort(-pred)[:k]
+        out.append(
+            (
+                float(np.median(y_true[top])),
+                t,
+                float(np.percentile(y_true[top], 90)),
+                float(np.median(y_true[top])) - base_med,
+            )
+        )
+    for med, t, p90, delta in sorted(out, reverse=True):
+        rate = headroom.get(t)
+        pct = f"{rate:.1%}" if rate is not None else "-"
+        print(f"{t:>28} {pct:>7} | {med:>11.3f} {p90:>8.3f} {delta:>+9.3f}")
+    print("\n  NB top decile of a thin arm is noisy; read large gaps, not orderings.")
 
 
 def main() -> int:
