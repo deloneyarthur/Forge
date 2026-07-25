@@ -1,5 +1,19 @@
 # Forge — Status
 
+## 2026-07-25T18:46:52Z — **Q59 FIXED and LIVE (versionless): categorical `rank_k` + stop DROPPING rows.** Both together; validated OOS before shipping.
+
+- **LIVE.** `6b662ac`. Daemon restarted 18:46:52Z onto retrained artifacts, `grammar_version=v51` (unchanged — SELECTION not enumeration, D287 precedent, no bump), NRestarts=0, zero errors, **N=300 preserved**. Full suite **2090 passed / 0 failed**.
+- **THE TWO DEFECTS, shipped together because either alone is worthless or worse:**
+  - **ENCODING** — `rank_k` was a linear slope but its relation to outcome is NON-MONOTONIC: P(F3 label=1) = k5 **0.0735** / k10 **0.1336** / k20 **0.0000** (D004 breadth floor; Crucible reproduce the zero exactly, 0/55,981 vs our 0/55,820). One slope through a peak-then-cliff is dragged negative by the cliff — that was the −0.33 (F3) / −0.04 (robustness) both sides first mis-read as pure collider.
+  - **CONDITIONING** — `FORGE_HONEST_LABEL_SCOPE` on → **off**. The drop is quality-correlated (9 of 81 coefficients sign-flip) AND deletes whole strata: `rank_k=20` is 55,820 rows unconditioned and **ZERO** under the drop, so the model could not learn the cliff at any encoding.
+- **VALIDATED OUT OF SAMPLE** (temporal split, judged on the unconditioned population): robustness OOS rank-IC **0.0321 → 0.3962** (12×); F3 OOS AUC **0.5910 → 0.6936**. Overfit gap unchanged (−0.164 vs −0.169) so the one-hot gain is **not** bought with parameters. ⚠️ Our FIRST pass used TRAIN AUC and was caught by the operator before relay — one-hot adds parameters, so in-sample gains prove nothing.
+- **Post-deploy artifact verification (before the daemon loaded them):** F3 `fbccd023` n=386,415 (was 42,876) AUC **0.8312**, coefficients **c10 +1.1541 > c5 +0.8569 ≫ c20 −2.4457 = CORRECT** vs truth; robustness `dede51d2` n=233,438 (was 36,229), **oos_r2 −12.055 → +0.181**; legacy linear `rank_k` gone from both.
+- **Sequenced retrain-then-restart** so the daemon never saw new feature names against old artifacts (which would have silently zeroed `rank_k`).
+- **Scope, corrected against ourselves:** `rank_k` was the **ONLY** continuous categorical — hypothesis/dte_bucket/dir_id/regime_id were already one-hot, so our "known failure mode in our pipeline" claim was withdrawn. A systematic sweep did find **`n_signals`** non-monotonic (0.0000/0.0668/0.0614/0.0947) — milder, untested, on the TEST list not the fix list. `n_optional_exits` is monotonic, stays linear.
+- **CLAIM BOUNDARY (Crucible's correction):** F3's label is **conversion-shaped, not quality-shaped** — P(convert) favours k=5 all-time while E[cpcv] favours k=10. This fix improves **conversion** prediction and claims nothing about quality. That is also the standalone argument for their two-part design, independent of the collider.
+- **Judge:** prereg `b1eb98fab4cc` — trend-xsect `k5_share` 0.553 → ~0.486, ~7σ at submission n, readable in hours. The CPCV read cannot resolve it (Crucible: v51−v49 is already −0.30σ).
+- **Next:** watch `k5_share` and resolve the prereg; ramp N=300→40; Factor-1 retest with a calibrated (logistic, clipped) F1 per Crucible's defect note; test `n_signals` encoding.
+
 ## 2026-07-25T07:34:22Z — **v51 DEPLOYED: same-night REVERT of the v50 rank_k bias.** The validating evidence was COLLIDER BIAS; the true sign is reversed. Rule adopted: parameter effects on STAGE ONE only.
 
 - **LIVE and verified.** `f3404ab`, D337. Journal: `grammar_version=v51`, `manual_bump row for v51`, no traceback, NRestarts=0. Suite **2087 passed / 0 failed** READ before restart. **`FORGE_PREFILTER_SAMPLE_N=300` preserved** (operator: keep the honest-arm speedup).
