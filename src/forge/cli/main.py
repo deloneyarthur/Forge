@@ -740,6 +740,22 @@ _PREFILTER_SAMPLE_PARSE_FAILED_LOGGED: bool = False
 _MAX_PREFILTER_SAMPLE_N = 350
 
 
+# v50 RETARGET (2026-07-24, versionless — SELECTION, not enumeration, so no grammar bump;
+# D287 precedent). The quality lane's ordering target moved target_wf_p25 -> target_cpcv_p25.
+# `wf_sharpe_p25` turned out to be a NON-BINDING enrichment label Crucible computes FOR this
+# ranker (threshold 0.0, admits 100% of stage two — their correction; it is not a gate), and
+# on the honest ARM it is ~ORTHOGONAL to the metric that does gate: sp(cpcv_p25, wf_p25) =
+# +0.031, versus +0.39 on the ranker-selected pool — a SELECTION ARTIFACT. Measured
+# consequence (scripts/target_sweep.py Run C: train on non-honest rows, rank the unseen
+# honest arm): ordering by wf_p25 lifts realized cpcv +0.009 (i.e. baseline), by cpcv +0.178.
+# Endorsed by Crucible. The trainer publishes BOTH targets (daily_ranker_eval.sh), so
+# reverting is this one constant with no gap in either artifact.
+# SINGLE SOURCE OF TRUTH: the journal labels derive from this too. The first v50 batch logged
+# "quality_rank: wf_p25 ... (model=d8d85324)" — the cpcv model under a hardcoded wf label —
+# which would have read as a FAILED retarget to anyone verifying from the journal.
+_QUALITY_LANE_TARGET = "target_cpcv_p25"
+
+
 def _resolve_prefilter_sample_n() -> int:
     """Parse ``FORGE_PREFILTER_SAMPLE_N`` (D335): count of prefilter-REJECTED configs to
     submit per batch as a uniform-random draw, tagged ``prefilter_sample``. This is the
@@ -2251,18 +2267,8 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     if quality_rank and not _quality_off and verdict_scorer is not None:
         from forge.ranking.model import load_latest_robustness_model, robustness_tail_norm
 
-        # v50 RETARGET (2026-07-24, versionless — this is SELECTION, not enumeration):
-        # target_wf_p25 -> target_cpcv_p25. `wf_sharpe_p25` turned out to be a NON-BINDING
-        # enrichment label Crucible computes FOR this ranker (threshold 0.0, admits 100% of
-        # stage two — their correction; it is not a gate), and on the honest ARM it is
-        # ~ORTHOGONAL to the metric that does gate: sp(cpcv_p25, wf_p25) = +0.031, vs +0.39
-        # on the ranker-selected pool, which is a SELECTION ARTIFACT. Measured consequence
-        # (scripts/target_sweep.py Run C — train on non-honest, rank the unseen honest arm):
-        # ordering by wf_p25 lifts realized cpcv +0.009 (i.e. baseline), by cpcv +0.178.
-        # Endorsed by Crucible. The trainer publishes BOTH targets (daily_ranker_eval.sh), so
-        # reverting is this one line with no gap in either artifact.
         _qmodel = load_latest_robustness_model(
-            forge_db_path.parent / "models", target="target_cpcv_p25"
+            forge_db_path.parent / "models", target=_QUALITY_LANE_TARGET
         )
         if _qmodel is not None:
             _qm = _qmodel  # non-None binding for the closure
@@ -2291,7 +2297,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                 verdict_scorer = _gate_tail_score
                 _gate_tail_ordering = True  # P1.1: rank by the gate-tail value (HARD gate)
                 typer.echo(
-                    f"quality_rank: wf_p25 GATE-TAIL ACTIVE "
+                    f"quality_rank: {_QUALITY_LANE_TARGET} GATE-TAIL ACTIVE "
                     f"(model={_qm.model_id} p_floor={_floor:.4f}) hard-gate (composite bypassed)"
                 )
             else:
@@ -2301,9 +2307,11 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                     return _base_scorer(config) * robustness_tail_norm(_qm, feats)
 
                 verdict_scorer = _blend_score
-                typer.echo(f"quality_rank: wf_p25 BLEND ACTIVE (model={_qm.model_id})")
+                typer.echo(
+                    f"quality_rank: {_QUALITY_LANE_TARGET} BLEND ACTIVE (model={_qm.model_id})"
+                )
         else:
-            typer.echo("quality_rank: no target_wf_p25 model yet (prior unchanged)")
+            typer.echo(f"quality_rank: no {_QUALITY_LANE_TARGET} model yet (prior unchanged)")
     elif quality_rank and verdict_scorer is None:
         typer.echo("quality_rank: inert — needs the F3 P(component) base (FORGE_F3_RANKER off)")
 
