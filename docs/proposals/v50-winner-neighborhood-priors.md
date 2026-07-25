@@ -238,7 +238,74 @@ honest arm shows zero — that is the null, not a bug.
    there would spend honest-arm throughput manufacturing rejects. So this doc's
    lever stands alone; there is no multi-objective merge to plan for.
 
-## 8.1 Prototype BUILT + shadow-diff PASSED — 2026-07-24
+## 8.0 ⚠️ VERDICT 2026-07-24 (evening): PARKED — the shadow number below was measured on the wrong population
+
+**Read this before §8.1/§8.2, whose figures are superseded.** Crucible's power reply
+(`CRUCIBLE_the_lift_is_real_but_your_post_ship_read_cannot_see_it_...`) flagged that our
+baseline p90 0.797 matched their **all-arm-labelled** pool (76% `ranked`), not their
+honest arm (0.672). They were right.
+
+**The defect.** `load_observations` filtered on `measurement_basis='fullhist_refit'`
+only — the honest **LANE** — with no `selection_mode` filter, so the judge ran on
+n=5,324 rows that are ~94% ranker-selected. §4 of this doc says *judge on
+`prefilter_sample`, never `ranked`*; §2 says *fit on the fullhist_refit lane*. Both
+were called "the honest slice" and the judge silently inherited the lane.
+
+**Re-derived on the honest arm** (n=344; median 0.3256 / p90 0.6712, matching Crucible
+to the digit):
+
+| read | d_median | d_p90 |
+|---|---:|---:|
+| ~~full lane (superseded)~~ | ~~+0.0290~~ | ~~+0.0455~~ |
+| fit non-honest → judge unseen honest arm (fully OOS) | +0.0153 | **+0.0087** |
+| fit honest arm → judge held-out honest arm (OOS) | +0.0026 | **+0.0019** |
+
+Bootstrap 95% CI on the fully-OOS p90 delta: **[+0.0003, +0.0429]** — real, but barely
+excluding zero and **~5× smaller** than claimed.
+
+**Starvation ruled out** as the explanation for the honest-only near-zero: a fit on 172
+honest rows still yields 98 entries at mean |tilt| 0.187, against 140 entries / 0.203
+for the full-lane fit. The honest-only prior is not shrunk to neutrality — it fits real
+tilts that simply do not generalize, which is evidence the full-lane tilts were partly
+ranker-specific.
+
+**Consequence: the A/B is not feasible.** Crucible sized it at ~765/arm to detect
++0.045. At the corrected +0.0087 the requirement is `(0.045/0.0087)² × 765 ≈ 20,000` per
+arm — ~57 days at the current honest rate. There is nothing testable at our resolution.
+
+**Prereg `916d79109b4d` resolved `refuted` (withdrawn-as-miscalibrated, never tested)** —
+both for the population defect and for Crucible's independent finding that its +0.02
+bound was cleared by noise ~22% of the time and sat 0.77σ from its own null, so neither
+branch could fire. No replacement registered.
+
+**This is §6's honest null arriving:** param-neighborhood concentration, as an aggregate
+generation lever, is exhausted at our measurement resolution. The lever is **PARKED** —
+not retuned. What survives is the residue in §8.3.
+
+## 8.3 What survives: two param findings worth handing to Crucible as hand-prior candidates
+
+Crucible's §6 ask — *record which params carry the delta, not just the aggregate* — is
+the part with value left. Per-param rank-IC against honest cpcv, within-cell demeaned,
+measured on the full lane for power and then **sign-checked on the honest arm alone**:
+
+| param | full-lane IC (n) | honest-arm IC (n) | |
+|---|---:|---:|---|
+| `rank_k` | −0.071 (5,135) | **−0.167** (120) | **agree** — lower `rank_k` (5 over 10) |
+| `per_trade_risk_pct` | +0.058 (5,300) | **+0.106** (278) | **agree** — higher risk pct |
+| `regime_filter_threshold` | −0.063 (5,300) | −0.012 (278) | agree, but weak on honest |
+| `directional_threshold` | +0.016 (5,300) | **−0.063** (278) | **SIGN FLIPS** |
+| `exit_time_stop_n_bars` | −0.052 (2,005) | n/a (**0**) | no honest coverage at all |
+
+The first two are candidate **hand-tuned priors** — the D282/D288/D291 pattern that
+demonstrably works — and should be relayed to Crucible for validation rather than
+shipped by us. `per_trade_risk_pct` needs their read specifically: "higher risk sizes
+better" may be a `vol_target` leverage artifact rather than an edge.
+
+`directional_threshold` is the cautionary one: 3rd-largest full-lane param, and its sign
+**inverts** on the honest arm. A prior fit on the lane would have tilted it the wrong
+way — the population defect in miniature, and the reason the sign-check column exists.
+
+## 8.1 Prototype BUILT + shadow-diff (SUPERSEDED — see §8.0) — 2026-07-24
 
 The artifact and the shadow gate exist and are committed. **Nothing is wired into the
 sampler**; the shadow-diff was the gate and it reads positive.

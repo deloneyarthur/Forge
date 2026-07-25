@@ -15,10 +15,10 @@ Two things it reports:
      strongest available evidence it is learning real structure rather than noise.
 
   2. WHAT IT WOULD DO - the shadow diff, measured the way the proposal pre-registers
-     it: CONFIG-level and OUT-OF-SAMPLE. A config's draw weight is the PRODUCT of its
-     per-param weights (the sampler draws each param, so the joint density compounds);
-     the prior is fit on half the honest rows and the reweighted distribution is read
-     on the held-out half. Headline is the **p90** -- "can the grammar throw a
+     it: CONFIG-level, OUT-OF-SAMPLE, and on the honest ARM. A config's draw weight is
+     the PRODUCT of its per-param weights (the sampler draws each param, so the joint
+     density compounds); the prior is fit on NON-honest rows and read on the unseen
+     honest arm. Headline is the **p90** -- "can the grammar throw a
      promotion-grade extreme without the ranker's help" -- because the centre drifts on
      cell mix. Effective sample size is reported beside it: a lift bought by collapsing
      the draw onto a handful of configs is not a lift, it is lost exploration.
@@ -26,6 +26,13 @@ Two things it reports:
      NB a per-param MARGINAL read understates this by ~10x. Weighting one param at a
      time ignores that the sampler draws them all, so the marginal shift is not the
      quantity the sampler would actually realize. Reported below the judge, labelled.
+
+POPULATION, and the defect that makes it worth spelling out: the honest LANE
+(`measurement_basis='fullhist_refit'`) is NOT the honest ARM
+(`selection_mode='prefilter_sample'`). The lane is ~94% ranker-selected. On 2026-07-24
+this script judged on the lane and reported p90 +0.0455; re-judged on the arm the same
+prior gives **+0.0087** (CI [+0.0003, +0.0429]). Crucible caught it. The judge now
+splits by arm and refuses to read a thin arm.
 
 HONEST BOUND, restated so the output is not over-read: this reorders draws inside a
 distribution whose ceiling is sub-gate (0/302 honest configs clear cpcv 1.5). A
@@ -67,6 +74,11 @@ _TARGET_GATE = "cpcv_sharpe_p25"
 _HAND_PINNED_DIRECTIONALS = frozenset({"residual_momentum", "momentum"})
 
 _MIN_CELL_N = 30  # below this a cell's own mean is too noisy to tilt against
+
+# The honest ARM — unselected by BOTH prefilter and ranker. The JUDGE population.
+# Distinct from the honest LANE (measurement_basis); see `load_observations`.
+_HONEST_ARM = "prefilter_sample"
+_MIN_JUDGE_N = 50  # below this the honest-arm read is not worth printing
 
 
 def _gate_value(gate_results: object, key: str) -> float | None:
@@ -144,13 +156,24 @@ def _cell_and_params(cfg: dict[str, Any]) -> tuple[tuple[str, ...], dict[str, fl
 
 
 def load_observations(db_path: Path) -> list[dict[str, Any]]:
-    """Honest-lane observations only: `measurement_basis='fullhist_refit'` with a real
-    cpcv value. Never the 5yr `standard_window` screen (spec §2)."""
+    """Honest-lane observations, each tagged with its selection ARM.
+
+    TWO DIFFERENT "HONEST"S — conflating them cost us a 5x-inflated result on
+    2026-07-24, caught by Crucible:
+      * honest LANE = `measurement_basis='fullhist_refit'` — the full-history validator
+        rather than the 5yr screen. This is the FIT population (spec §2).
+      * honest ARM  = `selection_mode='prefilter_sample'` — unselected by BOTH prefilter
+        and ranker. This is the JUDGE population (spec §4), and it is ~6% of the lane;
+        the other ~94% is ranker-selected.
+    Judging on the lane measures the ranker's pool, not the grammar's. Every row now
+    carries `arm` so the judge can filter, and `_judge` reports both so the two can
+    never silently merge again.
+    """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         raw = con.execute(
             """
-            SELECT s.config_json, v.gate_results
+            SELECT s.config_json, v.gate_results, s.selection_mode
             FROM verdicts v
             JOIN submissions s ON s.config_hash = v.config_hash
             WHERE v.measurement_basis = 'fullhist_refit'
@@ -160,7 +183,7 @@ def load_observations(db_path: Path) -> list[dict[str, Any]]:
         con.close()
 
     out: list[dict[str, Any]] = []
-    for cfg_json, gate_results in raw:
+    for cfg_json, gate_results, arm in raw:
         try:
             cfg = json.loads(cfg_json)
         except (json.JSONDecodeError, TypeError):
@@ -171,7 +194,7 @@ def load_observations(db_path: Path) -> list[dict[str, Any]]:
         cell, params = _cell_and_params(cfg)
         if not params:
             continue
-        out.append({"cell": cell, "params": params, "outcome": outcome})
+        out.append({"cell": cell, "params": params, "outcome": outcome, "arm": arm})
     return out
 
 
@@ -216,22 +239,32 @@ def _weighted_quantile(values: Sequence[float], weights: Sequence[float], q: flo
 def _judge(
     observations: list[dict[str, Any]], exempt: set[tuple[str, ...]], n_splits: int = 5
 ) -> None:
-    """The pre-registered read: fit on half, measure the reweighted distribution on the
-    held-out half, report median / p90 / effective sample size."""
-    print("\n=== THE JUDGE: config-level, OUT-OF-SAMPLE reweighted honest distribution ===")
+    """The pre-registered read: fit on NON-honest rows, judge on the honest ARM.
+
+    The arm split is not optional. Judging on the whole `fullhist_refit` LANE (~94%
+    ranker-selected) inflated this ~5x on 2026-07-24 — it measures the ranker's pool,
+    not the grammar's.
+    """
+    honest_only = [o for o in observations if o["arm"] == _HONEST_ARM]
+    non_honest = [o for o in observations if o["arm"] != _HONEST_ARM]
+    print("\n=== THE JUDGE: config-level, OUT-OF-SAMPLE, on the honest ARM ===")
     print(
-        "(fit on 50% of honest rows, read on the held-out 50%; p90 is the pre-registered metric)\n"
+        f"(fit on non-honest n={len(non_honest)}; judge on unseen honest arm n={len(honest_only)})"
     )
+    print("p90 is the pre-registered metric; judging on the LANE instead inflates it ~5x.\n")
+    if len(honest_only) < _MIN_JUDGE_N:
+        print(f"  honest arm too thin (n={len(honest_only)} < {_MIN_JUDGE_N}) — accrue more.")
+        return
     print(f"{'split':>6} {'uni med':>9} {'wtd med':>9} {'uni p90':>9} {'wtd p90':>9} {'d_p90':>9}")
     d_med: list[float] = []
     d_p90: list[float] = []
     for seed in range(n_splits):
-        # Seeded numpy RNG (not `random`): matches `target_sweep.py` and keeps the
-        # split reproducible without touching the production seed hierarchy.
-        idx = list(np.random.RandomState(seed).permutation(len(observations)))
-        half = len(idx) // 2
-        train = [observations[i] for i in idx[:half]]
-        test = [observations[i] for i in idx[half:]]
+        # Fit on non-honest rows (power), judge on a bootstrap resample of the honest
+        # arm (clean). Seeded numpy RNG matches `target_sweep.py` and keeps the split
+        # reproducible without touching the production seed hierarchy.
+        rng = np.random.RandomState(seed)
+        train = [non_honest[i] for i in rng.permutation(len(non_honest))]
+        test = [honest_only[i] for i in rng.randint(0, len(honest_only), len(honest_only))]
         prior = fit_winner_prior(train, trained_through=utc_now(), exempt_cells=exempt)
         vals = [o["outcome"] for o in test]
         w = [_config_weight(prior, o) for o in test]
@@ -245,13 +278,13 @@ def _judge(
         f"p90 lift as a share of the gap to the gate (0.351 -> 1.5): {np.mean(d_p90) / 1.149:.2%}"
     )
 
-    full = fit_winner_prior(observations, trained_through=utc_now(), exempt_cells=exempt)
-    w_all = np.array([_config_weight(full, o) for o in observations])
+    full = fit_winner_prior(non_honest, trained_through=utc_now(), exempt_cells=exempt)
+    w_all = np.array([_config_weight(full, o) for o in honest_only])
     w_all = w_all / w_all.sum()
     ess = 1.0 / float(np.sum(w_all**2))
     print(
-        f"effective sample size of the reweighted draw: {ess:,.0f} / {len(observations):,} "
-        f"({ess / len(observations):.1%} exploration retained)"
+        f"effective sample size on the honest arm: {ess:,.0f} / {len(honest_only):,} "
+        f"({ess / len(honest_only):.1%} exploration retained)"
     )
 
 
