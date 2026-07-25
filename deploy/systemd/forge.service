@@ -48,14 +48,17 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 # uniform-random prefilter-REJECTED configs/batch tagged selection_arm='prefilter_sample'
 # — the ONLY population unselected by both prefilter and ranker, the grammar-honest
 # estimate the freeze criterion reads. On forge.service (the DAEMON/submit path), NOT the
-# trainer unit. REVERTED to N=10 (2026-07-24 ~09:15 PDT, operator): the v49 honest baseline
-# LANDED at n=298 (Forge-side ledger; cpcv_p25 median +0.35, 0/298 clear the 1.5 gate). The
-# N=300 accelerator (00:20->09:15 PDT) is DONE; kept at a low N=10 to keep the three-arm
-# instrument warm and validated at minimal ranked cost. v49 is attribution-only, so no reason
-# to keep accruing v49 honest data past the baseline. RAMP back up (N=40+) when v50 ships and
-# needs its own honest cohort beside this baseline. This is a MEASURE-AND-ADJUST value: the
-# exact N->accrual mapping is coupled through backpressure, so N is tuned against observed rate.
-Environment=FORGE_PREFILTER_SAMPLE_N=10
+# trainer unit. RAMPED to N=300 for ONE OVERNIGHT WINDOW (2026-07-24 ~18:45 PDT, operator:
+# "ramp to 300 so we have something in the morning, then down to 40"), to accrue v50's own
+# honest cohort beside the v49 baseline (n=302). ⚠️ REVERT TO 40 IN THE MORNING — at N=300
+# the batch is 200+300=500 against the 600 in-flight cap, so backpressure throttles the whole
+# stream and RANKED PRODUCTION DROPS ~70%. That price is deliberate overnight and wrong by day.
+# Target: ~12h at ~30-35/hr = ~360-420 honest configs, enough to resolve prereg b13b0f893a11
+# (the k=5-vs-k=10 trend gap) — note the v50 bias itself makes k=10 only 25% of trend draws,
+# so the arm that VALIDATES the change is the scarce one and sets the n requirement.
+# Steady-state target is N=40 (Crucible's power target, ~11% ranked cost, batch 240 well
+# under the cap). MEASURE-AND-ADJUST: the N->accrual mapping is coupled through backpressure.
+Environment=FORGE_PREFILTER_SAMPLE_N=300
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
