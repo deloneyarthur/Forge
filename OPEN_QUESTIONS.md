@@ -1143,7 +1143,34 @@ answer; the reference-NAV declaration itself is an operator choice.
 
 **↳ ANSWERED 2026-07-20 (same day, `FORGE_v42_ack_and_answers_2026-07-20.md`): shape (b), narrowed to an ANNOTATION.** The check lives Crucible-side at queue time next to the row-45 liquidity preflight (chain truth already in hand; (a) declined — no new cross-system surface for a LOW item). It will be an exported annotation (`min_contracts_at_reference_nav` on the verdict surface), NOT a reject — fractional sizing at engine capital is legitimate research; a non-statistical reject-class is not added quietly. **Build is gated on the OPERATOR declaring the reference NAV** (ties to the live-deposit decision); until then shape (c) is the operating truth — the shadow detects. Nothing Forge-side; Q52 stays open only as the operator-NAV tickler.
 
-## Q57 — the v44 vix-conditioner fires at ~22% against a 12.5% target constant (2026-07-24, severity: medium)
+## Q57 — RESOLVED same-day — the v44 vix-conditioner fires at ~22% against a 12.5% target constant (2026-07-24, severity: medium)
+
+**RESOLVED 2026-07-24 — the SAMPLER WAS CORRECT; the TEST's denominator was wrong.**
+Read both predicates side by side: `_vix_conditioner_eligible` is evaluated BEFORE any
+optional second gate is appended, whereas the test judged the FINAL config and required
+every gate to sit in an allowed-set `{hurst, vix_term_slope}`. A conditioner-eligible
+config that did NOT fire can then take a regime VETO (`days_since_jump`,
+`_REGIME_VETO_SHARE = 0.5`); its final gates are `{hurst, days_since_jump}`, which the
+allowed-set rejects — so the test silently dropped it from the denominator. It only ever
+dropped NON-FIRING configs, which is why the rate inflated.
+
+Predicted `0.125 / (0.125 + 0.875 x 0.5) = 0.222`; measured exactly that. On seed 11:
+
+| predicate | fired / eligible | rate |
+|---|---:|---:|
+| old (allowed-set on final config) | 176 / 795 | 0.2214 |
+| **sampler's actual eligibility** | **176 / 1457** | **0.1208** |
+| constant | | 0.125 |
+
+662 configs dropped by the old predicate, **0 of them fired**.
+
+**Fix:** the test now keys eligibility on the PRIMARY gate's signal id (`sig_regime`),
+mirroring the sampler's own structure, so optional second gates (conditioner OR veto)
+cannot disqualify a config. Band tightened from the fitted [0.05, 0.28] back to a real
+[0.09, 0.17] around the constant. **No supply distortion on the resid_vix pilot cell** —
+Crucible's P2 in-book figures are unaffected; the provisional flag in the v50 deploy
+relay is withdrawn.
+
 
 **Question.** `_VIX_CONDITIONER_SHARE = 0.125`, but the realized fire rate measured by
 `test_conditioner_fires_near_target_share` is **~0.22 across every seed tried** (v50 code,

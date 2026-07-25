@@ -33,6 +33,9 @@ from crucible_contracts import IndicatorMetadata, RegistrySnapshot
 import forge.enumeration.sampler as sampler_mod
 from forge.enumeration import enumerate_candidates
 from forge.enumeration.sampler import (
+    _CAPITULATION_DIRECTIONAL_ID as _CAPITULATION_ID,
+)
+from forge.enumeration.sampler import (
     _RESID_MOMENTUM_PILOT_WEIGHT,
     _VIX_CONDITIONER_ID,
     _VIX_CONDITIONER_PRIMARY_GATES,
@@ -209,9 +212,19 @@ def test_conditioner_never_on_mean_reversion(v44_configs: list) -> None:
 
 
 def test_conditioner_fires_near_target_share() -> None:
-    """Over a wide draw, the conditioner fires on ~12.5% of ELIGIBLE configs
-    (trend-xsect, adx/hurst primary, no other second gate). Band is wide — the
-    eligible cell is narrow, so this guards the mechanism, not a tight rate."""
+    """Over a wide draw the conditioner fires on ~12.5% of ELIGIBLE configs.
+
+    ELIGIBILITY IS KEYED ON THE PRIMARY GATE'S SIGNAL ID (`sig_regime`), mirroring
+    `_vix_conditioner_eligible`, which is evaluated BEFORE any optional second gate is
+    appended. An earlier version of this test instead required every gate on the FINAL
+    config to sit in an allowed-set {hurst, vix_term_slope} — which silently dropped
+    every eligible config that took a regime VETO (`days_since_jump`) instead of the
+    conditioner. Those are all NON-FIRING configs, so removing them inflated the
+    measured rate to ~0.22 against a 0.125 constant, and the band had been fitted to
+    that artifact rather than to the target (Q57, resolved 2026-07-24: 176/795 = 0.2214
+    under the old predicate vs 176/1457 = 0.1208 under this one; 662 dropped, 0 of them
+    fired). The sampler was correct throughout.
+    """
     reg = _v44_registry(minimal_registry_snapshot())
     configs = list(
         enumerate_candidates(grammar=_grammar(), registry=reg, seed=11, max_candidates=20000)
@@ -219,28 +232,16 @@ def test_conditioner_fires_near_target_share() -> None:
     eligible = 0
     fired = 0
     for c in _trend_xsect(configs):
-        gates = _gates(c)
-        ts = [g for g in gates if g in _VIX_CONDITIONER_PRIMARY_GATES]
-        allowed = (*_VIX_CONDITIONER_PRIMARY_GATES, _VIX_CONDITIONER_ID)
-        if len(ts) == 1 and all(g in allowed for g in gates):
+        primary = next((s.indicators[0] for s in c.signals if s.id == "sig_regime"), None)
+        directional = next((s.indicators[0] for s in c.signals if s.role == "directional"), None)
+        if primary in _VIX_CONDITIONER_PRIMARY_GATES and directional != _CAPITULATION_ID:
             eligible += 1
-            if _VIX_CONDITIONER_ID in gates:
+            if _VIX_CONDITIONER_ID in _gates(c):
                 fired += 1
     assert eligible >= 20, f"too few eligible configs to test the share ({eligible})"
     rate = fired / eligible
-    # BAND RE-PIN (v50, 2026-07-24): the rank_k trend bias changed rng consumption for
-    # trend-xsect draws, so the conditioner's Bernoulli samples land at different stream
-    # positions and the measured rate moved 0.22 -> 0.223, just past the old ceiling.
-    # Measured across 6 seeds on v50: 0.208 / 0.212 / 0.215 / 0.221 / 0.221 / 0.244.
-    #
-    # ⚠️ The band is fitted to the REALIZED rate (~0.22), NOT to `_VIX_CONDITIONER_SHARE`
-    # (0.125) — and that gap is systematic across every seed, so it is a real PRE-EXISTING
-    # discrepancy this change only re-sampled, not caused (the pre-v50 code produced ~0.22
-    # too, which is why the old ceiling was 0.22). Most likely cause: this test's
-    # `eligible` predicate is NARROWER than the sampler's, so dividing by a smaller
-    # denominator inflates the rate. Logged as Q57; do NOT read a passing band here as
-    # evidence the share constant is honoured.
-    assert 0.05 <= rate <= 0.28, f"fire rate {rate:.3f} off target {_VIX_CONDITIONER_SHARE}"
+    # Tight band around the CONSTANT now that the denominator is right (measured 0.1208).
+    assert 0.09 <= rate <= 0.17, f"fire rate {rate:.3f} off target {_VIX_CONDITIONER_SHARE}"
 
 
 # --- validity -----------------------------------------------------------------
