@@ -2555,10 +2555,18 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             registry=registry,
             batch_id=str(result.batch_id),
             scored_at=batch.submitted_at,
-            # Shadow the wf_p25 robustness model (the quality lane's), not whichever
-            # robustness artifact was retrained last, so the §8.6 streak (D191/D192)
-            # measures the right model. Telemetry only — never changes submissions.
-            robustness_target="target_wf_p25",
+            # Shadow the model the quality lane ACTUALLY uses, not whichever robustness
+            # artifact was retrained last (D191/D192). Bound to `_QUALITY_LANE_TARGET`
+            # rather than a literal: v50 retargeted the lane to cpcv while this call site
+            # still said "target_wf_p25", so the shadow was measuring a model the lane no
+            # longer used — the intent ("the quality lane's") had silently drifted from
+            # the value. Deriving it removes the drift by construction.
+            # NB this introduces a deliberate discontinuity in `tail_score`/`tail_model_id`:
+            # rows before 2026-07-25 shadow the wf_p25 model, rows after shadow cpcv. Safe
+            # to switch now because the §8.6 wf_p25 tail streak was RETIRED 2026-07-16, so
+            # no live series spans the boundary. Split on `tail_model_id` when reading
+            # history. Telemetry only — never changes submissions.
+            robustness_target=_QUALITY_LANE_TARGET,
             hygiene_scorer=_hygiene_score,
         )
         if shadow_count:

@@ -54,10 +54,12 @@ def run_shadow_scoring(
 ) -> int:
     """Record shadow scores for the batch's submitted candidates; never raises.
 
-    ``robustness_target`` selects which robustness model to shadow (it shares the dir
-    with the daily-retrained cpcv model); ``None`` keeps the original target-blind
-    "newest" behavior. The production loop passes ``target_wf_p25`` so the §8.6 streak
-    measures the model the quality lane uses (D191/D192).
+    ``robustness_target`` selects which robustness model to shadow (the dir holds one
+    artifact per target, both retrained daily); ``None`` keeps the original target-blind
+    "newest" behavior. The production loop passes its own ``_QUALITY_LANE_TARGET`` so the
+    shadow always measures the model the quality lane actually uses (D191/D192) — it
+    passed a ``target_wf_p25`` literal until v50 retargeted the lane to cpcv and the two
+    silently diverged.
 
     ``hygiene_scorer`` records the model-free §6.2 hygiene composite per row
     (comparator fix): ``composite_score`` stores whatever score production ordered
