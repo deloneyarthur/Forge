@@ -13,7 +13,24 @@ WorkingDirectory=%h/proj/Forge
 # evaluated). Set HERE and not in forge.service: `build_dataset` is called only by
 # the `ranker-model` CLI this unit runs, so the flag in the daemon unit would be a
 # silent no-op (the shipped != deployed class, D330).
-Environment=FORGE_HONEST_LABEL_SCOPE=on
+# ⚠️ TURNED OFF 2026-07-25 (Q59). The DROP is a COLLIDER, and that outweighs the
+# estimand argument above. `honest_regime_coverage_row` is quality-correlated, so
+# dropping on it biases every coefficient correlated with coverage-resolution --
+# measured: 9 of 81 sign-FLIP. Worse, it deletes whole strata: rank_k=20 has 55,820
+# rows unconditioned and ZERO under the drop, so the model could not learn that k=20
+# converts at 0% (D004 breadth floor) at any encoding.
+# VALIDATED OUT OF SAMPLE, temporal split, judged on the unconditioned population:
+#   robustness  OOS rank-IC   0.0321 (drop) -> 0.3962 (no-drop)     12x
+#   F3          OOS AUC       0.5910 (drop) -> 0.6936 (no-drop + categorical rank_k)
+# The live models were near coin-flip out of sample, found two independent ways.
+# Ships TOGETHER with the categorical rank_k encoding in features.py -- arm F shows
+# either alone is worthless or worse (drop+one-hot is byte-identical to drop+linear,
+# because with k=20 deleted a one-hot over {5,10} IS a relabelled linear term).
+# D331 Part B's cell-allocation benefit does NOT regress (arm E: unconditioned picks
+# land marginally CLOSER to the ground-truth hypothesis mix).
+# REVERT = set this back to `on` + retrain; the flag is read only by the ranker-model
+# CLI this unit runs (a copy in forge.service would be a silent no-op, D330).
+Environment=FORGE_HONEST_LABEL_SCOPE=off
 ExecStart=%h/proj/Forge/scripts/daily_ranker_eval.sh
 # Train on a ~10k-row frame is minutes of pure-Python IRLS; snapshot + eval add a
 # little. Generous ceiling so a slow snapshot never wedges the timer.

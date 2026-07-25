@@ -78,6 +78,13 @@ def _directional_threshold_quantile(signal: SignalSpec) -> float | None:
     return _normalize(float(threshold), lo, hi)
 
 
+# The enumerable `rank_k` levels. Categorical by nature (see the encoding note in
+# `extract_features`): k=20 converts at 0% on the D004 breadth floor, so the relation to
+# outcome is non-monotonic and a slope mis-signs it. Kept as an explicit tuple so a new
+# level is a deliberate edit rather than a silent widening of a numeric range.
+_RANK_K_LEVELS: tuple[int, ...] = (5, 10, 20)
+
+
 def extract_features(config: StrategyConfig, registry: RegistrySnapshot) -> FeatureVector:
     """Featurize one config against the registry's family map."""
     family_by_id = {meta.id: meta.family for meta in registry.indicators}
@@ -93,7 +100,20 @@ def extract_features(config: StrategyConfig, registry: RegistrySnapshot) -> Feat
     is_rank = combiner.type == "cross_sectional_rank"
     feats["is_rank_arm"] = 1.0 if is_rank else 0.0
     if is_rank:
-        feats["rank_k"] = float(combiner.rank_k)
+        # Q59/arm F (2026-07-25): rank_k is CATEGORICAL, never a slope. Its relation to
+        # outcome is NON-MONOTONIC -- measured P(F3 label=1) is k=5 0.0735, k=10 0.1336,
+        # k=20 **0.0000** -- because D004's breadth floor (n_min = 2*rank_k) is
+        # unresolvable for k=20 from a 20-name tier-2 pool. Crucible reproduce that zero
+        # exactly (0/55,981 vs our 0/55,820). A single slope fitted through a
+        # peak-then-cliff is dragged NEGATIVE by the cliff, which is the -0.33 (F3) and
+        # -0.04 (robustness) coefficients both sides first mis-read as pure collider bias:
+        # the models were ranking k=5 above k=10, the reverse of stage-one truth.
+        # One-hot also stops the encoding caring about the k5-vs-k10 middle ordering,
+        # which is itself window-specific (Crucible: the all-time population reverses it).
+        # Validated OUT OF SAMPLE, temporal split -- no-drop+one-hot 0.6936 AUC vs
+        # no-drop+linear 0.6550, overfit gap unchanged, so it is not bought with params.
+        for k in _RANK_K_LEVELS:
+            feats[f"rank_k_is_{k}"] = 1.0 if combiner.rank_k == k else 0.0
 
     regime_gates = [s for s in config.signals if s.role == "regime_filter"]
     feats["n_signals"] = float(len(config.signals))

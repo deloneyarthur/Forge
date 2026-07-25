@@ -258,7 +258,10 @@ def test_rank_arm_flag_and_rank_k() -> None:
         underlying=None,
     )
     assert feats["is_rank_arm"] == 1.0
-    assert feats["rank_k"] == 5.0
+    # Q59/arm F: rank_k is one-hot, not a slope — the linear encoding mis-signed it
+    # (non-monotonic: k=20 converts 0% on the D004 breadth floor).
+    assert feats["rank_k_is_5"] == 1.0
+    assert feats["rank_k_is_10"] == 0.0
     assert feats["combiner=cross_sectional_rank"] == 1.0
     # No underlying on the rank arm → no underlying_class feature at all.
     assert not any(name.startswith("underlying_class=") for name in feats)
@@ -296,6 +299,39 @@ def test_grammar_invalid_config_still_featurizes() -> None:
     )
     feats = _features(signals=signals)
     assert feats["dir_family=trend"] == 1.0
+
+
+def test_rank_k_is_CATEGORICAL_not_a_slope() -> None:
+    """Q59/arm F: `rank_k`'s relation to outcome is NON-MONOTONIC, so a linear feature
+    cannot represent it and comes out with the WRONG SIGN.
+
+    Measured P(F3 label=1): k=5 0.0735, k=10 0.1336, **k=20 0.0000** — the D004 breadth
+    floor (`n_min = 2*rank_k` is unresolvable from a 20-name tier-2 pool; Crucible
+    reproduce the zero exactly at 0/55,981 against our 0/55,820). A single slope through
+    a peak-then-cliff is dragged negative by the cliff, which is what produced the
+    -0.33/-0.51 coefficient both sides first mis-read as pure collider bias.
+
+    One-hot is the encoding that stops caring about the middle ordering — which matters
+    because the k5-vs-k10 ordering is itself window-specific (Crucible: all-time reverses
+    it). Validated OOS: no-drop+one-hot 0.6936 vs no-drop+linear 0.6550 AUC, with an
+    unchanged overfit gap, so the gain is not bought with parameters.
+    """
+    cfg = minimal_strategy_config(
+        combiner=CombinerSpec(type="cross_sectional_rank", rank_k=10, rebalance_frequency="monthly")
+    )
+    feats = extract_features(cfg, _REGISTRY).as_dict()
+
+    assert "rank_k" not in feats, "a linear rank_k slope must not exist — it mis-signs"
+    assert feats["rank_k_is_10"] == 1.0
+    assert feats["rank_k_is_5"] == 0.0
+    assert feats["rank_k_is_20"] == 0.0
+
+
+def test_confluence_config_has_no_rank_k_indicators() -> None:
+    """Non-rank configs must not carry rank_k indicators at all — pooling them as
+    `rank_k=0` is what made the arm-C composition question look plausible."""
+    feats = extract_features(minimal_strategy_config(), _REGISTRY).as_dict()
+    assert not any(k.startswith("rank_k") for k in feats)
 
 
 def test_vol_target_sizer_one_hot() -> None:
