@@ -124,4 +124,7 @@ this change touch **disjoint populations**: since v47 made trend/MR xsect-only, 
 name exclusion can only affect *single-name* draws (i.e. `volatility_event`), while this
 bias only affects *trend xsect*. They therefore cannot confound each other in
 `funnel --compare`, and bundling them into one bump is defensible and saves a deploy
-cycle. Separate bumps remain the more conservative option. **Operator's call.**
+cycle. Separate bumps remain the more conservative option.
+
+**DECIDED 2026-07-24 (operator: "definitely bundle"): ONE bundled v50 bump** carrying this
+bias + the IWM/SLB rider, on the disjoint-population argument above.

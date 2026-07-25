@@ -61,6 +61,12 @@ it does NOT contaminate the honest-arm baseline the tail-model target decision r
 It can therefore ship as its own v50 or ride a later bump without either interfering
 with the other.
 
+**DECIDED 2026-07-24 (operator: "definitely bundle"): this rides ONE bundled v50 bump**
+with `v50-rank-k-trend-bias.md`. Disjoint populations make it safe — since v47 made
+trend/MR xsect-only, this name exclusion can only affect SINGLE-NAME draws (i.e.
+`volatility_event`), while the rank_k bias only affects TREND XSECT, so neither can
+confound the other in `funnel --compare`.
+
 ## Post-ship reads
 
 - Prereg `8eaa7e4aca93` resolves on post-cut data: once excluded the names can no
