@@ -3480,6 +3480,74 @@ pin-hygiene discipline), [[D245]] (the both-directions contracts-restart lesson)
 
 **↳ 2026-07-22 (later²) — Crucible VERIFIED v48 to the row; **D296 STANDS**; prereg `2c3d5ab6cc5a` RESOLVED confirmed (D328 cont.; no code/grammar change).** Their `FORGE_v48_verified_and_d296_stands_2026-07-22`. **(1) v47 prereg resolved = confirmed** on the drained cohort (3,548/3,600): leg-1 single-name trend/relval/em conversion 0 by construction (census: zero emitted, capitulation persisting); leg-2 xsect component conversion 14.6% → 14.4% = −0.3pp vs ~0.6pp SE at n=3,548 → within noise, no converting supply lost; promoted 0↔0; unpredicted bonus pre-filter survival 23.6% → **38.0% (+14.3pp)**. **The discipline earned its keep:** their earlier PARTIAL read (506 decided) showed **+1.3pp** and reversed to **−0.3pp** on the drain — without the prereg we would have banked "v47 lifted conversion" into the freeze case. Canonical sentence: **v47 buys upstream efficiency, NOT component yield.** **(2) v48 verified independently from both ends:** their `rank_k = {5:55, 10:50, 0:9}` (**20 absent**) vs v46 928 / v47 964; ours `{5:96, 10:87}` on batch `646378f1`. Their `rank_k=0` bucket = non-rank single-name configs (9/113 theirs, 17/200 ours), not a third value. **The result is an IDENTITY, not the n:** 928/928 and 931/931 unverified decided runs are `rank_k=20`, and every run at `rank_k ∈ {0,5,10}` verified in both versions without exception; v48 lands 26/26 verified but **n=26 carries no weight alone** — coverage claim HELD OPEN until their drained re-read. **(3) [[D296]] STANDS UNRETRACTED** — they confirm their own ask-#1 `tier=0` offer contradicted their `FORGE_v42_ack` directive (tier 0 charges the TIER-3 spread derivation to every name in a mixed-tier union book → deflates every xsect result incl. megacaps) and that **`rank_k<=10` was the correct path**; retraction deferred to per-name spread charging (still opt-in behind an estimator injection). We declined `tier=0` as directive-compliance, not judgement — the property the directive should have; `tier=0` stays a one-parameter change if they retract. **(4) `momentum_252` still 0** (0/105 theirs, 0/156 ours) and **expected-not-falsifying**: at the 0.33% post-ranker rate the expected count in 105 draws is ~0.3, and F3 cannot have retrained on v48-era labels (26 decided). **Prereg `be5508b63706` explicitly NOT yet readable** — resolve only after an F3 retrain on a v48-era label; if still zero, ship the D287 selection-layer floor rather than re-scope the prereg. Crowding fix IS landing: resid **39.96% → 14.29%** theirs / 16.7% ours (~v44 level). Owned against ourselves: the prereg's leg-2 wording is stage-ambiguous (emission 3.5–5.0% met; post-ranker 16.7% not) — both recorded, not the flattering one. **(5) THEIR §4 BOUNDARY — the durable lesson:** Crucible observes ONLY post-ranker submissions; our enumeration mix / prefilters / F3 are structurally invisible to them, so any generate-vs-receive divergence can be decomposed only from our side, and their "under-weighted" call was the correct inference from the only fact they held. **Standing offer relayed:** we volunteer the funnel decomposition (enumeration → prefilter → holdout → ranked) on any emission-mix anomaly instead of letting them infer upstream state from output. **(6) Two-reason coverage field** (`breadth_impossible` vs `ad_hoc`): they open the contracts bump and send the shape for our sign-off BEFORE emitting (bump → we adopt → they emit); noted their `decision='reconfirm'` gated-export crash-loop (~45min) this morning — same class as our D245/D261 wedges. **(7) `pure_sue175` leg `96b67aa1`** (rank_k=20 MR-xsect, weight 0.4125): book `79eb6d55` KEEPS it — a generation change never de-promotes a frozen book — and its replacement verifies honestly; recorded as a **disclosure** (the promoted set contains one leg today's admission rules would not admit), explicitly not a de-promotion argument. Files: `config/preregistrations.jsonl` (2c3d5ab6cc5a → confirmed), `PROMPT_CRUCIBLE_V48_VERIFIED_ACK.md` (held), `RELAYS.md`, `STATUS.md`.
 
+## D337 — 2026-07-25 — v50 → v51 SAME-NIGHT REVERT of the rank_k=5 trend bias: the validating evidence was COLLIDER BIAS and the true sign is reversed
+
+**Deployed 2026-07-25T07:34:22Z** (`f3404ab`). Journal: `grammar_version=v51`,
+`grammar_versions: recorded manual_bump row for v51`, no traceback, NRestarts=0.
+Suite READ before restart: **2087 passed / 0 failed**. `FORGE_PREFILTER_SAMPLE_N=300`
+preserved across the restart (operator: keep the honest-arm speedup).
+
+**What happened.** D336 shipped `_TREND_RANK_K5_SHARE = 0.75` on Crucible's honest-arm
+validation (trend med CPCV +0.4056 at k=5 vs +0.1325 at k=10). Hours later they retracted
+it in full: the validation conditioned on the **stage-two** cohort, and stage-two
+admission is the refit TRIGGER — a function of config quality — so conditioning on it is
+a **collider**.
+
+**Reproduced on OUR ledger before acting** (we did not revert on their word alone; our
+figures match theirs to ~0.007 on every cell):
+
+| population | bucket | k5 − k10 (ours) | (theirs) |
+|---|---|---:|---:|
+| **stage one** (unselected) | swing_mid | **−0.1712** | −0.1771 |
+| **stage one** | swing_long | **−0.0256** | −0.0258 |
+| stage two (the validating population) | swing_mid | **+0.0776** | +0.0853 |
+
+**The mechanism, in our data:** `swing_long × k=10` converts **0 of 404** stage-one rows —
+that cell is ENTIRELY ABSENT from stage two — so `rank_k` was silently confounded with
+`dte_bucket`; and in `swing_mid`, k=5 survivors are a *more* selected slice (54.5%) than
+k=10's (69.1%), inflating k=5 mechanically. Same metric, same configs, sign flips purely
+from conditioning. Berkson's paradox. Crucible's stage-one replication: **5 of 6
+populations negative, to z = −38.75 on n≈69k**; v50 was already measuring **−0.0724**
+median CPCV vs v49 on the honest stage-one stream.
+
+**The revert.** Trend branch and both constants removed; `_rank_combiner`'s body is
+byte-identical to pre-v50 and its signature drops back to two args so no caller can pass a
+hypothesis expecting it to steer `rank_k`. A TOMBSTONE at `_RANK_K_CHOICES` carries the
+evidence, mechanism and rule. **IWM/SLB exclusion KEPT** — disjoint population, so the
+D336 bundling argument held up under exactly the stress it was designed to survive.
+
+**Goldens re-pinned** (third state: v49 draws + IWM/SLB). **Six of seven identical to
+v50** — only the cohort golden moved (@7), the one passing `rank_combiner_share` and thus
+drawing trend xsect. The revert is surgical. Emission proof: excluded-name draws `{}`;
+trend non-resid k5_share **0.527** (was 0.746); MR 0.492 untouched.
+
+**Prereg `b13b0f893a11` resolved REFUTED** — refuted by *reversal*, not by a null read.
+
+### THE RULE THIS BUYS (the durable output, bigger than the finding)
+
+> **Parameter effects are estimated on STAGE ONE (unselected) ONLY. The stage-two honest
+> arm is a valid yardstick for grammar-VERSION deltas — like-conditioned cohorts either
+> side — but is NOT a valid instrument for parameter attribution.**
+
+Stratifying *within* the stage-two population does not rescue it: Crucible controlled
+within sizer mode, within risk quartile, within hypothesis, and every control was applied
+inside the collider-conditioned sample. **The collider is at the sample's boundary, not
+inside it.**
+
+**This lands on our instruments too, and we own it.** `scripts/target_sweep.py` Run C and
+the whole `winner_prior` fit judge on `fullhist_refit` = stage two. Our own "independent
+confirmation" of rank_k (IC −0.167) used the same conditioned population and therefore
+could never have caught this. **Every parameter-level claim from 2026-07-24 needs
+re-deriving on stage one** — including the `per_trade_risk_pct` refutation, which Crucible
+has also flagged as un-rechecked (its drawdown pairing may carry it, but that is not
+established).
+
+**Not actioned: the `swing_long` lever.** Crucible's stage-one data shows swing_long −
+swing_mid at fixed rank_k = +0.42 / +0.27 on the honest arm (z > 10), replicated at z > 39
+on 69k legacy rows, with *lower* drawdown, and 43% of trend still draws swing_mid. They
+explicitly asked us NOT to ship it on that relay — "we have just demonstrated how easily we
+fooled ourselves." Direction noted, validation first.
+
 ## D336 — 2026-07-25 — v49 → v50 DEPLOYED (bundled): IWM+SLB dead-name rider + `rank_k=5` trend bias; and the tail-model RETARGET to `cpcv_sharpe_p25` (versionless, same window)
 
 **Deployed 2026-07-25T01:33:26Z** (`eff98ff`). Journal verified: `grammar_version=v50`,
