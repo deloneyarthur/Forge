@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-07-25T01:33:26Z — **v50 DEPLOYED** (bundled: IWM+SLB rider + rank_k=5 trend bias) + the tail-model RETARGET to cpcv, versionless, same window
+
+- **LIVE and verified.** `eff98ff`. Journal: `grammar_version=v50`, `registry_loaded_from_export` (hash `4aad48e7be14daee`), `grammar_versions: recorded manual_bump row for v50`, reconcile line, §7.3 backpressure block. No traceback, NRestarts=0. **Full uncontended suite READ BEFORE restart: 2086 passed / 0 failed.** D-entry **D336**.
+- **(1) IWM + SLB excluded** (38 → 40 names) — yield-audit round 2, IWM 502 decided/0 converted, SLB 540/0. Prereg `8eaa7e4aca93`.
+- **(2) `rank_k=5` bias, trend-scoped** (`_TREND_RANK_K5_SHARE = 0.75`) — Crucible-validated on their honest arm n=341: trend med CPCV **+0.4056 vs +0.1325 (gap +0.2731)**, **FREE** (maxDD flat/better, gate pass identical), **ZERO in MR (+0.0029)**. BIAS not pin — k=10 keeps 25% (D067; its arm is n=84). `residual_momentum` checked first, D276 pin intact. **Known trade: k=5 lowers WF — it wins the joint 2.6× ONLY because cpcv is the binding gate. Revisit if that changes.** Prereg `b13b0f893a11`.
+- **(3) RETARGET LIVE (versionless):** daemon `target_wf_p25` → `target_cpcv_p25`, and `daily_ranker_eval.sh` now trains **both** targets — without that the lane would load the last hand-trained cpcv artifact and silently freeze. Post-restart both resolve (`cpcv d8d85324` n=29,419; `wf bde5367a`), so the revert is one line with no gap. Shipped in the same window as v50 because it is orthogonal to BOTH preregs (each reads populations the ranker cannot touch — the honest arm is drawn from prefilter REJECTS).
+- **(4) Contracts pin → 1.39.0** (`generation_arm`/`generation_prior_id`), PIN-ONLY — **we emit neither field**; the generation prior they exist for is parked, so Crucible's GO stands deliberately unused. The preflight caught the un-adopted pin (its job).
+- **Emission proof:** excluded-name draws `{}`; trend non-resid k5_share **0.746** (target 0.75); resid 0.483 / MR 0.477 untouched. *(The first proof read 0.495 and was wrong-conditions, not a bug: cold-start with no `rank_combiner_share` draws only resid on the trend-xsect arm, and resid short-circuits to its D276 pin by design.)*
+- **Goldens re-pinned (7)** under the D286/D290/D309 discipline — old code reproduced every constant exactly at preflight, and every first divergence is a `volatility_event` single-name config = the v37/v41/v43 pool-shift signature.
+- **⚠️ Q57 logged:** the v44 vix-conditioner fires at ~0.22 against its 0.125 constant, **across all 6 seeds** — PRE-EXISTING (pre-v50 produces ~0.22; the old band was fitted to it), v50 only re-sampled it past the edge. Band re-pinned [0.05, 0.28] **with an inline warning that it tracks the realized rate, not the target**. Likely the test's `eligible` predicate is narrower than the sampler's — resolve before trusting that constant.
+- **Next:** `funnel --compare v49 v50`; resolve both preregs on post-cut honest cohorts; watch the first `quality_rank:` line naming a cpcv model (first UNBLOCKED iteration, can be hours under backpressure); deploy relay to Crucible with the row-45 cross-check request.
+
 ## 2026-07-24 (late) — v50 BUNDLED and staged: rank_k=5 (trend) + IWM/SLB rider. Target LOCKED to cpcv. Generation prior PARKED after a population defect. Assembly-complement NULLED.
 
 **Three v50 generation/ranker levers resolved on measured evidence in one day; one grammar change survived and it came from the wreckage of the one that failed.**

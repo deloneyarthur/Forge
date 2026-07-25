@@ -3480,6 +3480,76 @@ pin-hygiene discipline), [[D245]] (the both-directions contracts-restart lesson)
 
 **↳ 2026-07-22 (later²) — Crucible VERIFIED v48 to the row; **D296 STANDS**; prereg `2c3d5ab6cc5a` RESOLVED confirmed (D328 cont.; no code/grammar change).** Their `FORGE_v48_verified_and_d296_stands_2026-07-22`. **(1) v47 prereg resolved = confirmed** on the drained cohort (3,548/3,600): leg-1 single-name trend/relval/em conversion 0 by construction (census: zero emitted, capitulation persisting); leg-2 xsect component conversion 14.6% → 14.4% = −0.3pp vs ~0.6pp SE at n=3,548 → within noise, no converting supply lost; promoted 0↔0; unpredicted bonus pre-filter survival 23.6% → **38.0% (+14.3pp)**. **The discipline earned its keep:** their earlier PARTIAL read (506 decided) showed **+1.3pp** and reversed to **−0.3pp** on the drain — without the prereg we would have banked "v47 lifted conversion" into the freeze case. Canonical sentence: **v47 buys upstream efficiency, NOT component yield.** **(2) v48 verified independently from both ends:** their `rank_k = {5:55, 10:50, 0:9}` (**20 absent**) vs v46 928 / v47 964; ours `{5:96, 10:87}` on batch `646378f1`. Their `rank_k=0` bucket = non-rank single-name configs (9/113 theirs, 17/200 ours), not a third value. **The result is an IDENTITY, not the n:** 928/928 and 931/931 unverified decided runs are `rank_k=20`, and every run at `rank_k ∈ {0,5,10}` verified in both versions without exception; v48 lands 26/26 verified but **n=26 carries no weight alone** — coverage claim HELD OPEN until their drained re-read. **(3) [[D296]] STANDS UNRETRACTED** — they confirm their own ask-#1 `tier=0` offer contradicted their `FORGE_v42_ack` directive (tier 0 charges the TIER-3 spread derivation to every name in a mixed-tier union book → deflates every xsect result incl. megacaps) and that **`rank_k<=10` was the correct path**; retraction deferred to per-name spread charging (still opt-in behind an estimator injection). We declined `tier=0` as directive-compliance, not judgement — the property the directive should have; `tier=0` stays a one-parameter change if they retract. **(4) `momentum_252` still 0** (0/105 theirs, 0/156 ours) and **expected-not-falsifying**: at the 0.33% post-ranker rate the expected count in 105 draws is ~0.3, and F3 cannot have retrained on v48-era labels (26 decided). **Prereg `be5508b63706` explicitly NOT yet readable** — resolve only after an F3 retrain on a v48-era label; if still zero, ship the D287 selection-layer floor rather than re-scope the prereg. Crowding fix IS landing: resid **39.96% → 14.29%** theirs / 16.7% ours (~v44 level). Owned against ourselves: the prereg's leg-2 wording is stage-ambiguous (emission 3.5–5.0% met; post-ranker 16.7% not) — both recorded, not the flattering one. **(5) THEIR §4 BOUNDARY — the durable lesson:** Crucible observes ONLY post-ranker submissions; our enumeration mix / prefilters / F3 are structurally invisible to them, so any generate-vs-receive divergence can be decomposed only from our side, and their "under-weighted" call was the correct inference from the only fact they held. **Standing offer relayed:** we volunteer the funnel decomposition (enumeration → prefilter → holdout → ranked) on any emission-mix anomaly instead of letting them infer upstream state from output. **(6) Two-reason coverage field** (`breadth_impossible` vs `ad_hoc`): they open the contracts bump and send the shape for our sign-off BEFORE emitting (bump → we adopt → they emit); noted their `decision='reconfirm'` gated-export crash-loop (~45min) this morning — same class as our D245/D261 wedges. **(7) `pure_sue175` leg `96b67aa1`** (rank_k=20 MR-xsect, weight 0.4125): book `79eb6d55` KEEPS it — a generation change never de-promotes a frozen book — and its replacement verifies honestly; recorded as a **disclosure** (the promoted set contains one leg today's admission rules would not admit), explicitly not a de-promotion argument. Files: `config/preregistrations.jsonl` (2c3d5ab6cc5a → confirmed), `PROMPT_CRUCIBLE_V48_VERIFIED_ACK.md` (held), `RELAYS.md`, `STATUS.md`.
 
+## D336 — 2026-07-25 — v49 → v50 DEPLOYED (bundled): IWM+SLB dead-name rider + `rank_k=5` trend bias; and the tail-model RETARGET to `cpcv_sharpe_p25` (versionless, same window)
+
+**Deployed 2026-07-25T01:33:26Z** (`eff98ff`). Journal verified: `grammar_version=v50`,
+`registry_loaded_from_export` (registry_hash `4aad48e7be14daee`), `grammar_versions:
+recorded manual_bump row for v50`, reconcile line, §7.3 backpressure block; no traceback,
+NRestarts=0. Full uncontended suite READ BEFORE restart: **2086 passed / 0 failed**.
+
+**Why bundled.** The two grammar changes touch DISJOINT populations — since v47 made
+trend/MR xsect-only, the name exclusion can only affect single-name draws (i.e.
+`volatility_event`) while the rank_k bias only affects trend xsect — so neither can
+confound the other in `funnel --compare`. Operator: "definitely bundle."
+
+**(1) IWM + SLB** → `_STRUCTURALLY_UNTRADEABLE_UNDERLYINGS` (38 → 40). `forge yield-audit`
+round 2: IWM 502 decided / 0 converted, SLB 540 / 0 since the clean-era cut (ghost-cut
+applied) — the only two names clearing the bar this cohort. Prereg `8eaa7e4aca93` on record
+BEFORE the edit (D207). Same frozen-list terms as v34/v37/v41/v43; row-45 cross-check
+requested in the deploy relay. NB IWM was already in `_NO_EARNINGS_UNDERLYINGS`, so it was
+barred only from earnings-gated configs; the 502/0 accrued on non-earnings single-name
+templates, which this closes.
+
+**(2) `rank_k=5` BIAS scoped to `trend_continuation`** (`_TREND_RANK_K5_SHARE = 0.75`).
+Origin: the SALVAGE of the parked winner-neighborhood prior — the learned prior's aggregate
+effect was unresolvable (p90 +0.0087, ~20k/arm to detect) but one param carried real signal,
+and Crucible validated it on their honest arm (n=341): trend med CPCV **+0.4056 (k=5, n=210)
+vs +0.1325 (k=10, n=84), gap +0.2731** — ~29× the entire corrected prior effect — and **FREE**
+(maxDD 0.1462 vs 0.1571, gate pass 97.4% vs 97.3%). **ZERO in mean_reversion (+0.0029)**,
+hence the scoping. BIAS not pin (D276 `_RESID_LONG_ONLY_SHARE` precedent): k=10 keeps 25% so
+the n=84 arm stays explorable (D067). `residual_momentum` is checked FIRST and keeps its own
+D276 pin. **Known trade:** k=5 lowers WF (0.752 vs 0.888) and wins the joint
+`min(cpcv/1.5, wf/2.0)` 2.6× ONLY because cpcv is the binding gate (0.0% admit vs 0.7%) —
+**revisit if that ever changes.** Prereg `b13b0f893a11`.
+
+**(3) TAIL-MODEL RETARGET — versionless, shipped in the same window.** `main.py`
+`target_wf_p25` → `target_cpcv_p25`. `wf_sharpe_p25` turned out to be a NON-BINDING
+enrichment label Crucible computes FOR our ranker (threshold 0.0, admits 100% of stage two
+— their correction; it is not a gate), and on the honest ARM it is ~orthogonal to the metric
+that does gate (`sp = +0.031`, vs +0.39 on the ranker-selected pool = a SELECTION ARTIFACT).
+Measured (`target_sweep.py` Run C): ordering by wf_p25 lifts realized cpcv +0.009 (baseline),
+by cpcv **+0.178**. Endorsed by Crucible. Selection ≠ enumeration, so no version bump
+(D287 precedent). **`daily_ranker_eval.sh` now trains BOTH targets** — without that the lane
+would load the last hand-trained cpcv artifact and silently freeze; training both also keeps
+the revert to a one-line daemon change with no gap. Verified post-restart: `target_cpcv_p25`
+→ `d8d85324` (n=29,419) and `target_wf_p25` → `bde5367a` both resolve.
+
+**(4) Contracts pin 1.38.0 → 1.39.0** (`generation_arm` / `generation_prior_id`). PIN-ONLY:
+we deliberately **emit neither field** — the generation prior they exist for was parked, so
+Crucible's "clear to emit" GO stands unused. The preflight caught the un-adopted pin.
+
+**Goldens re-pinned (7 constants)** under the D286/D290/D309 discipline: at the pre-edit
+preflight the OLD code reproduced every constant exactly (suite green but for the contracts
+pin), so no unrelated drift rides along. Verified every first divergence is a
+`volatility_event` single-name config = the v37/v41/v43 pool-shift signature; 7–11 of 15
+positions survive byte-identical (per-index seeding).
+
+**Emission proof** (3k+ cold enumeration, production `rank_combiner_share`): excluded-name
+draws `{}`; trend non-resid k5_share **0.746** (target 0.75); `residual_momentum` 0.483 and
+mean_reversion 0.477 both untouched (~0.50). The first proof run measured 0.495 and was
+WRONG-CONDITIONS, not a bug: a cold-start enumeration with no share draws only resid on the
+trend-xsect arm (everything else is filtered `retired_single_name`), and resid legitimately
+short-circuits to its D276 pin.
+
+**Also logged: Q57** — the v44 vix-conditioner fires at ~0.22 against its 0.125 constant
+across 6 seeds. PRE-EXISTING (pre-v50 code produces ~0.22 too; the old band ceiling had been
+fitted to it), v50 only re-sampled it past the edge. Band re-pinned to [0.05, 0.28] WITH an
+inline warning that it tracks the realized rate and is NOT evidence the share is honoured.
+
+**Post-ship reads:** `funnel --compare v49 v50` (and `--hypothesis trend_continuation`);
+resolve `8eaa7e4aca93` + `b13b0f893a11` on post-cut honest cohorts; watch the first
+`quality_rank:` journal line naming a cpcv model (appears on the first UNBLOCKED iteration).
+
 ## D335 — 2026-07-23 — PREFILTER-SAMPLE TWO-ARM CAMPAIGN (built behind `FORGE_PREFILTER_SAMPLE_N`, default 0 = byte-identical). The grammar-honest arm the freeze criterion is written to.
 
 **The gap it closes (Crucible 07-23 hard-rule-6 thread).** The freeze criterion is a claim about the GRAMMAR, so it must be read on the population unselected by BOTH Forge selection stages. Our two existing arms are not that: `ranked` is selected by both; `exploration_holdout` (D256) is ranker-unselected but **prefilter-SELECTED** (drawn from survivors), so it guards the ranker hazard only. The prefilter cuts ~63% of enumeration on the config's own in-sample performance (`permutation_test` dominant) and its rejects are never submitted → survivorship → the one selection stage neither side can measure. **`prefilter_sample`** submits a uniform-random draw of those rejects, tagged `selection_arm='prefilter_sample'` (contracts 1.37.0, D334), so Crucible finally has a population unselected by both stages.
