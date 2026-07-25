@@ -1569,6 +1569,10 @@ _COHORT_TREND = "trend_continuation"
 # Licensing harness environment-matched: OLD code reproduced every constant
 # exactly; every first divergence is a volatility_event config carrying the
 # new stack (seed-7777 goldens @0 — their first config is ve; cohort @8).
+# v51 (2026-07-25): re-pinned AGAIN — the v50 rank_k=5 trend bias was REVERTED the same
+# night (collider-biased evidence, k=5 is the worse value; see the tombstone in sampler.py).
+# So this state is "v49 draws + the IWM/SLB pool exclusion": the (b) contribution below is
+# gone and only the (a) pool-shift signature remains. Environment-matched per D286/D290/D309.
 # v50 (2026-07-24): re-pinned — TWO changes contribute, and their signatures are
 # separable. (a) The IWM+SLB yield-audit round-2 exclusion shrinks the single-name
 # drawable pool again (38 -> 40 excluded), which is the v37/v41/v43 pool-shift
@@ -1600,14 +1604,14 @@ _COHORT_GOLDEN_PRE_REFACTOR = [
     "69f050e79be4e717",
     "9773f97a5028e439",
     "c4b9a3f54e771c9f",
-    "c49237433f85513b",
+    "219cedfd0ce11930",
     "ed16b154735434b9",
     "05e71b18c2056b11",
     "13ac6ad099175be2",
     "d1dd5478e6beb9f0",
     "906af3289a51e4e6",
     "3e3fc290110bab4c",
-    "1df8847bf39cabe8",
+    "d5a3956a56e6206f",
 ]
 
 

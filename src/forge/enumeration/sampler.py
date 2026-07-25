@@ -210,27 +210,31 @@ _VOL_EVENT_POST_WINDOW_TD: int = 12
 # so we take the rank_k path, which needs no tier change.
 _RANK_K_CHOICES: tuple[int, ...] = (5, 10)
 
-# v50 (D###) — rank_k=5 BIAS, scoped to trend_continuation. Origin: the salvage of the
-# PARKED winner-neighborhood prior (`v50-winner-neighborhood-priors.md` §8.0/§8.3) — the
-# learned prior's aggregate effect was unresolvable, but one param carried real signal and
-# Crucible validated it on their honest arm (n=341, CRUCIBLE_rank_k_validated_trend_only_):
-# trend med CPCV +0.4056 (k=5, n=210) vs +0.1325 (k=10, n=84), gap +0.2731 — ~29x the entire
-# corrected prior effect. It is FREE: maxDD flat-to-better (0.1462 vs 0.1571), maxDD gate pass
-# identical (97.4% vs 97.3%) — the test separating a real effect from a risk trade. Survives
-# all 3 sizer modes and every per_trade_risk_pct quartile; D004 survivorship (a rank_k=20 child
-# cannot resolve the breadth floor) biases AGAINST k=5, so the gap is conservative.
-# SCOPED TO TREND: mean_reversion measures +0.0029 — a global bias would help trend and do
-# nothing for the larger converting family while advertising itself as a whole change.
-# BIAS NOT A PIN (0.75, the D276 `_RESID_LONG_ONLY_SHARE` precedent verbatim): the k=10 arm is
-# n=84, D067 says never starve a value to zero, and Crucible's survivorship note argues for
-# continuing to measure it.
-# KNOWN TRADE: k=5 raises CPCV and LOWERS walk-forward (0.7522 vs 0.8880). It wins the AND-shaped
-# joint min(cpcv/1.5, wf/2.0) ~2.6x on trend (0.2252 vs 0.0864) ONLY because cpcv is by far the
-# more binding gate (0.0% admit vs 0.7%) — if that ever changes this bias is the first thing to
-# revisit. A clean instance of wf-perp-cpcv: one param, opposite directions, not one axis.
-# Prereg `b13b0f893a11` registered BEFORE this edit (D207).
-_TREND_RANK_K5_SHARE: float = 0.75
-_TREND_HYPOTHESIS: str = "trend_continuation"
+# v51 (D###) — TOMBSTONE: `_TREND_RANK_K5_SHARE = 0.75` / `_TREND_HYPOTHESIS`, shipped in
+# v50 and REVERTED here the same night. It biased trend rank_k toward 5, which is the WORSE
+# value. The v50 evidence (Crucible's honest-arm read, trend med CPCV +0.4056 k=5 vs +0.1325
+# k=10) was COLLIDER BIAS and they retracted it in full
+# (CRUCIBLE_URGENT_rank_k_finding_was_COLLIDER_BIASED_..._2026-07-25).
+#
+# Mechanism, reproduced on OUR ledger before reverting: stage-two admission is the refit
+# TRIGGER, a function of config quality, so conditioning on it is a collider. In trend xsect,
+# `swing_long x k=10` converts 0 of 404 stage-one rows -- that cell is ENTIRELY ABSENT from
+# stage two -- so rank_k was silently confounded with dte_bucket; and in swing_mid the k=5
+# survivors are a more selected slice (54.5%) than k=10's (69.1%), inflating k=5 mechanically.
+# Same metric, same configs, only the conditioning changes:
+#     swing_mid  k5-k10   stage one (unselected) = -0.1712   (k=5 WORSE)
+#                         stage two (survivors)  = +0.0776   (k=5 "better")
+# The sign flips purely from conditioning. Berkson's paradox.
+#
+# THE RULE THIS BUYS (adopted both sides): parameter effects are estimated on STAGE ONE
+# (unselected) ONLY. The stage-two honest arm is a valid yardstick for grammar-VERSION
+# deltas -- like-conditioned cohorts either side -- but is NOT a valid instrument for
+# parameter attribution, because any param correlated with trigger probability gets a
+# biased and sometimes sign-flipped estimate there. Stratifying WITHIN the stage-two
+# population does not help: the collider is at its boundary, not inside it.
+#
+# Prereg b13b0f893a11 resolved REFUTED. Do not re-introduce a rank_k bias without a
+# stage-one estimate.
 
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
@@ -1385,7 +1389,7 @@ def sample_config(
         and not _uses_single_name_only_indicator(signals, space.rank_excluded_ids)
         and rng.random() < p_xsect
     ):
-        combiner = _rank_combiner(hypothesis, directional_id, rng)
+        combiner = _rank_combiner(directional_id, rng)
         underlying = None
 
     # D258 (v25) / D263 (v26) — optional SECOND regime gate ANDed on top of the
@@ -1512,19 +1516,19 @@ def _base_signals(
     return signals
 
 
-def _rank_combiner(hypothesis: str, directional_id: str, rng: random.Random) -> CombinerSpec:
+def _rank_combiner(directional_id: str, rng: random.Random) -> CombinerSpec:
     """The cross_sectional_rank combiner for a rank-arm draw.
 
     D276 (v33): residual_momentum's structure is pinned by evidence — monthly
     rebalance (every in-book converter; the weekly config failed hardest and
     breached the book dd gate), rank_k {5, 10} (their 5-10 ask), direction_mode
-    long_only-BIASED (2 of 3 WF passes; long_short stays explorable).
+    long_only-BIASED (2 of 3 WF passes; long_short stays explorable). Every other
+    directional keeps the H1 uniform knob draws.
 
-    v50: trend_continuation biases rank_k toward 5 (`_TREND_RANK_K5_SHARE` — see the
-    constant for the Crucible-validated evidence). residual_momentum is checked FIRST
-    and so keeps its own D276 pin untouched: a learned bias must never silently
-    override an operator-approved one. mean_reversion and every other hypothesis keep
-    the H1 uniform draw, byte-identical.
+    v51: the v50 `hypothesis` parameter and its trend rank_k=5 bias are GONE — the
+    evidence was collider-biased and k=5 is the worse value (see the tombstone at
+    `_RANK_K_CHOICES`). The signature drops back to two args so no caller can pass a
+    hypothesis expecting it to steer rank_k.
     """
     if directional_id == _RESID_MOMENTUM_DIRECTIONAL_ID:
         return CombinerSpec(
@@ -1532,18 +1536,6 @@ def _rank_combiner(hypothesis: str, directional_id: str, rng: random.Random) -> 
             rank_k=rng.choice(_RESID_RANK_K_CHOICES),
             rebalance_frequency="monthly",
             direction_mode=("long_only" if rng.random() < _RESID_LONG_ONLY_SHARE else "long_short"),
-        )
-    if hypothesis == _TREND_HYPOTHESIS:
-        # Weighted, not pinned: k=10 keeps 1 - share of the draw so the arm stays
-        # explorable (D067). Consumes ONE rng.random() in place of the uniform
-        # rng.choice, so the trend rank sequence diverges here by design — the
-        # golden re-pin scoping proof. Non-trend draws are untouched (hard rule #6).
-        rank_k = 5 if rng.random() < _TREND_RANK_K5_SHARE else 10
-        return CombinerSpec(
-            type="cross_sectional_rank",
-            rank_k=rank_k,
-            rebalance_frequency=rng.choice(_RANK_REBALANCE_CHOICES),  # type: ignore[arg-type]
-            direction_mode=rng.choice(_RANK_DIRECTION_MODES),  # type: ignore[arg-type]
         )
     return CombinerSpec(
         type="cross_sectional_rank",

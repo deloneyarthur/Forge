@@ -176,7 +176,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # cold-start byte-identical, rules text unchanged).
     # v50 (2026-07-24): IWM+SLB dead-name rider (prereg 8eaa7e4aca93) + the rank_k=5
     # trend bias (prereg b13b0f893a11) — both emission-policy, rules text unchanged.
-    assert grammar.grammar_version == "v50"  # type: ignore[attr-defined]
+    # v51 (2026-07-25): the rank_k=5 bias REVERTED same-night — Crucible retracted the
+    # evidence as collider-biased and k=5 is the WORSE value (reproduced on our ledger:
+    # swing_mid k5-k10 = -0.1712 on stage one vs +0.0776 on stage two, sign flipping
+    # purely from conditioning). IWM/SLB stays. Prereg b13b0f893a11 resolved refuted.
+    assert grammar.grammar_version == "v51"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
