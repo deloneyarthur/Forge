@@ -18,7 +18,7 @@ from datetime import UTC
 from typing import TYPE_CHECKING
 
 import polars as pl
-from crucible_contracts import StrategyConfig
+from crucible_contracts import StrategyConfig, parse_forward_compatible
 from crucible_contracts.models import GateResult
 
 from forge.feedback.rejection_weights import (
@@ -148,7 +148,16 @@ def build_dataset(
     records: list[dict[str, object]] = []
     feature_names: set[str] = set()
     for run_id, config_hash, decision, decided_at, gate_results_json, config_json in rows:
-        config = StrategyConfig.model_validate_json(config_json)
+        # D334-class trap, second occurrence (2026-07-25): re-reading OUR OWN stored
+        # config_json must be forward-compatible. Contracts 1.36.0 stamped a
+        # `prefilter_sample` bool, 1.37.0 REMOVED it, and rows from that era still carry
+        # it — so a strict model_validate_json raised extra_forbidden on the first such
+        # row and took the whole dataset build with it. Consequence: `ranker-model train`
+        # and BOTH train-robustness targets failed nightly at 05:00 for ~2 days, logged
+        # benignly as "non-zero ... continuing", freezing the live cpcv model at its
+        # 07-23 fit — the same model carrying the rank_k collider (Q59). Strict validation
+        # still guards FIRST ingest at submit time; this is a RE-read.
+        config = parse_forward_compatible(StrategyConfig, json.loads(config_json))
         # D290: ghost-era ve labels are fiction (Crucible 07-19 close-out) —
         # they never enter the training frame.
         if is_ve_ghost_label(config.hypothesis, decided_at):
@@ -222,7 +231,7 @@ def build_label_frame(
     records: list[dict[str, object]] = []
     feature_names: set[str] = set()
     for config_hash, config_json in rows:
-        config = StrategyConfig.model_validate_json(config_json)
+        config = parse_forward_compatible(StrategyConfig, json.loads(config_json))
         features = extract_features(config, registry).as_dict()
         feature_names.update(features)
         records.append(

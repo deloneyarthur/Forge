@@ -8,6 +8,7 @@ gate evaluations per D124). Design: `docs/proposals/learned-ranker.md` §4 F1.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 
@@ -134,6 +135,51 @@ def test_joins_labels_and_orders_rows() -> None:
     assert frame["label"].to_list() == [0, 1]
     # Feature columns rode along.
     assert frame["hypothesis=mean_reversion"].to_list() == [1.0, 1.0]
+
+
+def test_stored_config_with_since_removed_field_does_not_kill_the_build() -> None:
+    """REGRESSION (2026-07-25): the trainer died for ~2 days on `extra_forbidden`.
+
+    D334 all over again, one module across: contracts 1.36.0 stamped a
+    `prefilter_sample` bool onto StrategyConfig, 1.37.0 REMOVED it, and our stored
+    `config_json` from that era still carries it. A strict `model_validate_json` here
+    raised on the first such row and took the whole dataset build with it — so
+    `forge ranker-model train` and BOTH `train-robustness` targets failed every night at
+    05:00, logged benignly as "non-zero ... continuing". The live cpcv model froze at its
+    2026-07-23 fit, which is also the model carrying the rank_k collider (Q59): it was
+    biased AND could not be retrained.
+
+    Re-reading our OWN history must be forward-compatible; strict validation still guards
+    first ingest at submit time. This is a RE-read.
+    """
+    stale = json.loads(minimal_strategy_config().model_dump_json())
+    stale["prefilter_sample"] = None  # the 1.36.0 field that 1.37.0 removed
+    with db_connection() as conn:
+        conn.execute(
+            "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
+            "config_json, submitted_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                str(uuid.uuid4()),
+                str(uuid.uuid4()),
+                "stale000011112222",
+                json.dumps(stale),
+                datetime(2026, 6, 10, 11, 0),  # noqa: DTZ001
+                "gated",
+            ],
+        )
+        record_verdicts(
+            conn,
+            [
+                _gated_run(
+                    config_hash="stale000011112222",
+                    decision="component",
+                    decided_at=datetime(2026, 6, 10, 19, 0),  # noqa: DTZ001
+                )
+            ],
+        )
+        frame = build_dataset(conn, _REGISTRY)
+
+    assert frame.height == 1, "a since-removed field must not drop the row or raise"
 
 
 def test_era_cut_excludes_pre_boundary_rows() -> None:
