@@ -1,5 +1,27 @@
 # Forge — Status
 
+## 2026-07-26 (extreme sweep) — **THE TARGET IS `wf_sharpe_p25` EXCEEDANCE, NOT `cpcv` — 2.24× on unseen splits, 8/8 at every cell tested.** The sweep overturned the parameter we were one step from shipping.
+
+- **WHY THE EXTREME SWEEP EXISTED, vindicated.** The narrow read (`P(cpcv≥1.0)`, 1.48×, 4/4) answered ONE question at ONE operating point with ONE estimator. Widening to 8 splits × 8 τ × 5 selection fractions × 3 estimators × 5 base metrics found the recommendation was **wrong on the base metric**. Two anti-overfit guards carried the weight: **nested selection** (choose on early splits, evaluate on late) and **splits-won beside every mean**.
+- **ARMS A–C — the narrow result replicates and GROWS under tighter selection.** τ=1.0 on cpcv holds at **1.41× 8/8** (top 10%) and **2.92× 8/8** at **top 1%**. Production keeps ~190 of ~3,188 survivors (~6%), so **top 1–5% is the real operating point, not top 10%** — we had been measuring at the wrong fraction. ARM C's ridge-on-binary control still beats the incumbent (1.30×), so **the win is the TARGET, not the logistic**.
+- **⚠️ ARM D — τ selection is TIME-UNSTABLE. Do not auto-tune it.** Nested choice on cpcv lands on **τ=0.6 → 1.09× late**, while **τ=1.0 delivers 1.51× late, 4/4**. Early windows favour low τ (more labels), late windows favour high τ (enough tail events to fit). A learned/auto-tuned τ picks the loser. **It must be a flag, re-checked as label density grows.**
+- **THE FINDING — ARM E and its follow-up. `wf_sharpe_p25` exceedance beats `cpcv` exceedance everywhere, and it does not drift:**
+
+  | base × quantile | top 1% | top 5% | top 10% | early → late (top 5%) |
+  |---|---:|---:|---:|---|
+  | `wf_p25` q=0.990 | **8.02× 8/8** | 2.12× 8/8 | 1.64× 8/8 | 2.11× → **2.14× 4/4** |
+  | `wf_p25` q=0.995 | 7.98× 8/8 | 2.28× 8/8 | 1.87× 8/8 | 2.31× → **2.24× 4/4** |
+  | `wf_p25` q=0.999 | 7.43× 7/8 | 2.88× 8/8 | 2.26× 7/8 | 2.92× → **2.83× 4/4** |
+  | `wf_p10` q=0.999 | **10.88× 8/8** | 3.68× 8/8 | 2.58× 8/8 | 3.83× → 3.53× 4/4 |
+  | `wf_p10` q=0.990 | 1.45× 5/8 | 1.06× 5/8 | 1.04× 5/8 | **0.58×** → 1.54× |
+  | `cpcv_p25` q=0.990 | 2.76× 8/8 | 1.56× 8/8 | 1.35× 7/8 | 1.24× → 1.88× 4/4 |
+
+- **RECOMMEND `wf_p25`, NOT `wf_p10`, despite wf_p10's higher peak.** wf_p10 is **quantile-fragile** — 0.58× at q=0.990 vs 3.83× at q=0.999, a 6× swing on a knob ARM D just proved we cannot tune reliably. **`wf_p25` is flat across every quantile (2.11/2.31/2.92 early, 2.14/2.24/2.83 late) and wins 8/8 in all 12 grid cells.** Insensitivity to the untunable parameter is worth more than a higher fragile peak.
+- **THE NESTED TEST PASSES THIS TIME**, which is what separates this from the cpcv recommendation: the early-chosen winner also wins late (3.83× → 3.53×), where ARM D's cpcv choice degraded 1.29× → 1.09×.
+- **D336 IS NOT CONTRADICTED — it answered a different question.** D336 locked cpcv by measuring **realized-cpcv lift from MEAN-ordering** (wf +0.009 vs cpcv +0.178). This measures **tail lift from EXCEEDANCE-ordering**. `wf_p25` is a poor mean predictor *and* a strong tail predictor; both readings stand. That is the same mean-⊥-tail structure (spearman = −0.148) showing up one level higher.
+- **⚠️ THE LIMIT, stated plainly: we can lift the ≥1.0 tail reliably; we CANNOT yet show stable lift at ≥1.25 (best 4/8), and the gate is 1.5.** Every number above is judged on realised cpcv ≥1.0 as a reachable proxy. Nothing here demonstrates more promotions — it demonstrates more gate-adjacent supply.
+- **NOT SHIPPING ANYTHING YET.** The cpcv/τ=1.0 recommendation is **withdrawn**; the replacement (`wf_p25` exceedance at q≈0.99, deployed as a small tail LANE at top 1–5%) needs its own prereg before code. Scripts: `scripts/exceedance_extreme_sweep.py` (`dc6def0`).
+
 ## 2026-07-26 — **TAIL LEVER FOUND: ordering by `P(cpcv ≥ 1.0)` instead of `E[cpcv]` gives 1.48× the top-decile tail rate, 4/4 splits — but it HALVES component supply, and our mechanism was wrong.** Prereg `4ad0ccf642d5` resolved REFUTED (it was an AND; leg 1 carried, leg 2 reversed).
 
 - **THE THESIS THAT HOLDS: everything we run is average-shaped and promotion is a tail event.** F3 predicts P(component); the quality lane orders by `E[cpcv_p25]`; the feedback weights are Beta posteriors over RATES. On stage-one cells (n≥300) **spearman(cell MEAN, cell STD) = −0.148** while **spearman(cell P(≥1.0), cell STD) = +0.500** — the mean tells you nothing about tail production. D338's winner prior was the same lesson from the other side (q25 +0.013, q99 −0.032).
