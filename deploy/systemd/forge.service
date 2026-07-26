@@ -58,7 +58,15 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 # so the arm that VALIDATES the change is the scarce one and sets the n requirement.
 # Steady-state target is N=40 (Crucible's power target, ~11% ranked cost, batch 240 well
 # under the cap). MEASURE-AND-ADJUST: the N->accrual mapping is coupled through backpressure.
-Environment=FORGE_PREFILTER_SAMPLE_N=300
+#
+# 2026-07-26 — BACK TO STEADY-STATE N=40. The N=300 window did its job and the honest
+# threshold has CONVERGED: the arm went n=302 -> 937 and the median moved 0.351 -> 0.3521,
+# with 0.00% clearing the 1.5 gate both times and a max-ever of 1.3125. A 3.1x sample
+# changed the answer by 0.001, so more n cannot move it — only a different GENERATION
+# SURFACE can. Holding 300 past that point bought no information and cost ~60% of ranked
+# production (measured: 600 honest / 380 ranked / 20 holdout per 1,000 submissions).
+# Raise it again only for a NEW question that needs honest-arm n, not to refine this one.
+Environment=FORGE_PREFILTER_SAMPLE_N=40
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
