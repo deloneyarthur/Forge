@@ -1,5 +1,32 @@
 # Forge — Status
 
+## 2026-07-26 (wf_p10 validation) — **`wf_p10` IS REAL — it beats `wf_p25` at MATCHED positive counts (27.10× vs 19.30×). Our overfitting hypothesis was WRONG. Its fragility is a MASS POINT AT ZERO, and the fix is to pin the label by COUNT, not quantile.**
+
+- **WE PREDICTED `wf_p10` WOULD SHRINK AT MATCHED n. IT DID NOT.** ARM 2 fixes the positive count and picks `q` per metric to hit it, so the metric is the only thing varying (top 0.5%, 5 splits):
+
+  | n_pos | `wf_p25` | `wf_p10` | `cpcv` |
+  |---:|---|---|---|
+  | 150 | 19.30× 5/5 | **27.10× 5/5** | 7.60× 5/5 |
+  | 300 | 21.50× 5/5 | **28.90× 5/5** | 8.30× 5/5 |
+  | 750 | 19.30× 5/5 | 20.40× 4/5 | 6.80× 5/5 |
+  | 1,500 | **18.60× 5/5** | 3.40× 4/5 | 6.40× 5/5 |
+  | 3,000 | **18.90× 5/5** | 3.80× 4/5 | 4.50× 5/5 |
+
+  **At equal statistical footing `wf_p10` is the better metric in its extreme region** (n≤300), and `wf_p25` is ~19× at EVERY count from 150 to 3,000 — completely flat. The events-per-variable story we built (1.3/feature, regularisation improving with λ) was a real observation that led to a **wrong conclusion**.
+- **THE CLIFF IS EXPLAINED — a mass point at zero, not overfitting.** ARM 1: `wf_p10`'s **q0.98 = 0.0000** with a 1,641-row tie block, i.e. ~98% of configs have a non-positive worst-decile walk-forward window. Quantiles ≤0.99 land **in or beside that mass**, making the label an arbitrary tie-break. That is the whole 7× discontinuity. (Note `wf_p25` has the LARGER tie block at 10,260 but its thresholds sit at 0.70–1.35, far above it — so ties only matter when the threshold lands in them.)
+- **⇒ THE ENGINEERING FIX, better than either option we had offered: pin the label by POSITIVE COUNT, not quantile.** "Top 300 by `wf_p10`" never lands in the mass point and **sidesteps the quantile time-instability entirely** (the ARM-D finding that killed auto-tuning). The knob we could not tune becomes a knob we do not need.
+- **THEY ARE COMPLEMENTARY, NOT REDUNDANT — and this reopens the merge, on a different pair.** ARM 3 Jaccard on top-1% picks is only **0.168–0.298**. Configs each finds that the other misses (≥1.0): `wf_p10`-only **19 / 27 / 64 / 69 / 54**, `wf_p25`-only **17 / 14 / 19 / 23 / 20**. The refuted merge was **cpcv + wf**; a **`wf_p10` + `wf_p25`** blend has never been tested and is now the obvious next move.
+- **⚠️ DISJOINT COUNTS ARE MUCH SMALLER THAN THE NESTED ONES — our caveat was material.** ARM 4 re-counts on non-overlapping blocks (top 5%, 4,516 selected):
+
+  | model | ≥1.0 | ≥1.25 | **≥1.5** | max |
+  |---|---:|---:|---:|---:|
+  | incumbent `E[cpcv]` | 145 | 27 | **0** | 1.475 |
+  | `wf_p25` q=0.990 | 257 | 67 | **1** | 1.532 |
+  | `wf_p10` q=0.999 | **294** | **80** | **3** | 1.532 |
+
+  **Distinct gate-clearers are 0 / 1 / 3, not the 0 / 4 / 8 the nested windows implied.** At those counts 3-vs-1 is NOT statistically separable. What IS solid: the incumbent finds **zero**, and the ≥1.0 / ≥1.25 columns (real n) favour `wf_p10` throughout.
+- **Script `scripts/wf_p10_validation.py`. Still nothing shipped.**
+
 ## 2026-07-26 (merge sweep) — **MERGE REFUTED: cpcv adds NOTHING to wf, it dilutes.** And in absolute terms the incumbent is not merely worse at the tail — **it selects ZERO gate-clearing configs where the wf targets select 4–8.**
 
 - **THE ABSOLUTE TABLE — the one that matters.** Ratios hid a zero denominator. Summed over the 3 late test splits, top 5% selected:
