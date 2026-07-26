@@ -1,5 +1,24 @@
 # Forge — Status
 
+## 2026-07-26 (promoted-leg recall) — **The operator's reference-class correction settles the target. `sharpe_baseline` ranks the promoted legs at median 98.6% and surfaces the orthogonal convexity sleeve the incumbent ranks at 11.6%. `wf_p10` misses most of them (median 21.7%).**
+
+- **OPERATOR'S CORRECTION, adopted: the ONLY calibration reference is the PROMOTED books, because they cleared all 13 gates.** We had flagged Crucible's `selection_pbo = 0.7778` rejection of a 5-leg MR family as a caution our lane inherits. **That was the wrong inference.** That number reflects THEIR assembly search breadth (44,643 candidates deflating to `n_trials = 49`), not our component quality — and the promoted books cleared the same gate at **0.2738**. A rejected assembly is not a counter-example to a supply strategy. **Withdrawn from the caution list.**
+- **THE TEST THAT FOLLOWS — do the candidate targets RANK the components that actually reached a promoted book?** `scripts/promoted_leg_recall.py`; every model fit strictly on rows decided BEFORE each leg, percentile measured against the 5,000-row contemporaneous pool the leg competed in:
+
+  | leg | cpcv | incumbent | **`sharpe_baseline`** | `wf_p10` |
+  |---|---:|---:|---:|---:|
+  | `c5a9bc05` trend/swing_long | 1.1321 | **97.4%** | 87.7% | 21.7% |
+  | `96b67aa1` MR/swing_mid | 0.9439 | **77.6%** | **6.6%** | 16.5% |
+  | `722fe985` event_momentum/swing_short | 1.2364 | **11.6%** | **100.0%** | 19.8% |
+  | `65316ca4` MR/swing_mid | 1.5199 | 81.4% | **98.6%** | 92.4% |
+  | `1e090034` MR/swing_mid | 1.3709 | 90.9% | **98.7%** | 97.0% |
+  | **median** | | 81.4% | **98.6%** | **21.7%** |
+  | **mean** | | 71.8% | **78.3%** | 49.5% |
+
+- **THE FINDING: `sharpe_baseline` ranks `722fe985` at 100.0% where the INCUMBENT ranks it at 11.6%.** That is the `event_momentum`/`swing_short` **convexity sleeve** — Crucible's most hypothesis-orthogonal promoted leg, the one that sets the 0.9115 floor and "earns its slot on payoff shape, not solo quality", sitting in a book that cleared PBO at 0.2738. **The live ranker would essentially never surface it; the tail target puts it at the top of its pool.** That is precisely the "moving toward a full gate pass" direction, and no aggregate tail statistic showed it.
+- **`wf_p10` IS THE ONE THIS FALSIFIES.** Median 21.7%; it misses three of five promoted legs badly (21.7% / 16.5% / 19.8%) and only catches the two highest-cpcv MR legs. Its strong aggregate lift comes from a region that does not contain most known winners. **Head-to-head + this = `sharpe_baseline` confirmed as the MR-leg target on two independent grounds.**
+- **⚠️ HONEST LIMITS: n=5, and the WIN COUNT is TIED at 3/5 each** — the separation is in magnitude and median, not in how often each beats the incumbent. `sharpe_baseline` also **badly misses `96b67aa1` at 6.6%** (incumbent 77.6%), unexplained. **This test can falsify a target; it cannot establish a rate.** The prereg's live concurrent arm split remains the settling instrument.
+
 ## 2026-07-26 (ASK-1 CORRECTED + head-to-head) — **Saturation is ~62 at k=170, NOT ~3. Our "cap at ~30 slots" advice was built on a number Crucible has withdrawn — the operator's larger-lane instinct was right. And the head-to-head says `sharpe_baseline` and `wf_p10` are much CLOSER than one run suggested.**
 
 - **⚠️ CRUCIBLE CORRECTED ASK 1 BY ~20× (`9996751`, sent BEFORE our relay `f32c9c4` — we relayed and pre-registered on the superseded number).** They measured ρ on **overlapping days only**; the §8.7 `mean_pairwise_correlation` screen **zero-fills the union** (§27.2, "zeros are signal" — a leg flat on a day genuinely contributes zero P&L).
