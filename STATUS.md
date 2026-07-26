@@ -1,6 +1,36 @@
 # Forge — Status
 
-## 2026-07-26 (throughput cost) — **RECOMMENDATION CHANGES TO `wf_p25`. The cost side reverses the ranking: it buys 5× the tail rate for ~0.4 components per batch — 1.2 components per extra ≥1.25 vs `wf_p10`'s 6.0.**
+## 2026-07-26 (re-priced) — **THERE IS NO TRADEOFF. The "throughput cost" was 100% WEAK components. Counting only book-usable ones, every tail target delivers MORE — and the recommendation reverts to `wf_p10`/`AND-label`.**
+
+- **OPERATOR'S CHALLENGE — "less components are good if they're strong; we get no value creating weaker components" — TESTED AND CONFIRMED, emphatically.** Every component that has ever made a promoted book sits at the **96.4th–100th percentile** of all components by cpcv:
+
+  | run | cpcv | percentile | books |
+  |---|---:|---:|---:|
+  | `65316ca4` | 1.5199 | **100.0%** | 3 |
+  | `1e090034` | 1.3709 | 99.9% | 1 |
+  | `722fe985` | 1.2364 | 99.7% | 1 |
+  | `c5a9bc05` | 1.1321 | 99.2% | 1 |
+  | `96b67aa1` | **0.9439** | **96.4%** | 1 |
+
+  **No book has ever used a component below the 96.4th percentile.** All-component median is 0.4421. **Only 1,420 of 41,437 components (3.43%) clear the weakest-ever book leg.**
+- **THE DECORRELATION ESCAPE HATCH IS CLOSED TOO.** The natural counter — "a weak but orthogonal component can still earn a slot" — does not hold on our own book history: the LOW-marginal-sharpe legs (0.6365 / 0.6678 / 0.6827) are still HIGH-cpcv components. Decorrelation decides **which strong components combine**, not whether a weak one becomes usable.
+- **⚠️ OUR COST ANALYSIS WAS WRONG AND THE PREVIOUS BLOCK'S RECOMMENDATION IS WITHDRAWN.** We counted all components equally, which made `wf_p25` look "5× cheaper per unit of tail". Re-priced on book-usable components only (disjoint windows, distinct configs), the picture inverts — **every tail target delivers MORE strong components AND fewer weak ones**:
+
+  | model | Δ WEAK | Δ **STRONG** | Δ ≥1.0 | Δ ≥1.25 |
+  |---|---:|---:|---:|---:|
+  | `wf_p25` @5% | −205 | **+97** | +85 | +30 |
+  | `wf_p10` @5% | −413 | **+109** | +100 | +34 |
+  | `AND-label` @5% | −538 | **+116** | +107 | +37 |
+  | `wf_p25` @10% | −422 | **+120** | +99 | +30 |
+  | `wf_p10` @10% | −660 | **+136** | +113 | +37 |
+  | `AND-label` @10% | −830 | **+150** | +124 | +40 |
+
+  **Δ STRONG is positive for every target at every fraction.** The "cost" was entirely in the tier that has never produced book value. **There is no trade to price — the tail lane is strictly better.**
+- **⇒ RECOMMENDATION REVERTS TO `wf_p10` (or `AND-label`), matching the operator's instinct.** At ≥2% selection they beat `wf_p25` on strong components (+71/+109/+136 vs +62/+97/+120) — the ranking only favoured `wf_p25` while weak components were miscounted as a cost.
+- **THE ONE REAL USE FOR WEAK COMPONENTS, stated for completeness: training signal.** Our own models and Crucible's need negative examples. But that need is already served by the honest arm (40/batch, uniform), the holdout (10/batch), and the ~96% weak mass the ranked lane still produces even under a tail target. **No reason to spend RANKED slots on them.**
+- **⚠️ CAVEAT ON THE FLOOR: it rests on 5 book legs.** 0.9439 is the weakest leg ever used, n=5. If Crucible's assembly ever admits a genuinely orthogonal low-cpcv component the floor moves. The evidence we have is unanimous (5/5 above the 96th percentile) but it is 5 observations, not a law.
+
+## 2026-07-26 (throughput cost) — ~~**RECOMMENDATION CHANGES TO `wf_p25`.**~~ **WITHDRAWN — see the block above; this priced weak components as if they had value.** The cost side reverses the ranking: it buys 5× the tail rate for ~0.4 components per batch — 1.2 components per extra ≥1.25 vs `wf_p10`'s 6.0.**
 
 - **WE PREDICTED THE wf TARGETS WOULD COST MORE THAN cpcv EXCEEDANCE (which halved component rate 22.88% → 11.61%). WRONG — they cost far less.** Component rate at top 5%: incumbent **36.75%** → `wf_p25` **34.36%** (−6.5% relative) → `wf_p10` **29.93%** (−18.6%) → `AND-label` **27.63%** (−24.8%).
 - **THE EXCHANGE RATE — components given up per EXTRA ≥1.25 config, and the number the lane decision actually turns on:**
