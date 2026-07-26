@@ -1,5 +1,30 @@
 # Forge — Status
 
+## 2026-07-26 (sharpe_baseline RESULT) — **`sharpe_baseline` BEATS `wf_p10` and becomes the MR-leg target: 307 strong components vs 244, and 131 for the incumbent. On TREND nothing beats the incumbent — the trend leg needs NO model.**
+
+- **THE DECISION METRIC — absolute strong components, disjoint windows, top 5%** (judge = corrected floor 0.9115):
+
+  | slice | model | comp | **STRONG** | ≥1.0 | max |
+  |---|---|---:|---:|---:|---:|
+  | **GLOBAL** | incumbent `E[cpcv]` | 1,672 | 131 | 75 | 1.475 |
+  | | **`sharpe_baseline` top-800** | 1,518 | **307** | **221** | **1.536** |
+  | | `wf_p10` top-800 | 1,414 | 244 | 170 | 1.532 |
+  | | `wf_p25` top-800 | 1,569 | 243 | 164 | 1.532 |
+  | **MR only** | incumbent | 691 | 71 | 40 | 1.447 |
+  | | **`sharpe_baseline` top-800** | 690 | **184** | **140** | **1.536** |
+  | | `wf_p10` top-800 | 643 | 132 | 90 | 1.475 |
+  | **TREND only** | **incumbent** | 960 | **58** | 28 | 1.372 |
+  | | `cpcv` top-800 | 859 | **61** | 30 | 1.414 |
+  | | `sharpe_baseline` top-800 | 821 | 49 | 26 | 1.414 |
+  | | `wf_p10` top-800 | 465 | 43 | 24 | 1.414 |
+
+- **MR LEG = `sharpe_baseline` top-800.** +39% strong components over `wf_p10` (184 vs 132), +159% over the incumbent, highest max seen (1.536), and it keeps MORE components while doing it (690 vs 643) — better on both axes at once. **No cliff**: flat 7.97/7.80/7.35/6.97 across n=200→1600 where `wf_p10` collapses past 200. Nested: 5.03× late on 3/3 unseen splits.
+- **⚠️ TREND LEG NEEDS NO MODEL — and the lift ratios were misleading.** `wf_p10` top-400 shows a respectable **1.66× nested lift** on trend yet delivers **43 strong components against the incumbent's 58**. The reason: it selects a far smaller component pool (465 vs 960), so a better *rate* on fewer rows is fewer *configs*. **Lift ratio ≠ absolute delivery, and only the absolute column is the deliverable.** Best trend option is `cpcv` top-800 at 61 vs 58 — a 5% edge not worth a second trainer. **Confirms the earlier call: trend leg = slot reservation, incumbent ordering.**
+- **RECONCILIATION with Crucible's ASK-3 numbers — no contradiction, different denominators.** They reported `sharpe_baseline` at **14.47×** on the trend tail; we measure ~1.2–2×. **Theirs is lift vs the BASE RATE (0.82%); ours is lift vs the INCUMBENT E[cpcv] MODEL.** The incumbent already captures most of that headroom. Their lead was right about the metric and our denominator is the decision-relevant one — worth stating back to them so neither side re-derives it.
+- **THE CONTROL CLEARED IT.** `corr(sharpe_baseline, cpcv) = 0.7901`, yet `cpcv`-exceedance manages only 243 strong globally against `sharpe_baseline`'s 307, and 2.71–3.03× lift against 6.82–9.21×. **`sharpe_baseline` is NOT cpcv wearing a hat** — the 21% that is not shared carries most of the signal.
+- **⚠️ THE SHARED-SAMPLE CAVEAT STANDS AND IS NOT RESOLVED BY THIS.** `sharpe_baseline` is in-sample by construction and cpcv is not, so some of the edge may still be co-movement rather than prediction. Our design equalises *evaluation* (all targets judged on held-out-in-time configs) but cannot equalise *label provenance*. **A live arm-split is the only thing that settles it** — which is what the lane is for.
+- **REVISED TWO-LEG DESIGN:** MR leg **`sharpe_baseline` top-800, ~30 slots** (ASK-1 saturation cap). Trend leg **~slot reservation on incumbent ordering**, no second model. Remainder incumbent, preserving the within-batch control.
+
 ## 2026-07-26 (Crucible answered all 3 asks) — **MR lane caps at ~30 slots, NOT 95/190. Our book floor was WRONG (0.9115 not 0.9439) and the sub-floor counter we dismissed is CORRECT. `sharpe_baseline` lead under test — result lands in `/home/aj/.cache/rv/sb_out.txt`.**
 
 - **⏳ IN FLIGHT — READ THIS FIRST IF PICKING UP COLD.** `scripts/sharpe_baseline_nested_test.py` is running detached (worker PID 3731322, started 13:04 local, ETA ~1h). **Output: `/home/aj/.cache/rv/sb_out.txt`** (append-only, unbuffered). A detached reaper (`/home/aj/.cache/rv/sb_reaper.sh`) deletes the 6.7GB snapshot and appends `[reaper] worker exited …` when done. **If that marker is present the run is complete.** Nothing else depends on it; nothing is deployed.
