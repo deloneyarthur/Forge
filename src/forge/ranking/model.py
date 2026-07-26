@@ -692,6 +692,94 @@ def train_tail_model(
     )
 
 
+def score_tail_features(model: TailModel, features: Mapping[str, float]) -> float:
+    """`P(top-N by the base metric)` for one config's features. Absent features read 0.0,
+    matching `score_features` — a feature the model never saw contributes nothing rather
+    than crashing a batch."""
+    total = model.intercept
+    for name, mean, std, coef in zip(
+        model.feature_names, model.means, model.stds, model.coefficients, strict=True
+    ):
+        if std <= 0.0:
+            continue
+        total += coef * ((float(features.get(name, 0.0)) - mean) / std)
+    return _sigmoid(total)
+
+
+def save_tail_model(model: TailModel, models_dir: Path) -> Path:
+    """Write the canonical artifact. `base_target` and `n_pos` are both in the FILENAME so
+    two lanes at different label sizes are distinguishable on disk, not just by content."""
+    models_dir.mkdir(parents=True, exist_ok=True)
+    fields = _payload(
+        trained_through=model.trained_through,
+        era_cut=model.era_cut,
+        base_target=model.base_target,
+        n_pos=model.n_pos,
+        n_rows=model.n_rows,
+        n_positive=model.n_positive,
+        lambda_=model.lambda_,
+        feature_names=model.feature_names,
+        means=model.means,
+        stds=model.stds,
+        intercept=model.intercept,
+        coefficients=model.coefficients,
+        train_metrics=model.train_metrics,
+    )
+    fields["kind"] = "tail"
+    fields["model_id"] = model.model_id
+    stamp = model.trained_through.strftime("%Y%m%dT%H%M%S")
+    name = (
+        f"tail_model_v{model.schema_version}_{model.base_target}_n{model.n_pos}"
+        f"_{stamp}Z_{model.model_id[:8]}.json"
+    )
+    path = models_dir / name
+    path.write_text(_canonical(fields), encoding="utf-8")
+    return path
+
+
+def load_tail_model(path: Path) -> TailModel:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    metrics = tuple(sorted((str(k), float(v)) for k, v in raw["train_metrics"].items()))
+    return TailModel(
+        schema_version=int(raw["schema_version"]),
+        model_id=str(raw["model_id"]),
+        trained_through=datetime.fromisoformat(raw["trained_through"]),
+        era_cut=datetime.fromisoformat(raw["era_cut"]),
+        base_target=str(raw["base_target"]),
+        n_pos=int(raw["n_pos"]),
+        n_rows=int(raw["n_rows"]),
+        n_positive=int(raw["n_positive"]),
+        lambda_=float(raw["lambda"]),
+        feature_names=tuple(raw["feature_names"]),
+        means=tuple(raw["means"]),
+        stds=tuple(raw["stds"]),
+        intercept=float(raw["intercept"]),
+        coefficients=tuple(raw["coefficients"]),
+        train_metrics=metrics,
+    )
+
+
+def load_latest_tail_model(models_dir: Path, *, base_target: str | None = None) -> TailModel | None:
+    """Newest valid tail artifact by (trained_through, model_id); corrupt files skipped.
+
+    Same degrade-never-crash contract as `load_latest_robustness_model`: a half-written or
+    schema-drifted artifact must not take the daemon down, it must leave the lane inert."""
+    best: TailModel | None = None
+    for path in sorted(models_dir.glob("tail_model_v*.json")) if models_dir.is_dir() else []:
+        try:
+            model = load_tail_model(path)
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
+        if base_target is not None and model.base_target != base_target:
+            continue
+        if best is None or (model.trained_through, model.model_id) > (
+            best.trained_through,
+            best.model_id,
+        ):
+            best = model
+    return best
+
+
 # P5.5 (B/June-review §5): a temporal holdout is enough rows to fit a train split AND
 # score a >=2-row test split. Below this the OOS estimate is noise → report None.
 _MIN_OOS_ROWS = 20

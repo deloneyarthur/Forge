@@ -304,6 +304,7 @@ def submit_batch(
     holdout_hashes: frozenset[str] = frozenset(),
     young_explore_hashes: frozenset[str] = frozenset(),
     prefilter_sample_hashes: frozenset[str] = frozenset(),
+    tail_lane_hashes: frozenset[str] = frozenset(),
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
@@ -362,6 +363,12 @@ def submit_batch(
             selection_mode = "holdout"
         elif config_hash in young_explore_hashes:
             selection_mode = "young_explore"
+        elif config_hash in tail_lane_hashes:
+            # Prereg `8cfe95f4a6e9` — the concurrent tail arm. It DOES compete for ranked
+            # slots (its slots come out of the merit lane), so it keeps `pool_size`; it is
+            # tagged apart so the arm split against the merit arm is readable, which is the
+            # whole instrument. Never merged into `ranked`.
+            selection_mode = "tail_lane"
         else:
             selection_mode = "ranked"
             ranked_rank += 1

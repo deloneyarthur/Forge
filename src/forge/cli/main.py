@@ -804,6 +804,34 @@ def _resolve_young_explore_slots() -> int:
     return max(0, min(slots, 8))
 
 
+def _resolve_tail_lane_slots() -> int:
+    """Parse ``FORGE_TAIL_LANE_SLOTS`` (prereg `8cfe95f4a6e9`): ranked slots per batch
+    reserved for the TAIL arm, ordered by `P(top-N by sharpe_baseline)` instead of the
+    merit lane's `E[cpcv]`.
+
+    A CONCURRENT arm, not a switch. Crucible's `k5_share` fix read at +5.09 sigma *because* it
+    was an arm split, and their instrument carries a drift floor (bootstrap SEs understate
+    across-window variation 1.3-2.1x and do NOT shrink with n), so a before/after read
+    across time is unreadable at any sample size while two arms in the same batches cancel
+    the drift. The slots come OUT of the merit lane, so batch size and throughput are
+    unchanged and the comparison is like-for-like.
+
+    Unset/empty/0 → 0 (byte-identical, no tail lane). Malformed → 0 (degrade-never-crash).
+    Clamped to [0, 150] of the ~190 ranked slots: a hard ceiling that keeps a control
+    arm alive no matter what the value says, because an arm split with no control is
+    not an experiment."""
+    import os
+
+    raw = os.environ.get("FORGE_TAIL_LANE_SLOTS", "").strip()
+    if not raw:
+        return 0
+    try:
+        slots = int(raw)
+    except ValueError:
+        return 0
+    return max(0, min(slots, 150))
+
+
 def _resolve_exploration_holdout_frac() -> float:
     """Parse ``FORGE_EXPLORATION_HOLDOUT_FRAC`` (P3.3 / B7): the fraction of each batch that
     BYPASSES the learned ranking as a seeded random draw, giving the learned components
@@ -2347,11 +2375,36 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # D316 (2d) — the young-cell explore quota rides the same engine; inert
     # without the D307 floor's maturity data (mature_cells is None).
     _young_n = _resolve_young_explore_slots() if mature_cells is not None else 0
-    if _holdout_n > 0 or _young_n > 0:
+    # Prereg `8cfe95f4a6e9` — the TAIL arm. Ordered by P(top-N by sharpe_baseline), which
+    # offline delivers 313 strong components per 4,520 selected against the incumbent's 133
+    # (8 splits, per-window disjoint counts, 4/4 windows). Runs CONCURRENT with the merit
+    # arm so the drift that makes across-time reads unusable cancels. No artifact yet →
+    # scorer None → lane inert and the batch is byte-identical.
+    _tail_n = _resolve_tail_lane_slots()
+    _tail_scorer: Callable[[StrategyConfig], float] | None = None
+    if _tail_n > 0:
+        from forge.ranking.model import load_latest_tail_model, score_tail_features
+
+        _tmodel = load_latest_tail_model(forge_db_path.parent / "models")
+        if _tmodel is not None:
+            _tm = _tmodel
+
+            def _tail_score(config: StrategyConfig) -> float:
+                return score_tail_features(_tm, extract_features(config, registry).as_dict())
+
+            _tail_scorer = _tail_score
+            typer.echo(
+                f"tail_lane: ACTIVE {_tail_n} slots (model={_tm.model_id} "
+                f"base={_tm.base_target} top-{_tm.n_pos}) — concurrent arm, "
+                f"merit arm is the control"
+            )
+        else:
+            typer.echo(f"tail_lane: {_tail_n} slots requested but no tail model yet — lane inert")
+    if _holdout_n > 0 or _young_n > 0 or (_tail_n > 0 and _tail_scorer is not None):
         from forge.core.seed import SeedHierarchy
         from forge.ranking import rank_batch_with_exploration
 
-        _selected, _holdout, _young = rank_batch_with_exploration(
+        _selected, _holdout, _young, _tail = rank_batch_with_exploration(
             ranker,
             reports,
             promoted_strategies=tuple(promoted),
@@ -2360,11 +2413,14 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             rng=SeedHierarchy(seed).rng("exploration_holdout"),
             young_explore_n=_young_n,
             young_rng=SeedHierarchy(seed).rng("young_cell_explore") if _young_n > 0 else None,
+            tail_n=_tail_n if _tail_scorer is not None else 0,
+            tail_scorer=_tail_scorer,
             **_rank_kwargs,  # type: ignore[arg-type]
         )
-        ranked = [*_selected, *_holdout, *_young]
+        ranked = [*_selected, *_holdout, *_young, *_tail]
         _holdout_hashes = frozenset(c.report.config.config_hash for c in _holdout)
         _young_hashes = frozenset(c.report.config.config_hash for c in _young)
+        _tail_hashes = frozenset(c.report.config.config_hash for c in _tail)
         typer.echo(
             f"exploration_holdout: {len(_holdout)} of {len(ranked)} submitted "
             f"(frac={_holdout_frac:.3f}, seeded bypass of the ranker)"
@@ -2373,6 +2429,11 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             typer.echo(
                 f"young_explore: {len(_young)} of {len(ranked)} submitted "
                 f"(quota {_young_n}, young-cell seeded draw; tagged young_explore)"
+            )
+        if _tail:
+            typer.echo(
+                f"tail_lane: {len(_tail)} of {len(ranked)} submitted "
+                f"(tagged tail_lane; merit arm {len(_selected)} is the concurrent control)"
             )
     else:
         ranked = rank_batch(
@@ -2384,6 +2445,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         )
         _holdout_hashes = frozenset()
         _young_hashes = frozenset()
+        _tail_hashes = frozenset()
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
 
@@ -2510,6 +2572,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             holdout_hashes=_holdout_hashes,
             young_explore_hashes=_young_hashes,
             prefilter_sample_hashes=_prefilter_sample_hashes,
+            tail_lane_hashes=_tail_hashes,
         )
         # D062 + D064: persist per-filter rejection counts to batch_summaries
         # (aggregate + per-hypothesis breakdown). Same connection so the

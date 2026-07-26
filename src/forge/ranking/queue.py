@@ -229,7 +229,7 @@ def rank_batch_with_holdout(
     ``(selected, holdout)``. Total submitted is still ``<= n`` (holdout REPLACES rank slots, it
     doesn't add). `holdout_n == 0` reduces to a plain `rank_batch` selection with an empty
     holdout, so the caller's flag-OFF path stays byte-identical."""
-    selected, holdout, _young = rank_batch_with_exploration(
+    selected, holdout, _young, _tail = rank_batch_with_exploration(
         ranker,
         reports,
         promoted_strategies,
@@ -268,10 +268,14 @@ def rank_batch_with_exploration(
     gate_tail_ordering: bool = False,
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
     mature_cells: AbstractSet[ExperimentCell] | None = None,
-) -> tuple[list[RankedCandidate], list[RankedCandidate], list[RankedCandidate]]:
-    """The exploration engine (P3.3 holdout + D316 young-cell quota).
+    tail_n: int = 0,
+    tail_scorer: Callable[[StrategyConfig], float] | None = None,
+) -> tuple[
+    list[RankedCandidate], list[RankedCandidate], list[RankedCandidate], list[RankedCandidate]
+]:
+    """The exploration engine (P3.3 holdout + D316 young-cell quota + the tail lane).
 
-    Returns ``(selected, holdout, young_explore)`` — the three submission lanes
+    Returns ``(selected, holdout, young_explore, tail)`` — the four submission lanes
     the submitter tags. Rank slots = ``n - holdout_n - effective_young`` where
     ``effective_young`` counts only what the young draw can actually fill (a
     short young pool never under-fills the merit lane). Draw order: merit →
@@ -280,7 +284,19 @@ def rank_batch_with_exploration(
     cells only, pinned exempt). Both explore lanes REPLACE rank slots; total
     stays ``<= n``. ``young_explore_n == 0`` or ``mature_cells is None`` (the
     D307 floor flag off) keeps the young lane empty and the holdout path
-    byte-identical to the pre-D316 form."""
+    byte-identical to the pre-D316 form.
+
+    ``tail_n`` / ``tail_scorer`` (prereg `8cfe95f4a6e9`) add a CONCURRENT arm ordered by a
+    different objective — `P(top-N by sharpe_baseline)` rather than the merit lane's
+    `E[cpcv]`. It is drawn FIRST, from the same survivor pool, and its slots come out of the
+    merit lane so batch size is unchanged and the two arms are like-for-like.
+
+    Why concurrent rather than a switch: Crucible's `k5_share` fix read at +5.09 sigma *because*
+    it was an arm split, and their instrument has a drift floor where bootstrap SEs
+    understate across-window variation by 1.3-2.1x and do not shrink with n — so a
+    before/after comparison across time is unreadable at any sample size, while two arms in
+    the same batches cancel the drift. ``tail_n == 0`` or no scorer → empty lane, and every
+    other lane is byte-identical."""
     scored = _score_reports(
         ranker,
         reports,
@@ -288,6 +304,27 @@ def rank_batch_with_exploration(
         verdict_scorer=verdict_scorer,
         gate_tail_ordering=gate_tail_ordering,
     )
+    # The tail arm draws first, on its own objective, and never shares a config with the
+    # merit arm — disjoint lanes are what make the prereg's arm split readable.
+    tail: list[RankedCandidate] = []
+    if tail_n > 0 and tail_scorer is not None:
+        tail_scored = [
+            RankedCandidate(
+                report=c.report,
+                prior_promotion_score=c.prior_promotion_score,
+                composite_score=tail_scorer(c.report.config),
+            )
+            for c in scored
+        ]
+        tail = select_top_n(
+            tail_scored,
+            min(tail_n, len(tail_scored)),
+            similarity_fn=similarity_fn,
+            min_per_hypothesis=0,
+            floor_exempt_hypotheses=floor_exempt_hypotheses,
+        )
+        tail_hashes = {c.report.config.config_hash for c in tail}
+        scored = [c for c in scored if c.report.config.config_hash not in tail_hashes]
     # Pre-draw the young quota's FEASIBLE size against the whole scored pool so
     # merit slots are only surrendered for draws that can actually happen. The
     # actual draw runs after selection/holdout over the true remainder.
@@ -305,7 +342,7 @@ def rank_batch_with_exploration(
         effective_young = 0
     selected = select_top_n(
         scored,
-        max(0, n - holdout_n - effective_young),
+        max(0, n - holdout_n - effective_young - len(tail)),
         similarity_fn=similarity_fn,
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
@@ -329,7 +366,7 @@ def rank_batch_with_exploration(
         if effective_young > 0 and young_rng is not None
         else []
     )
-    return selected, holdout, young
+    return selected, holdout, young, tail
 
 
 __all__ = [
