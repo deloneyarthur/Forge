@@ -1202,7 +1202,7 @@ denominator against the test's predicate over one enumeration; if they differ, f
 predicate (cheap) — if they agree, the share constant is not being applied as written and
 that is a v-bump-worthy supply correction on the resid_vix cell.
 
-## Q58 — the `param_no_promotion` proposer trigger is degenerate in a 0-promotion regime, and it just targeted our BEST cell (2026-07-25, severity: high)
+## Q58 — RESOLVED (guard shipped 2026-07-26; decline staged for the next restart) — the `param_no_promotion` proposer trigger is degenerate in a 0-promotion regime, and it just targeted our BEST cell (2026-07-25, severity: high)
 
 **What happened.** At 2026-07-25T04:41:18Z the daemon auto-wrote proposal
 `f59812c7-6cc2-4e90-ad42-f84b3300386a` (`proposal_type: tighten`, `status: PENDING`):
@@ -1242,7 +1242,7 @@ the D034 wording. (2) Guard `param_no_promotion` at source the way D034 guarded
 the global promotion count is 4. If a cell-kill trigger is wanted, base it on COMPONENT
 conversion, which has a real base rate (42,212), not promotion.
 
-## Q59 — the collider is IN THE LIVE RANKER MODEL, not just in our analyses (2026-07-25, severity: high)
+## Q59 — RESOLVED 2026-07-26 (fixed, deployed, confirmed in production at z=+5.09) — the collider is IN THE LIVE RANKER MODEL, not just in our analyses (2026-07-25, severity: high)
 
 **Finding.** Reverting the v50 sampler bias did NOT restore v49 behaviour, and the reason
 is that the collider propagated one layer deeper than either side realised.
@@ -1300,3 +1300,49 @@ increment, not a 07:30 flag flip.
 the robustness regressor on the unconditioned population. (b) Retrain the robustness model
 on stage one explicitly. (c) Revert the ranker to `target_wf_p25` — rejected: wf is inert
 on the cpcv gate (Run C: +0.009 vs +0.178), so that trades a biased signal for no signal.
+
+**RESOLVED 2026-07-26 — fixed, deployed, and CONFIRMED IN PRODUCTION.** Shipped versionless
+2026-07-25T18:46:52Z (`6b662ac`, D337 follow-on) as **two entangled fixes that only work
+together**: (1) `FORGE_HONEST_LABEL_SCOPE` on → **off** (option (b) above — the drop is
+quality-correlated AND deletes whole strata: `rank_k=20` is 55,820 rows unconditioned and
+**zero** under the drop, so the model could not learn the cliff at any encoding); (2)
+`rank_k` re-encoded from a linear slope to **one-hot**, because its relation to outcome is
+NON-MONOTONIC (P(F3 label) = 0.0735 / 0.1336 / **0.0000**) and one slope through a
+peak-then-cliff is dragged negative by the cliff. Validated OOS before shipping: robustness
+rank-IC **0.0321 → 0.3962**, F3 AUC **0.5910 → 0.6936**, overfit gap unchanged.
+
+**Production confirmation (prereg `b1eb98fab4cc`, CONFIRMED):** on the **ranked arm** — the
+only arm the ranker controls — trend-xsect `k5_share` went **0.7683 (n=82) → 0.4294
+(n=177), z = +5.09**, and now sits *below* the 0.486 uniform rate, i.e. correctly preferring
+k=10. The `prefilter_sample` control arm did **not** move (0.5000 → 0.4892, both ~uniform),
+giving a clean difference-in-differences that rules out enumeration, grammar, and universe
+confounds.
+
+**Two corrections to this entry's own text, for the record.** (i) *"Every feature correlated
+with coverage-resolution probability is biased"* was an overstatement — measured, **9 of 81**
+shared coefficients sign-flip, not all. (ii) The live model's `rank_k` was the **only**
+continuous categorical; `hypothesis`/`dte_bucket`/`dir_id`/`regime_id` were already one-hot,
+so the "known failure mode in our pipeline" framing was withdrawn. A systematic sweep found
+`n_signals` non-monotonic, but its one-hot **failed OOS validation** (sign-unstable across
+temporal splits, mean −0.0020) and was NOT shipped — the severity of a smeared categorical
+depends on the SHAPE (a cliff to exact zero), not on the significance of its steps.
+
+## Q60 — `forge grammar reject-proposal` cannot run while the daemon holds the DB (2026-07-26, severity: low)
+
+**What.** Q58's recommended action (1) is to DECLINE proposal `f59812c7`. The command is
+`forge grammar reject-proposal --id … --initials …`, which does a `db_connection()` **write**
+(`UPDATE grammar_proposals SET status …`). The live `~/forge_data/forge.db` is held RW by
+`forge.service`, where even read-only opens fail intermittently (standing pitfall,
+`docs/tasks/investigate-live.md`). So the operator audit row cannot be written while the
+daemon runs.
+
+**Not urgent.** There is no auto-apply path (verified in Q58: `apply-proposal` is a separate
+CLI command, called zero times from the run loop), so a PENDING proposal is inert. The
+important half of Q58 — the **guard at source** — is shipped and prevents recurrence.
+
+**Staged.** Run `reject-proposal` inside the next stop→restart window, alongside any other
+DB-write chores. Pairs naturally with the `FORGE_PREFILTER_SAMPLE_N` 300 → 40 ramp.
+
+**Worth considering later, not now.** Every other operator DB-write command has the same
+constraint. A `--defer` mode that queues the audit row to a file the daemon folds in on its
+next loop would remove the coupling, but that is a design increment, not a fix for today.

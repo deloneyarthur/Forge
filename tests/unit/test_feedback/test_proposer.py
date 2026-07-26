@@ -224,24 +224,61 @@ def test_trigger_c_fires_when_cell_has_zero_promotions(monkeypatch: pytest.Monke
     from forge.feedback import proposer as proposer_mod
 
     monkeypatch.setattr(proposer_mod, "_PARAM_NO_PROMOTION_MIN_SAMPLES", 5)
-    # 5 mean_reversion / swing_short outcomes, 0 promoted
-    outcomes = tuple(
-        _outcome(
-            name=f"r{i}",
-            hypothesis="mean_reversion",
-            dte_bucket="swing_short",
-            promote=False,
-            failed_gates=("sharpe_gate",),
-        )
-        for i in range(5)
+    # 5 mean_reversion / swing_short outcomes, 0 promoted -- PLUS a promotion in a
+    # DIFFERENT cell, so the batch clears the Q58 guard below and the zero is
+    # informative rather than the regime-wide default.
+    outcomes = (
+        *(
+            _outcome(
+                name=f"r{i}",
+                hypothesis="mean_reversion",
+                dte_bucket="swing_short",
+                promote=False,
+                failed_gates=("sharpe_gate",),
+            )
+            for i in range(5)
+        ),
+        _outcome(name="p_other", hypothesis="trend_continuation", dte_bucket="swing_long"),
     )
-    bf = BatchFeedback(batch_id=uuid.uuid4(), submitted_count=5, outcomes=outcomes)
+    bf = BatchFeedback(batch_id=uuid.uuid4(), submitted_count=6, outcomes=outcomes)
     report = _report()
     proposals = propose(report, bf, at=_AT)
     c_props = [p for p in proposals if p.evidence_json.get("trigger") == "param_no_promotion"]
     assert len(c_props) >= 1
     assert c_props[0].proposal_type == "tighten"
     assert c_props[0].target == "grammar"
+
+
+def test_trigger_c_is_guarded_off_in_a_zero_promotion_regime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Q58: a promotion-denominator trigger is meaningless while NOTHING promotes.
+
+    Live ledger 2026-07-25: 4 promotions against ~428k verdicts, so the expected
+    promotion count at the 200-sample threshold is ~0.002 and observing zero is the
+    expected outcome for EVERY cell. The trigger then measures sample size, not
+    quality -- and it duly fired on `(trend_continuation, swing_mid)`, the
+    highest-weighted converting cell in the same batch's own learned weights.
+    Same degeneracy and same fix as D034's `gate_failure_concentration` guard.
+    """
+    from forge.feedback import proposer as proposer_mod
+
+    monkeypatch.setattr(proposer_mod, "_PARAM_NO_PROMOTION_MIN_SAMPLES", 5)
+    outcomes = tuple(
+        _outcome(
+            name=f"r{i}",
+            hypothesis="trend_continuation",
+            dte_bucket="swing_mid",
+            promote=False,
+            failed_gates=("sharpe_gate",),
+        )
+        for i in range(5)
+    )
+    bf = BatchFeedback(batch_id=uuid.uuid4(), submitted_count=5, outcomes=outcomes)
+    assert bf.promoted_count == 0
+    proposals = propose(_report(), bf, at=_AT)
+    c_props = [p for p in proposals if p.evidence_json.get("trigger") == "param_no_promotion"]
+    assert c_props == []
 
 
 def test_trigger_c_does_not_fire_when_cell_has_at_least_one_promotion(

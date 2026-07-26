@@ -225,7 +225,23 @@ def _proposals_from_param_history(
     at: datetime,
 ) -> list[GrammarProposal]:
     """Trigger (c): find (hypothesis, dte_bucket) cells with N+ samples
-    and 0 promotions. For Phase 5 the window is the current batch only."""
+    and 0 promotions. For Phase 5 the window is the current batch only.
+
+    Q58 guard (2026-07-25), the same guard D034 put on
+    `gate_failure_concentration` and for the same reason: a
+    promotion-DENOMINATOR trigger is meaningless while nothing promotes. The
+    live ledger carries 4 promotions against ~428k verdicts, so the expected
+    promotion count at the 200-sample threshold is ~0.002 — observing zero is
+    the expected outcome for EVERY cell, and the trigger degenerates into a
+    measure of sample size. It duly fired once, on `(trend_continuation,
+    swing_mid)`: the highest-weighted converting cell in the same batch's own
+    learned weights, and the cell the current grammar work is built on.
+
+    A cell-kill trigger wanting a real base rate should key on COMPONENT
+    conversion (42,212 observed), not promotion.
+    """
+    if feedback.promoted_count == 0:
+        return []
     cells: dict[tuple[str, str], list[CandidateOutcome]] = {}
     for o in feedback.outcomes:
         key = (str(o.config.hypothesis), str(o.config.dte_bucket))
