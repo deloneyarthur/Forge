@@ -1,5 +1,28 @@
 # Forge — Status
 
+## 2026-07-26 (ASK-1 CORRECTED + head-to-head) — **Saturation is ~62 at k=170, NOT ~3. Our "cap at ~30 slots" advice was built on a number Crucible has withdrawn — the operator's larger-lane instinct was right. And the head-to-head says `sharpe_baseline` and `wf_p10` are much CLOSER than one run suggested.**
+
+- **⚠️ CRUCIBLE CORRECTED ASK 1 BY ~20× (`9996751`, sent BEFORE our relay `f32c9c4` — we relayed and pre-registered on the superseded number).** They measured ρ on **overlapping days only**; the §8.7 `mean_pairwise_correlation` screen **zero-fills the union** (§27.2, "zeros are signal" — a leg flat on a day genuinely contributes zero P&L).
+
+  | book-usable, n=776 | overlap-only *(what we sized on)* | **gate convention** |
+  |---|---:|---:|
+  | mean ρ | 0.549 | **0.1012** |
+  | eff_N at k=32 | 3.09 | **24.3** |
+  | **eff_N at k=170** | **3.27** | **62.3** |
+  | asymptote | 3.32 | **97.7** |
+
+  **Independently confirmed by a live book:** `c914c3c8`, five MR/swing_mid xsect legs from exactly this family, gated at `mean_pairwise_correlation = 0.0023` against a **0.70** threshold — three orders of magnitude of margin. Their own note: the measurement they sent "would have been falsified by the first book built from the thing it described."
+- **⇒ THE ~30-SLOT CAP IS WITHDRAWN AND THE LANE SIZE IS REOPENED.** We talked the operator down from 95 slots / the full lane citing saturation; **that advice rested on the withdrawn number.** At ~62 independent streams from 170 members, a 95-slot MR lane is well inside the useful range.
+- **The quality↔redundancy claim SURVIVES BUT MUCH WEAKER.** Gate convention: ρ 0.0851 → **0.1012** book-usable (+19%, not 0.320 → 0.548) and ceiling 138 → **98** (−29%, not 9.8 → 3.3). **"Strength and redundancy are the same property" was too strong** and we repeated it in our relay. The durable version: **this family shares a factor when CO-ACTIVE (ρ 0.549) but is rarely co-active — concentration is safe because the legs trade at different times, not because they are independent when they trade.**
+- **⚠️ THE SOBERING RESULT IN THE SAME RELAY: all three books from that family REJECT at `selection_pbo = 0.7778` against a 0.40 gate** — identically across the concentrated book AND both correlation-diversified counterfactuals. **The concentrated book does not lose to the diversified ones; the whole family is selection-overfit.** Consistent with their standing "top-N-equal-weight assembly is ~1-factor" result. **A tail lane feeding that family inherits this** — worth watching regardless of lane size. Also: survivor pool **44,643 configs deflates to `n_trials = 49`** effective independent trials (prior corpus estimate ~37).
+- **PREREG `8cfe95f4a6e9`: its SIZING CLAUSE is superseded, its PREDICTION is not.** The claim under test — tail arm delivers ≥1.5× the concurrent incumbent arm's strong-component rate — **does not depend on lane size**. Recorded rather than silently re-registered; the sizing sentence in that record cites the withdrawn ~3.3 asymptote and should be read against this block.
+- **HEAD-TO-HEAD (`scripts/tail_target_headtohead.py`, 8 splits, n_pos 100→3200, 3 judges, 2 estimators × 3 λ, per-window counts) — CLOSER THAN THE SINGLE RUN SAID:**
+  - **Bar 1 (beat `wf_p10` at every judge) NOT met as stated.** `wf_p10` top-100/200 wins on LIFT at every judge (4.47× / 6.78× vs `sharpe_baseline`'s 3.95× / 5.94×). **But our own bar was badly specified** — we established earlier that lift ≠ delivery, then set a lift bar.
+  - **Bar 2 (estimator robustness) MET decisively.** `sharpe_baseline` is **8/8 at every n, every estimator, every λ**; `wf_p10` degrades to 6/8 at n=400 and 4/8 past it, and dies at 1600+ (0.90×).
+  - **Bar 3 (unseen late splits) MET by both** (~5×, 4/4). ⚠️ **Nested selection picked WRONG again — 4 for 4 now**: it chose `wf_p10` top-100 (early 3.67×) → late 5.27×, when `sharpe_baseline` top-100 gives late **5.40×**.
+  - **Bar 4 (per-window absolute) MET, and this is the decider.** GLOBAL top 5%: `sharpe_baseline` top-1600 **313 (4/4)** and top-800 305 (4/4) vs `wf_p10` 253/241. MR top 5%: `sharpe_baseline` **185/182 (4/4)** vs `wf_p10` 161/133. At top 1% they tie (44 vs 43 on MR).
+  - **VERDICT: `sharpe_baseline` on delivery and robustness; `wf_p10` on peak lift in a narrow n band.** Since the lane is now sized LARGER (correction above), the operating fraction moves toward top 5% where `sharpe_baseline` wins clearly. **Target confirmed, for a weaker reason than the first run implied.**
+
 ## 2026-07-26 (sharpe_baseline RESULT) — **`sharpe_baseline` BEATS `wf_p10` and becomes the MR-leg target: 307 strong components vs 244, and 131 for the incumbent. On TREND nothing beats the incumbent — the trend leg needs NO model.**
 
 - **THE DECISION METRIC — absolute strong components, disjoint windows, top 5%** (judge = corrected floor 0.9115):
