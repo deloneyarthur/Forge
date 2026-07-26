@@ -1,5 +1,33 @@
 # Forge — Status
 
+## 2026-07-26 (trend sweep) — **A separate trend target IS justified (ARM 0 decisive) — but the trend lever is ~4× WEAKER than the MR one, and `wf_p10` has the same cliff here. Recommendation: build the leg as a SLOT RESERVATION; its own model is marginal.**
+
+- **THE TREND SLICE:** n=130,109 (57.5% of the population), component rate 19.35%. Tail is thin: **955 ≥ book floor, 558 ≥1.0, and only 2 ≥1.5 in 130k rows.** The trend leg cannot be justified on gate-clearers at all — it is a supply-diversity argument.
+- **ARM 0 — SEPARATE TARGET JUSTIFIED, and we predicted the opposite.** We expected the global model to rank trend candidates fine, collapsing the two-leg design into a slot reservation. It does not: two of three global models are **actively WORSE than the incumbent** when pointed at trend.
+
+  | metric | global model, restricted to trend | trend-fit |
+  |---|---:|---:|
+  | `wf_p10` | 2.56× 5/5 | **3.18× 5/5** |
+  | `wf_p25` | **0.56× 0/5** | 1.70× 5/5 |
+  | `cpcv_p25` | **0.39× 0/5** | 1.77× 5/5 |
+
+  **The global fits are MIS-SPECIFIED for trend, not merely tilted away from it** — the feature weights a global fit learns are wrong in that region. This is the strongest evidence for the operator's two-leg proposal and it is sharper than the starvation argument.
+- **⚠️ `wf_p10` HAS THE SAME CLIFF ON TREND, at a label size instead of a quantile:** top-100 **3.26×**, top-200 3.00×, top-400 3.13×, then **top-800 0.23× 0/5**, top-1600 0.27× 0/5. Usable band is n ∈ [100, 400] and it dies past that — the zero mass point again. `cpcv_p25` by contrast climbs monotonically (1.10 → 1.34 → 1.54 → 1.63 → **2.12× 5/5** at top-1600) with no cliff.
+- **⇒ ON TREND, `cpcv_p25` EXCEEDANCE IS COMPETITIVE — the reverse of the global answer**, where cpcv was the weakest base. Different regions want different metrics, which is the two-leg case made concrete rather than assumed.
+- **ARM 3 nested (the decider) — and for the FIRST time the nested choice was a good one:** chose `wf_p10` top-100 on early (1.90×) → **1.69× on 3/3 unseen late splits**, and nothing beats it late (`cpcv` top-1600 is second at 1.50×, 3/3). Breaks the 3-for-3 non-transfer streak. **But `wf_p10` top-100 is 100 positives against 115 features — 0.87 events/variable, worse than the global case we already flagged as fragile.**
+- **⚠️ ARM 4 — THE DECISION METRIC, and it deflates the whole thing.** Disjoint windows, top 5%, 2,600 selected:
+
+  | model | comp | **STRONG** | ≥1.0 | max |
+  |---|---:|---:|---:|---:|
+  | incumbent `E[cpcv]` | 952 | **47** | 28 | 1.372 |
+  | `wf_p10` top-200 | 566 | **55** | 37 | 1.414 |
+  | `wf_p10` top-800 | 459 | 38 | 24 | 1.414 |
+  | `wf_p25` top-200 | 487 | 32 | 20 | 1.372 |
+  | `wf_p25` top-800 | 460 | 38 | 24 | 1.372 |
+
+  **Only `wf_p10` top-200 beats the incumbent, +55 vs 47 = +17%.** Both `wf_p25` variants are WORSE. Compare the MR side: `wf_p10` delivered **+63%** strong components there. **The trend lever is real but ~4× weaker**, and no trend model gets near the 1.5 gate (max 1.414).
+- **RECOMMENDATION: build the trend leg as a SLOT RESERVATION first; a dedicated trend model is marginal.** Reserving trend slots and ordering by the incumbent yields 47 strong; the best trend-fit model yields 55. **+8 strong components per 2,600 selected is a thin return on a second target, trainer, artifact and retrain cadence.** The diversification argument for the leg stands on its own (single-spine books); the second *model* should wait for either Crucible's ASK-3 answer or a better trend target than `wf_p10` top-200.
+
 ## 2026-07-26 (relay out) — **THREE ASKS to Crucible; the lane is BLOCKED on ask 1. Two-leg ranked lane proposed (operator).**
 
 - **Relay `c337b68`** carries the whole tail arc plus the first real asks on them in a week. Their two-part concession and drift-floor findings accepted — **multi-split sweeps are now mandatory on our side and "wait for more n" is retired as an argument.**
