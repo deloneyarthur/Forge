@@ -1,5 +1,24 @@
 # Forge — Status
 
+## 2026-07-26 (merge sweep) — **MERGE REFUTED: cpcv adds NOTHING to wf, it dilutes.** And in absolute terms the incumbent is not merely worse at the tail — **it selects ZERO gate-clearing configs where the wf targets select 4–8.**
+
+- **THE ABSOLUTE TABLE — the one that matters.** Ratios hid a zero denominator. Summed over the 3 late test splits, top 5% selected:
+
+  | ordering model | n selected | ≥1.0 | ≥1.25 | **≥1.5 (GATE)** | max |
+  |---|---:|---:|---:|---:|---:|
+  | **incumbent `E[cpcv]` ridge** | 10,163 | 219 | 20 | **0** | 1.353 |
+  | `wf_p25` q=0.990 | 10,163 | 457 | 101 | **2** | 1.532 |
+  | `wf_p25` q=0.999 | 10,163 | 605 | 152 | **4** | 1.532 |
+  | `wf_p10` q=0.999 | 10,163 | **810** | **232** | **8** | 1.532 |
+  | `cpcv` q=0.990 | 10,163 | 379 | 64 | 2 | 1.523 |
+
+  **The live model finds ZERO gate-clearers and never exceeds 1.353.** At top 1% and top 0.5% it also finds zero ≥1.25 (that is the `--` in the ratio table — an undefined ratio, not a missing measurement). Only 20 configs in the whole 225,879-row population clear 1.5, so at top-5% a blind selector expects ~1; `wf_p10` gets 8. **⚠️ COUNTING CAVEAT: the 3 late test windows are NESTED, so a config can be counted up to 3×. These are not 8 distinct configs. The cross-model comparison is fair (identical windows); the absolute magnitude is inflated.**
+- **MERGE REFUTED — the rank-blend is MONOTONE in w.** 0.00 (pure cpcv) → 1.00 (pure wf) at top 1%: **2.71× / 5.01× / 5.53× / 5.93× / 9.15×**. Every gram of cpcv weight strictly hurts. Product form 5.75×; `gate-then-rank` (the live gate-tail shape) 4.60×; joint label 8.50× but **5/6** splits at top 0.5% vs pure wf's 6/6. **NESTED confirms: w chosen on EARLY = 1.00, evaluated on LATE = 7.82× on 3/3 unseen splits.** There is no merge to build — cpcv exceedance is simply the weakest of the three targets and blending drags.
+- **FULL PARAMETER SWEEP — `wf_p25` is flat, `wf_p10` has a genuine CLIFF.** `wf_p25`: **25 of 25 cells at 6/6**, and near-constant across quantile (top 0.5%: 18.06 / 17.31 / 17.81 / 18.78 / 17.78 for q = 0.980→0.999); insensitive to estimator and λ (logistic 9.10/9.15/9.13, ridge 8.38, all 6/6). `wf_p10`: **2.92× at 4/6 (q=0.990) → 20.75× at 5/6 (q=0.995) → 24.28× at 6/6 (q=0.999)** — a 7× discontinuity between adjacent quantiles, not a tunable ramp.
+- **⚠️ CORRECTION TO OUR OWN EARLIER CLAIM.** We wrote that stable lift at the harder ≥1.25 tail was unreachable (best 4/8). **That was true of CPCV exceedance only.** On judge ≥1.25 at top 5%: `wf_p25` q=0.999 = **10.06× at 6/6**, `wf_p10` q=0.999 = 13.47× at 6/6, cpcv = 1.64–2.02× at 3/6. **The wf targets DO lift the harder tail reliably.** Limitation withdrawn.
+- **THE ONE GENUINELY OPEN CHOICE — `wf_p25` vs `wf_p10` q=0.999.** wf_p10 finds ~2× the gate-clearers (8 vs 4) and ~1.5× the ≥1.25s (232 vs 152), but **on counts of 8 vs 4 that is suggestive, not decisive**, and its payoff collapses to 1.75× at a neighbouring quantile — a knob ARM D of the extreme sweep proved is time-unstable. **Recommendation: ship `wf_p25` q≈0.99 as the lane (robust everywhere, 4 gate-clearers where the incumbent finds 0) and run `wf_p10` q=0.999 in a small parallel exploration slot** to test the 2× with more data. Operator's call.
+- **STILL NOTHING SHIPPED.** Scripts: `scripts/exceedance_merge_sweep.py` (`6150b87`). A lane needs its own prereg before code.
+
 ## 2026-07-26 (extreme sweep) — **THE TARGET IS `wf_sharpe_p25` EXCEEDANCE, NOT `cpcv` — 2.24× on unseen splits, 8/8 at every cell tested.** The sweep overturned the parameter we were one step from shipping.
 
 - **WHY THE EXTREME SWEEP EXISTED, vindicated.** The narrow read (`P(cpcv≥1.0)`, 1.48×, 4/4) answered ONE question at ONE operating point with ONE estimator. Widening to 8 splits × 8 τ × 5 selection fractions × 3 estimators × 5 base metrics found the recommendation was **wrong on the base metric**. Two anti-overfit guards carried the weight: **nested selection** (choose on early splits, evaluate on late) and **splits-won beside every mean**.
