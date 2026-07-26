@@ -1,5 +1,34 @@
 # Forge — Status
 
+## 2026-07-26T00:52Z — **Q59 fix CONFIRMED IN PRODUCTION at z = +5.09 with a flat control arm.** Prereg `b1eb98fab4cc` RESOLVED. `n_signals` dip SURVIVES and is 5× deeper than we thought.
+
+- **PREREG `b1eb98fab4cc` = CONFIRMED.** Resolved on `submitted_at >= 2026-07-25 18:46:52` per the rule recorded before the read — NOT on "post-cut" (the fix was versionless, so `grammar_version=v51` spans both eras and 311 post-cut/PRE-fix configs at 0.5659 sit inside the window).
+- **⚠️ THE METRIC WAS ARM-DILUTED AND WE NEARLY UNDER-READ OUR OWN RESULT BY 2×.** First report was all-arms 0.5651 → 0.5000 ("bias gone"). But `prefilter_sample` was **60% of post-fix submissions** at N=300 and is a *uniform draw the ranker never touches*. Split by arm:
+
+  | cohort | arm | n | k5_share | z vs 0.486 |
+  |---|---|---:|---:|---:|
+  | PRE-fix | **ranked** | 82 | **0.7683** | **+5.11** |
+  | PRE-fix | prefilter_sample *(control)* | 222 | 0.5000 | +0.42 |
+  | POST-fix | **ranked** | 177 | **0.4294** | −1.51 |
+  | POST-fix | prefilter_sample *(control)* | 417 | 0.4892 | +0.13 |
+
+- **RANKED ARM 0.7683 → 0.4294, z = +5.09.** The broken ranker picked k=5 **77%** of the time; it now sits *below* the 0.486 uniform rate — mildly preferring k=10, the direction ground truth says is correct (+0.1196 vs +0.0290). It did not merely stop being wrong; it leans right.
+- **THE CONTROL DID NOT MOVE** (0.5000 → 0.4892, both ~uniform) — a clean difference-in-differences ruling out enumeration drift, grammar, and the July universe change. The honest arm earned its keep as a control, which is a use we had not planned for it.
+- **RULE ADOPTED: prereg the ARM when the claim is about the ranker.** An all-arms share moves whenever `FORGE_PREFILTER_SAMPLE_N` moves, for reasons unrelated to the hypothesis. Ours got the right answer by luck of the bound; at N=40 tomorrow the same metric would read differently.
+- **`n_signals`: Crucible's hypothesis REFUTED, informatively — the coverage conjunct was MASKING the dip, not causing it.** They predicted the dip at 3 was an artifact of `honest_coverage` and would vanish post-no-drop. **First, their test as specified was untestable:** the conjunct lives in `label_for` (the LABEL), not the population filter no-drop removed — so shipping no-drop moved coverage-dependence from filter to label rather than removing it. Ran the real test (conjunct stripped from the label), n=388,235:
+
+  | n_signals | A: our label | B: conjunct REMOVED |
+  |---:|---:|---:|
+  | 2 | 0.0677 | **0.1186** |
+  | 3 | **0.0639** | **0.0938** |
+  | 4 | 0.0987 | 0.1347 |
+  | **2→3** | **z = −4.36** | **z = −22.84** |
+
+  Removing the conjunct makes the dip **5× more significant**. **`n_signals` one-hot moves from the TEST list to the FIX list.**
+- **The two ledgers reconcile without either being wrong:** their `reached_stage_two` label is monotonic; ours is positive-decision. **3-signal configs are TRIED more and SUCCEED less** — the conversion-vs-quality distinction reappearing one level up.
+- **Relay out:** `a7602be` in `~/proj/freeze/relays/` (prereg confirmation + arm-dilution lesson + `n_signals` refutation + D338's transferable lesson). No asks on them.
+- **Next:** `n_signals` one-hot (temporal split, OOS AUC, overfit gap); Factor-1 retest with a calibrated logistic F1; ramp `FORGE_PREFILTER_SAMPLE_N` 300 → 40 in the morning.
+
 ## 2026-07-25 (late) — **GENERATION PRIOR: PARKED → REFUTED on stage one.** It is a tail-COMPRESSOR: body up, tail down, gate-clearing rate 0.64×. Analysis-only, nothing shipped.
 
 - **The parking number was a collider read.** The winner-neighborhood prior was parked 07-24 at **d_p90 +0.0087** on the honest ARM, needing ~20,000/arm ≈ **57 days**. Both its fit and its judge ran on `measurement_basis='fullhist_refit'` = **STAGE TWO**. Per D337's rule that is a collider, so the number was untrustworthy in both directions — **and the 57-day power problem was itself an artifact**: 302 conditioned rows were the sample when **233,867 unconditioned rows** sat in the same table. Re-derived today at **8,000× the judge power, with no waiting.**
