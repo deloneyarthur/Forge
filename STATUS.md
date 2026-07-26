@@ -1,5 +1,20 @@
 # Forge — Status
 
+## 2026-07-26 (concentration) — **THE ONE ARGUMENT AGAINST 100%: `wf_p10` collapses the cell mix to ~90% mean-reversion swing_mid, and our books already have a single-spine problem.**
+
+- **Concentration of the selected stream** (disjoint windows, top 10%):
+
+  | selector | cells | top-3 share | effective cells (1/HHI) | strong-producing cells |
+  |---|---:|---:|---:|---:|
+  | incumbent | 9 | **62.5%** | **5.8** | 8 |
+  | `wf_p10` | 9 | **89.8%** | **3.7** | 6 |
+  | `AND-label` | 7 | 88.7% | 3.7 | 6 |
+
+- **`wf_p10`'s top three are ALL mean_reversion swing_mid** — `keltner_pct` 31.9%, `rsi` 29.3%, `rsi_14` 28.6%. **Trend is abandoned**: `trend/donchian/mid` falls from 20.2% (incumbent) to **4.2%**.
+- **WHY THIS BITES AT 100% SPECIFICALLY.** (1) All 4 promoted books share ONE trend spine (`91324e5d_dsjv45`); if Forge stops emitting trend candidates we can never diversify away from that dependency. (2) `rsi`/`rsi_14`/`keltner_pct` on the same bucket are near-identical oscillators, so their RETURN STREAMS likely correlate — and assembly binds on **decorrelation** (D186/D187, joint strong-AND-decorrelated frontier). **Plausible mechanism: more strong components, fewer USABLE ones.**
+- **⚠️ WE CANNOT PRICE THIS — Forge is blind to assembly correlation by design.** The measured facts are ours; whether 190 near-identical MR components per batch are usable is **Crucible's read**, and it is the question to relay.
+- **RECOMMENDATION: majority tail lane, NOT 100%.** ~130–150 of 190 tail-ordered, remainder incumbent — preserves trend flow, keeps a within-batch control (the Q59 fix was readable at z=+5.09 only because a control arm did not move), and hedges a model trained on 300 positives. Existing exploration floors (arm_floor ≤19, cell_floor ≤19) should be respected, not bypassed.
+
 ## 2026-07-26 (re-priced) — **THERE IS NO TRADEOFF. The "throughput cost" was 100% WEAK components. Counting only book-usable ones, every tail target delivers MORE — and the recommendation reverts to `wf_p10`/`AND-label`.**
 
 - **OPERATOR'S CHALLENGE — "less components are good if they're strong; we get no value creating weaker components" — TESTED AND CONFIRMED, emphatically.** Every component that has ever made a promoted book sits at the **96.4th–100th percentile** of all components by cpcv:
