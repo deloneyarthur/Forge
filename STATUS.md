@@ -1,5 +1,21 @@
 # Forge — Status
 
+## 2026-07-26 — **HONEST THRESHOLD CONVERGED — accrual item RETIRED.** 3× the data moved the median by 0.001. And the ≥1.5 record, read properly: 18 distinct configs have cleared it, but only ONE honestly.
+
+- **CONVERGED, not pending.** The honest arm (`selection_mode='prefilter_sample'`, unselected by BOTH prefilter and ranker) went **n=302 → 937** and the answer did not move:
+
+  | | 07-24 baseline | now |
+  |---|---:|---:|
+  | n | 302 | **937** |
+  | median | 0.351 | **0.3521** |
+  | clear 1.5 | 0.00% | **0.00%** |
+
+- **THE THRESHOLD:** honest median **0.3521**, p99 0.9267, p99.9 1.1979, **max ever 1.3125** against a **1.5** gate. Gap median→gate **1.1479**. In 937 honestly-sampled configs the gate has **never** been touched.
+- **⚠️ ACCRUAL ITEM RETIRED — "accrue more honest data" is CLOSED.** A 3.1× sample moved the median 0.001; more n will not change this answer. What would change it is a different GENERATION SURFACE (the parked Path-C question), not more sampling. **`FORGE_PREFILTER_SAMPLE_N=300` has delivered what it was raised for** — holding it further buys no information and costs ~60% of ranked production.
+- **THE ≥1.5 RECORD, read properly (operator's question — and the 0% above was scoped too narrowly).** Across ALL 244,188 decided verdicts carrying a cpcv value: **22 verdicts ≥1.5 (0.0090%), 18 distinct configs, 4 `promote`**; ≥1.25 = 256, ≥1.0 = 2,143; max **2.9879**. So the pipeline HAS cleared the gate. **But 19 of 22 carry `measurement_basis = None`** (pre-D331, before 07-22) and the top values cluster **06-29 → 07-03, inside the pre-07-02 CPCV defect window Crucible flagged** — `a940e2ec` at 1.8747 is *literally the row they named as defective*, and `3d6ed2af` at 2.9879 appears three times as promote/promote/**reject** (re-gate pollution). **The only clean modern one: `cf530d34`, cpcv 1.5526, `fullhist_refit`, RANKED arm, decided 2026-07-25 02:57, decision=component.**
+- **THE FRAMING THAT MATTERS — selection is doing real work.** Generation ceiling (honest, unselected) **1.3125**; post-selection ceiling (ranked) **1.5526**; promoted 4. The 1.3125 → 1.5526 gap is what the ranker buys. **Raising the UNSELECTED ceiling is a generation-surface problem, not a sampling or ranking one.**
+- **Lead, not a result:** at ≥1.0 the ranked arm is **3.99%** and the holdout (the correct ranker control — both are prefilter survivors, only one is ranker-picked) is **3.91%**, i.e. near-parity. But holdout n=230 (9 configs) and the window predates most of the Q59 fix. **Re-read once the fixed ranker accrues.**
+
 ## 2026-07-26 (early) — **Queue cleared: Factor-1 retest REFUTES the remedy, Q58 guarded at source, Q59/Q58 closed, 9 flips are conditioning-not-encoding, 4 preregs read.** Three relays out.
 
 - **FACTOR-1 RETEST — Crucible's defect is REAL but their minimal fix LOSES.** Their diagnosis (a ridge on a 0/1 label emits negatives; a negative F1 flips F2's sign in the product) is **confirmed and quantified: 7.83%** of test rows go negative, range [−0.1988, +0.6636]. But logistic-clipped-to-(0,1] costs IC **everywhere**: F1 alone 0.2462 → **0.1954**, two-part 0.2793 → **0.2237**, top-decile 0.4607 → 0.4517. **The unconditioned single model still wins IC by >2× (0.4673).** Hypothesis for why: the sigmoid saturates and flattens top-end ordering, and that costs more than the 7.83% sign-flips. **Two-part stays not-needed — now shown WITH their fix applied**, which is the stronger statement they asked for. NB their premise assumed a 6.33% base rate; on the joined population it is **18.70%**. No further work without a new argument.
