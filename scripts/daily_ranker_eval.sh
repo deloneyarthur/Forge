@@ -107,6 +107,29 @@ for _target in target_cpcv_p25 target_wf_p25; do
     fi
 done
 
+# --- train-tail -> staging, then atomic publish (the TAIL LANE, prereg 8cfe95f4a6e9) --
+#     A logistic on P(top-800 by sharpe_baseline), NOT a ridge on a continuous value:
+#     promotion is a tail event and an average-shaped objective does not order tails
+#     (spearman(cell mean, cell std) = -0.148 vs spearman(cell P(>=1.0), cell std) = +0.500).
+#     Offline this delivers 313 strong components per 4,520 selected against the incumbent
+#     E[cpcv]'s 133, over 8 splits with 4/4 per-window wins.
+#     The lane that consumes this is FLAG-GATED (FORGE_TAIL_LANE_SLOTS, default 0), so
+#     publishing the artifact daily is inert until the flag is set -- and the artifact must
+#     exist BEFORE the flag flips, or the lane logs "inert" and silently changes nothing.
+#     Same staging + atomic-mv discipline as the robustness fits; a refusal (thin rows) is
+#     non-fatal and leaves the previous artifact in place.
+echo "daily-ranker-eval: train-tail (target_sharpe_baseline top-800)"
+if uv run forge ranker-model train-tail --forge-db "$SNAP" --models-dir "$STAGING"; then
+    shopt -s nullglob
+    for art in "$STAGING"/tail_model_*.json; do
+        mv -f -- "$art" "$MODELS_DIR/"   # same fs -> atomic rename
+        echo "daily-ranker-eval: published $(basename "$art")"
+    done
+    shopt -u nullglob
+else
+    echo "daily-ranker-eval: train-tail non-zero (insufficient rows or registry) -- continuing" >&2
+fi
+
 # --- eval + streak (single DB pass; criterion constant imported from the CLI so
 #     it cannot drift from the manual `forge ranker-model eval`) ----------------
 echo "daily-ranker-eval: eval + streak"

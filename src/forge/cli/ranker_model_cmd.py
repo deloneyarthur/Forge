@@ -521,6 +521,90 @@ def cmd_eval_prior_weight(
     )
 
 
+@ranker_model_app.command("train-tail")
+def cmd_train_tail(
+    forge_db: Path | None = typer.Option(
+        None, "--forge-db", help="forge.db path (use a snapshot of the live DB)"
+    ),
+    config: Path = typer.Option(
+        Path("config/forge.yaml"), "--config", help="forge.yaml (db_path + models dir defaults)"
+    ),
+    exports_dir: Path | None = typer.Option(
+        None, "--exports-dir", help="Crucible exports dir override (registry snapshot)"
+    ),
+    era_cut: str | None = typer.Option(
+        None, "--era-cut", help="ISO label-era cutoff override (naive = UTC)"
+    ),
+    lambda_: float = typer.Option(10.0, "--lambda", help="L2 regularization strength"),
+    base_target: str = typer.Option(
+        "target_sharpe_baseline", "--base-target", help="continuous metric the top-N label ranks"
+    ),
+    n_pos: int = typer.Option(800, "--n-pos", help="label size: the top N by --base-target"),
+    models_dir: Path | None = typer.Option(
+        None, "--models-dir", help="artifact dir (default: <config db_path parent>/models)"
+    ),
+) -> None:
+    """Train the TAIL-LANE model (prereg `8cfe95f4a6e9`): a logistic predicting
+    `P(top-N by base_target)`.
+
+    Distinct from `train-robustness`, which fits a ridge on a continuous gate value.
+    Promotion is a tail event and an average-shaped objective does not order tails — on
+    stage-one cells spearman(cell mean, cell std) = -0.148 while spearman(cell P(>=1.0),
+    cell std) = +0.500.
+
+    `--n-pos` is a COUNT, never a quantile: four independently-tuned parameters have failed
+    to transfer forward on this data, and `wf_p10` carries a mass point at zero where a
+    quantile threshold lands inside a tie block. The default 800 is the measured operating
+    point, not a value to search.
+    """
+    from forge.core.contracts_check import check_contracts_version
+
+    check_contracts_version()
+
+    from forge.persistence.db import db_connection
+    from forge.persistence.registry_loader import load_registry
+    from forge.ranking.dataset import build_dataset
+    from forge.ranking.model import save_tail_model, train_tail_model
+
+    forge_db = _resolve_forge_db(forge_db, config)
+    cut = _resolve_era_cut(era_cut)
+    models_dir = _resolve_models_dir(models_dir, config)
+    registry = load_registry(exports_dir=exports_dir) if exports_dir else load_registry()
+
+    with db_connection(forge_db) as conn:
+        frame = build_dataset(conn, registry, era_cut=cut)
+
+    if base_target not in frame.columns:
+        typer.echo(f"refusing to train: no {base_target} column in the frame", err=True)
+        raise typer.Exit(code=1)
+    trainable = sum(1 for v in frame[base_target].to_list() if v is not None)
+    if trainable < _MIN_TRAIN_ROWS:
+        typer.echo(
+            f"refusing to train: {trainable} rows carry {base_target} (need >= {_MIN_TRAIN_ROWS})",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if n_pos >= trainable:
+        typer.echo(
+            f"refusing to train: n_pos={n_pos} >= {trainable} trainable rows "
+            "(the label would be every row)",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    model = train_tail_model(
+        frame, base_target=base_target, n_pos=n_pos, lambda_=lambda_, era_cut=cut
+    )
+    path = save_tail_model(model, models_dir)
+    metrics = dict(model.train_metrics)
+    typer.echo(
+        f"trained tail[{base_target} top-{n_pos}]: model_id={model.model_id} "
+        f"rows={model.n_rows} positives={model.n_positive} "
+        f"features={len(model.feature_names)} train_auc={metrics['auc']:.4f} "
+        f"brier={metrics['brier']:.4f} -> {path}"
+    )
+
+
 @ranker_model_app.command("train-robustness")
 def cmd_train_robustness(
     forge_db: Path | None = typer.Option(
