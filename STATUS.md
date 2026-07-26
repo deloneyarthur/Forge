@@ -1,5 +1,13 @@
 # Forge — Status
 
+## 2026-07-26 (relay out) — **THREE ASKS to Crucible; the lane is BLOCKED on ask 1. Two-leg ranked lane proposed (operator).**
+
+- **Relay `c337b68`** carries the whole tail arc plus the first real asks on them in a week. Their two-part concession and drift-floor findings accepted — **multi-split sweeps are now mandatory on our side and "wait for more n" is retired as an argument.**
+- **ASK 1 (BLOCKING the lane): the saturation point for near-identical MR swing_mid components.** If we ship ~170/batch that are ~90% `{keltner_pct, rsi, rsi_14} × swing_mid`, how many survive their decorrelation screen before the rest are redundant? We are structurally blind to correlation (D186/D187); a rough number lets us size the lane instead of guessing.
+- **ASK 2: confirm or correct the 0.9439 book-usability floor.** Our entire "no tradeoff" conclusion rests on **5 promoted legs**. If assembly would ever admit a genuinely orthogonal low-cpcv component, the arithmetic changes.
+- **ASK 3: the TWO-LEG RANKED LANE (operator's proposal, and better than either of our positions).** Stop treating the ranked lane as one queue — split it into an **MR leg** (`wf_p10` top-300, let it concentrate where its edge is) and a **TREND leg with its own target, which we have NOT found yet.** Our sweeps were global, so they optimised the blend and landed on whatever dominates; the trend tail is genuinely thinner (`trend/donchian/mid` P(≥1.0) 0.61%, `trend/momentum_252/long` 0.52% vs `MR/rsi/swing_mid` 1.82%), so **a global target will always starve trend.** Makes concentration explicit and managed rather than emergent, keeps trend supply alive against the single-spine risk, and each leg is judged on its own arm. Also asked whether they can see what predicts the **trend** tail — they observe which trend components clear gates and reach books; we only observe that our targets abandon trend.
+- **NEXT WORK REGARDLESS OF THEIR REPLY: find a trend-specific tail target.** Re-run the target sweeps **scoped to trend cells only** rather than globally. That work is ours and does not block on them.
+
 ## 2026-07-26 (concentration) — **THE ONE ARGUMENT AGAINST 100%: `wf_p10` collapses the cell mix to ~90% mean-reversion swing_mid, and our books already have a single-spine problem.**
 
 - **Concentration of the selected stream** (disjoint windows, top 10%):
