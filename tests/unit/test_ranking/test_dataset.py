@@ -56,6 +56,7 @@ def _gated_run(
     cpcv: float | None = 0.8,
     wf: float | None = 1.2,
     regime_stress: float | None = 0.5,
+    sharpe_baseline: float | None = 0.9,
 ):
     from datetime import date
 
@@ -75,6 +76,7 @@ def _gated_run(
         ("cpcv_sharpe_p25", cpcv, 1.5),
         ("walk_forward_sharpe_median", wf, 2.0),
         ("regime_stress_p25_return", regime_stress, 0.0),
+        ("sharpe_baseline", sharpe_baseline, 1.0),
     ):
         if _val is not None:
             gate_results[_name] = GateResult(
@@ -300,6 +302,28 @@ def test_emits_continuous_targets_from_gate_values() -> None:
     assert frame["target_cpcv_p25"].to_list() == [0.74]
     assert frame["target_wf_median"].to_list() == [1.30]
     assert frame["target_regime_stress"].to_list() == [0.82]
+
+
+def test_emits_sharpe_baseline_target() -> None:
+    """Crucible's 2026-07-26 ASK-3 lead, validated in our nested design (prereg
+    `8cfe95f4a6e9`): ordering by `P(sharpe_baseline >= top-N)` delivers 307 strong
+    components per 4,520 selected against the incumbent's 131. It has to reach the
+    training frame before any of that can be fitted."""
+    with db_connection() as conn:
+        _insert_submission(conn, config_hash="aaaa000011112222")
+        record_verdicts(
+            conn,
+            [
+                _gated_run(
+                    config_hash="aaaa000011112222",
+                    decision="reject",
+                    sharpe_baseline=1.37,
+                ),
+            ],
+        )
+        frame = build_dataset(conn, _REGISTRY)
+
+    assert frame["target_sharpe_baseline"].to_list() == [1.37]
 
 
 def test_missing_target_gate_is_null() -> None:

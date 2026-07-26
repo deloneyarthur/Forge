@@ -52,6 +52,15 @@ TARGET_COLUMNS: tuple[str, ...] = (
     # in `gate_results` from 2026-06-19 (Crucible); null on pre-emission verdicts.
     "target_wf_p25",
     "target_wf_p10",
+    # The TAIL-LANE base metric (prereg `8cfe95f4a6e9`). Crucible's 2026-07-26 lead,
+    # confirmed in our nested design: ordering by `P(sharpe_baseline >= top-N)` delivers
+    # 307 strong components per 4,520 selected against the incumbent E[cpcv]'s 131 and
+    # `wf_p10`'s 244, keeps MORE components while doing it, and has no cliff across
+    # n=200..1600. NB it is IN-SAMPLE by construction where cpcv is not, and
+    # corr(sharpe_baseline, cpcv) = 0.7901 on our frame — it survives a cpcv-exceedance
+    # control (243 strong) but the shared-sample question is settled only by the live
+    # concurrent arm split, not by any offline read.
+    "target_sharpe_baseline",
 )
 _TARGET_GATE: tuple[tuple[str, str], ...] = (
     ("target_cpcv_p25", "cpcv_sharpe_p25"),
@@ -59,6 +68,7 @@ _TARGET_GATE: tuple[tuple[str, str], ...] = (
     ("target_regime_stress", "regime_stress_p25_return"),
     ("target_wf_p25", "wf_sharpe_p25"),
     ("target_wf_p10", "wf_sharpe_p10"),
+    ("target_sharpe_baseline", "sharpe_baseline"),
 )
 
 # A train-time conditioning feature (= the D128 honesty predicate, §8.2): lets

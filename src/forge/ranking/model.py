@@ -566,6 +566,132 @@ def train_robustness_model(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class TailModel:
+    """A logistic predicting ``P(config lands in the top N by some base metric)``.
+
+    The TAIL-LANE model (prereg `8cfe95f4a6e9`). Distinct from `RobustnessModel`, which
+    predicts a continuous gate value: promotion is a tail event and an average-shaped
+    objective does not order tails. On stage-one cells spearman(cell MEAN, cell STD) =
+    -0.148 while spearman(cell P(>=1.0), cell STD) = +0.500 — the mean carries no
+    information about tail production.
+
+    `n_pos` is part of the identity, not a hyperparameter to search: the artifact name and
+    `model_id` both carry it, so two lanes at different label sizes cannot collide.
+    """
+
+    schema_version: int
+    model_id: str
+    trained_through: datetime
+    era_cut: datetime
+    base_target: str
+    n_pos: int
+    n_rows: int
+    n_positive: int
+    lambda_: float
+    feature_names: tuple[str, ...]
+    means: tuple[float, ...]
+    stds: tuple[float, ...]
+    intercept: float
+    coefficients: tuple[float, ...]
+    train_metrics: tuple[tuple[str, float], ...]
+
+
+def train_tail_model(
+    frame: pl.DataFrame,
+    *,
+    base_target: str,
+    n_pos: int,
+    lambda_: float = 10.0,
+    era_cut: datetime,
+) -> TailModel:
+    """Fit ``P(top-``n_pos`` by ``base_target``)`` from config features.
+
+    WHY A COUNT AND NOT A QUANTILE. Three independently-tuned parameters failed to transfer
+    forward on this data (the exceedance threshold, the `wf_p10` quantile, a blend weight),
+    and `wf_p10` carries a mass point at zero where a quantile threshold lands inside a tie
+    block and reduces the label to an arbitrary tie-break — the entire cause of its 7x cliff
+    between adjacent quantiles. A count selects exactly ``n_pos`` rows, cannot land in a tie
+    block, and carries no knob to mis-tune. `n_pos` is set from measurement and pinned.
+
+    Rows with a null ``base_target`` are dropped: an absent metric is not a low one.
+    """
+    if base_target not in frame.columns:
+        msg = f"base target column {base_target!r} not in frame"
+        raise ValueError(msg)
+
+    raw = frame[base_target].to_list()
+    keep = [i for i, v in enumerate(raw) if v is not None]
+    n_rows = len(keep)
+    if n_rows == 0:
+        msg = f"no rows carry a non-null {base_target}"
+        raise ValueError(msg)
+
+    values = [float(raw[i]) for i in keep]
+    order = sorted(range(n_rows), key=lambda i: values[i], reverse=True)
+    top = set(order[: min(n_pos, n_rows)])
+    labels = [1 if i in top else 0 for i in range(n_rows)]
+    n_positive = sum(labels)
+    if n_positive in (0, n_rows):
+        msg = f"cannot train on a single class ({n_positive}/{n_rows} positive)"
+        raise ValueError(msg)
+
+    # The base metric is the LABEL; every target column stays out of the design, exactly as
+    # the logistic verdict model excludes them.
+    raw_names = [c for c in frame.columns if c not in _LOGISTIC_NON_FEATURES]
+    raw_columns = {name: frame[name].to_list() for name in raw_names}
+    columns = {name: [float(raw_columns[name][i]) for i in keep] for name in raw_names}
+    feature_names, means, stds, x_rows = _standardize_design(columns, raw_names, n_rows)
+    intercept, coefficients = _fit_irls(x_rows, labels, lambda_)
+
+    logits = intercept + x_rows @ np.asarray(coefficients, dtype=np.float64)
+    probs = _sigmoid_vec(logits).tolist()
+    metrics = tuple(
+        sorted(
+            (
+                ("auc", auc_score(labels, probs)),
+                ("brier", brier_score(labels, probs)),
+            )
+        )
+    )
+
+    trained_through = max(frame["decided_at"].to_list())
+    fields = _payload(
+        trained_through=trained_through,
+        era_cut=era_cut,
+        base_target=base_target,
+        n_pos=n_pos,
+        n_rows=n_rows,
+        n_positive=n_positive,
+        lambda_=lambda_,
+        feature_names=tuple(feature_names),
+        means=tuple(means),
+        stds=tuple(stds),
+        intercept=intercept,
+        coefficients=tuple(coefficients),
+        train_metrics=metrics,
+    )
+    fields["kind"] = "tail"
+    model_id = hashlib.sha256(_canonical(fields).encode("utf-8")).hexdigest()[:16]
+    return TailModel(
+        schema_version=FEATURE_SCHEMA_VERSION,
+        model_id=model_id,
+        trained_through=trained_through,
+        era_cut=era_cut,
+        base_target=base_target,
+        n_pos=n_pos,
+        n_rows=n_rows,
+        n_positive=n_positive,
+        lambda_=lambda_,
+        feature_names=tuple(feature_names),
+        means=tuple(means),
+        stds=tuple(stds),
+        intercept=intercept,
+        coefficients=tuple(coefficients),
+        train_metrics=metrics,
+    )
+
+
 # P5.5 (B/June-review §5): a temporal holdout is enough rows to fit a train split AND
 # score a >=2-row test split. Below this the OOS estimate is noise → report None.
 _MIN_OOS_ROWS = 20

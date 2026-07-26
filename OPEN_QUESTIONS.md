@@ -1346,3 +1346,34 @@ DB-write chores. Pairs naturally with the `FORGE_PREFILTER_SAMPLE_N` 300 → 40 
 **Worth considering later, not now.** Every other operator DB-write command has the same
 constraint. A `--defer` mode that queues the audit row to a file the daemon folds in on its
 next loop would remove the coupling, but that is a design increment, not a fix for today.
+
+## Q61 — `test_campaigns_audit_exit_1_on_starvation` fails on a clean tree (2026-07-26, severity: low)
+
+**What.** `tests/unit/test_cli/test_campaigns_cmd.py::test_campaigns_audit_exit_1_on_starvation`
+asserts `exit_code == 1` and gets 0. **Confirmed PRE-EXISTING**: it fails with this
+session's `dataset.py`/`model.py` changes stashed, and neither module is on the audit path.
+The rest of the suite is green — **2,044 passed, 1 skipped, this one failure**.
+
+**Diagnosis (partial).** The seed comment says *"ve members: 1 of 100 ranked (1%), 3 of 10
+holdout (30%) -> starved"*, which should trip the rule: `holdout_members 3 >=
+MIN_HOLDOUT_MEMBERS 3` and `carriage_ratio 0.033 < STARVATION_RATIO 0.25`. The thresholds
+are unchanged, so the likely cause is **membership resolution**, not the starvation
+arithmetic: `_seed_db` writes `config_json = {"hypothesis": ...}` only, and
+`campaign_member_fn("ve-exit-repair")` probably needs more of a config than a bare
+hypothesis key to recognise a member. If so the campaign resolves as *unauditable* rather
+than *starved*, and `audit_carriage` returns no results → exit 0.
+
+**Suspect window:** `campaign_audit.py` was last touched by **D315 (`7060dc6`)**, which
+added verdict label provenance and the activation probe. Worth diffing that against the
+seed fixture.
+
+**Not fixed here, deliberately.** Two defensible repairs — enrich the seed fixture, or
+loosen the membership function — and choosing between them decides whether an
+under-specified config should count as a campaign member in production. That is a
+behavioural question owned by whoever holds D299/D305, not a test-green chore to fold into
+an unrelated increment.
+
+**Live impact: likely NONE, but unverified.** If membership resolution really is failing on
+thin configs, the live `forge campaigns audit` would report `ve-exit-repair` as unauditable
+rather than silently healthy — a visible degradation, not a false all-clear. The daemon does
+not gate on it. Verify against the live DB before assuming.
