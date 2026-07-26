@@ -1,5 +1,34 @@
 # Forge — Status
 
+## 2026-07-26 (throughput cost) — **RECOMMENDATION CHANGES TO `wf_p25`. The cost side reverses the ranking: it buys 5× the tail rate for ~0.4 components per batch — 1.2 components per extra ≥1.25 vs `wf_p10`'s 6.0.**
+
+- **WE PREDICTED THE wf TARGETS WOULD COST MORE THAN cpcv EXCEEDANCE (which halved component rate 22.88% → 11.61%). WRONG — they cost far less.** Component rate at top 5%: incumbent **36.75%** → `wf_p25` **34.36%** (−6.5% relative) → `wf_p10` **29.93%** (−18.6%) → `AND-label` **27.63%** (−24.8%).
+- **THE EXCHANGE RATE — components given up per EXTRA ≥1.25 config, and the number the lane decision actually turns on:**
+
+  | selection | `wf_p25` | `wf_p10` | `AND-label` |
+  |---|---:|---:|---:|
+  | 0.5% | **0.7** | 4.2 | 6.8 |
+  | 1.0% | **1.2** | 6.0 | 7.2 |
+  | 2.0% | **2.2** | 6.0 | 8.3 |
+  | 5.0% | **2.6** | 5.8 | 6.8 |
+  | 10.0% | **6.7** | 8.7 | 10.8 |
+
+  **`wf_p25` is 5× cheaper per unit of tail than `wf_p10` at every fraction.** Every prior sweep judged on lift alone and ranked `wf_p10` first; on the full ledger that ranking inverts.
+- **PER-BATCH, at a realistic lane size (ranked lane ships ~190/batch):**
+
+  | lane | components | ≥1.0 | ≥1.25 |
+  |---|---:|---:|---:|
+  | incumbent, 19 slots | 8.1 | 0.46 | 0.084 |
+  | **`wf_p25`, 19 slots** | **7.7** | **1.58** | **0.420** |
+  | `wf_p10`, 19 slots | 5.6 | 1.95 | 0.504 |
+  | `AND-label`, 19 slots | 4.8 | 2.21 | 0.546 |
+
+  **A 19-slot `wf_p25` lane costs 0.4 components per batch and buys 5× the ≥1.25 rate.** At 47 slots it costs ~1.0 component for the same 5×. **The MARGINAL step from `wf_p25` to `AND-label` costs ~23 components per extra ≥1.25** (+0.126/batch for 2.9 components) — far worse than `wf_p25`'s average, so the extra tail is not worth buying at that price.
+- **⚠️ THE ONE COUNTER-ARGUMENT, stated honestly: gate-clearers specifically favour `wf_p10`/`AND-label`.** At top 10%: ≥1.5 counts are incumbent **0**, `wf_p25` **2**, `wf_p10` **6**, `AND-label` **6**. If the objective is strictly "configs at the gate" rather than "tail-adjacent supply", the expensive targets win — but n=2-vs-6 is far too small to price, whereas the ≥1.25 column (91 vs 110) has real n.
+- **REVISED RECOMMENDATION: `wf_p25` top-1500, ~19–47 slots of the ranked lane.** Near-free (0.4–1.0 components/batch), 5× the ≥1.25 rate, and the label is pinned by COUNT so it carries no tunable knob (the 3-for-3 non-transfer finding). Keep `wf_p10`/`AND-label` as the escalation if the operator wants gate-clearers specifically and will pay ~6–9 components each.
+- **Note the incumbent is not bad at its own job** — 36.75% component rate at top 5% against an 18.29% base. It is a component-finder, and we would be spending a little of that to buy a tail-finder.
+- Script: `scripts/tail_lane_tradeoff.py`. **Decision packet complete — lift, gate-clearers, and cost all measured. Nothing shipped.**
+
 ## 2026-07-26 (blend sweep) — **BLEND REFUTED (2nd merge to fail identically). Champion settles: `wf_p10` top-300, optionally intersected with `wf_p25` (AND-label). And a pattern is now named: tuned parameters do NOT transfer forward on this data — 3 for 3.**
 
 - **RANK-BLEND REFUTED — monotone in w, exactly like the cpcv merge.** top 0.5%: **18.50× (pure `wf_p25`) → 23.60× (w=0.50) → 28.90× (pure `wf_p10`)**. Every gram of `wf_p25` weight hurts. `product` 23.30×. **`OR-label` is the WORST form at 18.30×** — we predicted it would win on the low-overlap argument; broadening the label just dilutes it.
