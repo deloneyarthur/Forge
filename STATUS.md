@@ -1,5 +1,22 @@
 # Forge — Status
 
+## 2026-07-26 (blend sweep) — **BLEND REFUTED (2nd merge to fail identically). Champion settles: `wf_p10` top-300, optionally intersected with `wf_p25` (AND-label). And a pattern is now named: tuned parameters do NOT transfer forward on this data — 3 for 3.**
+
+- **RANK-BLEND REFUTED — monotone in w, exactly like the cpcv merge.** top 0.5%: **18.50× (pure `wf_p25`) → 23.60× (w=0.50) → 28.90× (pure `wf_p10`)**. Every gram of `wf_p25` weight hurts. `product` 23.30×. **`OR-label` is the WORST form at 18.30×** — we predicted it would win on the low-overlap argument; broadening the label just dilutes it.
+- **ONE FORM BEATS THE CHAMPION: `AND-label`** — one model trained on "top-300 of `wf_p10` **AND** top-1500 of `wf_p25`". Not a blend of scores; a narrower LABEL. ARM 1: **29.10× / 15.24× / 3.90×** vs pure `wf_p10`'s 28.90× / 14.09× / 3.52×, **5/5 at all three fractions**. Confirmed on DISJOINT windows (top 5%, 4,520 selected, distinct configs):
+
+  | model | positives | ≥1.0 | ≥1.25 | **≥1.5** | max |
+  |---|---:|---:|---:|---:|---:|
+  | incumbent `E[cpcv]` | — | 145 | 27 | **0** | 1.475 |
+  | `wf_p10` top-300 | 300 | 321 | 82 | **3** | 1.532 |
+  | **`AND-label`** | **194** | **330** | **88** | **4** | 1.532 |
+
+  **Fewer positives (194 vs 300) and better selection** — intersecting labels purifies where averaging scores dilutes. Margins are modest (+3% / +7% / 4-vs-3) but consistent in every cell tested. **Label overlap is 62–69%** (of `wf_p10`'s top-300, ~190 also sit in `wf_p25`'s top-1500) — much higher than the 0.17–0.30 Jaccard we measured on model PREDICTIONS. Those are different quantities and we should not have read the prediction Jaccard as label disagreement.
+- **⚠️ THE PATTERN, now 3 for 3: TUNED PARAMETERS DO NOT TRANSFER FORWARD ON THIS DATA.** ARM 3 chose w=0.50 on early splits → **11.81×** late, when w=1.00 gives **16.21×** (the late column is monotone to w=1.00). Same failure as (i) the exceedance τ (chose 0.6 → 1.09× when 1.0 gives 1.51×) and (ii) the `wf_p10` quantile. **Three independent free parameters, three times the historical optimum was the wrong forward choice.** ⇒ **Ship FIXED, principled settings — never a learned or auto-tuned knob.** "Top-N by count" is exactly such a setting; a quantile or a blend weight is not.
+- **STANDING RECOMMENDATION: `AND-label` (`wf_p10` top-300 ∩ `wf_p25` top-1500), fallback pure `wf_p10` top-300.** Against the live incumbent on distinct configs: **2.3× the ≥1.0, 3.3× the ≥1.25, and 4-vs-0 at the gate.**
+- **⚠️ GAP BEFORE ANY SHIP — THROUGHPUT COST IS UNMEASURED FOR THE wf TARGETS.** We priced it for cpcv exceedance (component rate **22.88% → 11.61%**, halved) but have NOT re-measured it for `wf_p10`/`AND-label`, which select a more extreme and probably lower-converting region. **The supply cost could be worse.** That number must exist before a lane ships — it is the operator's trade to price, and we have not yet given them the price.
+- Scripts: `scripts/wf_blend_sweep.py`, `scripts/wf_p10_validation.py`. **Still nothing shipped.**
+
 ## 2026-07-26 (wf_p10 validation) — **`wf_p10` IS REAL — it beats `wf_p25` at MATCHED positive counts (27.10× vs 19.30×). Our overfitting hypothesis was WRONG. Its fragility is a MASS POINT AT ZERO, and the fix is to pin the label by COUNT, not quantile.**
 
 - **WE PREDICTED `wf_p10` WOULD SHRINK AT MATCHED n. IT DID NOT.** ARM 2 fixes the positive count and picks `q` per metric to hit it, so the metric is the only thing varying (top 0.5%, 5 splits):
