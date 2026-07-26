@@ -1,5 +1,22 @@
 # Forge — Status
 
+## 2026-07-26 — **TAIL LEVER FOUND: ordering by `P(cpcv ≥ 1.0)` instead of `E[cpcv]` gives 1.48× the top-decile tail rate, 4/4 splits — but it HALVES component supply, and our mechanism was wrong.** Prereg `4ad0ccf642d5` resolved REFUTED (it was an AND; leg 1 carried, leg 2 reversed).
+
+- **THE THESIS THAT HOLDS: everything we run is average-shaped and promotion is a tail event.** F3 predicts P(component); the quality lane orders by `E[cpcv_p25]`; the feedback weights are Beta posteriors over RATES. On stage-one cells (n≥300) **spearman(cell MEAN, cell STD) = −0.148** while **spearman(cell P(≥1.0), cell STD) = +0.500** — the mean tells you nothing about tail production. D338's winner prior was the same lesson from the other side (q25 +0.013, q99 −0.032).
+- **LEG 1 CONFIRMED, decisively** (`scripts/exceedance_target_sweep.py`, stage one n=235,477, 4 temporal splits, judged on **realised** top-decile tail rate — not IC, not median):
+
+  | ordering target | mean P(≥1.0) | vs incumbent | splits won |
+  |---|---:|---:|---:|
+  | `E[cpcv]` (incumbent) | 1.7000% | 1.00× | 0/4 |
+  | `P(cpcv ≥ 0.75)` | 1.9580% | 1.15× | 4/4 |
+  | **`P(cpcv ≥ 1.0)`** | **2.5082%** | **1.48×** | **4/4** |
+  | `P(cpcv ≥ 1.25)` | 2.0662% | 1.22× | **1/4** |
+
+  **τ=1.25 is NOT shippable despite its raw 1.22×** — 1 of 4 splits, only 256 positives. A single 0.8-split read would have picked it (5.61% vs 5.25%). **The multi-split sweep is the only reason we know** — the `n_signals` lesson, applied and earning its keep the same night.
+- **LEG 2 REFUTED — and our mechanism was wrong, in the direction that should embarrass the thesis but doesn't.** We predicted the exceedance target would un-starve swing_long. It does the **opposite**: swing_long share of the top decile **HALVES 22.2% → 9.2%**; `momentum_252/swing_long` 14.8% → 4.2%; `sma_slope/swing_long` 7.4% → 5.0%; `donchian/swing_mid` **ROSE** 30.6% → 34.4%. **Why we were wrong:** we nominated `sma_slope/swing_long` because it had the highest cell MEAN (0.253) and waved at its 0.82% tail rate — but `MR/rsi/swing_mid` (**1.82%**) and `MR/rsi_14/swing_mid` (**1.65%**) were always the better tail cells, and that is exactly where the exceedance target loads (15.1% → 22.8%, 13.0% → 18.6%). **We over-weighted the mean inside an argument that the mean is the wrong statistic.** The lever works; our story about *why* did not.
+- **THE COST, quantified as promised — this is the operator's call, not the model's.** Component rate of the selected top decile **HALVES: 22.88% → 11.61%**. Per 7,064 selected at split 0.7: configs ≥1.0 go **122 → 154 (+26%)**, components delivered go **1,616 → 820 (−49%)**. **More tail, less supply.** Crucible's assembly needs components; the pipeline's purpose is promotions. That trade is not ours to make silently.
+- **RECOMMENDED SHAPE — a tail LANE, not a wholesale swap.** Reserve a fraction of each batch for exceedance-ordered picks and leave the rest on `E[cpcv]`, the D287/experiment-cell pattern already in the codebase. Versionless (selection, not enumeration), it makes the tail-vs-supply trade a **dial the operator sets** rather than a binary, and it is A/B-readable by arm — the exact instrument that measured the Q59 fix at z=+5.09. **Not built; awaiting the operator's word on where the dial should sit.**
+
 ## 2026-07-26 — **HONEST THRESHOLD CONVERGED — accrual item RETIRED.** 3× the data moved the median by 0.001. And the ≥1.5 record, read properly: 18 distinct configs have cleared it, but only ONE honestly.
 
 - **CONVERGED, not pending.** The honest arm (`selection_mode='prefilter_sample'`, unselected by BOTH prefilter and ranker) went **n=302 → 937** and the answer did not move:
