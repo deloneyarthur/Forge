@@ -12,7 +12,7 @@ WHAT THIS ADDS over that run:
   * 8 splits instead of 5, with a 4/4 early-late nested cut instead of 2/3.
   * n_pos from 100 to 3200 — `sharpe_baseline` looked FLAT over 200..1600 and flatness is
     the property we are buying, so it has to be probed past the tested edge.
-  * THREE judge thresholds (0.9115 book floor / 1.0 / 1.25), because a target that only
+  * THREE judge thresholds (0.9439 book floor / 1.0 / 1.25), because a target that only
     wins at the easiest judge is not a tail target.
   * Estimator + lambda robustness — logistic and ridge-on-binary at lambda 1/10/100. If the
     edge is a property of the LABEL it survives the estimator swap; if it is a property of
@@ -55,9 +55,9 @@ _SPLITS = (0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
 _EARLY, _LATE = _SPLITS[:4], _SPLITS[4:]
 _NPOS = (100, 200, 400, 800, 1600, 3200)
 _FRACS = (0.01, 0.02, 0.05)
-_JUDGES = (0.9115, 1.0, 1.25)
+_JUDGES = (0.9439, 1.0, 1.25)
 _LAMBDAS = (1.0, 10.0, 100.0)
-_FLOOR = 0.9115
+_FLOOR = 0.9439
 _MIN_POS = 30
 _POSITIVE = frozenset({"component", "promote"})
 _NON_FEATURES = frozenset(

@@ -2,7 +2,7 @@
 order the tail better than `wf_p10`?
 
 THEIR MEASUREMENT (2026-07-26, single-split, their stored labels, top 5%, scoring
-P(cpcv >= 0.9115)):
+P(cpcv >= 0.9439)):
 
     hypothesis            n        base    wf_p10   wf_median   sharpe_baseline
     trend_continuation  111,268   0.82%     4.49x      6.21x        14.47x
@@ -21,9 +21,9 @@ If `sharpe_baseline` is simply a proxy for cpcv-on-the-same-window, then a model
 incumbent already orders by E[cpcv]. Including cpcv-exceedance separates "sharpe_baseline is
 a better tail label" from "sharpe_baseline is cpcv wearing a hat".
 
-Judged at the CORRECTED book-usability floor **0.9115** (Crucible 2026-07-26: our 0.9439 was
-wrong, derived from 5 legs when there are 14; the floor-setting leg is `031ea6933bad2e34`,
-the only `event_momentum` and only `swing_short` leg ever promoted).
+Judged at the book-usability floor **0.9439** — OUR original value. Crucible replaced it
+with 0.9115 on 2026-07-26 and RETRACTED that the same day: 0.9115 was a later REFIT of
+`031ea6933bad2e34`, a leg ADMITTED at 1.2364 and the only one of 14 whose value moved.
 
 Labels pinned by COUNT. Multi-split with splits-won. Nested selection. Stage one only.
 Snapshot only, never the live RW-locked DB.
@@ -54,7 +54,7 @@ _SPLITS = (0.55, 0.60, 0.65, 0.70, 0.75)
 _EARLY, _LATE = _SPLITS[:2], _SPLITS[2:]
 _FRACS = (0.01, 0.02, 0.05)
 _NPOS = (200, 400, 800, 1600)
-_FLOOR = 0.9115  # Crucible's corrected book-usability floor
+_FLOOR = 0.9439  # book-usability floor (Crucible RETRACTED 0.9439 on 2026-07-26)
 _MIN_POS = 30
 _NON_FEATURES = frozenset(
     {"crucible_run_id", "config_hash", "decided_at", "decision", "label", "coverage_verified"}

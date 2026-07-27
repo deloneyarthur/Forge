@@ -1,5 +1,23 @@
 # Forge — Status
 
+## 2026-07-27 — **Re-run at the CORRECTED 0.9439 floor: every conclusion holds and the margins WIDEN. Tail model TRAINED and on disk. Lane still flag-off.**
+
+- **THE RE-RUN, at the restored floor.** GLOBAL top 5%, per-window disjoint strong components:
+
+  | model | @0.9115 (retracted) | **@0.9439 (correct)** | vs incumbent |
+  |---|---:|---:|---:|
+  | incumbent `E[cpcv]` | 133 | **113** | — |
+  | `sharpe_baseline` top-1600 | 313 | **280** (4/4) | **2.48×** |
+  | `sharpe_baseline` top-800 | 305 | **277** (4/4) | 2.45× |
+  | `wf_p10` top-800 | 253 | **229** (4/4) | 2.03× |
+
+  MR slice top 5%: incumbent **66**, `sharpe_baseline` **175/170** (4/4), `wf_p10` **143/119**. **Ratio improves 2.50× → 2.65×.**
+- **⚠️ OUR OWN CAUTION WAS OVERSTATED.** We warned the counts were "~25% optimistic". Measured: **~10-11% lower**, and because the stricter bar is harder for the INCUMBENT too, **the ratios move the other way** (GLOBAL 2.35× → 2.48×). Flagging a number as suspect is right; guessing its magnitude was not, and the guess was wrong by 2.5×.
+- **Conclusions unchanged:** `sharpe_baseline` wins delivery at every fraction, 4/4 per-window in both slices; robust across estimator × λ (8/8) where `wf_p10` degrades past n=400; `wf_p10` keeps its narrow-band peak lift and loses everywhere else. At the tightest selection (MR top 1%) they tie (40 vs 39).
+- **⚠️ NESTED SELECTION PICKED WRONG FOR THE FIFTH TIME.** ARM 3 chose `wf_p10` top-100 (early 4.26×) → late **5.82×**, when `sharpe_baseline` top-100 delivers late **6.24×**. Five for five that a parameter chosen on history underperforms forward. **The design already assumes this — `n_pos` is pinned, not searched.**
+- **TAIL MODEL TRAINED AND LIVE ON DISK** (`~/forge_data/models/tail_model_v1_target_sharpe_baseline_n800_20260727T000117Z_2e9d4d57.json`): **rows 395,049, positives 800, features 114, train_auc 0.9339, brier 0.0019**; round-trips through `load_latest_tail_model` and scores. **The ordering constraint is now satisfied — the artifact exists BEFORE the flag flips.**
+- **TO GO LIVE (operator-gated):** a deploy window sets **`FORGE_TAIL_LANE_SLOTS=95`** and restarts; the journal should then print `tail_lane: ACTIVE 95 slots (model=2e9d4d57...)` and each batch should carry ~95 `tail_lane` + ~95 `ranked` rows for the prereg's arm split.
+
 ## 2026-07-26 (TAIL LANE BUILT + Crucible retracts) — **Lane, trainer and daily publish are in, flag-gated OFF. And Crucible retracted most of ASK 2: OUR 0.9439 floor was right, their "convexity sleeve" is measured as their LEAST convex leg, and our original dismissal of sub-floor components STANDS.**
 
 - **CRUCIBLE'S RETRACTION (`a7ec5b4`) — three of their ASK-2 claims fail, all in our favour, and the operator's config read triggered every one.**
