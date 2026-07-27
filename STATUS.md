@@ -1,5 +1,17 @@
 # Forge — Status
 
+## 2026-07-27 (post-deploy regression check) — **`volatility_event` is NOT starved (9.71% → 9.57%). Trend supply took the hit: 52.9% → 36.2% of the batch, a 32% relative cut — larger than we estimated.**
+
+- **Checked because nobody had, and it was our omission:** the tail lane takes 95 ranked slots and submits ~0% ve, so the D216 orthogonal-family floor (`volatility_event >= 0.20`) could have been silently bypassed at the SUBMISSION layer even though it binds at generation.
+
+  | window | n | trend | MR | **volatility_event** |
+  |---|---:|---:|---:|---:|
+  | BEFORE (N=40, pre-tail) | 3,120 | **52.9%** | 37.4% | **9.71%** |
+  | AFTER (tail lane live) | 5,516 | **36.2%** | 54.2% | **9.57%** |
+
+- **ve is fine — 9.71% → 9.57%, inside noise.** The floor holds because it binds at generation and the `prefilter_sample` / `holdout` / merit arms all still carry ve; the tail arm simply does not draw it.
+- **⚠️ TREND IS THE ONE THAT MOVED: 52.9% → 36.2%, a 32% RELATIVE cut in trend supply.** We estimated this at the arm level (~43 trend from merit vs ~2 from tail per batch) but had not measured it at the WHOLE-BATCH level, and the whole-batch number is the one Crucible's assembly sees. **All four promoted books still share ONE trend spine**, so this is the cost we accepted knowingly — now quantified rather than projected. It reinforces the sizing decision (hold 95, do not widen) and it is the strongest argument yet for building the trend leg rather than more MR slots.
+
 ## 2026-07-27 (in flight) — **TREND-SCOPED `sharpe_baseline` sweep RUNNING DETACHED. Read `/home/aj/.cache/rv/trend2_out.txt`; the `[reaper]` line means it finished.**
 
 - **THE QUESTION IT SETTLES: is there a trend-side target worth a second model, or does the trend leg stay a slot reservation?** The previous trend sweep said no (`cpcv` top-800 beat the incumbent only 61 to 58) — **but it predated `target_sharpe_baseline` existing as a target column, so Crucible's best lead was never in it.**
