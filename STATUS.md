@@ -1,5 +1,23 @@
 # Forge — Status
 
+## 2026-07-27T20:56Z — **TAIL LANE LIVE ~27h: 4.23× the incumbent arm's strong-component rate, and it costs NOTHING — its component rate is HIGHER too (56.58% vs 37.43%).**
+
+- **DEPLOYED 2026-07-26T17:30:54 PDT** (`d788382`), `FORGE_TAIL_LANE_SLOTS=95`. **NRestarts=0, zero errors in 27h.** Journal confirms activation every batch: `tail_lane: ACTIVE 95 slots (model=2e9d4d5785316b5d base=target_sharpe_baseline top-800)` then `tail_lane: 95 of 200 submitted (merit arm 95 is the concurrent control)`.
+- **THE ARM SPLIT — distinct configs with ≥1 verdict, judge = cpcv ≥ 0.9439 among components:**
+
+  | arm | configs | components | comp rate | **STRONG** | ≥1.0 | **≥1.5** | max |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | **`tail_lane`** | 1,686 | 954 | **56.58%** | **140** | **108** | **1** | **1.5214** |
+  | `ranked` (control) | 2,394 | 896 | 37.43% | 47 | 35 | 0 | 1.3883 |
+  | `holdout` | 213 | 40 | 18.78% | 0 | 0 | 0 | 0.8736 |
+  | `prefilter_sample` | 826 | 252 | 30.51% | 4 | 3 | 0 | 1.2647 |
+
+- **PREREG `8cfe95f4a6e9`: strong-component rate 8.3037% vs 1.9632% = 4.23×, against a predicted ≥1.5×.** Nearly 3× the registered bar, and **above the 2.48×/2.65× the offline sweeps predicted** — the live arm is outperforming its own forecast.
+- **⇒ THERE IS NO THROUGHPUT COST — the lane is better on BOTH axes.** We spent a whole analysis arc pricing a supply trade (component rate 36.75% → 29.93% offline). Live, `tail_lane`'s component rate is **56.58% against the control's 37.43%**. The trade we agonised over does not exist in production; the operator's "less components are good if they're strong" framing turned out not even to be the relevant tension.
+- **INDEPENDENT CORROBORATION from the refit trigger.** `tail_lane` configs triggered **1,093 full-history refits from 1,686 configs (65%)** vs `ranked`'s **984 from 2,394 (41%)**. The refit trigger fires on would-be-components, so a 1.6× higher trigger rate is a second, mechanically distinct signal pointing the same way — and it explains why verdict ROWS exceed submissions.
+- **⚠️ NOT RESOLVING THE PREREG YET, for three reasons.** (1) **~27h of verdicts**, and early returns may over-represent fast-deciding configs. (2) The registered criterion is *"over a majority of BATCHES"* — this is a POOLED read, and per-batch consistency is not yet checked. (3) **The ≥1.5 count is 1** — a gate-clearer the control did not produce, but n=1 is not a rate. **Resolve after the per-batch check on a fuller cohort.**
+- **First measurement discrepancy caught and corrected in-flight:** the naive read used verdict ROWS as the denominator (tail 2,779 / ranked 3,378) and gave 4.36×. Distinct configs give **4.23×** — the honest number, and the difference is entirely the refit asymmetry above.
+
 ## 2026-07-27 — **Re-run at the CORRECTED 0.9439 floor: every conclusion holds and the margins WIDEN. Tail model TRAINED and on disk. Lane still flag-off.**
 
 - **THE RE-RUN, at the restored floor.** GLOBAL top 5%, per-window disjoint strong components:
