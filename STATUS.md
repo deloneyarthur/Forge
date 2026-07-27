@@ -1,5 +1,23 @@
 # Forge — Status
 
+## 2026-07-27 (sizing decision) — **HOLD at 95 slots. The tail arm is 97% mean_reversion, so the merit arm is now our ONLY meaningful trend supply — and more slots would cut trend ~58% to buy ~10-15% more independent content.**
+
+- **LIVE concentration, measured on what each arm actually submitted since the restart:**
+
+  | arm | n | cells | top-3 share | effective cells | hypothesis mix |
+  |---|---:|---:|---:|---:|---|
+  | `ranked` (merit) | 2,565 | 20 | 44.1% | **8.7** | trend **45.1%** / MR 41.5% / ve 13.5% |
+  | `tail_lane` | 1,805 | 12 | **83.6%** | **4.0** | **MR 97.0%** / trend 2.5% / ve 0.5% |
+
+  Live concentration is **more extreme than the offline forecast** (we predicted ~90% MR swing_mid; it is 97%). Its top three are `keltner_pct` 33.8%, `rsi_14` 27.1%, `rsi` 22.7% — all MR/swing_mid.
+- **⇒ THE MERIT ARM IS NOW THE TREND SUPPLY.** Per 200-config batch today: ~43 trend from merit, ~2 from tail. **Going 95 → 150 tail would cut merit to ~40 slots and trend supply from ~43 to ~18 per batch — a 58% cut** — while all four promoted books still share ONE trend spine. That is the dependency we built the two-leg design to avoid.
+- **THREE REASONS TO HOLD, in order of weight:**
+  1. **It would break the instrument mid-experiment.** Prereg `8cfe95f4a6e9`'s criterion is *per-BATCH majority*, and it is unresolved. Control drops 95 → 40 slots/batch, taking expected strong-per-batch from ~1.9 to ~0.8 — too thin for a per-batch rate. And the cohort would straddle two lane sizes, which is how a result becomes unresolvable.
+  2. **Trend supply, above.**
+  3. **Diminishing returns.** Crucible's corrected saturation is ~62 independent streams at k=170. 95 → 150 buys roughly **10-15% more independent content, not 58%** — the curve is already flat there.
+- **⇒ THE RIGHT LEVER IS NOT MORE MR SLOTS — IT IS THE MISSING TREND LEG.** The tail lane as built *is* the MR leg of the operator's two-leg design. Capacity should go to a trend-side arm so the tail stream stops being one family, not to widening a lane that already saturates. **Our trend sweep found `cpcv` top-800 beats the incumbent only 61 to 58 on trend, which did not justify a trainer** — that is the open problem, and Crucible's `sharpe_baseline` trend result (14.47× vs base rate) has not been re-run per-hypothesis in our nested design.
+- **DECISION: hold 95, let the prereg accrue, resolve on its own per-batch criterion.** Revisit sizing only after resolution, and prefer a trend arm over more MR slots.
+
 ## 2026-07-27T20:56Z — **TAIL LANE LIVE ~27h: 4.23× the incumbent arm's strong-component rate, and it costs NOTHING — its component rate is HIGHER too (56.58% vs 37.43%).**
 
 - **DEPLOYED 2026-07-26T17:30:54 PDT** (`d788382`), `FORGE_TAIL_LANE_SLOTS=95`. **NRestarts=0, zero errors in 27h.** Journal confirms activation every batch: `tail_lane: ACTIVE 95 slots (model=2e9d4d5785316b5d base=target_sharpe_baseline top-800)` then `tail_lane: 95 of 200 submitted (merit arm 95 is the concurrent control)`.
