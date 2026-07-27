@@ -55,7 +55,9 @@ _CPCV = "target_cpcv_p25"
 _ERA_CUT = datetime(2026, 6, 10, 17, 17, 13, tzinfo=UTC)
 _SPLITS = (0.55, 0.60, 0.65, 0.70, 0.75)
 _EARLY, _LATE = _SPLITS[:2], _SPLITS[2:]
-_FRACS = (0.01, 0.02, 0.05, 0.10)
+# 0.5% added 2026-07-27: a trend ARM would be ~20-40 slots of ~3,188 survivors (~1%),
+# so the decision-relevant fractions are the tight ones, not top-10%.
+_FRACS = (0.005, 0.01, 0.02, 0.05)
 _NPOS = (100, 200, 400, 800, 1600)
 _BOOK_FLOOR = 0.9439
 _JUDGES = (_BOOK_FLOOR, 1.0)
@@ -169,7 +171,7 @@ def _arm0(book: TrendBook) -> None:
     print("(a) global model restricted to trend candidates  vs  (b) trend-fit model")
     print("if these tie, reserve trend slots and reuse the global model -- no second target\n")
     print(f"{'metric':<18} {'fit':<10} " + "".join(f"{'top ' + f'{f:.0%}':>16}" for f in _FRACS))
-    for metric in ("target_wf_p10", "target_wf_p25", _CPCV):
+    for metric in ("target_sharpe_baseline", "target_wf_p10", "target_wf_p25", _CPCV):
         for kind in ("global", "trend"):
             fn = book.global_fit_restricted if kind == "global" else book.trend_fit
             cells = [
@@ -284,7 +286,9 @@ def _arm4(book: TrendBook, comp: np.ndarray) -> None:
     edges = [int(len(book.y) * f) for f in (0.60, 0.70, 0.80, 0.90, 1.00)]
     cands: list[tuple[str, Any]] = [("incumbent E[cpcv]", None)]
     cands += [
-        (f"{m} top-{n}", (m, n)) for m in ("target_wf_p10", "target_wf_p25") for n in (200, 800)
+        (f"{m} top-{n}", (m, n))
+        for m in ("target_sharpe_baseline", "target_wf_p10", "target_wf_p25", _CPCV)
+        for n in (200, 800, 1600)
     ]
     print(f"{'model':<28} {'n_sel':>7} {'comp':>7} {'STRONG':>8} {'>=1.0':>7} {'max':>7}")
     for name, spec in cands:

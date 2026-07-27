@@ -1,5 +1,13 @@
 # Forge — Status
 
+## 2026-07-27 (in flight) — **TREND-SCOPED `sharpe_baseline` sweep RUNNING DETACHED. Read `/home/aj/.cache/rv/trend2_out.txt`; the `[reaper]` line means it finished.**
+
+- **THE QUESTION IT SETTLES: is there a trend-side target worth a second model, or does the trend leg stay a slot reservation?** The previous trend sweep said no (`cpcv` top-800 beat the incumbent only 61 to 58) — **but it predated `target_sharpe_baseline` existing as a target column, so Crucible's best lead was never in it.**
+- **RUNNING:** `scripts/trend_tail_target_sweep.py`, **python worker PID 1355145** (detached, PPID 1, ~5.7GB RSS). **Output `/home/aj/.cache/rv/trend2_out.txt`** (unbuffered, append-only). A `setsid` reaper (`/home/aj/.cache/rv/trend2_reaper.sh`, PID 1358533) deletes the 6.7GB snapshot and appends `[reaper] python worker 1355145 exited …` on completion. **Nothing in production depends on it.**
+- **Three things changed for this run:** `sharpe_baseline` now auto-picked by arms 1–3 via `TARGET_COLUMNS` and added explicitly to arms 0 and 4; ARM 4 candidates go 4 → **12** (4 metrics × n ∈ {200, 800, 1600}); fractions **0.005**/0.01/0.02/0.05 — because a trend ARM is ~20–40 slots of ~3,188 survivors (~1%), so top-10% was never the decision-relevant point. Floor was already **0.9439** (written before Crucible's retracted 0.9115), so no correction needed.
+- **THE BAR: ARM 4's absolute strong-component count per disjoint window, against the trend-restricted incumbent.** NOT lift — lift is exactly what made `wf_p10` look good on trend (1.66× nested) while delivering FEWER configs (43 vs 58), because it selected a smaller component pool.
+- **⚠️ RECURRING OPERATIONAL TRAP, now on its third occurrence and worth a permanent rule: `pgrep -f <script>` returns the BASH WRAPPER, not the python worker** — the wrapper's cmdline contains the full command string including the script name. Consequences so far: a snapshot deleted out from under a live run, and two false "finished" reports. **RULE: identify a worker by checking `/proc/<pid>/cmdline` STARTS WITH the interpreter path, then pin the reaper to that PID.**
+
 ## 2026-07-27 (sizing decision) — **HOLD at 95 slots. The tail arm is 97% mean_reversion, so the merit arm is now our ONLY meaningful trend supply — and more slots would cut trend ~58% to buy ~10-15% more independent content.**
 
 - **LIVE concentration, measured on what each arm actually submitted since the restart:**
