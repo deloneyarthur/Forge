@@ -1,5 +1,26 @@
 # Forge — Status
 
+## 2026-07-27 (TREND ANSWER) — **`sharpe_baseline` does NOT transfer to trend — it LOSES to the incumbent there (41 vs 44). The trend target is `wf_p10` top-200 at +34%, the metric we REJECTED for the MR lane. Both legs identified, and they want different targets.**
+
+- **ARM 4, the decision metric — absolute strong components, disjoint windows, judge cpcv ≥ 0.9439:**
+
+  | model | components | **STRONG** | ≥1.0 | max |
+  |---|---:|---:|---:|---:|
+  | incumbent `E[cpcv]` | 985 | 44 | 28 | 1.372 |
+  | **`wf_p10` top-200** | 598 | **59 (+34%)** | **41** | 1.414 |
+  | `cpcv` top-1600 | 874 | 56 (+27%) | 38 | 1.414 |
+  | `cpcv` top-200 | 757 | 47 (+7%) | 34 | **1.633** |
+  | `sharpe_baseline` top-1600 | 865 | **41 (−7%)** | 29 | 1.414 |
+  | `sharpe_baseline` top-800 | 844 | 38 (−14%) | 27 | 1.414 |
+  | `sharpe_baseline` top-200 | 755 | 28 (−36%) | 17 | 1.253 |
+
+- **⇒ CRUCIBLE'S `sharpe_baseline` LEAD DOES NOT SURVIVE ON TREND.** Their 14.47× was lift vs the BASE RATE on their ledger; in our nested design against the incumbent MODEL, on absolute delivery, it is **worse than doing nothing** at every label size. **It is the best MR target and among the worst trend targets** — the sharpest possible demonstration that a target is regional, not global.
+- **⇒ AND WE REVERSE OUR OWN "the trend leg needs no model".** That conclusion came from a sweep that tested `wf_p10` **only at top-800** on trend (40 strong, below the incumbent). At **top-200** it delivers **59 vs 44, +34%** — the operating point simply had not been tested. **The earlier verdict was a coverage gap in our grid, not a property of the data.**
+- **`wf_p10` shows its cliff here too** — top-200 **59**, top-800 40, top-1600 **13**. Usable band is narrow and low; the label must be pinned by COUNT at 200.
+- **ARM 0 re-confirms a separate trend model is justified**, and by a wider margin than before: trend-fit beats global-restricted for every metric (`wf_p10` 10.48× vs 6.68×; `cpcv` 5.63× vs 0.82×; `sharpe_baseline` 1.20× vs 1.28× — both useless). The global fits remain mis-specified for the region.
+- **⇒ THE TWO-LEG DESIGN IS NOW FULLY SPECIFIED, WITH DIFFERENT TARGETS PER LEG:** **MR leg = `sharpe_baseline` top-800** (live, 4.23× and rising); **TREND leg = `wf_p10` top-200** (+34% strong, not yet built). This is the operator's original proposal vindicated in the strongest form — not "trend needs its own slots" but "trend needs its own OBJECTIVE, and it is a different one".
+- **Trend tail remains thin:** 988 configs ≥0.9439 and only **2 ≥1.5** in 132,425 trend rows, and no trend model exceeds 1.633. The leg is a supply-diversity play, not a gate-clearer play — unchanged.
+
 ## 2026-07-27 (post-deploy regression check) — **`volatility_event` is NOT starved (9.71% → 9.57%). Trend supply took the hit: 52.9% → 36.2% of the batch, a 32% relative cut — larger than we estimated.**
 
 - **Checked because nobody had, and it was our omission:** the tail lane takes 95 ranked slots and submits ~0% ve, so the D216 orthogonal-family floor (`volatility_event >= 0.20`) could have been silently bypassed at the SUBMISSION layer even though it binds at generation.
