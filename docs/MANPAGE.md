@@ -204,6 +204,28 @@ its arms are individually mature (the arm-floor keying gap that forced the D287 
 window). Activation is an operator-gated deploy (flip the env on `forge.service` + restart);
 journal line when active: `cell_floor: mature_cells=N …`.
 
+**Env-only knob — `FORGE_TAIL_LANE_SLOTS`** (prereg `8cfe95f4a6e9`): ranked slots per batch
+reserved for the **tail arm**, ordered by `P(top-N by sharpe_baseline)` from the
+`train-tail` artifact instead of the merit lane's `E[cpcv]`. Tagged
+`selection_mode='tail_lane'` — a FOURTH lane, kept apart from `ranked` so the arm
+comparison is a query rather than an inference. It keeps `pool_size` (it competed for ranked
+slots), unlike `prefilter_sample`.
+
+A **concurrent arm, not a switch**: Crucible's `k5_share` fix read at +5.09 sigma *because*
+it was an arm split, and their instrument carries a drift floor (bootstrap SEs understate
+across-window variation 1.3–2.1× and do **not** shrink with n), so a before/after read
+across time is unreadable at any sample size while two arms in the same batches cancel the
+drift. Tail slots come **out of** the merit lane, so batch size and throughput are unchanged
+and the comparison is like-for-like. The arm draws FIRST and its picks leave the pool, so
+merit and holdout never see them and the holdout stays uniform over configs *neither* arm
+took.
+
+Unset/0 → **byte-identical**; no artifact → lane inert (degrades to the incumbent, never to
+an empty batch); clamp **[0, 150]** of ~190 ranked slots — a hard ceiling that keeps a
+control arm alive whatever the value says, because an arm split with no control is not an
+experiment. Journal when active: `tail_lane: ACTIVE N slots (model=… base=… top-…)`.
+Activation is an operator-gated deploy.
+
 **Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D316, Theme 2d): extra seeded-random
 submission slots per batch reserved for YOUNG-cell members, tagged
 `selection_mode='young_explore'` — a THIRD lane, deliberately distinct from the uniform
@@ -297,6 +319,36 @@ feature name; the daemon shadow-scores against the newest artifact in
 | `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override. |
 | `--lambda` | float | 1.0 | L2 regularization strength. |
 | `--models-dir` | path | `<config db_path parent>/models` | Artifact dir (NOT derived from `--forge-db` — that's a snapshot). |
+
+### forge ranker-model train-tail
+
+Train the **tail-lane** model (prereg `8cfe95f4a6e9`) — an L2 logistic predicting
+`P(config lands in the top N by a continuous base metric)`, default
+`target_sharpe_baseline` top-800. Distinct from `train-robustness`, which fits a *ridge on a
+continuous value*: promotion is a tail event and an average-shaped objective does not order
+tails (on stage-one cells spearman(cell mean, cell std) = −0.148 while spearman(cell
+P(≥1.0), cell std) = +0.500). Refuses when the base-metric column is absent, when under 50
+rows carry it, or when `--n-pos` ≥ the trainable rows (the label would be every row). Saves
+an append-only `tail_model_<base_target>_n<N>_*.json` artifact — base metric and label size
+are both in the FILENAME, so two lanes at different sizes never shadow each other. Published
+daily by `scripts/daily_ranker_eval.sh` (staging + atomic mv); the artifact must exist
+BEFORE `FORGE_TAIL_LANE_SLOTS` is set or the lane logs `inert` and changes nothing.
+
+`--n-pos` is a **count, never a quantile**: five independently-tuned parameters have failed
+to transfer forward on this data, and `wf_p10` carries a mass point at zero where a quantile
+threshold lands inside a tie block and reduces the label to an arbitrary tie-break. The
+default 800 is the measured operating point, not a value to search.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--forge-db` | path | yaml | Forge DB path (use a snapshot of live). |
+| `--config` | path | `config/forge.yaml` | YAML defaults (db_path, models dir). |
+| `--exports-dir` | path | exports default | Crucible exports dir (registry snapshot). |
+| `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override. |
+| `--lambda` | float | 10.0 | L2 regularization strength. |
+| `--base-target` | str | `target_sharpe_baseline` | Continuous metric the top-N label ranks. |
+| `--n-pos` | int | 800 | Label size: the top N by `--base-target`. Pinned, not searched. |
+| `--models-dir` | path | `<db parent>/models` | Artifact directory. |
 
 ### forge ranker-model train-robustness
 

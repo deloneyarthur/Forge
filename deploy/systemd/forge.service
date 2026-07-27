@@ -75,6 +75,33 @@ Environment=FORGE_PREFILTER_SAMPLE_N=40
 # exactly "on"; anything else = byte-identical (hard rule 6). REVERT = delete these
 # two lines + daemon-reload + restart. Journal line when active: `cell_floor: ...`.
 Environment=FORGE_YOUNG_CELL_FLOOR=on
+# FORGE_TAIL_LANE_SLOTS (prereg 8cfe95f4a6e9, 2026-07-27): the TAIL ARM. 95 of the ~190
+# ranked slots ordered by P(top-800 by sharpe_baseline) from the `train-tail` artifact,
+# instead of the merit lane's E[cpcv]. Tagged selection_mode='tail_lane'.
+#
+# WHY: promotion is a tail event (4 in ~428k) but every learned component we run is
+# average-shaped, and on stage-one cells spearman(cell mean, cell std) = -0.148 while
+# spearman(cell P(>=1.0), cell std) = +0.500 -- the mean carries no information about tail
+# production. Offline, at the corrected 0.9439 book floor over 8 splits with per-window
+# disjoint counts: 280 strong components per 4,520 selected against the incumbent's 113
+# (2.48x), 4/4 windows; on the MR slice 175 vs 66 (2.65x). Robust 8/8 across estimator and
+# lambda where wf_p10 collapses past n=400.
+#
+# CONCURRENT, NOT A SWITCH. Crucible's k5_share fix read at +5.09 sigma *because* it was an
+# arm split, and their instrument carries a drift floor (bootstrap SEs understate
+# across-window variation 1.3-2.1x and do NOT shrink with n), so a before/after read across
+# time is unreadable at any sample size. The remaining ~95 merit slots are the CONTROL, in
+# the same batches. Slots come OUT of the merit lane: batch size and throughput unchanged.
+#
+# SIZE: 95, the operator's call. Crucible's original "cap at ~30" rested on a saturation
+# number they retracted by ~20x (they measured rho on overlapping days; the section 8.7
+# screen zero-fills the union) -- corrected, the MR/swing_mid family supplies ~62
+# independent streams at k=170, and a real 5-leg book from it gated at
+# mean_pairwise_correlation 0.0023 against a 0.70 threshold.
+#
+# UNSET/0 = byte-identical. No artifact -> lane inert, degrades to the incumbent. Revert is
+# a one-line unset + restart; nothing enumerated or persisted depends on it.
+Environment=FORGE_TAIL_LANE_SLOTS=95
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
