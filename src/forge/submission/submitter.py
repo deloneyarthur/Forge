@@ -292,6 +292,17 @@ def _submit_one(
     )
 
 
+def _lane_of(config_hash: str, lanes: Mapping[str, frozenset[str]] | None) -> str | None:
+    """Which objective lane claimed this config, if any. Lanes are disjoint by
+    construction in `rank_batch_with_exploration`; first match wins regardless."""
+    if not lanes:
+        return None
+    for tag, hashes in lanes.items():
+        if config_hash in hashes:
+            return tag
+    return None
+
+
 def submit_batch(
     db: duckdb.DuckDBPyConnection,
     *,
@@ -304,7 +315,7 @@ def submit_batch(
     holdout_hashes: frozenset[str] = frozenset(),
     young_explore_hashes: frozenset[str] = frozenset(),
     prefilter_sample_hashes: frozenset[str] = frozenset(),
-    tail_lane_hashes: frozenset[str] = frozenset(),
+    extra_lane_hashes: Mapping[str, frozenset[str]] | None = None,
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
@@ -363,12 +374,13 @@ def submit_batch(
             selection_mode = "holdout"
         elif config_hash in young_explore_hashes:
             selection_mode = "young_explore"
-        elif config_hash in tail_lane_hashes:
-            # Prereg `8cfe95f4a6e9` — the concurrent tail arm. It DOES compete for ranked
-            # slots (its slots come out of the merit lane), so it keeps `pool_size`; it is
-            # tagged apart so the arm split against the merit arm is readable, which is the
-            # whole instrument. Never merged into `ranked`.
-            selection_mode = "tail_lane"
+        elif (_lane := _lane_of(config_hash, extra_lane_hashes)) is not None:
+            # Prereg `8cfe95f4a6e9` — a concurrent objective arm (`tail_lane` on MR,
+            # `trend_lane` on trend). Each DOES compete for ranked slots (its slots come out
+            # of the merit lane), so it keeps `pool_size`; each is tagged apart so the arm
+            # split against the merit arm is readable, which is the whole instrument.
+            # Never merged into `ranked`, and never into each other.
+            selection_mode = _lane
         else:
             selection_mode = "ranked"
             ranked_rank += 1

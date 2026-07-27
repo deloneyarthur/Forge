@@ -118,17 +118,28 @@ done
 #     exist BEFORE the flag flips, or the lane logs "inert" and silently changes nothing.
 #     Same staging + atomic-mv discipline as the robustness fits; a refusal (thin rows) is
 #     non-fatal and leaves the previous artifact in place.
-echo "daily-ranker-eval: train-tail (target_sharpe_baseline top-800)"
-if uv run forge ranker-model train-tail --forge-db "$SNAP" --models-dir "$STAGING"; then
-    shopt -s nullglob
-    for art in "$STAGING"/tail_model_*.json; do
-        mv -f -- "$art" "$MODELS_DIR/"   # same fs -> atomic rename
-        echo "daily-ranker-eval: published $(basename "$art")"
-    done
-    shopt -u nullglob
-else
-    echo "daily-ranker-eval: train-tail non-zero (insufficient rows or registry) -- continuing" >&2
-fi
+#     TWO lanes, because the target is REGIONAL not global (measured 2026-07-27):
+#     sharpe_baseline top-800 runs 4.23x the merit arm on MR but is WORSE than the
+#     incumbent on trend (41 vs 44), where wf_p10 top-200 wins (59 vs 44, +34%). Both
+#     artifacts coexist in one models dir -- `load_latest_tail_model` filters BY
+#     base_target, so a target-blind "newest" would shadow one lane with the other.
+#     n_pos is pinned per lane, never searched.
+for _spec in "target_sharpe_baseline 800" "target_wf_p10 200"; do
+    set -- $_spec
+    _base="$1"; _npos="$2"
+    echo "daily-ranker-eval: train-tail ($_base top-$_npos)"
+    if uv run forge ranker-model train-tail --base-target "$_base" --n-pos "$_npos" \
+           --forge-db "$SNAP" --models-dir "$STAGING"; then
+        shopt -s nullglob
+        for art in "$STAGING"/tail_model_*.json; do
+            mv -f -- "$art" "$MODELS_DIR/"   # same fs -> atomic rename
+            echo "daily-ranker-eval: published $(basename "$art")"
+        done
+        shopt -u nullglob
+    else
+        echo "daily-ranker-eval: train-tail $_base non-zero (thin rows or registry) -- continuing" >&2
+    fi
+done
 
 # --- eval + streak (single DB pass; criterion constant imported from the CLI so
 #     it cannot drift from the manual `forge ranker-model eval`) ----------------

@@ -226,6 +226,23 @@ control arm alive whatever the value says, because an arm split with no control 
 experiment. Journal when active: `tail_lane: ACTIVE N slots (model=… base=… top-…)`.
 Activation is an operator-gated deploy.
 
+**Env-only knob — `FORGE_TREND_LANE_SLOTS`** (prereg `8cfe95f4a6e9`, trend leg): the SECOND
+objective lane, ordered by `P(top-200 by wf_sharpe_p10)`, tagged
+`selection_mode='trend_lane'`. Exists because **the target is REGIONAL, not global.**
+Measured 2026-07-27 on the trend slice, absolute strong components over disjoint windows:
+incumbent 44, `wf_p10` top-200 **59 (+34%)**, `cpcv` top-1600 56, and `sharpe_baseline` —
+the MR lane's winner, running 4.23× live there — **41, worse than the incumbent.** The
+metric rejected for MR is the trend winner.
+
+Sized small deliberately: the trend tail is thin (988 configs ≥ the 0.9439 book floor, only
+**2 ≥ 1.5** in 132,425 trend rows) and `wf_p10` carries a cliff (59 strong at top-200, 40 at
+top-800, **13** at top-1600), so the label must be pinned by COUNT at 200. It is a
+supply-diversity leg against the single-trend-spine dependency in all four promoted books,
+not a gate-clearer play. Clamp **[0, 60]** — the merit arm must survive both lanes and is
+currently our only meaningful trend supply (trend fell 52.9% → 36.2% of the batch when the
+MR lane alone went live). Needs a `train-tail --base-target target_wf_p10 --n-pos 200`
+artifact; without one the lane logs `inert`.
+
 **Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D316, Theme 2d): extra seeded-random
 submission slots per batch reserved for YOUNG-cell members, tagged
 `selection_mode='young_explore'` — a THIRD lane, deliberately distinct from the uniform

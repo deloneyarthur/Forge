@@ -144,7 +144,7 @@ def test_exploration_engine_three_lanes_disjoint_and_bounded() -> None:
             prior_promotion_proximity=0.10,
         )
     )
-    selected, holdout, young, _tail = rank_batch_with_exploration(
+    selected, holdout, young, _extra = rank_batch_with_exploration(
         ranker,
         reports,
         [],
@@ -181,7 +181,7 @@ def test_exploration_engine_young_off_matches_holdout_form() -> None:
         )
     )
     s1, h1 = rank_batch_with_holdout(ranker, reports, [], 4, holdout_n=1, rng=_random.Random(9))
-    s2, h2, y2, _t2 = rank_batch_with_exploration(
+    s2, h2, y2, _e2 = rank_batch_with_exploration(
         ranker, reports, [], 4, holdout_n=1, rng=_random.Random(9), young_explore_n=0
     )
     assert [c.report.config.config_hash for c in s1] == [c.report.config.config_hash for c in s2]

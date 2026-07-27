@@ -832,6 +832,36 @@ def _resolve_tail_lane_slots() -> int:
     return max(0, min(slots, 150))
 
 
+def _resolve_trend_lane_slots() -> int:
+    """Parse ``FORGE_TREND_LANE_SLOTS`` (prereg `8cfe95f4a6e9`, trend leg): ranked slots per
+    batch for the TREND arm, ordered by `P(top-200 by wf_sharpe_p10)`.
+
+    A SECOND objective lane, because the target is REGIONAL. Measured 2026-07-27 on the
+    trend slice, absolute strong components over disjoint windows: incumbent 44,
+    `wf_p10` top-200 **59 (+34%)**, `cpcv` top-1600 56, and `sharpe_baseline` — the MR
+    lane's winner, running 4.23x live there — **41, WORSE than the incumbent**. The metric
+    we rejected for MR is the trend winner.
+
+    Sized small on purpose. The trend tail is thin (988 configs >= the 0.9439 book floor
+    and only 2 >= 1.5 in 132,425 trend rows), and `wf_p10` carries a cliff: 59 strong at
+    top-200, 40 at top-800, 13 at top-1600. It is a supply-diversity leg against the
+    single-trend-spine dependency in all four promoted books, not a gate-clearer play.
+
+    Unset/empty/0 → 0 (byte-identical). Malformed → 0. Clamped to [0, 60] — the merit arm
+    must survive both lanes, and it is currently our only meaningful trend supply
+    (trend fell 52.9% → 36.2% of the batch when the MR lane alone went live)."""
+    import os
+
+    raw = os.environ.get("FORGE_TREND_LANE_SLOTS", "").strip()
+    if not raw:
+        return 0
+    try:
+        slots = int(raw)
+    except ValueError:
+        return 0
+    return max(0, min(slots, 60))
+
+
 def _resolve_exploration_holdout_frac() -> float:
     """Parse ``FORGE_EXPLORATION_HOLDOUT_FRAC`` (P3.3 / B7): the fraction of each batch that
     BYPASSES the learned ranking as a seeded random draw, giving the learned components
@@ -2380,31 +2410,41 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # (8 splits, per-window disjoint counts, 4/4 windows). Runs CONCURRENT with the merit
     # arm so the drift that makes across-time reads unusable cancels. No artifact yet →
     # scorer None → lane inert and the batch is byte-identical.
-    _tail_n = _resolve_tail_lane_slots()
-    _tail_scorer: Callable[[StrategyConfig], float] | None = None
-    if _tail_n > 0:
+    # Two objective lanes, because the target is REGIONAL not global (measured
+    # 2026-07-27): sharpe_baseline runs 4.23x the merit arm on MR but is WORSE than the
+    # incumbent on trend (41 vs 44), where wf_p10 top-200 wins (59 vs 44, +34%).
+    _extra_lanes: list[tuple[str, int, Callable[[StrategyConfig], float]]] = []
+    for _tag, _slots, _base in (
+        ("tail_lane", _resolve_tail_lane_slots(), "target_sharpe_baseline"),
+        ("trend_lane", _resolve_trend_lane_slots(), "target_wf_p10"),
+    ):
+        if _slots <= 0:
+            continue
         from forge.ranking.model import load_latest_tail_model, score_tail_features
 
-        _tmodel = load_latest_tail_model(forge_db_path.parent / "models")
-        if _tmodel is not None:
-            _tm = _tmodel
+        _lm = load_latest_tail_model(forge_db_path.parent / "models", base_target=_base)
+        if _lm is None:
+            typer.echo(f"{_tag}: {_slots} slots requested but no {_base} model yet — lane inert")
+            continue
 
-            def _tail_score(config: StrategyConfig) -> float:
-                return score_tail_features(_tm, extract_features(config, registry).as_dict())
+        def _mk(model: object = _lm) -> Callable[[StrategyConfig], float]:
+            def _score(config: StrategyConfig) -> float:
+                return score_tail_features(model, extract_features(config, registry).as_dict())  # type: ignore[arg-type]
 
-            _tail_scorer = _tail_score
-            typer.echo(
-                f"tail_lane: ACTIVE {_tail_n} slots (model={_tm.model_id} "
-                f"base={_tm.base_target} top-{_tm.n_pos}) — concurrent arm, "
-                f"merit arm is the control"
-            )
-        else:
-            typer.echo(f"tail_lane: {_tail_n} slots requested but no tail model yet — lane inert")
-    if _holdout_n > 0 or _young_n > 0 or (_tail_n > 0 and _tail_scorer is not None):
+            return _score
+
+        _extra_lanes.append((_tag, _slots, _mk()))
+        typer.echo(
+            f"{_tag}: ACTIVE {_slots} slots (model={_lm.model_id} "
+            f"base={_lm.base_target} top-{_lm.n_pos}) — concurrent arm, "
+            f"merit arm is the control"
+        )
+    _tail_n = sum(s for _, s, _ in _extra_lanes)
+    if _holdout_n > 0 or _young_n > 0 or _extra_lanes:
         from forge.core.seed import SeedHierarchy
         from forge.ranking import rank_batch_with_exploration
 
-        _selected, _holdout, _young, _tail = rank_batch_with_exploration(
+        _selected, _holdout, _young, _extra = rank_batch_with_exploration(
             ranker,
             reports,
             promoted_strategies=tuple(promoted),
@@ -2413,14 +2453,16 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             rng=SeedHierarchy(seed).rng("exploration_holdout"),
             young_explore_n=_young_n,
             young_rng=SeedHierarchy(seed).rng("young_cell_explore") if _young_n > 0 else None,
-            tail_n=_tail_n if _tail_scorer is not None else 0,
-            tail_scorer=_tail_scorer,
+            extra_lanes=tuple(_extra_lanes),
             **_rank_kwargs,  # type: ignore[arg-type]
         )
-        ranked = [*_selected, *_holdout, *_young, *_tail]
+        ranked = [*_selected, *_holdout, *_young, *[c for v in _extra.values() for c in v]]
         _holdout_hashes = frozenset(c.report.config.config_hash for c in _holdout)
         _young_hashes = frozenset(c.report.config.config_hash for c in _young)
-        _tail_hashes = frozenset(c.report.config.config_hash for c in _tail)
+        _lane_hashes = {
+            tag: frozenset(c.report.config.config_hash for c in picks)
+            for tag, picks in _extra.items()
+        }
         typer.echo(
             f"exploration_holdout: {len(_holdout)} of {len(ranked)} submitted "
             f"(frac={_holdout_frac:.3f}, seeded bypass of the ranker)"
@@ -2430,11 +2472,12 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                 f"young_explore: {len(_young)} of {len(ranked)} submitted "
                 f"(quota {_young_n}, young-cell seeded draw; tagged young_explore)"
             )
-        if _tail:
-            typer.echo(
-                f"tail_lane: {len(_tail)} of {len(ranked)} submitted "
-                f"(tagged tail_lane; merit arm {len(_selected)} is the concurrent control)"
-            )
+        for _tag, _picks in _extra.items():
+            if _picks:
+                typer.echo(
+                    f"{_tag}: {len(_picks)} of {len(ranked)} submitted "
+                    f"(tagged {_tag}; merit arm {len(_selected)} is the concurrent control)"
+                )
     else:
         ranked = rank_batch(
             ranker,
@@ -2445,7 +2488,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
         )
         _holdout_hashes = frozenset()
         _young_hashes = frozenset()
-        _tail_hashes = frozenset()
+        _lane_hashes = {}
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
 
@@ -2572,7 +2615,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             holdout_hashes=_holdout_hashes,
             young_explore_hashes=_young_hashes,
             prefilter_sample_hashes=_prefilter_sample_hashes,
-            tail_lane_hashes=_tail_hashes,
+            extra_lane_hashes=_lane_hashes,
         )
         # D062 + D064: persist per-filter rejection counts to batch_summaries
         # (aggregate + per-hypothesis breakdown). Same connection so the

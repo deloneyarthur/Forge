@@ -229,7 +229,7 @@ def rank_batch_with_holdout(
     ``(selected, holdout)``. Total submitted is still ``<= n`` (holdout REPLACES rank slots, it
     doesn't add). `holdout_n == 0` reduces to a plain `rank_batch` selection with an empty
     holdout, so the caller's flag-OFF path stays byte-identical."""
-    selected, holdout, _young, _tail = rank_batch_with_exploration(
+    selected, holdout, _young, _extra = rank_batch_with_exploration(
         ranker,
         reports,
         promoted_strategies,
@@ -268,14 +268,17 @@ def rank_batch_with_exploration(
     gate_tail_ordering: bool = False,
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
     mature_cells: AbstractSet[ExperimentCell] | None = None,
-    tail_n: int = 0,
-    tail_scorer: Callable[[StrategyConfig], float] | None = None,
+    extra_lanes: Sequence[tuple[str, int, Callable[[StrategyConfig], float]]] = (),
 ) -> tuple[
-    list[RankedCandidate], list[RankedCandidate], list[RankedCandidate], list[RankedCandidate]
+    list[RankedCandidate],
+    list[RankedCandidate],
+    list[RankedCandidate],
+    dict[str, list[RankedCandidate]],
 ]:
     """The exploration engine (P3.3 holdout + D316 young-cell quota + the tail lane).
 
-    Returns ``(selected, holdout, young_explore, tail)`` — the four submission lanes
+    Returns ``(selected, holdout, young_explore, extra)`` where ``extra`` maps each
+    objective lane's tag to its picks — the submission lanes
     the submitter tags. Rank slots = ``n - holdout_n - effective_young`` where
     ``effective_young`` counts only what the young draw can actually fill (a
     short young pool never under-fills the merit lane). Draw order: merit →
@@ -286,10 +289,18 @@ def rank_batch_with_exploration(
     D307 floor flag off) keeps the young lane empty and the holdout path
     byte-identical to the pre-D316 form.
 
-    ``tail_n`` / ``tail_scorer`` (prereg `8cfe95f4a6e9`) add a CONCURRENT arm ordered by a
-    different objective — `P(top-N by sharpe_baseline)` rather than the merit lane's
-    `E[cpcv]`. It is drawn FIRST, from the same survivor pool, and its slots come out of the
-    merit lane so batch size is unchanged and the two arms are like-for-like.
+    ``extra_lanes`` (prereg `8cfe95f4a6e9`) is a sequence of ``(tag, slots, scorer)``
+    CONCURRENT arms, each ordered by its own objective rather than the merit lane's
+    `E[cpcv]`. Measured 2026-07-27, the objective is REGIONAL not global: on the MR slice
+    `P(top-800 by sharpe_baseline)` delivers 4.23x the merit arm's strong-component rate
+    live, while on TREND that same target is WORSE than the incumbent (41 vs 44) and
+    `P(top-200 by wf_p10)` wins instead (59 vs 44, +34%). One lane per region, each with
+    its own target.
+
+    Lanes draw in the order given, before the merit lane, from the same survivor pool; each
+    lane's picks leave the pool so no config lands in two arms and the arm split stays a
+    query rather than an inference. Their slots come OUT of the merit lane, so batch size is
+    unchanged and every arm is like-for-like.
 
     Why concurrent rather than a switch: Crucible's `k5_share` fix read at +5.09 sigma *because*
     it was an arm split, and their instrument has a drift floor where bootstrap SEs
@@ -304,27 +315,31 @@ def rank_batch_with_exploration(
         verdict_scorer=verdict_scorer,
         gate_tail_ordering=gate_tail_ordering,
     )
-    # The tail arm draws first, on its own objective, and never shares a config with the
-    # merit arm — disjoint lanes are what make the prereg's arm split readable.
-    tail: list[RankedCandidate] = []
-    if tail_n > 0 and tail_scorer is not None:
-        tail_scored = [
+    # Objective arms draw first, each on its own scorer, and never share a config with the
+    # merit arm or each other — disjoint lanes are what make the arm split readable.
+    extra: dict[str, list[RankedCandidate]] = {}
+    for tag, slots, scorer in extra_lanes:
+        if slots <= 0 or not scored:
+            extra[tag] = []
+            continue
+        rescored = [
             RankedCandidate(
                 report=c.report,
                 prior_promotion_score=c.prior_promotion_score,
-                composite_score=tail_scorer(c.report.config),
+                composite_score=scorer(c.report.config),
             )
             for c in scored
         ]
-        tail = select_top_n(
-            tail_scored,
-            min(tail_n, len(tail_scored)),
+        picks = select_top_n(
+            rescored,
+            min(slots, len(rescored)),
             similarity_fn=similarity_fn,
             min_per_hypothesis=0,
             floor_exempt_hypotheses=floor_exempt_hypotheses,
         )
-        tail_hashes = {c.report.config.config_hash for c in tail}
-        scored = [c for c in scored if c.report.config.config_hash not in tail_hashes]
+        extra[tag] = picks
+        taken = {c.report.config.config_hash for c in picks}
+        scored = [c for c in scored if c.report.config.config_hash not in taken]
     # Pre-draw the young quota's FEASIBLE size against the whole scored pool so
     # merit slots are only surrendered for draws that can actually happen. The
     # actual draw runs after selection/holdout over the true remainder.
@@ -342,7 +357,7 @@ def rank_batch_with_exploration(
         effective_young = 0
     selected = select_top_n(
         scored,
-        max(0, n - holdout_n - effective_young - len(tail)),
+        max(0, n - holdout_n - effective_young - sum(len(v) for v in extra.values())),
         similarity_fn=similarity_fn,
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
@@ -366,7 +381,7 @@ def rank_batch_with_exploration(
         if effective_young > 0 and young_rng is not None
         else []
     )
-    return selected, holdout, young, tail
+    return selected, holdout, young, extra
 
 
 __all__ = [

@@ -95,14 +95,14 @@ def _kwargs(**over: object) -> dict[str, object]:
 def test_flag_off_is_byte_identical_and_returns_an_empty_tail() -> None:
     """`tail_n=0` must leave the three existing lanes exactly as they were."""
     reports = _reports(20)
-    sel_a, hold_a, young_a, tail_a = rank_batch_with_exploration(
+    sel_a, hold_a, young_a, extra_a = rank_batch_with_exploration(
         _ranker(), reports, n=10, **_kwargs()
     )
-    sel_b, hold_b, young_b, tail_b = rank_batch_with_exploration(
-        _ranker(), reports, n=10, tail_n=0, tail_scorer=lambda _c: 1.0, **_kwargs()
+    sel_b, hold_b, young_b, extra_b = rank_batch_with_exploration(
+        _ranker(), reports, n=10, extra_lanes=(("tail_lane", 0, lambda _c: 1.0),), **_kwargs()
     )
-    assert tail_a == []
-    assert tail_b == []
+    assert extra_a == {}
+    assert extra_b["tail_lane"] == []
     assert [c.report.config.config_hash for c in sel_a] == [
         c.report.config.config_hash for c in sel_b
     ]
@@ -120,9 +120,10 @@ def test_tail_lane_is_filled_by_the_tail_scorer_not_the_ranker() -> None:
     def tail_scorer(cfg: StrategyConfig) -> float:
         return 1.0 if cfg.name in hot else 0.0
 
-    selected, _holdout, _young, tail = rank_batch_with_exploration(
-        _ranker(), reports, n=10, tail_n=5, tail_scorer=tail_scorer, **_kwargs()
+    selected, _holdout, _young, extra = rank_batch_with_exploration(
+        _ranker(), reports, n=10, extra_lanes=(("tail_lane", 5, tail_scorer),), **_kwargs()
     )
+    tail = extra["tail_lane"]
     assert len(tail) == 5
     assert {c.report.config.name for c in tail} <= hot
     # Disjoint arms — a config is in exactly one lane, so the arm split is readable.
@@ -136,9 +137,10 @@ def test_tail_slots_come_out_of_the_merit_lane_not_the_batch() -> None:
     """The lane must not inflate the batch — total stays <= n, so throughput is
     unchanged and the comparison is like-for-like."""
     reports = _reports(30)
-    selected, holdout, young, tail = rank_batch_with_exploration(
-        _ranker(), reports, n=12, tail_n=5, tail_scorer=lambda _c: 1.0, **_kwargs()
+    selected, holdout, young, extra = rank_batch_with_exploration(
+        _ranker(), reports, n=12, extra_lanes=(("tail_lane", 5, lambda _c: 1.0),), **_kwargs()
     )
+    tail = extra["tail_lane"]
     assert len(tail) == 5
     assert len(selected) + len(holdout) + len(young) + len(tail) <= 12
     assert len(selected) == 7
@@ -149,14 +151,14 @@ def test_holdout_stays_uniform_over_configs_neither_arm_selected() -> None:
     the merit arm nor the tail arm took, or it stops being uniform over
     non-selected survivors."""
     reports = _reports(30)
-    selected, holdout, _young, tail = rank_batch_with_exploration(
+    selected, holdout, _young, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=15,
-        tail_n=4,
-        tail_scorer=lambda _c: 1.0,
+        extra_lanes=(("tail_lane", 4, lambda _c: 1.0),),
         **_kwargs(holdout_n=3),
     )
+    tail = extra["tail_lane"]
     taken = {c.report.config.config_hash for c in selected} | {
         c.report.config.config_hash for c in tail
     }
@@ -168,17 +170,73 @@ def test_a_short_pool_never_under_fills_the_merit_lane() -> None:
     """If the tail scorer can only fill part of its quota the merit lane keeps the
     rest — a starved tail arm must not cost throughput."""
     reports = _reports(6)
-    selected, _holdout, _young, tail = rank_batch_with_exploration(
-        _ranker(), reports, n=6, tail_n=4, tail_scorer=lambda _c: 1.0, **_kwargs()
+    selected, _holdout, _young, extra = rank_batch_with_exploration(
+        _ranker(), reports, n=6, extra_lanes=(("tail_lane", 4, lambda _c: 1.0),), **_kwargs()
     )
+    tail = extra["tail_lane"]
     assert len(selected) + len(tail) == 6
 
 
 def test_no_scorer_means_no_tail_lane_even_with_slots_requested() -> None:
     """A missing artifact must degrade to the incumbent, never to an empty batch."""
     reports = _reports(20)
-    selected, _holdout, _young, tail = rank_batch_with_exploration(
-        _ranker(), reports, n=10, tail_n=5, tail_scorer=None, **_kwargs()
+    selected, _holdout, _young, extra = rank_batch_with_exploration(
+        _ranker(), reports, n=10, extra_lanes=(), **_kwargs()
     )
-    assert tail == []
+    assert extra == {}
     assert len(selected) == 10
+
+
+def test_two_objective_lanes_are_disjoint_and_each_uses_its_own_scorer() -> None:
+    """The two-leg design (2026-07-27): the objective is REGIONAL, not global.
+    `sharpe_baseline` delivers 4.23x on MR live but is WORSE than the incumbent on
+    trend (41 vs 44), where `wf_p10` wins (59 vs 44). So each leg needs its own
+    target, and the arms must stay disjoint or neither can be measured."""
+    reports = [_report(f"m{i:03d}") for i in range(15)] + [
+        _report(f"t{i:03d}", hypothesis="trend_continuation") for i in range(15)
+    ]
+    mr_hot = {f"m{i:03d}" for i in range(10, 15)}
+    tr_hot = {f"t{i:03d}" for i in range(10, 15)}
+    selected, _holdout, _young, extra = rank_batch_with_exploration(
+        _ranker(),
+        reports,
+        n=16,
+        extra_lanes=(
+            ("tail_lane", 4, lambda c: 1.0 if c.name in mr_hot else 0.0),
+            ("trend_lane", 4, lambda c: 1.0 if c.name in tr_hot else 0.0),
+        ),
+        **_kwargs(),
+    )
+    tail, trend = extra["tail_lane"], extra["trend_lane"]
+    assert len(tail) == 4
+    assert len(trend) == 4
+    assert {c.report.config.name for c in tail} <= mr_hot
+    assert {c.report.config.name for c in trend} <= tr_hot
+    # Every arm disjoint from every other — the precondition for reading any of them.
+    hashes = [{c.report.config.config_hash for c in arm} for arm in (selected, tail, trend)]
+    assert not (hashes[0] & hashes[1])
+    assert not (hashes[0] & hashes[2])
+    assert not (hashes[1] & hashes[2])
+    # Slots still come out of merit; the batch does not inflate.
+    assert len(selected) + len(tail) + len(trend) <= 16
+
+
+def test_lane_order_is_respected_when_two_lanes_want_the_same_config() -> None:
+    """Lanes draw in the order given. If both scorers rank the same config top, the
+    FIRST lane takes it and the second must not double-count — otherwise the arms
+    overlap and the comparison is meaningless."""
+    reports = _reports(12)
+    both = {"cfg011"}
+
+    def hot(c: StrategyConfig) -> float:
+        return 1.0 if c.name in both else 0.0
+
+    _selected, _holdout, _young, extra = rank_batch_with_exploration(
+        _ranker(),
+        reports,
+        n=10,
+        extra_lanes=(("first", 1, hot), ("second", 1, hot)),
+        **_kwargs(),
+    )
+    assert {c.report.config.name for c in extra["first"]} == both
+    assert {c.report.config.name for c in extra["second"]} != both
