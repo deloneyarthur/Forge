@@ -7,6 +7,7 @@ incumbent + 0.05 AND precision@K ≥ incumbent's, per checkpoint window.
 
 from __future__ import annotations
 
+import itertools
 import uuid
 from datetime import datetime
 
@@ -22,6 +23,7 @@ from forge.ranking.evaluation import (
 )
 
 _SINCE = datetime(2026, 6, 10, 17, 17, 13)  # noqa: DTZ001 — naive-UTC convention
+_CANDIDATE_SEQ = itertools.count(1)
 
 
 def _gated_run(
@@ -76,6 +78,17 @@ def _gated_run(
     )
 
 
+def _next_candidate_id() -> str:
+    """Monotonic candidate ids, because `evaluate_shadow` ORDERs BY forge_candidate_id and
+    `_held_out_platt_ece` splits that result by INDEX PARITY. With `uuid4()` ids the row
+    order was a fresh random permutation every run, so which rows landed in the Platt fit
+    half versus the eval half was random: in a 120-row / 6-positive fixture roughly 3% of
+    runs put all 6 positives in one half, the estimate degraded to None, and the suite failed
+    intermittently for no reason a reader could see. Insertion-ordered ids make the split
+    deterministic and put the seeded positives across both halves as the fixtures intend."""
+    return str(uuid.UUID(int=next(_CANDIDATE_SEQ)))
+
+
 def _seed(
     conn: duckdb.DuckDBPyConnection,
     rows: list[tuple[str, float, float, str]],
@@ -84,7 +97,7 @@ def _seed(
 ) -> None:
     """rows: (config_hash, model_score, composite_score, decision)."""
     for config_hash, model_score, composite_score, decision in rows:
-        candidate_id = str(uuid.uuid4())
+        candidate_id = _next_candidate_id()
         conn.execute(
             "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
             "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
@@ -107,7 +120,7 @@ def _seed_hygiene(
     """rows: (config_hash, model_score, composite_score, hygiene_score|None, decision).
     None hygiene = a row recorded before the comparator fix (column NULL)."""
     for config_hash, model_score, composite_score, hygiene_score, decision in rows:
-        candidate_id = str(uuid.uuid4())
+        candidate_id = _next_candidate_id()
         conn.execute(
             "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
             "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
