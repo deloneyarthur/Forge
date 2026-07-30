@@ -16,7 +16,9 @@ knob to mis-tune.
 
 from __future__ import annotations
 
+import tempfile
 from datetime import UTC, datetime
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -129,3 +131,43 @@ def test_n_pos_changes_the_model_id() -> None:
         _frame(values, feature), base_target="target_sharpe_baseline", n_pos=8, era_cut=_ERA_CUT
     )
     assert a.model_id != b.model_id
+
+
+def test_load_latest_resolves_by_base_target_not_by_recency() -> None:
+    """THE BUG THIS PINS (live, 2026-07-27..29, 24 of 63 batches). Two lanes publish two
+    artifacts into one models dir. `load_latest_tail_model` orders by
+    (trained_through, model_id), so when both are trained by the same daily run the
+    `trained_through` values TIE and the winner is decided by a hash comparison — a coin
+    toss. Unfiltered, the 95-slot MR lane was handed the trend lane's
+    `target_wf_p10` top-200 artifact and scored it against the FULL survivor population
+    rather than the trend slice it was fitted on, on two of four days.
+
+    The lane's identity is its objective, so resolution must be by `base_target` and the
+    recency ordering may only break ties WITHIN one objective."""
+    import polars as pl
+
+    from forge.ranking.model import load_latest_tail_model, save_tail_model
+
+    values = [float(i) for i in range(40)]
+    feature = [1.0 if i >= 30 else 0.0 for i in range(40)]
+    frame = _frame(values, feature).rename({"target_sharpe_baseline": "target_a"})
+    frame = frame.with_columns(target_b=pl.col("target_a"))
+
+    models_dir = Path(tempfile.mkdtemp())
+    a = train_tail_model(frame, base_target="target_a", n_pos=10, era_cut=_ERA_CUT)
+    b = train_tail_model(frame, base_target="target_b", n_pos=8, era_cut=_ERA_CUT)
+    save_tail_model(a, models_dir)
+    save_tail_model(b, models_dir)
+
+    # Both artifacts share `trained_through` (one training run), so recency cannot separate
+    # them: whichever model_id sorts higher would win an unfiltered resolution.
+    assert a.trained_through == b.trained_through
+
+    got_a = load_latest_tail_model(models_dir, base_target="target_a")
+    got_b = load_latest_tail_model(models_dir, base_target="target_b")
+    assert got_a is not None
+    assert got_b is not None
+    assert got_a.base_target == "target_a"
+    assert got_a.n_pos == 10
+    assert got_b.base_target == "target_b"
+    assert got_b.n_pos == 8
