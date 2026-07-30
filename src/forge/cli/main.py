@@ -2413,10 +2413,21 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # Two objective lanes, because the target is REGIONAL not global (measured
     # 2026-07-27): sharpe_baseline runs 4.23x the merit arm on MR but is WORSE than the
     # incumbent on trend (41 vs 44), where wf_p10 top-200 wins (59 vs 44, +34%).
-    _extra_lanes: list[tuple[str, int, Callable[[StrategyConfig], float]]] = []
-    for _tag, _slots, _base in (
-        ("tail_lane", _resolve_tail_lane_slots(), "target_sharpe_baseline"),
-        ("trend_lane", _resolve_trend_lane_slots(), "target_wf_p10"),
+    # `candidate_filter` is load-bearing, not decoration: the trend target was validated
+    # by RESTRICTING the population to trend rows, and `wf_p10` scores MR configs highly
+    # too, so an unfiltered trend lane would select MR — competing with the MR lane and
+    # failing to reproduce its own +34%. A lane selects from the population it was fitted on.
+    from forge.ranking.queue import ObjectiveLane
+
+    _extra_lanes: list[ObjectiveLane] = []
+    for _tag, _slots, _base, _filt in (
+        ("tail_lane", _resolve_tail_lane_slots(), "target_sharpe_baseline", None),
+        (
+            "trend_lane",
+            _resolve_trend_lane_slots(),
+            "target_wf_p10",
+            lambda c: c.hypothesis == "trend_continuation",
+        ),
     ):
         if _slots <= 0:
             continue
@@ -2433,13 +2444,13 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
 
             return _score
 
-        _extra_lanes.append((_tag, _slots, _mk()))
+        _extra_lanes.append(ObjectiveLane(_tag, _slots, _mk(), candidate_filter=_filt))
+        _pop = "all survivors" if _filt is None else "trend_continuation only"
         typer.echo(
             f"{_tag}: ACTIVE {_slots} slots (model={_lm.model_id} "
-            f"base={_lm.base_target} top-{_lm.n_pos}) — concurrent arm, "
-            f"merit arm is the control"
+            f"base={_lm.base_target} top-{_lm.n_pos}, population={_pop}) — "
+            f"concurrent arm, merit arm is the control"
         )
-    _tail_n = sum(s for _, s, _ in _extra_lanes)
     if _holdout_n > 0 or _young_n > 0 or _extra_lanes:
         from forge.core.seed import SeedHierarchy
         from forge.ranking import rank_batch_with_exploration

@@ -14,6 +14,7 @@ D023/D8 — module 6 of the Phase 4 build.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from forge.ranking.diversifier import jaccard_signal_ids, select_top_n
@@ -49,6 +50,28 @@ _PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS: int = 15
 # stage only). Re-evaluate if Crucible ships OverlaySpec / a bear-paying path
 # that makes rv viable (PROMPT_CRUCIBLE_OVERLAYSPEC_BEAR_COMPLEMENT.md).
 _PRODUCTION_FLOOR_EXEMPT_HYPOTHESES: frozenset[str] = frozenset({"relative_value"})
+
+
+@dataclass(frozen=True, slots=True)
+class ObjectiveLane:
+    """One concurrent submission arm ordered by its own objective (prereg `8cfe95f4a6e9`).
+
+    ``candidate_filter`` is NOT optional decoration — it is what makes a lane reproduce the
+    result it was validated on. The trend target (`P(top-200 by wf_p10)`, +34% strong
+    components) was measured by RESTRICTING the population to trend rows and selecting
+    within it. Without the filter the same model scores every candidate, and since `wf_p10`
+    scores MR configs highly too it would select MR — competing with the MR lane for the
+    same configs instead of supplying trend, and quietly failing to reproduce its own
+    offline number. A lane must select from the population it was fitted and judged on.
+
+    ``None`` means the whole survivor pool, which is correct for a globally-fitted target
+    like the MR lane's `sharpe_baseline`.
+    """
+
+    tag: str
+    slots: int
+    scorer: Callable[[StrategyConfig], float]
+    candidate_filter: Callable[[StrategyConfig], bool] | None = None
 
 
 def rank_batch(
@@ -268,7 +291,7 @@ def rank_batch_with_exploration(
     gate_tail_ordering: bool = False,
     experiment_cells: AbstractSet[ExperimentCell] | None = None,
     mature_cells: AbstractSet[ExperimentCell] | None = None,
-    extra_lanes: Sequence[tuple[str, int, Callable[[StrategyConfig], float]]] = (),
+    extra_lanes: Sequence[ObjectiveLane] = (),
 ) -> tuple[
     list[RankedCandidate],
     list[RankedCandidate],
@@ -289,8 +312,8 @@ def rank_batch_with_exploration(
     D307 floor flag off) keeps the young lane empty and the holdout path
     byte-identical to the pre-D316 form.
 
-    ``extra_lanes`` (prereg `8cfe95f4a6e9`) is a sequence of ``(tag, slots, scorer)``
-    CONCURRENT arms, each ordered by its own objective rather than the merit lane's
+    ``extra_lanes`` (prereg `8cfe95f4a6e9`) is a sequence of `ObjectiveLane` CONCURRENT
+    arms, each ordered by its own objective rather than the merit lane's
     `E[cpcv]`. Measured 2026-07-27, the objective is REGIONAL not global: on the MR slice
     `P(top-800 by sharpe_baseline)` delivers 4.23x the merit arm's strong-component rate
     live, while on TREND that same target is WORSE than the incumbent (41 vs 44) and
@@ -318,17 +341,27 @@ def rank_batch_with_exploration(
     # Objective arms draw first, each on its own scorer, and never share a config with the
     # merit arm or each other — disjoint lanes are what make the arm split readable.
     extra: dict[str, list[RankedCandidate]] = {}
-    for tag, slots, scorer in extra_lanes:
+    for lane in extra_lanes:
+        tag, slots = lane.tag, lane.slots
         if slots <= 0 or not scored:
+            extra[tag] = []
+            continue
+        # Restrict to the population this lane was fitted and judged on, BEFORE scoring.
+        eligible = (
+            scored
+            if lane.candidate_filter is None
+            else [c for c in scored if lane.candidate_filter(c.report.config)]
+        )
+        if not eligible:
             extra[tag] = []
             continue
         rescored = [
             RankedCandidate(
                 report=c.report,
                 prior_promotion_score=c.prior_promotion_score,
-                composite_score=scorer(c.report.config),
+                composite_score=lane.scorer(c.report.config),
             )
-            for c in scored
+            for c in eligible
         ]
         picks = select_top_n(
             rescored,
@@ -385,6 +418,7 @@ def rank_batch_with_exploration(
 
 
 __all__ = [
+    "ObjectiveLane",
     "rank_batch",
     "rank_batch_with_exploration",
     "rank_batch_with_holdout",

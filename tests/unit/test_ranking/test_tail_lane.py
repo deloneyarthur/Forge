@@ -23,6 +23,7 @@ from crucible_contracts import SignalSpec, StrategyConfig
 
 from forge.prefilters.types import FilterResult, PreFilterReport
 from forge.ranking import rank_batch_with_exploration
+from forge.ranking.queue import ObjectiveLane
 from forge.ranking.scorer import Ranker
 from forge.ranking.types import RankerWeights
 from tests.fixtures.strategy_configs import minimal_strategy_config
@@ -99,7 +100,11 @@ def test_flag_off_is_byte_identical_and_returns_an_empty_tail() -> None:
         _ranker(), reports, n=10, **_kwargs()
     )
     sel_b, hold_b, young_b, extra_b = rank_batch_with_exploration(
-        _ranker(), reports, n=10, extra_lanes=(("tail_lane", 0, lambda _c: 1.0),), **_kwargs()
+        _ranker(),
+        reports,
+        n=10,
+        extra_lanes=(ObjectiveLane("tail_lane", 0, lambda _c: 1.0),),
+        **_kwargs(),
     )
     assert extra_a == {}
     assert extra_b["tail_lane"] == []
@@ -121,7 +126,11 @@ def test_tail_lane_is_filled_by_the_tail_scorer_not_the_ranker() -> None:
         return 1.0 if cfg.name in hot else 0.0
 
     selected, _holdout, _young, extra = rank_batch_with_exploration(
-        _ranker(), reports, n=10, extra_lanes=(("tail_lane", 5, tail_scorer),), **_kwargs()
+        _ranker(),
+        reports,
+        n=10,
+        extra_lanes=(ObjectiveLane("tail_lane", 5, tail_scorer),),
+        **_kwargs(),
     )
     tail = extra["tail_lane"]
     assert len(tail) == 5
@@ -138,7 +147,11 @@ def test_tail_slots_come_out_of_the_merit_lane_not_the_batch() -> None:
     unchanged and the comparison is like-for-like."""
     reports = _reports(30)
     selected, holdout, young, extra = rank_batch_with_exploration(
-        _ranker(), reports, n=12, extra_lanes=(("tail_lane", 5, lambda _c: 1.0),), **_kwargs()
+        _ranker(),
+        reports,
+        n=12,
+        extra_lanes=(ObjectiveLane("tail_lane", 5, lambda _c: 1.0),),
+        **_kwargs(),
     )
     tail = extra["tail_lane"]
     assert len(tail) == 5
@@ -155,7 +168,7 @@ def test_holdout_stays_uniform_over_configs_neither_arm_selected() -> None:
         _ranker(),
         reports,
         n=15,
-        extra_lanes=(("tail_lane", 4, lambda _c: 1.0),),
+        extra_lanes=(ObjectiveLane("tail_lane", 4, lambda _c: 1.0),),
         **_kwargs(holdout_n=3),
     )
     tail = extra["tail_lane"]
@@ -171,7 +184,11 @@ def test_a_short_pool_never_under_fills_the_merit_lane() -> None:
     rest — a starved tail arm must not cost throughput."""
     reports = _reports(6)
     selected, _holdout, _young, extra = rank_batch_with_exploration(
-        _ranker(), reports, n=6, extra_lanes=(("tail_lane", 4, lambda _c: 1.0),), **_kwargs()
+        _ranker(),
+        reports,
+        n=6,
+        extra_lanes=(ObjectiveLane("tail_lane", 4, lambda _c: 1.0),),
+        **_kwargs(),
     )
     tail = extra["tail_lane"]
     assert len(selected) + len(tail) == 6
@@ -202,8 +219,8 @@ def test_two_objective_lanes_are_disjoint_and_each_uses_its_own_scorer() -> None
         reports,
         n=16,
         extra_lanes=(
-            ("tail_lane", 4, lambda c: 1.0 if c.name in mr_hot else 0.0),
-            ("trend_lane", 4, lambda c: 1.0 if c.name in tr_hot else 0.0),
+            ObjectiveLane("tail_lane", 4, lambda c: 1.0 if c.name in mr_hot else 0.0),
+            ObjectiveLane("trend_lane", 4, lambda c: 1.0 if c.name in tr_hot else 0.0),
         ),
         **_kwargs(),
     )
@@ -235,8 +252,79 @@ def test_lane_order_is_respected_when_two_lanes_want_the_same_config() -> None:
         _ranker(),
         reports,
         n=10,
-        extra_lanes=(("first", 1, hot), ("second", 1, hot)),
+        extra_lanes=(ObjectiveLane("first", 1, hot), ObjectiveLane("second", 1, hot)),
         **_kwargs(),
     )
     assert {c.report.config.name for c in extra["first"]} == both
     assert {c.report.config.name for c in extra["second"]} != both
+
+
+def test_a_lane_without_a_filter_selects_the_wrong_population() -> None:
+    """THE BUG THIS FILTER FIXES, pinned so it cannot come back.
+
+    The trend target (`wf_p10` top-200, +34% strong components) was validated by
+    RESTRICTING the population to trend rows and selecting within it. Unfiltered,
+    the same model scores every candidate — and `wf_p10` scores MR configs highly
+    too — so the lane would select MR, compete with the MR lane for the same
+    configs, and silently fail to reproduce its own offline number.
+    """
+    reports = [_report(f"m{i:03d}") for i in range(10)] + [
+        _report(f"t{i:03d}", hypothesis="trend_continuation") for i in range(10)
+    ]
+
+    # A scorer that ranks MR ABOVE trend — the realistic failure, since the trend
+    # model was never asked to discriminate against a population it never saw.
+    def mr_favouring(c: StrategyConfig) -> float:
+        # composite_score is constrained to [0, 1] (RankedCandidate); production
+        # scorers are sigmoids, so this mirrors the real range.
+        return 0.9 if c.name.startswith("m") else 0.1
+
+    _sel, _h, _y, unfiltered = rank_batch_with_exploration(
+        _ranker(),
+        reports,
+        n=12,
+        extra_lanes=(ObjectiveLane("trend_lane", 4, mr_favouring),),
+        **_kwargs(),
+    )
+    picked = {c.report.config.name for c in unfiltered["trend_lane"]}
+    assert all(n.startswith("m") for n in picked), "unfiltered lane should grab MR"
+
+    _sel2, _h2, _y2, filtered = rank_batch_with_exploration(
+        _ranker(),
+        reports,
+        n=12,
+        extra_lanes=(
+            ObjectiveLane(
+                "trend_lane",
+                4,
+                mr_favouring,
+                candidate_filter=lambda c: c.hypothesis == "trend_continuation",
+            ),
+        ),
+        **_kwargs(),
+    )
+    got = {c.report.config.name for c in filtered["trend_lane"]}
+    assert len(got) == 4
+    assert all(n.startswith("t") for n in got), "filtered lane must stay in its population"
+
+
+def test_an_empty_eligible_pool_yields_an_empty_lane_not_a_crash() -> None:
+    """If a batch enumerates no trend candidates the lane must go empty and the
+    merit arm keeps the slots — never a crash, never a mis-population pick."""
+    reports = _reports(10)  # all mean_reversion
+    selected, _h, _y, extra = rank_batch_with_exploration(
+        _ranker(),
+        reports,
+        n=8,
+        extra_lanes=(
+            ObjectiveLane(
+                "trend_lane",
+                4,
+                lambda _c: 1.0,
+                candidate_filter=lambda c: c.hypothesis == "trend_continuation",
+            ),
+        ),
+        **_kwargs(),
+    )
+    assert extra["trend_lane"] == []
+    assert len(selected) == 8
