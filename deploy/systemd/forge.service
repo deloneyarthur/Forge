@@ -102,6 +102,32 @@ Environment=FORGE_YOUNG_CELL_FLOOR=on
 # UNSET/0 = byte-identical. No artifact -> lane inert, degrades to the incumbent. Revert is
 # a one-line unset + restart; nothing enumerated or persisted depends on it.
 Environment=FORGE_TAIL_LANE_SLOTS=95
+# FORGE_TREND_LANE_SLOTS (prereg 8cfe95f4a6e9, trend leg; 2026-07-30): the SECOND objective
+# arm. 40 slots ordered by P(top-200 by wf_sharpe_p10), restricted to trend_continuation
+# candidates.
+#
+# WHY A SECOND TARGET AND NOT MORE MR SLOTS: the objective is REGIONAL. On the trend slice,
+# absolute strong components over disjoint windows: incumbent 44, wf_p10 top-200 59 (+34%),
+# and sharpe_baseline -- the MR lane's winner, confirmed live at 5.67x -- 41, WORSE than the
+# incumbent. The metric we rejected for MR is the trend winner.
+#
+# WHY 40 RAISES TREND SUPPLY RATHER THAN CUTTING IT: merit goes 95 -> 55 slots at ~45% trend
+# (~25 trend configs), plus 40 slots that are 100% trend by construction = ~65 vs ~43 today.
+# The MR lane alone had taken whole-batch trend from 52.9% to 36.2%; this reverses that while
+# leaving a 55-slot merit control alive for both arms' reads.
+#
+# THE CANDIDATE FILTER IS LOAD-BEARING (b17ce39). wf_p10 scores MR configs highly too, so an
+# unfiltered trend lane would select MR -- competing with the MR lane and failing to reproduce
+# its own +34%. The lane selects only from the population it was fitted and judged on; the
+# journal prints `population=trend_continuation only` so a mis-scope is visible in the log.
+#
+# Sized small on purpose: the trend tail is thin (988 configs >= the 0.9439 book floor and
+# only 2 >= 1.5 in 132,425 trend rows) and wf_p10 has a cliff (59 strong at top-200, 40 at
+# top-800, 13 at top-1600), so n_pos is PINNED at 200. This is a supply-diversity leg against
+# the single-trend-spine dependency in all four promoted books, NOT a gate-clearer play.
+#
+# UNSET/0 = byte-identical. No artifact -> lane inert. Revert is a one-line unset + restart.
+Environment=FORGE_TREND_LANE_SLOTS=40
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
