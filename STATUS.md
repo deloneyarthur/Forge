@@ -1,5 +1,29 @@
 # Forge — Status
 
+## 2026-07-31 (CAN WE MEASURE EXHAUSTION?) — **the 1.5-gate rate needs 183 days/arm, per-CELL production is NOISE (z=+0.29), and the answer is a concurrent GENERATION A/B — DEPLOYED, plus the honest arm ramped 40→150.** (D341)
+
+- **⚠️ STANDING OBLIGATION — REVERT `FORGE_PREFILTER_SAMPLE_N` TO 40 WHEN THE A/B RESOLVES.** At 150 we forgo **~31% of ranked production/day**. Time-boxed to this experiment only.
+- **TWO EXPERIMENTS LIVE, competing for the same throughput:** the generation A/B (arms from zero at the 2026-07-31 restart, ~925 honest configs/arm/day, **~2.6 days** to a readable p90 delta — submission time, verdicts lag) and the trend-lane prereg `4d1fa832789f` (**593/700** merit-trend rows, ~14.5h).
+- **(C) AS RE-SPECIFIED YESTERDAY CANNOT BE READ.** Detecting a doubling of P(cpcv ≥ 1.5) needs **183 days/arm** on both stages. What resolves: **p90** (+0.05 in ~3d) and **book-floor rate** (doubling in ~4d); p99 already too thin (52–160d). **D340 was right about the BASIS and wrong about the STATISTIC** — an unmeasurable-because-rare criterion makes "not exhausted" true by construction.
+- **PER-CELL PRODUCTION IS NOISE — the load-bearing finding.** Chi-square dispersion at `(hyp, dir, bucket, regime)`: **X²=38.9, df=37, z=+0.29**, not distinguishable from one common rate. Top cell 1-of-41, CI **[0.43%, 12.60%]**; a 0-of-96 cell's CI *includes* the pooled rate. **Tier 0's "22 zero-production cells are prune candidates" was reading noise** — same error class as the `unevaluated` misread and D339's.
+
+  | granularity | z | verdict |
+  |---|---:|---|
+  | cell | +0.29 | **noise** |
+  | hyp × directional × bucket | +1.16 | noise |
+  | **hyp × bucket** | **+2.02** | **signal** |
+  | **regime gate alone** | **+2.16** | **signal** |
+  | bucket / hypothesis alone | +1.04 / +1.14 | noise |
+
+- **⇒ hypothesis ALONE is noise**, so "trend beats MR" is unsupported; **hyp × bucket is signal** — trend/swing_long **0.94%** vs trend/swing_mid **0.28%**. Per-category tracking confirmed, at the granularity the data licenses.
+- **CENTRE-vs-TAIL CORRECTION (ours):** "the mean carries no information about tail production" was quoted off spearman(mean, **std**) = −0.148, a different quantity. Measured: spearman(median, P(≥floor)) = **+0.389**, spearman(p90, P(≥floor)) = **+0.654**. The centre is weakly positive — but 3 of the 5 highest-median cells produce **zero**, so centre-optimising still steers wrong, just not for the reason we gave.
+- **`unevaluated` IS NOT A FRONTIER** (raised as one, retracted): 10.8% of all-time multiplicity but **1.26% of current flow**, **92.8% of it the `named` axis retired at v47/v52**. Only 2 genuinely unexplored cells, both MR × hurst — already refuted and deprioritised. **No large pool of unmeasured grammar exists.**
+- **BUILT:** Tier 0 `honest_cell_scorecard.py` (ranks production; prices a prune by post-stratification — a tightening is a strict subset, so concurrent arms are only needed for *loosenings*); Tier 1 A/B (`iterator.py`, separate seed stream, **no coin drawn when off** = byte-identical; `generation_arm` hash-excluded so both arms can't dedup); `book_usable_weights.py` (honest-arm scored, **shrinks to the regime marginal below n=100**, barren gates floored at 0.05 **never zeroed** — zeroing is a *prune*, an operator-gated grammar act); `production_by_group.py` (`--by arm` resolves the A/B, `--by category` tracks across grammars).
+- **THE TRACKER VALIDATED ITSELF on something it wasn't built to find:** trend/swing_long **0.99% (v49) → 0.00% (v50) → 1.05% (v51)**, p90 0.6397 → 0.5917 → 0.6542 — v50 being the independently-flagged bad grammar. Caveat: v50's 0/302 is wide, so the **p90 drop** is the trustworthy half.
+- **DEPLOYED (2 restarts, full ritual each, 2,120 passed / 0 failed, NRestarts=0, 0 errors):** `FORGE_GENERATION_ARM_B_SHARE=0.5` (clamp max; arm B may never exceed half the stream or there's no control) + `FORGE_PREFILTER_SAMPLE_N=150`. Stream is gating-rate limited → raising N shifts the **mix**, not volume (honest takes `N/(200+N)`; model reproduces the recorded N=300 window exactly). 150 is the knee: 300 buys 0.7 more days at double the ranked cost.
+- **CRUCIBLE (`3f82f3d`) CAUGHT US POOLING STAGES — reproduced to 3–4 decimals.** Our "2 gate-clearers" was **one per stage across two bases**. **D340's "the tail did not converge" is WITHDRAWN** to "no affirmative evidence it has" — 1-of-1,856 vs 0-of-302 is not distinguishable. We had written that warning into the criterion doc hours earlier; a rule you must remember is not a control. Their v52 flag was **timing** (batch `2dcace4b` at 19:03:02Z vs their 17:37Z read, stamped correctly). Reply drafted `9639ece`, **unsent** — carries `vix_term_slope` **0-of-548** as a gate (scoped: 1.11% paired with days_since_jump on swing_long) and the dispersion result, which tells them to discount every per-cell number we've sent.
+- **WATCH:** first batch must log `generation_arm_ab: ACTIVE ~50/50` and **NOT `arm INERT`** (empty map ⇒ treatment silently runs incumbent weights).
+
 ## 2026-07-31 (v52 DEPLOYED + the freeze criterion's binding condition RE-SPECIFIED) — **capitulation RETIRED (0 components in 603 decided, Crucible confirmed 0/613 independently); condition (C) was measured on the COLLIDER basis and on the corrected honest-arm reading THE GRAMMAR IS NOT EXHAUSTED; and a grammar commit SELF-DEPLOYED on the live tree — caught with zero contamination.** (D340)
 
 - **v52 LIVE 2026-07-31T10:38 PDT.** `active/running`, **NRestarts=0**, `grammar_version=v52`, `registry_hash=6ea47c05c9eafc9e`, all 8 flags present, **0 errors**. Full uncontended suite **2,097 passed / 1 skipped / 0 failed**. Prereg `0a5ddc861aae`.
