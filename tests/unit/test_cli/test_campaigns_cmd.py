@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from forge.cli.main import app
+from forge.core.clock import utc_now
 from forge.persistence.db import open_db
 
 runner = CliRunner()
@@ -32,7 +33,16 @@ def test_campaigns_list_shows_registry() -> None:
 
 
 def _seed_db(path: Path, *, starve_ve: bool) -> None:
-    now = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+    """Seed submissions RELATIVE TO THE CLOCK, never at a fixed date.
+
+    `audit_carriage` filters `submitted_at >= _watermark(utc_now(), days)`, a window that
+    rolls forward in real time while a hardcoded seed date does not. This fixture originally
+    pinned 2026-07-20 and silently began failing on 2026-07-27, when those rows aged out of
+    the 7-day window: zero rows in scope, so `ranked_total` is 0, `carriage_ratio` is None,
+    nothing can be starved and the audit correctly exits 0. The assertion failure looked like
+    a membership-resolution bug (Q61's recorded diagnosis) and was a time bomb in the seed.
+    """
+    now = utc_now()
     conn = open_db(path)
     rows: list[tuple[str, str | None]] = []
     if starve_ve:
