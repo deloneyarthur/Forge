@@ -16,6 +16,18 @@
 - **OUR ERROR, named:** the per-batch form was copied from the MR lane, where merit had 95 slots across all hypotheses. At a 55-slot merit arm its trend subset is ~20 rows, which cannot resolve a 0.6% base rate.
 - **⇒ RESOLUTION RULE, PRE-COMMITTED 2026-07-31 BEFORE THE DATA MATURED (operator: "let it accrue and resolve pooled"):** resolve `4d1fa832789f`'s quality leg **POOLED**, at the registered **≥1.25×** bar, on the **FIRST read once the merit trend-restricted arm reaches n = 700 decided** (~36 batches total, ~26h out; expected z ≈ +3.3 if rates hold). **Fixed n, single read** — "resolve when z is big enough" would be optional stopping, the same error class as the D339 attribution. The **aggregation** changes from per-batch to pooled; the **bar does not**. Anyone resolving this earlier or on the per-batch form is reading a degenerate statistic.
 - **The design thesis is visible:** trend_lane comp% is **lower** (26.1% vs 30.1%) while strong% is 4.5× higher — the mean-vs-tail tradeoff the lane exists for.
+- **`hurst-mr-conditioner` is NOT the same mechanism as our conditioner finding** (operator asked). Theirs = *hurst as a gate on MR*; ours = *vix as a SECOND gate on xsect trend over a hurst primary*. **But the follow-up question paid off** — is the damage vix, or the second-gate slot itself? That matters more, since the regime VETO shares that slot at 0.5 share, **4× the conditioner's 0.125**. Same base, unbiased arms, v49+:
+
+  | second-slot occupant | n | comp% | mean cpcv | z |
+  |---|---:|---:|---:|---:|
+  | `hurst` alone | 1,470 | 27.4% | +0.1552 | baseline |
+  | + `days_since_jump` **veto** | 773 | **37.8%** | +0.2276 | **+5.04** |
+  | + `vix_term_slope` **conditioner** | 292 | **12.0%** | −0.0618 | **−5.57** |
+
+- **⇒ DOUBLE-GATING IS NOT THE PROBLEM — the veto is one of the better things we do.** Opposite signs, near-equal force, same slot and base. The finding narrows to **`vix_term_slope` as a trend conditioner**; the hurst base is healthy and the veto design is vindicated.
+- **Their MR-only scope guard is independently corroborated** (their note: trend × hurst is above baseline; we measure 27.4% / 37.8%) — load-bearing, not cautious.
+- **Own-numbers correction, disclosed:** `9cb99d1`'s 30.7% baseline pooled slot-unused with veto-carrying configs; decomposed it is **12.0% vs 27.4%**. Conclusion unchanged.
+- **NEXT (Crucible's call, D320 split of authority):** candidate registry entry `vix-trend-conditioner`/`deprioritize` for *them* to author, our `BINDINGS` to route. Relayed `470973a` **with a scope warning** — vix must stay live as an R2 **primary** gate (the D276 coin, ~1,171 configs, un-implicated) and the hurst base untouched.
 
 ## 2026-07-30 (TREND LEG LIVE + a DEFECT we found in our own confirmed result) — **the MR lane ran the TREND artifact for 24 of 63 batches. The prereg still holds (60/62, reproduced exactly) but the ATTRIBUTION was wrong: the 5–7× belongs to the LANE, not to `sharpe_baseline`. And Crucible's Q57 mapping is wrong in two directions — their pinned pilot window holds 3 configs.** (D339)
 
