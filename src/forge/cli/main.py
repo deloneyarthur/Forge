@@ -832,6 +832,55 @@ def _resolve_tail_lane_slots() -> int:
     return max(0, min(slots, 150))
 
 
+def _resolve_generation_arm_b_share() -> float:
+    """Parse ``FORGE_GENERATION_ARM_B_SHARE`` (Tier 1, D341): the fraction of enumerated
+    configs drawn under arm B's regime-gate weights instead of the incumbent map.
+
+    A CONCURRENT arm for the GENERATION side, for the same reason the ranked lanes needed one:
+    a weighting change read across TIME confounds the change with the measurement window, and
+    Crucible's drift floor puts version-over-version deltas below ~0.15-0.20 beyond resolution
+    at ANY n, because the noise is between windows and does not shrink with sample size. Both
+    weight sets drawing inside every batch is what makes the drift cancel.
+
+    The arms differ ONLY in which regime-gate map steers `_pick_regime`: the incumbent scores a
+    gate by COMPONENT rate on ranker-selected runs, arm B by BOOK-USABLE rate on the honest
+    arm. On live data those disagree by ~9x across gates, so the choice is consequential.
+
+    Unset/empty/0 → 0.0 (byte-identical: no coin drawn, no rng consumed). Malformed → 0.0
+    (degrade-never-crash). Clamped to [0.0, 0.5] — arm B may never exceed half the stream,
+    because an experiment that reallocates most of generation to the treatment has no control
+    left to compare against."""
+    import os
+
+    raw = os.environ.get("FORGE_GENERATION_ARM_B_SHARE", "").strip()
+    if not raw:
+        return 0.0
+    try:
+        share = float(raw)
+    except ValueError:
+        return 0.0
+    return max(0.0, min(share, 0.5))
+
+
+def _load_book_usable_regime_weights(
+    forge_db_path: Path,
+) -> dict[tuple[str, str, str, str], float]:
+    """Arm-B's map. Reads OUR verdicts (the honest arm lives there), not Crucible's export,
+    because the estimand is honest-arm book-usable production rather than gated component
+    rate. Silent degrade to {} → the arm is inert and the incumbent map is used for every
+    config (hard rule #6)."""
+    from forge.feedback.book_usable_weights import compute_book_usable_regime_weights
+    from forge.persistence.db import db_connection
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    try:
+        with db_connection(forge_db_path) as conn:
+            return compute_book_usable_regime_weights(conn)
+    except Exception:
+        return {}
+
+
 def _resolve_trend_lane_slots() -> int:
     """Parse ``FORGE_TREND_LANE_SLOTS`` (prereg `8cfe95f4a6e9`, trend leg): ranked slots per
     batch for the TREND arm, ordered by `P(top-200 by wf_sharpe_p10)`.
@@ -1616,6 +1665,8 @@ def _run_battery_for_seed(
     rank_combiner_share: Mapping[str, float] | None = None,
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    generation_arm_b_weights: Mapping[tuple[str, str, str, str], float] | None = None,
+    generation_arm_b_share: float = 0.0,
     refutation_effects: RefutationEffects | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
@@ -1689,6 +1740,8 @@ def _run_battery_for_seed(
             rank_combiner_share=rank_combiner_share,
             cohort_yield_weights=cohort_yield_weights,
             regime_gate_yield_weights=regime_gate_yield_weights,
+            generation_arm_b_weights=generation_arm_b_weights,
+            generation_arm_b_share=generation_arm_b_share,
             refutation_effects=refutation_effects,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
@@ -2169,6 +2222,24 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # loader skipped, regime draw keeps its D150/uniform base (byte-identical, hard
     # rule #6). On: the (hyp,dir,bucket,regime) component-rate composes onto the base
     # so the regime draw avoids sink gates (gamma_flip) and favours minting ones.
+    # Tier 1 (D341) — the concurrent generation A/B. Off by default: share 0 means the
+    # iterator draws no arm coin, consumes no rng and stamps no `generation_arm`, so the
+    # stream is byte-identical to the pre-feature one (hard rule #6). Loading the map is
+    # skipped entirely when the share is 0 so a cold/absent DB costs nothing.
+    generation_arm_b_share = _resolve_generation_arm_b_share()
+    generation_arm_b_weights: dict[tuple[str, str, str, str], float] = {}
+    if generation_arm_b_share > 0.0:
+        generation_arm_b_weights = _load_book_usable_regime_weights(forge_db_path)
+        if generation_arm_b_weights:
+            typer.echo(
+                f"generation_arm_ab: ACTIVE share={generation_arm_b_share:.2f} "
+                f"({len(generation_arm_b_weights)} cells on honest-arm book-usable rate) "
+                f"— arm B vs the incumbent component-rate map, concurrent in every batch"
+            )
+        else:
+            typer.echo(
+                "generation_arm_ab: share set but no honest-arm weights yet — arm INERT"
+            )
     regime_gate_yield_weights: dict[tuple[str, str, str, str], float] = {}
     if regime_gate_yield:
         regime_gate_yield_weights = _load_regime_gate_yield_weights(
@@ -2233,6 +2304,8 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             rank_combiner_share=rank_combiner_share,
             cohort_yield_weights=cohort_yield_weights,
             regime_gate_yield_weights=regime_gate_yield_weights,
+            generation_arm_b_weights=generation_arm_b_weights,
+            generation_arm_b_share=generation_arm_b_share,
             refutation_effects=refutation_effects,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,

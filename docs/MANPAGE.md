@@ -243,6 +243,36 @@ currently our only meaningful trend supply (trend fell 52.9% → 36.2% of the ba
 MR lane alone went live). Needs a `train-tail --base-target target_wf_p10 --n-pos 200`
 artifact; without one the lane logs `inert`.
 
+**Env-only knob — `FORGE_GENERATION_ARM_B_SHARE`** (Tier 1, D341): the **generation**-side
+concurrent A/B. The fraction of enumerated configs drawn under arm B's regime-gate weights
+instead of the incumbent map; both arms draw inside **every batch**, and each config is
+tagged with the contracts 1.39.0 `generation_arm` field (`"baseline"` / `"book_usable"`).
+
+**Why concurrent, not sequential.** A weighting change read across TIME confounds the change
+with the measurement window. Crucible's drift floor puts version-over-version deltas below
+~0.15–0.20 beyond resolution at **any** n, because the noise is *between* windows and does not
+shrink with sample size — the same reason the ranked lanes are arm splits and read at z=+6.27
+where a before/after read would have been unusable.
+
+**What the arms differ by.** Only which map steers the regime draw. The incumbent
+(`--regime-gate-yield`) scores a gate by **component rate** on ranker-selected runs; arm B
+scores it by **book-usable rate** (cpcv ≥ 0.9439) on the **honest arm** — the one population
+unselected by both prefilter and ranker, so it is not collider-conditioned. On live data the
+two disagree by ~9× across gates (`vol_regime` 2.87 down to `vix_term_slope` 0.31), so the
+choice is consequential rather than cosmetic.
+
+**Estimator note:** a cell gets its own rate only past n=100 and inherits its regime's marginal
+otherwise. That is forced by measurement — per-cell book-usable rates on the honest arm are not
+distinguishable from a single common rate (X²=38.9, df=37, z=+0.29), while the regime-gate
+marginal is (z=+2.16). A barren gate is de-emphasised to a 0.05 floor, **never zeroed**:
+zeroing removes it from the draw, which is a *prune* and belongs in an operator-gated version
+bump, not a map that reloads every batch.
+
+Unset/0/malformed → **0.0**, and the iterator then draws no arm coin, consumes no rng and
+stamps no `generation_arm` — byte-identical (hard rule #6). Clamped **[0.0, 0.5]**: arm B may
+never exceed half the stream, because an experiment with no control is not an experiment. No
+honest-arm rows yet → empty map → logs `arm INERT` and every config uses the incumbent.
+
 **Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D316, Theme 2d): extra seeded-random
 submission slots per batch reserved for YOUNG-cell members, tagged
 `selection_mode='young_explore'` — a THIRD lane, deliberately distinct from the uniform
