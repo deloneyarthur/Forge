@@ -128,6 +128,34 @@ Environment=FORGE_TAIL_LANE_SLOTS=95
 #
 # UNSET/0 = byte-identical. No artifact -> lane inert. Revert is a one-line unset + restart.
 Environment=FORGE_TREND_LANE_SLOTS=40
+# FORGE_GENERATION_ARM_B_SHARE (Tier 1, D341) — the GENERATION-side concurrent A/B, the
+# counterpart to the tail/trend ranked lanes. Both regime-gate weight maps draw inside EVERY
+# batch, and each config carries the contracts 1.39.0 `generation_arm` tag.
+#
+# WHY CONCURRENT: a weighting change read across TIME confounds the change with the
+# measurement window, and Crucible's drift floor puts version-over-version deltas below
+# ~0.15-0.20 beyond resolution at ANY n (the noise is BETWEEN windows and does not shrink with
+# sample size). The ranked lanes read at z=+6.27 precisely because they were arm splits; a
+# before/after read of the same effect would have been unusable.
+#
+# WHAT THE ARMS DIFFER BY: only which map steers `_pick_regime`. The incumbent
+# (--regime-gate-yield) scores a gate by COMPONENT rate on ranker-selected runs; arm B scores
+# it by BOOK-USABLE rate (cpcv >= 0.9439) on the HONEST arm, the one population unselected by
+# both prefilter and ranker and therefore not collider-conditioned. On live data the two
+# disagree ~9x across gates (vol_regime 2.87 -> vix_term_slope 0.31).
+#
+# CANNOT change the hypothesis mix: this map only chooses the regime gate WITHIN an
+# already-drawn (hypothesis, directional, bucket), so it cannot starve MR or the D216-floored
+# volatility_event. Those live on `hypothesis_weights`, a different axis.
+#
+# SIZE: 0.5 is the clamp maximum and the power-optimal split. Honest-arm accrual is ~765/day
+# stage one, so a 50/50 split gives ~382/day/arm and a +0.05 move in p90 resolves in ~6 days;
+# at 0.25 the treatment arm halves and the same read takes ~13. Drop to 0.25 if a smaller
+# treated fraction is wanted for the first window.
+#
+# UNSET/0/malformed = byte-identical (no arm coin, no rng consumed, no tag). REVERT = delete
+# this line + daemon-reload + restart. Journal line when live: `generation_arm_ab: ACTIVE`.
+Environment=FORGE_GENERATION_ARM_B_SHARE=0.5
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
