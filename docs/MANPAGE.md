@@ -733,7 +733,13 @@ WARNs on a starved campaign or a stale file. D316 adds the writer-activation pro
 `activation probe` healthcheck WARNs on INERT ids). D328 adds the grammar-freeze census:
 `scripts/search_multiplicity_census.py --db $SNAP --jsonl-out …` reuses the same snapshot →
 `~/forge_data/ranker_eval/search_multiplicity_census.jsonl` (one metric-B row/day; the
-`freeze census` healthcheck WARNs on a rise past the bar or a stale file). Deterministic
+`freeze census` healthcheck WARNs on a rise past the bar or a stale file). D339 adds the
+vix-conditioner ranked share → `~/forge_data/ranker_eval/vix_conditioner_share.jsonl`: the
+cell's share of its eligible pool per selection arm, over 7d. **Deliberately no healthcheck
+check** — the cell is worth ~0.01% of strong production, so it is a row to read when asked,
+not an alert. It exists to keep the D339 commitment to Crucible auditable: their
+`vix-trend-conditioner` entry is left UNBOUND because our ranker already de-selects the cell
+~24x, and we bind it if `ranked_share_max` climbs toward `unbiased_share_mean`. Deterministic
 (no LLM, hard rule #5); telemetry-only — never touches grammar/weights/config/ranking.
 Trap-cleans the snapshot + staging on every exit. No args.
 

@@ -509,4 +509,100 @@ uv run python "$(dirname "$0")/search_multiplicity_census.py" \
     > "$OUT_DIR/search_multiplicity_census_last_run.txt" 2>&1 \
     || echo "daily-ranker-eval: freeze census failed -- continuing" >&2
 
+# --- vix-conditioner ranked share (D339) ---------------------------------------
+# THE COMMITMENT THIS EXISTS TO KEEP. We told Crucible we would leave their
+# `vix-trend-conditioner` entry UNBOUND because our ranker already de-selects the
+# cell ~24x (ranked 0.005 vs 0.112 on the unbiased arms), and that we would bind
+# it if that stopped being true. The F3 and tail models retrain daily and nothing
+# guarantees the suppression holds, so the promise needs an instrument or it is
+# just a sentence in a relay.
+#
+# Deliberately a JSONL row and NOT a healthcheck WARN: the whole finding is that
+# this cell is worth ~0.01% of strong production, so a page-able alert would be
+# exactly the over-engineering we argued against when we declined the binding.
+# One row a day, read when someone asks. Reuses $SNAP — no second cp.
+echo "daily-ranker-eval: vix-conditioner ranked share"
+uv run python - "$SNAP" "$OUT_DIR/vix_conditioner_share.jsonl" <<'PY' \
+    || echo "daily-ranker-eval: conditioner share failed -- continuing" >&2
+import json
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+from forge.core.clock import utc_now
+from forge.persistence.db import db_connection
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+snap, out = sys.argv[1], Path(sys.argv[2])
+
+_VIX = "vix_term_slope"
+
+
+def classify(cfg):
+    """(eligible, fired) — mirrors `_vix_conditioner_eligible` post-hoc."""
+    if cfg.get("hypothesis") != "trend_continuation":
+        return False, False
+    combiner = cfg.get("combiner") or {}
+    if combiner.get("type") != "cross_sectional_rank":
+        return False, False
+    directional, gates = "", []
+    for sig in cfg.get("signals") or []:
+        inds = sig.get("indicators") or []
+        if not inds:
+            continue
+        if sig.get("role") == "directional":
+            directional = inds[0]
+        elif sig.get("role") == "regime_filter":
+            gates.extend(inds)
+    if directional == "momentum" or gates[:1] != ["hurst"] or len(gates) > 2:
+        return False, False
+    return True, len(gates) == 2 and gates[1] == _VIX
+
+
+with db_connection(snap) as conn:
+    rows = conn.execute(
+        """
+        SELECT selection_mode, config_json FROM submissions
+        WHERE selection_mode IS NOT NULL
+          AND submitted_at >= now() - INTERVAL 7 DAY
+        """
+    ).fetchall()
+
+tally = defaultdict(lambda: [0, 0])
+for arm, cfg_json in rows:
+    try:
+        cfg = json.loads(cfg_json)
+    except (TypeError, ValueError):
+        continue
+    eligible, fired = classify(cfg)
+    if not eligible:
+        continue
+    cell = tally[arm]
+    cell[0] += 1
+    cell[1] += fired
+
+
+def share(arm):
+    n, fired = tally.get(arm, [0, 0])
+    return round(fired / n, 4) if n else None
+
+
+ranked = [share(a) for a in ("ranked", "trend_lane") if share(a) is not None]
+unbiased = [share(a) for a in ("holdout", "prefilter_sample") if share(a) is not None]
+row = {
+    "ts": utc_now().isoformat(),
+    "window_days": 7,
+    "by_arm": {a: {"eligible": v[0], "fired": v[1], "share": share(a)} for a, v in tally.items()},
+    "ranked_share_max": max(ranked) if ranked else None,
+    "unbiased_share_mean": round(sum(unbiased) / len(unbiased), 4) if unbiased else None,
+}
+with out.open("a") as fh:
+    fh.write(json.dumps(row) + "\n")
+print(
+    f"daily-ranker-eval: vix-conditioner ranked_max={row['ranked_share_max']} "
+    f"unbiased_mean={row['unbiased_share_mean']} "
+    f"(bind if ranked climbs toward unbiased — D339)"
+)
+PY
+
 echo "daily-ranker-eval: done"
