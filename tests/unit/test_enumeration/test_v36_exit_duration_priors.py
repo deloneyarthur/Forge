@@ -168,29 +168,3 @@ def test_mr_swing_short_time_stop_in_family_box_since_v40(
 
 
 # --- the capitulation veto: D270's U[5,15] survives at BOTH buckets ---------------
-
-
-def test_v36_capitulation_veto_keeps_d270_range_at_both_buckets(
-    grammar: Grammar, registry: RegistrySnapshot
-) -> None:
-    """Crucible's veto (cohort hygiene: the v35 bare-drop pane accumulates at
-    ~50/day and must not split its chassis 8h in): capitulation keeps U[5,15]
-    at BOTH buckets. The floor pin (an observed n_bars < 8 on swing_mid)
-    proves the directional did NOT inherit the MR swing_mid [8,15] shift."""
-    reg = _v31_registry(registry)
-    space = build_search_space(grammar, reg)
-    swing_mid_nbars: list[int] = []
-    for seed in range(1200):
-        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
-        if not _is_capitulation(cfg):
-            continue
-        ts = _time_stop_params(cfg)
-        if ts is None:
-            continue
-        n_bars = ts.get("n_bars")
-        assert isinstance(n_bars, int), ts
-        assert 5 <= n_bars <= 15, (cfg.dte_bucket, ts)
-        if cfg.dte_bucket == "swing_mid":
-            swing_mid_nbars.append(n_bars)
-    assert swing_mid_nbars, "no capitulation swing_mid time_stop draws sampled"
-    assert min(swing_mid_nbars) < 8, swing_mid_nbars

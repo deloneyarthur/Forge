@@ -2773,13 +2773,13 @@ def _v31_registry(base: RegistrySnapshot) -> RegistrySnapshot:
 def test_d270_momentum_pools_scoped_to_mean_reversion(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """The C2 carve-out admits momentum to MR's directional pool ONLY when the
-    registry serves it; the trend pool PIN-EXCLUDES it (contrarian op +
-    time-stop chassis are wrong for continuation — and trend draws must stay
-    byte-identical)."""
+    """v52 (D328): the C2 carve-out is RETIRED, so `momentum` is out of EVERY directional
+    pool even when the registry serves it. Previously it was admitted to MR only; the
+    exemption failed its adoption episode at 0 components in 603 decided (prereg
+    `0a5ddc861aae`), so the pool now matches what the registry FLAGS alone would give."""
     reg = _v31_registry(registry)
     space = build_search_space(grammar, reg)
-    assert "momentum" in space.directional_indicators_by_hypothesis["mean_reversion"]
+    assert "momentum" not in space.directional_indicators_by_hypothesis["mean_reversion"]
     assert "momentum" not in space.directional_indicators_by_hypothesis["trend_continuation"]
     base_space = build_search_space(grammar, registry)
     assert "momentum" not in base_space.directional_indicators_by_hypothesis["mean_reversion"]
@@ -2788,47 +2788,30 @@ def test_d270_momentum_pools_scoped_to_mean_reversion(
 def test_d270_capitulation_reachable_and_grammar_valid(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """The full capitulation genome, v35/D280 BARE-DROP shape: momentum
-    directional (absolute drop threshold, lookback/skip knobs) x NO regime
-    gate (the v31 rv_rank pin dropped on Crucible's adjudication; R1-exempt)
-    x {swing_short, swing_mid} (the k=1 rider) x CALL-default x no veto x
-    confluence-only x never vol_target — every emitted instance fully
-    grammar-valid."""
+    """v52 (D328): capitulation is UNREACHABLE. The genome this test used to pin — momentum
+    directional x no regime gate x {swing_short, swing_mid}, the v35/D280 bare-drop — cannot
+    be drawn at all now that the C2 carve-out and the R1 bare-drop exemption are both empty
+    (prereg `0a5ddc861aae`: 0 components in 603 decided).
+
+    Asserting unreachability rather than deleting the test. `momentum` is still a registry
+    indicator carrying live `trend`-family flags, so nothing but those two tables keeps it
+    out of the MR pool — a silent re-admission is exactly what this catches. 400 forced-MR
+    draws is the budget the reachability version used, so the power behind the negative
+    claim matches the power that established the positive one.
+    """
     reg = _v31_registry(registry)
     space = build_search_space(grammar, reg)
     seen = 0
-    time_stop_seen = 0
     for seed in range(400):
         cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
         directional = next(s for s in cfg.signals if s.role == "directional")
-        if directional.indicators != ("momentum",):
-            continue
-        seen += 1
-        p = directional.params
-        assert p["op"] == "<", p
-        assert "use_percentile" not in p, p
-        assert -0.083 <= float(p["threshold"]) <= -0.041, p
-        assert isinstance(p["lookback"], int), p
-        assert 3 <= p["lookback"] <= 10, p
-        assert p["skip"] == 0, p
-        # D280 (v35): BARE-DROP — no regime gate of any kind.
-        assert not [s for s in cfg.signals if s.role == "regime_filter"], cfg.signals
-        # chassis: probe bucket + the k=1 swing_short rider, no calm-side
-        # veto, single-name-only, no vol chain
-        assert cfg.dte_bucket in ("swing_short", "swing_mid"), cfg.dte_bucket
-        assert not any(s.id == "sig_regime_veto" for s in cfg.signals), cfg.signals
-        assert cfg.combiner.type == "confluence", cfg.combiner
-        assert cfg.sizer.mode != "vol_target", cfg.sizer
-        for ex in cfg.exits:
-            if ex.id == "time_stop":
-                time_stop_seen += 1
-                n_bars = ex.params.get("n_bars")
-                assert isinstance(n_bars, int), ex.params
-                assert 5 <= n_bars <= 15, ex.params
+        # R1 is whole again: the bare-drop was the only gate-less MR arm.
+        assert [s for s in cfg.signals if s.role == "regime_filter"], cfg.signals
+        if directional.indicators == ("momentum",):
+            seen += 1
         res = validate(cfg, grammar, reg)
         assert res.valid, f"seed={seed}: {res.errors}"
-    assert seen > 0, "momentum never drawn as the MR directional"
-    assert time_stop_seen > 0, "no capitulation config ever drew the time_stop exit"
+    assert seen == 0, f"momentum re-admitted as an MR directional in {seen}/400 draws"
 
 
 def test_d270_momentum_never_anchors_trend(grammar: Grammar, registry: RegistrySnapshot) -> None:
@@ -2954,30 +2937,34 @@ _REGIME_GOLDEN_V31_ACTIVE = [
 def test_d270_capitulation_active_cold_start_golden(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
-    """Byte-pin the v31 enumeration sequence (registry serving momentum on top
-    of the v29 set). Diverges from _REGIME_GOLDEN_V29_ACTIVE at the first MR
-    config touched by the widened directional pool — the D270 licensed change —
-    and a full capitulation genome appears within the scan window (position 71
-    since the D309/v43 pool shift; see the comment below)."""
-    reg = _v31_registry(registry)
-    active = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=15)]
-    assert active == _REGIME_GOLDEN_V31_ACTIVE
-    # The D291/v40 stream re-pin moved the first capitulation genome (and with
-    # it the v29-vs-v31 split) to position 30 — the 15-length goldens now
-    # coincide, so the divergence claim is asserted on a live 40-window pair.
-    # D309 (v43): the 30-name exclusion's pool shift moved the first
-    # capitulation genome again, 30 → 71 — the carriers scan widens to 80
-    # (same landmark, same claim; the v29-vs-v31 divergence stays in-40).
+    """v52 (D328): the v31 registry now enumerates BYTE-IDENTICALLY to the v29 one.
+
+    This is the strongest emission proof the retirement can have, and it is stronger than
+    the assertion it replaces. `_v31_registry` differs from `_v29_registry` by exactly one
+    thing — it SERVES `momentum`. Before v52 that widened MR's directional pool and the two
+    sequences diverged; with the C2 carve-out retired, serving the indicator changes nothing,
+    because nothing downstream will draw it. An id that is truly out of the grammar is one
+    whose presence in the registry is undetectable in the output.
+
+    The old golden `_REGIME_GOLDEN_V31_ACTIVE` is retired with the cell it pinned: it now
+    equals `_REGIME_GOLDEN_V29_ACTIVE` by construction, so keeping a second copy would be a
+    duplicate that could only ever drift.
+    """
+    reg31 = _v31_registry(registry)
     reg29 = _v29_registry(registry)
+    active = [c.config_hash for c in enumerate_candidates(grammar, reg31, 7777, max_candidates=15)]
+    assert active == _REGIME_GOLDEN_V29_ACTIVE
+
+    s31 = [c.config_hash for c in enumerate_candidates(grammar, reg31, 7777, max_candidates=40)]
     s29 = [c.config_hash for c in enumerate_candidates(grammar, reg29, 7777, max_candidates=40)]
-    s31 = [c.config_hash for c in enumerate_candidates(grammar, reg, 7777, max_candidates=40)]
-    assert s31 != s29  # widened MR pool shifts the sequence
+    assert s31 == s29, "serving `momentum` still perturbs the draw — the carve-out leaked"
+
     carriers = [
         c
-        for c in enumerate_candidates(grammar, reg, 7777, max_candidates=80)
+        for c in enumerate_candidates(grammar, reg31, 7777, max_candidates=200)
         if any(s.role == "directional" and s.indicators == ("momentum",) for s in c.signals)
     ]
-    assert carriers, "no capitulation genome in the first 80 draws"
+    assert carriers == [], "capitulation genome still emitted after retirement"
 
 
 # ---------------------------------------------------------------------------

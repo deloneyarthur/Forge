@@ -180,7 +180,13 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # evidence as collider-biased and k=5 is the WORSE value (reproduced on our ledger:
     # swing_mid k5-k10 = -0.1712 on stage one vs +0.0776 on stage two, sign flipping
     # purely from conditioning). IWM/SLB stays. Prereg b13b0f893a11 resolved refuted.
-    assert grammar.grammar_version == "v51"  # type: ignore[attr-defined]
+    # v52 (2026-07-31, D328 second prune): CAPITULATION RETIRED — `momentum` withdrawn as
+    # an MR directional plus the R1 bare-drop exemption that served it. Both were
+    # operator-approved loosenings, so withdrawing them restores the base rules (a
+    # TIGHTENING, hard rule #4) and R1 is whole again. Its v47 exemption carried a defined
+    # close-out and the adoption episode failed: 619 submitted / 603 decided / 0 components
+    # / 0 promotes, median CPCV negative in both bare-drop buckets. Rules text unchanged.
+    assert grammar.grammar_version == "v52"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
