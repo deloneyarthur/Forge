@@ -66,7 +66,23 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 # SURFACE can. Holding 300 past that point bought no information and cost ~60% of ranked
 # production (measured: 600 honest / 380 ranked / 20 holdout per 1,000 submissions).
 # Raise it again only for a NEW question that needs honest-arm n, not to refine this one.
-Environment=FORGE_PREFILTER_SAMPLE_N=40
+#
+# 2026-07-31 — RAMPED TO 150, TIME-BOXED TO THE TIER-1 A/B (D341). A NEW question needing
+# honest-arm n, which is the only condition this knob may be raised under. The stream is
+# gating-rate limited (backpressure blocked at depth 778 vs cap 600), so total configs/day is
+# roughly fixed at ~4,318 and raising N shifts the MIX rather than the volume: honest takes
+# N/(200+N). That model reproduces the recorded N=300 window exactly (600 honest / 400 ranked
+# per 1,000), so it is calibrated, not assumed.
+#   N=40  -> 718 honest/day  -> the A/B resolves in ~6.3 days, ranked 3,600/day
+#   N=150 -> 1,851/day       -> ~2.6 days,                     ranked 2,466/day (-31%)
+#   N=300 -> 2,591/day       -> ~1.9 days,                     ranked 1,727/day (-52%)
+# 150 is the knee. Going to 300 buys only 0.7 further days while doubling the ranked cost and
+# pushing the trend-lane prereg gate from ~14.5h to ~21h.
+# COST ACCEPTED: the trend-lane prereg (593/700 merit-trend rows) slips ~10h -> ~14.5h. Trading
+# 4.5 hours on a nearly-finished prereg for 3.7 days on the A/B.
+# ⚠️ REVERT TO 40 THE MOMENT THE A/B RESOLVES. The last ramp's lesson stands: holding it past
+# its question costs ranked production and buys no information.
+Environment=FORGE_PREFILTER_SAMPLE_N=150
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
