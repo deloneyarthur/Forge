@@ -27,7 +27,20 @@
 - **⇒ DOUBLE-GATING IS NOT THE PROBLEM — the veto is one of the better things we do.** Opposite signs, near-equal force, same slot and base. The finding narrows to **`vix_term_slope` as a trend conditioner**; the hurst base is healthy and the veto design is vindicated.
 - **Their MR-only scope guard is independently corroborated** (their note: trend × hurst is above baseline; we measure 27.4% / 37.8%) — load-bearing, not cautious.
 - **Own-numbers correction, disclosed:** `9cb99d1`'s 30.7% baseline pooled slot-unused with veto-carrying configs; decomposed it is **12.0% vs 27.4%**. Conclusion unchanged.
-- **NEXT (Crucible's call, D320 split of authority):** candidate registry entry `vix-trend-conditioner`/`deprioritize` for *them* to author, our `BINDINGS` to route. Relayed `470973a` **with a scope warning** — vix must stay live as an R2 **primary** gate (the D276 coin, ~1,171 configs, un-implicated) and the hurst base untouched.
+- **~~NEXT (Crucible's call):~~ RESOLVED — entry AUTHORED and UPGRADED to `deprioritize` (hash `40e590632fbc0704`), and WE DECLINE TO BIND IT.** They verified our `search_n_trials` mechanism on their own ledger (**304 of 304** v51 slot-batches, configs differing only in regime gate carry an identical stamp, zero disagreements), adopted our slot-eliminating-vs-within-slot rule edit, and changed the unlock to *a working assembly-value score*.
+- **⚠️ THE OBVIOUS BINDING IS A TRAP — nearly shipped it.** `deprioritize_regime_gate` feeds `_pick_regime` (`sampler.py:1274`), the **PRIMARY** draw. Binding `("trend_continuation","vix_term_slope")` would suppress **vix-as-primary** (the D276 coin, ~1,171 configs, explicitly protected) and leave the conditioner draw (`sampler.py:1437`) untouched — the exact opposite of the entry, and it would look correct in review. A correct binding needs a **new `BindingKind`**.
+- **⇒ AND WE PRICED IT AT ~ZERO, so we are not building that kind.** Over the 106-batch v51 cohort a ×0.25 binding reclaims **1.59 configs/batch of 240 (0.66%)**:
+
+  | arm | cond/batch | saved | what it is |
+  |---|---:|---:|---|
+  | `prefilter_sample` | 1.56 | **1.17** | D335 grammar-honest RANDOM arm |
+  | `holdout` | 0.35 | **0.26** | D256 UNBIASED arm |
+  | `ranked` + `trend_lane` | 0.22 | 0.16 | production |
+
+  **~90% falls on the two unbiased MEASUREMENT arms.** Production gain 0.16 configs/batch ⇒ ~**0.001 strong components/batch against ~9.7** = **0.01%**.
+- **Why: the ranker already did it** (24× de-selection, 0.0046 ranked vs 0.1121 unbiased). **The irony is exact — the same within-slot property that made binding SAFE for `search_n_trials` is what makes it POINTLESS**: it redirects the search rather than shrinking it, and selection was already redirecting.
+- **DECISIVE COST: binding starves the re-test their own unlock names.** Suppressing ×4 leaves ~4× less conditioner data for the assembly-score re-test they explicitly want, and the lost data is the unbiased-arm data this analysis ran on.
+- **⇒ ENTRY STAYS UNBOUND** — "an entry with no binding routes nothing", so the knowledge is registered at zero cost to measurement and zero structural surface. Relayed `53aae75`. **BIND IF:** the ranked-arm conditioner share climbs from 0.0046 back toward the ~0.11 unbiased rate (the F3/tail models retrain daily; nothing guarantees it holds), **or** their assembly-score successor lands and disagrees.
 
 ## 2026-07-30 (TREND LEG LIVE + a DEFECT we found in our own confirmed result) — **the MR lane ran the TREND artifact for 24 of 63 batches. The prereg still holds (60/62, reproduced exactly) but the ATTRIBUTION was wrong: the 5–7× belongs to the LANE, not to `sharpe_baseline`. And Crucible's Q57 mapping is wrong in two directions — their pinned pilot window holds 3 configs.** (D339)
 

@@ -29,8 +29,12 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from forge.persistence.db import db_connection
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _VIX = "vix_term_slope"
 _PRIMARY_GATES = ("hurst",)  # v45/D319 narrowed the conditioner to a hurst primary
@@ -76,16 +80,20 @@ def main() -> int:
     with db_connection(snap) as conn:
         rows = conn.execute(
             """
-            SELECT s.selection_mode, v.grammar_version, s.config_json
+            SELECT s.selection_mode, v.grammar_version, s.config_json,
+                   CAST(s.forge_batch_id AS VARCHAR)
             FROM submissions s
             JOIN verdicts v ON v.config_hash = s.config_hash
             WHERE s.selection_mode IS NOT NULL
             """
         ).fetchall()
 
-    # arm -> [eligible, fired]
+    # arm -> [eligible, fired]; plus absolutes for the bind/don't-bind price
     tally: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-    for arm, version, cfg_json in rows:
+    arm_rows: dict[str, int] = defaultdict(int)
+    arm_fired: dict[str, int] = defaultdict(int)
+    batches: set[str] = set()
+    for arm, version, cfg_json, batch_id in rows:
         digits = "".join(c for c in str(version) if c.isdigit())
         if not digits or int(digits) < min_version:
             continue
@@ -95,7 +103,11 @@ def main() -> int:
             cfg = json.loads(cfg_json)
         except (TypeError, json.JSONDecodeError):
             continue
+        batches.add(batch_id)
+        arm_rows[arm] += 1
         eligible, fired = _classify(cfg)
+        if fired:
+            arm_fired[arm] += 1
         if not eligible:
             continue
         cell = tally[arm]
@@ -119,7 +131,36 @@ def main() -> int:
         share = fired / eligible
         vs = f"{0.125 / share:.1f}x under" if share else "ZERO"
         print(f"{arm:<18} {label[arm]:<28} {eligible:>9} {fired:>6} {share:>8.4f} {vs:>9}")
+
+    _print_binding_price(arm_rows, arm_fired, len(batches))
     return 0
+
+
+def _print_binding_price(
+    arm_rows: Mapping[str, int], arm_fired: Mapping[str, int], n_batches: int
+) -> None:
+    """What a `deprioritize` binding would actually buy, per batch.
+
+    The binding multiplies the conditioner draw by DEPRIORITIZE_WEIGHT (0.25), so it reclaims
+    0.75 x the current per-batch conditioner count. WHERE that lands is the decision: slots
+    reclaimed from `holdout` and `prefilter_sample` are not production, they are the two
+    unbiased measurement arms, and thinning the cell there costs the resolution any future
+    re-test would need."""
+    if not n_batches:
+        return
+    print(f"\nPRICE OF A `deprioritize` BINDING (x0.25), over {n_batches} batches")
+    print(f"{'arm':<18} {'rows/batch':>11} {'cond/batch':>11} {'saved/batch':>12}")
+    print("-" * 56)
+    total_saved = 0.0
+    for arm in _ARMS:
+        if arm not in arm_rows:
+            continue
+        per_batch = arm_fired.get(arm, 0) / n_batches
+        saved = per_batch * 0.75
+        total_saved += saved
+        print(f"{arm:<18} {arm_rows[arm] / n_batches:>11.1f} {per_batch:>11.2f} {saved:>12.2f}")
+    print("-" * 56)
+    print(f"{'TOTAL saved/batch':<18} {'':>11} {'':>11} {total_saved:>12.2f}")
 
 
 if __name__ == "__main__":
