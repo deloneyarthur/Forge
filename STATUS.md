@@ -1,5 +1,22 @@
 # Forge — Status
 
+## 2026-07-31 (DAY-1 TWO-LANE READ) — **supply leg CONFIRMED at z=+5.59; the tail lane holds 4.42× on a CLEAN artifact window; and the trend leg's registered criterion is DEGENERATE — resolution moves to POOLED at a PRE-COMMITTED n, decided before the data matured.** (D339 cont.)
+
+- **Service healthy after 24h:** `active`, **NRestarts=0**, **17/17 batches** with both lanes at full slots (95 tail + 40 trend + 55 merit control), zero errors. `zero_promotion_streak=104` is expected — promotion is a ~4-in-428k event, and the WARN is the §7.3-class noise floor, not a fault.
+- **SUPPLY LEG (prereg `4d1fa832789f` prediction 2) — CONFIRMED.** On the per-batch `ranked_top_n_by_hypothesis` journal line (the metric this block flagged on 07-30 as the one to resolve on):
+
+  | | batches | trend configs | share |
+  |---|---:|---:|---:|
+  | before | 57 | mean 76.7 (57–97) | 32.0% |
+  | **after** | 17 | **mean 90.1 (84–96)** | **37.5%** |
+
+  **Mann-Whitney z = +5.59**, P(after > before) = 0.949; only **19%** of the 57 prior batches reach the new *minimum*.
+- **TAIL LANE, FIRST CLEAN `sharpe_baseline`-ONLY WINDOW** (24h, no wf_p10 contamination): tail **5.670%** strong (149/2,628) vs merit **1.284%** (16/1,246) = **4.42×, z = +6.31**, and comp% higher too (36.6% vs 24.4%). The D339 attribution correction holds on uncontaminated data.
+- **QUALITY LEG — POOLED IS STRONG, THE REGISTERED CRITERION IS UNREADABLE.** Pooled trend-restricted: trend_lane **2.680%** (26/970) vs merit **0.597%** (2/335) = **4.49×, z = +2.27**. But the registered per-batch form gives 7/10 ≥1.25× with a **median ratio of 0.33**, and the contradiction is structural: merit's trend arm is **~19.7 decided/batch** at a 0.597% rate → **E[strong] = 0.118/batch**, predicted **P(0 strong) = 0.889** vs observed **15/17 = 0.882**. One component moves merit's rate 5.1pp, so the ratio measures **merit's luck**, not the trend arm. The two finite ratios (0.33, 0.36) are exactly the two fluke batches.
+- **OUR ERROR, named:** the per-batch form was copied from the MR lane, where merit had 95 slots across all hypotheses. At a 55-slot merit arm its trend subset is ~20 rows, which cannot resolve a 0.6% base rate.
+- **⇒ RESOLUTION RULE, PRE-COMMITTED 2026-07-31 BEFORE THE DATA MATURED (operator: "let it accrue and resolve pooled"):** resolve `4d1fa832789f`'s quality leg **POOLED**, at the registered **≥1.25×** bar, on the **FIRST read once the merit trend-restricted arm reaches n = 700 decided** (~36 batches total, ~26h out; expected z ≈ +3.3 if rates hold). **Fixed n, single read** — "resolve when z is big enough" would be optional stopping, the same error class as the D339 attribution. The **aggregation** changes from per-batch to pooled; the **bar does not**. Anyone resolving this earlier or on the per-batch form is reading a degenerate statistic.
+- **The design thesis is visible:** trend_lane comp% is **lower** (26.1% vs 30.1%) while strong% is 4.5× higher — the mean-vs-tail tradeoff the lane exists for.
+
 ## 2026-07-30 (TREND LEG LIVE + a DEFECT we found in our own confirmed result) — **the MR lane ran the TREND artifact for 24 of 63 batches. The prereg still holds (60/62, reproduced exactly) but the ATTRIBUTION was wrong: the 5–7× belongs to the LANE, not to `sharpe_baseline`. And Crucible's Q57 mapping is wrong in two directions — their pinned pilot window holds 3 configs.** (D339)
 
 - **TREND LEG DEPLOYED 2026-07-29T22:58 PDT** — `FORGE_TREND_LANE_SLOTS=40`, `P(top-200 by wf_p10)` restricted to `trend_continuation`. Service `active`, **NRestarts=0**, all three flags live, `grammar_version=v51`, zero errors. **FIRST TWO-LANE BATCH VERIFIED** (`410aa355`, after ~1h of §7.3 backpressure):
