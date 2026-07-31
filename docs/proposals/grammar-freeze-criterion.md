@@ -95,19 +95,121 @@ visible and is arguably the more actionable one: 11.0% of all-time multiplicity 
 cells that have never had a fair hearing.**
 
 The dead-unprotected share of current flow (metric B) is below
-an **operator-set threshold** and **stable over N census runs**. The threshold is set from the
-baseline, not invented here — mirror the robustness-streak pattern (record the raw series first,
-operator finalizes the bar). Baseline is 2.80%; a natural target is to drive it to the residual
-that remains after the deferred single-name-axis read resolves, then hold.
+an **operator-set threshold** and **stable over N census runs**.
 
-**(C) Quality ceiling, on the stage-two basis — ADDED 2026-07-22 (D330), and binding.**
+**THE BAR IS SET (operator, 2026-07-31): metric B ≤ 1.00% of current flow, stable over 7
+consecutive census runs.** Recorded series first, as the pattern requires — the 12 runs since
+the D331 re-base (`metric_b_flow`, the flow metric; note the JSONL's
+`dead_unprotected_share` is the *all-time* share and is a different, smaller number):
+
+```
+2.27  0.69  0.69  0.63  0.58  0.74  0.74  0.37  0.29  0.34  0.40  0.42
+ ^v47 prune lands here                          ^ last 5 runs: 0.29-0.42
+```
+
+**Why 1.00% and not tighter.** The observed post-prune range is 0.29–0.74% and the last five
+runs sit in 0.29–0.42%, so 1.00% clears the realised range with ~2.4× headroom over the recent
+band. That headroom is deliberate and is NOT slack: a genuinely NEW cell enters the census as
+`unevaluated`, and the moment it accrues its first honest evaluations without a component it
+becomes `dead_unprotected` for as long as it takes to prune or defer it. A bar set at the
+recent band would fire on healthy exploration — the v17 cold-start mistake wearing a different
+hat. 1.00% is loose enough to tolerate one new cell being measured and tight enough that the
+2.27% pre-prune state would have failed it.
+
+**Expected post-prune value: ~0.05%.** Every remaining unit of dead-unprotected flow is one
+cell (the v35 capitulation bare-drop); retiring it takes metric B to approximately zero, at
+which point the bar is a regression tripwire rather than a target.
+
+**(C) Quality ceiling — RE-SPECIFIED ON THE HONEST ARM 2026-07-31 (D339 cont.). The
+stage-two version below is SUPERSEDED and must not be used to declare exhaustion.**
+
+### Why the original (C) is void
+
+It measured CPCV on `measurement_basis = 'fullhist_refit'` — **stage two**. It was written
+2026-07-22; three days later [[D337]] and [[D338]] established that stage-two admission **is
+the refit trigger**, a function of config quality, so conditioning on it is a collider that can
+*sign-flip* an estimate (`rank_k=5`: +0.0776 stage two vs −0.1712 stage one — shipped in v50,
+reverted in v51 the next night). (C) was never revisited after that rule landed.
+
+It is not a theoretical worry here. Re-measured 2026-07-31 at n ≥ 300 per version, the two
+bases **disagree in sign**:
+
+| basis | median | p90 |
+|---|---|---|
+| stage two (`fullhist_refit`), v39 → v51 | 0.2945 → **0.4287** (+0.13) | 0.7260 → **0.8965** (+0.17) |
+| stage one (all decided), v18 → v51 | 0.2877 → 0.2297 (−0.06), via a deep U | 0.7352 → 0.6964 |
+
+The original text read "*best figures are the oldest*" off the stage-two series. That is not
+what stage two says today, and stage one's endpoint decline is an artifact of comparing across
+a trough (median bottoms at −0.026 in v28 and recovers to 0.2297 by v51).
+
+**And stage one is not the fix either.** "All decided configs" is still ranker-selected — the
+ranker picks what gets submitted, so its preferences are baked into the population. Neither
+basis answers "what can the *grammar* produce".
+
+### The re-specified (C)
+
+**Basis: the D335 honest arm (`selection_mode = 'prefilter_sample'`)** — a uniform random draw
+from prefilter-REJECTED configs, the only population unselected by *both* the prefilter and the
+ranker. Note precisely what it is: a draw from the **rejected** pool, so it is a **lower bound**
+on the grammar's surface, which is the conservative direction for an exhaustion claim.
+
+The grammar is exhausted when **both** hold on that arm:
+
+1. **Centre converged** — median CPCV stable as n grows. *Necessary, NOT sufficient.*
+2. **Tail exhausted** — the max and the count clearing the **1.5 promotion gate** stop moving
+   as n grows. **This is the binding half**, because promotion is a tail event (4 in ~428k) and
+   a converged median carries no information about tail production: on stage-one cells
+   spearman(cell mean, cell std) = −0.148 while spearman(cell P(≥1.0), cell std) = +0.500.
+
+**A median-convergence argument alone can never establish exhaustion.** That was the defect in
+the original criterion beyond its basis, and it is the same mean-⊥-tail lesson the two-leg
+ranked lane was built on.
+
+### Where the re-specified (C) stands — NOT MET (2026-07-31)
+
+The recorded convergence claim was **n = 937, median 0.3521, max-ever 1.3125, 0.00% clearing
+the 1.5 gate**, concluding *"a 3.1× sample changed the answer by 0.001, so more n cannot move
+it — only a different GENERATION SURFACE can."* At **n = 7,484**, an 8× sample:
+
+| reading | recorded (n=937) | now (n=7,484) |
+|---|---|---|
+| max CPCV | 1.3125 | **1.6629** |
+| configs clearing 1.5 | **0** | **2** |
+| pooled median | 0.3521 | 0.1990 *(basis unreconciled — see below)* |
+
+Both clearers are real, cross-sectional, non-degenerate, with healthy trade counts:
+
+```
+d004043d  v49  reject     cpcv 1.6326  227 trades  trend/swing_long  sma_slope x rv_rank
+36c8aab4  v51  component  cpcv 1.6629  425 trades  MR/swing_mid      rsi x market_rv x ivol
+```
+
+**⇒ The centre converged; the TAIL did not.** The claim "only a different generation surface
+can move it" is falsified for the tail: the *same* surface produced a 1.6629 component once the
+sample was large enough to reach it. **(C) is NOT satisfied and the grammar is not exhausted on
+the reading that matters.**
+
+**Honest caveat:** the pooled honest-arm median (0.1990) does not reconcile with the recorded
+0.3521, and the original script is not available to diagnose the difference. Neither figure is
+treated as authoritative here. The gate-clearer counts are directly checkable and are what this
+section rests on.
+
+**Second-order finding, tracked separately:** `36c8aab4b0f6a360` reached CPCV 1.6629 **as a
+component** after our own prefilter rejected it. A prefilter false-negative at the top of the
+distribution is a different problem from grammar exhaustion and does not belong in this
+criterion, but it should not be lost.
+
+---
+
+**SUPERSEDED — the original stage-two (C), retained for the record:**
 The grammar is exhausted when, on `measurement_basis = 'fullhist_refit'` at n ≥ 300 per
 version: (1) admitted **median** CPCV shows no improvement over N trailing versions,
 **and** (2) **p90** CPCV does not move — the ceiling, not the centre, since the centre
 drifts on cell mix alone — **and** (3) no newly-added component clears a pre-set
 within-cell lift bar on *both* admission and CPCV.
 
-**Where (C) already stands, measured (2026-07-22):**
+**Where the SUPERSEDED (C) stood, measured (2026-07-22):**
 
 | reading | value | source |
 |---|---|---|
@@ -122,6 +224,14 @@ ceiling has not moved in 20 grammar versions and ~481k stage-one runs, and the e
 cell range sits below *half* the promotion gate. Forge deliberately does **not** claim
 this, because the five versions carrying our largest structural changes (v43–v48) have
 zero stage-two rows. Declaring exhaustion on a series ending at v42 is the basis trap.
+
+> **2026-07-31 postscript on the block above.** Refusing to claim exhaustion off that series
+> turned out to be right for a *second*, larger reason than the one given: the series is not
+> merely truncated at v42, it is measured on the collider basis, and its central claim
+> ("best figures are the oldest") reverses on today's stage-two data. The instinct to
+> withhold the claim on coverage grounds happened to protect us from a basis error nobody
+> had identified yet. Withholding a conclusion you cannot fully justify is worth more than
+> the specific reason you withhold it.
 
 **The blocking constraint is the stage-two FEED, not throughput and not optimization.**
 (Corrected 2026-07-22 — an earlier version of this paragraph proposed a stage-one intake
