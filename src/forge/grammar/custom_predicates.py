@@ -218,17 +218,9 @@ _C2_HYPOTHESIS_FAMILIES: dict[str, tuple[str, ...] | None] = {
 # is exactly one id. Operator-approved loosening (OPEN_PROPOSALS e9d74318,
 # hard rules #1/#4); consumed by both this predicate and
 # `search_space._build_directional_pool`.
-# v52 (D328 freeze programme, prereg `0a5ddc861aae`): EMPTIED. The capitulation carve-out
-# is RETIRED — its v47 exemption carried a defined close-out ("folds into a later prune if
-# it fails its adoption episode") and the episode failed: 619 submitted / 603 decided /
-# **0 components / 0 promotes** across every momentum-as-MR cell, median CPCV NEGATIVE in
-# both bare-drop buckets (-0.3142 swing_mid, -0.2621 swing_short), best-ever 1.1598 against
-# a 0.9439 book floor. The trial ran its full course and the intermediate signals lied:
-# v35's bare-drop improved median OOS trades 4 -> 13 and WF-zero 97.3% -> 70%, both held,
-# and neither produced a component. The table is kept (not deleted) because the C2 per-id
-# mechanism is grammar-general — a future carve-out re-populates it rather than re-deriving
-# it, and an empty dict makes "no id is carved out" explicit at the call site.
-_C2_HYPOTHESIS_EXTRA_IDS: dict[str, tuple[str, ...]] = {}
+_C2_HYPOTHESIS_EXTRA_IDS: dict[str, tuple[str, ...]] = {
+    "mean_reversion": ("momentum",),
+}
 
 # D280 (v35): R1 per-directional GATE EXEMPTIONS — configs whose directional
 # signal's indicator tuple matches an entry need no regime gate. The set holds
@@ -236,11 +228,7 @@ _C2_HYPOTHESIS_EXTRA_IDS: dict[str, tuple[str, ...]] = {}
 # multi-indicator directional can never partially match. Sole member: the
 # capitulation bare-drop arm (see the WHY in `_r1_mean_reversion_requires_
 # iv_rank_gate`). Operator-approved loosening, OPEN_PROPOSALS `4d35a046`.
-# v52 (D328, prereg `0a5ddc861aae`): EMPTIED with the carve-out above. This exemption existed
-# ONLY to serve the capitulation bare-drop, so retiring the directional leaves it with nothing
-# to except — and an exemption with no members is a latent loosening the next reader cannot
-# see the purpose of. R1 is whole again: every mean_reversion config now carries a regime gate.
-_R1_GATE_EXEMPT_DIRECTIONALS: frozenset[tuple[str, ...]] = frozenset()
+_R1_GATE_EXEMPT_DIRECTIONALS: frozenset[tuple[str, ...]] = frozenset({("momentum",)})
 
 # §3.5 P2 entry DTE windows per bucket. (Exit DTE thresholds are tracked
 # via theta_cliff_exit's params, which isn't fully pinned in §3.5; P2

@@ -36,6 +36,7 @@ from forge.enumeration.sampler import sample_config
 from forge.enumeration.search_space import build_search_space
 from forge.grammar import Grammar, load_grammar
 from tests.fixtures.strategy_configs import minimal_registry_snapshot
+from tests.unit.test_enumeration.test_sampler import _v31_registry
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -108,6 +109,33 @@ def test_v40_mr_time_stop_nbars_in_8_12_all_buckets(
         assert 8 <= nbars <= 12, f"n_bars {nbars} outside [8,12] at {cfg.dte_bucket}"
         checked += 1
     assert checked >= 500, f"too few MR time_stop draws checked: {checked}"
+
+
+def test_v40_capitulation_keeps_uniform_pick_and_d270_range(
+    grammar: Grammar, registry: RegistrySnapshot
+) -> None:
+    """The capitulation directional's pane is veto-frozen mid-trial: uniform
+    required pick (~0.5) and D270's U[5,15] n_bars box, both buckets. The base
+    fixture registry lacks the momentum indicator, so this builds on the v31
+    registry (the same pattern as the v36 capitulation-veto test)."""
+    reg = _v31_registry(registry)
+    space = build_search_space(grammar, reg)
+    caps = [
+        cfg
+        for seed in range(8000)
+        if _is_capitulation(
+            cfg := sample_config(
+                space, reg, random.Random(seed), forced_hypothesis="mean_reversion"
+            )
+        )
+    ]
+    assert len(caps) >= 200, f"too few capitulation draws: {len(caps)}"
+    timer_share = sum(1 for c in caps if "time_stop" in _exit_ids(c)) / len(caps)
+    assert 0.38 < timer_share < 0.62, f"capitulation timer share {timer_share:.3f} not ~0.5"
+    nbars = [n for c in caps if (n := _time_stop_nbars(c)) is not None]
+    assert nbars, "no capitulation time_stop draws sampled"
+    assert all(5 <= n <= 15 for n in nbars), f"n_bars left [5,15]: {sorted(set(nbars))}"
+    assert max(nbars) >= 13, "capitulation box narrowed — draws never reach [13,15]"
 
 
 def test_v40_trend_required_pick_stays_uniform(

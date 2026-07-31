@@ -834,36 +834,7 @@
 # unaffected). Emission proof: rank_k in {5,10} only, resid 11.8%->3.5%,
 # momentum_252 28.0%->30.7%, MR xsect +27%, trend single-name still 0. See D328.
 
-# v52 (2026-07-31, D328 freeze programme — SECOND PRUNE): CAPITULATION RETIRED.
-# `momentum` is withdrawn as a `mean_reversion` directional, and with it the R1
-# per-directional bare-drop exemption that existed only to serve it. NO change to
-# the `rules:` text — emission-policy (the D098/v5 class): two tables in
-# `custom_predicates` go EMPTY, `_C2_HYPOTHESIS_EXTRA_IDS` (the D270/v31 per-id
-# carve-out) and `_R1_GATE_EXEMPT_DIRECTIONALS` (the D280/v35 bare-drop). Both were
-# operator-approved LOOSENINGS (OPEN_PROPOSALS `e9d74318`, `4d35a046`); withdrawing
-# them restores the base rules, so this is a TIGHTENING under hard rule #4 and R1 is
-# whole again — every mean_reversion config now carries a regime gate.
-# WHY: the v47 exemption carried a defined close-out ("folds into a later prune if it
-# fails its adoption episode") and the episode failed. All-time across every
-# momentum-as-MR cell: 619 submitted, 603 decided, 0 COMPONENTS, 0 promotes; median
-# CPCV NEGATIVE in both bare-drop buckets (-0.3142 swing_mid, -0.2621 swing_short);
-# best-ever 1.1598 against a 0.9439 book floor and a 1.5 promotion gate. The v31
-# rv_rank-pinned lineage was already condemned by Crucible (69/69 dead) and carries no
-# CPCV values at all — those configs die at earlier gates.
-# THE TRIAL RAN ITS FULL COURSE AND THE INTERMEDIATE SIGNALS LIED: v35's bare-drop
-# improved median OOS trades 4 -> 13 and WF-zero 97.3% -> 70%, D282 veto-froze the pane
-# mid-trial to let it accrue, both improvements HELD, and neither produced a component.
-# Trade-count and WF-zero gains are not evidence of component production.
-# Emission proof: the v31 registry (which SERVES `momentum`) now enumerates BYTE-
-# IDENTICALLY to the v29 one (which does not) — an id truly out of the grammar is one
-# whose presence in the registry is undetectable in the output. Goldens: the v31 cold-
-# start golden is retired into the v29 one it now equals; no other golden moves.
-# Buys ~530 configs/batch of flow and takes freeze metric B 0.42% -> ~0, emptying
-# condition (A)'s ledger. Surface-minimisation and throughput, NOT a promotion unlock:
-# the DSR charge is slot-scoped (D310) and this cell shared its slot with live MR
-# supply. Prereg `0a5ddc861aae`. See D328.
-
-grammar_version: v52
+grammar_version: v51
 
 rules:
   # =========================================================================
