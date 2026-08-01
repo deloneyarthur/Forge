@@ -206,7 +206,25 @@ from crucible_contracts import (
 # A/B is withdrawn and Crucible's "clear to emit" GO stands deliberately unused. Adopting
 # anyway to keep pin==installed per the bump->adopt discipline; the fields default to None and
 # their absence maps to "unset", never to the control arm.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.39.0"
+# 1.40.0 (2026-08-01, Crucible): `generation_arm` WIDENED to
+# Literal["prior_on","prior_off","baseline","book_usable"] — the fix for the D342 incident,
+# where we stamped "baseline"/"book_usable" against the 1.39.0 two-value Literal, took the
+# daemon down ~6h and put 350 configs in their inbox/errors. Our names, verbatim.
+# THREE DECISIONS THEY MADE THAT WE INHERIT, recorded because they constrain future work:
+#   * ONE FIELD, not one per experiment. Consequence, documented on the field: TWO GENERATION
+#     EXPERIMENTS CANNOT RUN CONCURRENTLY on `generation_arm`. The prior A/B is parked; if it
+#     is ever revived alongside another, that is when a second field gets minted — not before.
+#   * The Literal STAYS CLOSED at four values. Their argument is D342 itself: narrowness
+#     caught a cross-system stamp bug AT the boundary instead of letting our regime-weight
+#     arms silently masquerade as the parked prior A/B. Widening to `str` would trade a loud
+#     incident for silent misclassification. We agree; do not ask for `str`.
+#   * Adoption order is already safe: their reader fleet (inbox watcher, runners, refit
+#     watcher, publishers) restarted on 1.40.0 and a real D342 config with "baseline"
+#     round-trips through the live inbox parser. Nothing of ours will be rejected.
+# PIN-ONLY adopt, no Forge code change — the emit path (D342's stamp-time `model_validate`)
+# already produces these values and simply stops raising. The two deliberately-red D341 tests
+# go green here, which is the intended signal that the gap closed rather than a fix to them.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.40.0"
 
 
 def check_contracts_version() -> str:

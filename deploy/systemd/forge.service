@@ -171,16 +171,15 @@ Environment=FORGE_TREND_LANE_SLOTS=40
 #
 # UNSET/0/malformed = byte-identical (no arm coin, no rng consumed, no tag). REVERT = delete
 # this line + daemon-reload + restart. Journal line when live: `generation_arm_ab: ACTIVE`.
-# 2026-07-31 DISABLED AFTER A ~6h SELF-INFLICTED OUTAGE. `generation_arm` is a
-# Literal['prior_on','prior_off'] in contracts 1.39.0, NOT a free string -- the adopt note in
-# contracts_check.py says so in as many words. We emitted 'baseline'/'book_usable', which
-# `model_copy` accepted because it does NOT validate, so 350 rows were written that every
-# subsequent reader then choked on (both model_validate_json AND parse_forward_compatible --
-# a literal_error is the D261 face that forward-compat does not cover). The daemon failed
-# every iteration for ~6h and Crucible's queue drained to 4.
-# Re-enable ONLY after contracts widens the literal to admit our arm names. Rows cleaned;
-# the mechanism, weights and read tooling are all built and tested and need no change.
-Environment=FORGE_GENERATION_ARM_B_SHARE=0
+# 2026-08-01 RE-ENABLED at 0.5. Disabled 07-31 after a ~6h self-inflicted outage: we stamped
+# "baseline"/"book_usable" against 1.39.0's two-value Literal, `model_copy` accepted it without
+# validating, and 350 configs were rejected at Crucible's inbox (D342). Contracts 1.40.0 WIDENS
+# the Literal to admit both names verbatim; their reader fleet restarted on it and a real D342
+# config round-trips through the live inbox parser. Our emit path now validates AT the stamp,
+# so an inadmissible value fails loudly and locally instead of writing silently.
+# NOTE the constraint their one-field design carries: two generation experiments cannot run
+# concurrently on `generation_arm`. This A/B owns it while it runs.
+Environment=FORGE_GENERATION_ARM_B_SHARE=0.5
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
