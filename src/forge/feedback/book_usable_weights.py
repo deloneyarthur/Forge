@@ -37,6 +37,16 @@ if TYPE_CHECKING:
 
 # The weakest component ever used in a promoted book, at ADMISSION time. Crucible's later
 # 0.9115 refit was retracted; this is the figure their 2026-07-26 correction restored.
+#
+# DO NOT REFRESH THIS FROM A POST-2026-08-02 PROMOTED POPULATION WHILE THE GENERATION A/B IS
+# RUNNING (prereg `4e369b779ca9`). It is not a diagnostic here — it *defines* arm B, whose
+# regime weights are scored on the book-usable rate. Crucible's search lane switched its
+# traded unit on 08-02 (tail overlay OFF, enforcing the 07-09 §20 decision it had drifted
+# past), which reads ~0.05-0.11 higher on the Sharpe family. That lifts book cards across
+# §8.7, admits more components, and can drag this floor DOWN for UNIT reasons rather than
+# supply ones — loosening arm B's definition mid-flight. A pinned literal is what keeps the
+# experiment honest across that boundary; if the floor is ever re-derived, carry the
+# tail-ON-era and tail-OFF-era figures as separate constants rather than blending them.
 BOOK_FLOOR: float = 0.9439
 
 # Beta prior on the regime marginal. Deliberately weak: the marginal has ~150-800 configs per

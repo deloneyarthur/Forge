@@ -1,5 +1,24 @@
 # Forge — Status
 
+## 2026-08-01 (THE INBOOK FIX SHIPPED SAME-DAY + **a TRADED-UNIT change lands 08-02 that must not be read as supply** — and the one place it could contaminate us is the LIVE A/B's arm-B definition) (D346)
+
+- **THE UN-CONFOUNDING IS LIVE FROM THE 08-02 05:00 TICK.** Crucible shipped the inbook fix this afternoon (operator-signed): incumbent legs now resolve from the **promoted composition**, pool membership required only of NEW entrants. Dry-run candidate batch **4 → 8**, with `inbook_aa315324_add_*` and `664b137e` extensions in the set — **`664b137e` was ALSO silently inextensible** and nobody knew.
+  - **Precision on which of our numbers un-confounds when, and it is not "instantly":** admission-time marginal ranking un-confounds at the 08-02 tick (every entrant scored against every promoted base, champion included). The D213 export marginals we quoted (−0.3315 / −0.0176) are leave-one-out properties of the books they sit in and **do not retroactively change** — the un-confounded dilution read arrives with the first champion-lineage promotions. Our "redundancy stands, dilution magnitude confounded" split was accepted verbatim.
+- **MARGIN: KEEP 183 DAYS, UNIFORM — no change, and their reasoning is now on the record.** It also absorbs floor movement (earlier-on-backfill) and the asof-vs-calendar skew; the cost is two swing_long names for a few months in the lane our own converge program says is emitting near-duplicates at corr 0.66–0.79. "Uniform beats a per-lane knob nobody will remember the reason for."
+- **⚠️ TRADED-UNIT CHANGE 08-02: the search lane's tail overlay is now OFF.** It was enforcing a 2026-07-09 §20 decision (`portfolio-campaign-tail-off-everywhere`, tail measured at ~−$26k over 8.5y) that the later-built search lane had **drifted past** — all four search-promoted books carry the tail by drift, not decision. Their ablation on `c52c1ab3`:
+
+  | | tail ON | tail OFF | delta |
+  |---|--:|--:|--:|
+  | wf_max_drawdown_worst | 0.1178 | 0.1178 | **0.0 — byte-identical** |
+  | wf_sharpe_median | 2.4267 | 2.5378 | **+0.111** |
+  | cpcv_sharpe_p25 | 1.6693 | 1.7229 | +0.054 |
+  | wf_sharpe_p10 | 0.4323 | 0.3658 | **−0.067** |
+
+  **The tail bought exactly zero worst-drawdown protection** — the one axis it exists for — at 0.11 of median Sharpe (66 `tail_roll_reopen_unaffordable` events today alone: the carve-out often cannot re-open after rolls, so the hedge is absent when it matters). **Post-08-02 book cards read ~0.05–0.11 higher on the Sharpe family. That is the UNIT, not our supply.**
+- **WE TRACK NO BOOK-CARD SERIES — verified, not assumed.** Every yardstick we steer or train on is component-level (`verdicts` cpcv / wf_p25 / p10); the tail is a **portfolio-level** overlay that never touches a component card. `promoted_leg_recall.py` reads the export for `component_run_id` labels only, not `gated_run.run.metrics`. **Nothing to split.**
+- **⚠️ THE ONE REAL EXPOSURE IS SECOND-ORDER AND IT TOUCHES A RUNNING EXPERIMENT.** `BOOK_FLOOR = 0.9439` (`feedback/book_usable_weights.py:40`) — the weakest component ever admitted to a promoted book — **defines arm B of the LIVE generation A/B** (prereg `4e369b779ca9`). If tail-OFF lifts book cards, more books clear §8.7, more components become promoted, and the floor can move DOWN for **unit** reasons. It is a **pinned literal in 4 places and is never recomputed from the export**, so it cannot drift on its own — **but do NOT refresh it from a post-08-02 population while the A/B runs.** That would import a unit change into a running experiment mid-flight.
+- **`c52c1ab3`'s distinctive property shrinks under the new unit, honestly noted:** its p10 goes 0.4323 → 0.3658. Still the only positive p10 on the board, but ~15% of it was the overlay Crucible just removed. **Ask 1 does not reopen** — the 0.1178 worst-DD is the book's own path, not the tail, and tail-off cpcv_p25 lands 1.7229 vs the champion's 1.7236.
+
 ## 2026-08-01 (CRUCIBLE ANSWERED EVERYTHING — **the window is PER-BUCKET (swing_long is SEVEN years), our Ask-4 decorrelation mechanism is REFUTED at n=7,439, the champion criterion turned out not to exist in code, and our scale-down algebra was killed by their measurement. Two of our four asks landed; two of ours were wrong. Filter corrected in-tree.**) (D345)
 
 - **⚠️ STANDING OBLIGATION (unchanged): REVERT `FORGE_PREFILTER_SAMPLE_N` 150 → 40 WHEN THE A/B RESOLVES.** ~31% of ranked production/day until then.
