@@ -897,6 +897,7 @@ def _pick_underlying(
     underlying_class_weights: Mapping[str, float] | None = None,
     underlying_name_weights: Mapping[str, float] | None = None,
     deprioritize_diversified: bool = False,
+    below_inception: frozenset[str] = frozenset(),
 ) -> str | None:
     """Per-config underlying selection from the Tier 1+2 pool.
 
@@ -940,6 +941,15 @@ def _pick_underlying(
     # D278 (v34): filter AFTER the branch so it covers both pools; order
     # preserved (filter, not set ops) so the draw stays deterministic (#6).
     pool = tuple(u for u in pool if u not in _STRUCTURALLY_UNTRADEABLE_UNDERLYINGS)
+    # Chain-inception floor (Crucible `chain_inception_floors_*.json`): a name whose option
+    # chain begins after the implied window start can only ever return `pre_inception` —
+    # permanent for the window, since pre-IPO chains cannot be backfilled. Same filter-not-
+    # set-ops ordering as D278 above so the draw stays deterministic (#6). Empty set (no
+    # export, or every name has history) => byte-identical. NOT a frozen list like D278's:
+    # floors move EARLIER on backfill and the window slides, so the set is recomputed per
+    # batch from the newest export — a pinned list would starve names that became legal again.
+    if below_inception:
+        pool = tuple(u for u in pool if u not in below_inception)
     # D320 (refutation wiring) — `broad-index-vol-event`: deprioritize the
     # DIVERSIFIED (ETF/index) class for ve. Only the index half is mapped (the
     # single-name half feeds Crucible's ve-solo-density unlock). Gate on the pool
@@ -1144,6 +1154,7 @@ def sample_config(
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     refutation_effects: RefutationEffects | None = None,
+    below_inception: frozenset[str] = frozenset(),
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -1335,6 +1346,7 @@ def sample_config(
             refutation_effects is not None
             and hypothesis in refutation_effects.deprioritize_diversified_hypotheses
         ),
+        below_inception=below_inception,
     )
 
     # H1 (v12 / D109) — cross_sectional_rank combiner, the breadth lever. Drawn

@@ -150,6 +150,7 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     refutation_effects: RefutationEffects | None = None,
+    below_inception: frozenset[str] = frozenset(),
     generation_arm_b_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     generation_arm_b_share: float = 0.0,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
@@ -290,6 +291,7 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
                     else regime_gate_yield_weights
                 ),
                 refutation_effects=refutation_effects,
+                below_inception=below_inception,
                 forced_hypothesis=forced_hypothesis,
             )
         except SamplerError as exc:

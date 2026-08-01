@@ -1667,6 +1667,7 @@ def _run_battery_for_seed(
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     generation_arm_b_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     generation_arm_b_share: float = 0.0,
+    below_inception: frozenset[str] = frozenset(),
     refutation_effects: RefutationEffects | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
@@ -1742,6 +1743,7 @@ def _run_battery_for_seed(
             regime_gate_yield_weights=regime_gate_yield_weights,
             generation_arm_b_weights=generation_arm_b_weights,
             generation_arm_b_share=generation_arm_b_share,
+            below_inception=below_inception,
             refutation_effects=refutation_effects,
             min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
         )
@@ -2226,6 +2228,22 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # iterator draws no arm coin, consumes no rng and stamps no `generation_arm`, so the
     # stream is byte-identical to the pre-feature one (hard rule #6). Loading the map is
     # skipped entirely when the share is 0 so a cold/absent DB costs nothing.
+    from forge.core.clock import utc_now as _utc_now
+    from forge.enumeration.chain_inception import underlyings_below_inception
+
+    # Chain-inception floors (Crucible `chain_inception_floors_*.json`, daily 20:30). Names
+    # whose option chain begins after the implied window start can only return
+    # `pre_inception` — permanent for the window, since pre-IPO chains cannot be backfilled.
+    # Recomputed EVERY batch from the newest export, never pinned: floors move earlier on
+    # backfill and the sliding window un-hits names over time, so a frozen list would both
+    # starve names that became legal again and miss names that just became illegal.
+    # Fail-open — no export => empty set => emission byte-identical (hard rule #6).
+    below_inception = underlyings_below_inception(_utc_now().date())
+    if below_inception:
+        typer.echo(
+            f"chain_inception: excluding {len(below_inception)} underlying(s) whose chain "
+            f"starts after the implied window ({', '.join(sorted(below_inception))})"
+        )
     generation_arm_b_share = _resolve_generation_arm_b_share()
     generation_arm_b_weights: dict[tuple[str, str, str, str], float] = {}
     if generation_arm_b_share > 0.0:
