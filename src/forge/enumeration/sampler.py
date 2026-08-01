@@ -53,6 +53,7 @@ from crucible_contracts import (
 from crucible_contracts.exceptions import QueryError
 
 from forge.enumeration import defaults
+from forge.enumeration.chain_inception import ChainInceptionExclusions
 from forge.enumeration.indicator_thresholds import (
     is_threshold_skippable,
     sample_threshold_params,
@@ -1154,7 +1155,7 @@ def sample_config(
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     refutation_effects: RefutationEffects | None = None,
-    below_inception: frozenset[str] = frozenset(),
+    below_inception: ChainInceptionExclusions | None = None,
     forced_hypothesis: str | None = None,
 ) -> StrategyConfig:
     """Construct one grammar-valid ``StrategyConfig`` using ``rng`` for every choice.
@@ -1346,7 +1347,11 @@ def sample_config(
             refutation_effects is not None
             and hypothesis in refutation_effects.deprioritize_diversified_hypotheses
         ),
-        below_inception=below_inception,
+        # Per-BUCKET: Crucible queues swing_long on a 7-year window and the others on 5, so
+        # the exclusion set is resolved against this config's bucket, never flat.
+        below_inception=(
+            below_inception.for_bucket(bucket) if below_inception is not None else frozenset()
+        ),
     )
 
     # H1 (v12 / D109) — cross_sectional_rank combiner, the breadth lever. Drawn

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from forge.core.seed import SeedHierarchy
+from forge.enumeration.chain_inception import ChainInceptionExclusions
 from forge.enumeration.sampler import SamplerError, sample_config
 from forge.enumeration.search_space import (
     NON_ENUMERABLE_HYPOTHESES,
@@ -150,7 +151,7 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
     cohort_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     refutation_effects: RefutationEffects | None = None,
-    below_inception: frozenset[str] = frozenset(),
+    below_inception: ChainInceptionExclusions | None = None,
     generation_arm_b_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     generation_arm_b_share: float = 0.0,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
@@ -340,6 +341,4 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
         if _arm is None:
             yield cfg
         else:
-            yield type(cfg).model_validate(
-                {**cfg.model_dump(mode="json"), "generation_arm": _arm}
-            )
+            yield type(cfg).model_validate({**cfg.model_dump(mode="json"), "generation_arm": _arm})

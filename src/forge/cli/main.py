@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from crucible_contracts import RegistrySnapshot, StrategyConfig
 
     from forge.enumeration import RefutationEffects
+    from forge.enumeration.chain_inception import ChainInceptionExclusions
     from forge.feedback.trade_rate_priors import BucketKey, BucketStats
     from forge.feedback.types import BatchFeedback
     from forge.grammar import Grammar
@@ -1667,7 +1668,7 @@ def _run_battery_for_seed(
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     generation_arm_b_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     generation_arm_b_share: float = 0.0,
-    below_inception: frozenset[str] = frozenset(),
+    below_inception: ChainInceptionExclusions | None = None,
     refutation_effects: RefutationEffects | None = None,
     trade_rate_priors: Mapping[BucketKey, BucketStats] | None = None,
     forge_db_path: Path | None = None,
@@ -2232,17 +2233,24 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     from forge.enumeration.chain_inception import underlyings_below_inception
 
     # Chain-inception floors (Crucible `chain_inception_floors_*.json`, daily 20:30). Names
-    # whose option chain begins after the implied window start can only return
-    # `pre_inception` — permanent for the window, since pre-IPO chains cannot be backfilled.
+    # whose option chain begins after the window start can only return `pre_inception` —
+    # permanent for the window, since pre-IPO chains cannot be backfilled.
     # Recomputed EVERY batch from the newest export, never pinned: floors move earlier on
     # backfill and the sliding window un-hits names over time, so a frozen list would both
     # starve names that became legal again and miss names that just became illegal.
-    # Fail-open — no export => empty set => emission byte-identical (hard rule #6).
+    # PER-BUCKET: swing_long is queued on 7 years and the rest on 5, so this is a set per
+    # bucket, not one list — the sampler resolves it against each config's own bucket.
+    # Fail-open — no export => empty => emission byte-identical (hard rule #6).
     below_inception = underlyings_below_inception(_utc_now().date())
     if below_inception:
+        by_bucket = ", ".join(
+            f"{bucket}={len(below_inception.for_bucket(bucket))}"
+            for bucket in ("swing_short", "swing_mid", "swing_long")
+        )
         typer.echo(
-            f"chain_inception: excluding {len(below_inception)} underlying(s) whose chain "
-            f"starts after the implied window ({', '.join(sorted(below_inception))})"
+            f"chain_inception: excluding {len(below_inception.all_names())} underlying(s) "
+            f"whose chain starts after the window [{by_bucket}] "
+            f"({', '.join(sorted(below_inception.all_names()))})"
         )
     generation_arm_b_share = _resolve_generation_arm_b_share()
     generation_arm_b_weights: dict[tuple[str, str, str, str], float] = {}
@@ -2255,9 +2263,7 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
                 f"— arm B vs the incumbent component-rate map, concurrent in every batch"
             )
         else:
-            typer.echo(
-                "generation_arm_ab: share set but no honest-arm weights yet — arm INERT"
-            )
+            typer.echo("generation_arm_ab: share set but no honest-arm weights yet — arm INERT")
     regime_gate_yield_weights: dict[tuple[str, str, str, str], float] = {}
     if regime_gate_yield:
         regime_gate_yield_weights = _load_regime_gate_yield_weights(
