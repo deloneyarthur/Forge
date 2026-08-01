@@ -1,5 +1,18 @@
 # Forge — Status
 
+## 2026-07-31 (INCIDENT — RECOVERED) — **the generation A/B stamped a value the contract forbids: ~6h daemon outage, 350 configs rejected at Crucible's inbox, §7.3 wedged behind a 5-day auto-flush. Production restored; the A/B is BLOCKED on a contracts widening.** (D342)
+
+- **PRODUCTION RESTORED.** Batch `3d31d921`: 350 configs, all `generation_arm` null, **0 inbox errors**, outstanding `submitted` rows **0**, limiter released, NRestarts=0.
+- **ROOT CAUSE, ours.** `generation_arm` is `Literal['prior_on','prior_off']` (contracts 1.39.0). We stamped `"baseline"`/`"book_usable"`. **The adopt note in `contracts_check.py` names those two values and we quoted it in a relay the same day.** 340 failed iterations from 17:14 PDT. Crucible spotted it independently ("newest submission ~6.7h old; queue drained to 4") and correctly ruled out their own P2 change.
+- **THREE GUARDS, THREE HOLES — the actual finding:** (1) `model_copy(update=…)` **does not validate**; (2) the test asserted `arms["baseline"] > 0` **on that unvalidated object** and passed green; (3) `parse_forward_compatible` covers extra *fields*, not unknown *literal values* — the [[D261]] face, documented in this repo, fallen through again.
+- **CROSS-SYSTEM, which the local symptoms hid.** The same 350 configs were already in Crucible's inbox and **all rejected** (700 files in `inbox/errors/` at 17:14). So batch `8b77f2ff` could never gate and §7.3 wedged on it — **`STRANDED_AFTER` = 5 days** before the D110 flush would have cleared it. Writing an invalid value is not a local error when the write path is someone else's inbox.
+- **RECOVERY:** DB backed up first (`forge.db.pre_arm_cleanup_20260731_230544`) → nulled the 350 rows (2,000 most-recent now parse clean) → `FORGE_GENERATION_ARM_B_SHARE=0` → restart → retired the rejected rows with the **D110 aged-out sentinel** (existing mechanism, not invented).
+- **DURABLE FIX:** the iterator now **validates at the stamp** rather than `model_copy`. Two D341 tests correctly **fail** against the current literal — that red *is* the proof the hole is closed, and it stays red until the contract admits our names.
+- **⚠️ A/B BLOCKED, NOT ABANDONED.** Mechanism, arm-B weights and read tooling all built and tested; **only the literal blocks it.** Hard rule #2 — a contracts gap to **surface, not work around**. Repurposing `prior_on`/`prior_off` would have restored it today and left Crucible reading our arms as their parked prior A/B.
+- **THE LESSON, and it is not "read the contract" — we did.** Three layers each validated the wrong thing: a copy that skips validation, a test asserting on that copy, and a tolerant reader tolerant of a *different* failure. **When a value crosses a system boundary, the test must round-trip it through the boundary's own validator.**
+- **OWED TO CRUCIBLE:** they hold 350 rejected files and diagnosed the symptom. Their pre-authorised **300s limiter rollback is NOT needed** — the drain was us, not their export cadence. Relay + the `generation_arm` widening request are the next action.
+- **UNAFFECTED:** `FORGE_PREFILTER_SAMPLE_N=150` still live (ramp obligation stands), trend-lane prereg `4d1fa832789f` still accruing, v52 unaffected.
+
 ## 2026-07-31 (CAN WE MEASURE EXHAUSTION?) — **the 1.5-gate rate needs 183 days/arm, per-CELL production is NOISE (z=+0.29), and the answer is a concurrent GENERATION A/B — DEPLOYED, plus the honest arm ramped 40→150.** (D341)
 
 - **⚠️ STANDING OBLIGATION — REVERT `FORGE_PREFILTER_SAMPLE_N` TO 40 WHEN THE A/B RESOLVES.** At 150 we forgo **~31% of ranked production/day**. Time-boxed to this experiment only.

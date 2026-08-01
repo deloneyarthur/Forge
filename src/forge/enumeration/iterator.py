@@ -327,4 +327,17 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
         # cannot move config_hash — which is the precondition for the A/B, since a hash-bearing
         # arm tag would make an identical config drawn by both arms dedup into two strategies
         # and the comparison would measure dedup instead of the weighting.
-        yield cfg if _arm is None else cfg.model_copy(update={"generation_arm": _arm})
+        #
+        # RE-VALIDATED, and that is not belt-and-braces (2026-07-31 incident). `generation_arm`
+        # is a Literal, and `model_copy` does NOT validate — so an unaccepted arm name writes
+        # cleanly here and then detonates in every READER of the row, including
+        # `parse_forward_compatible`, because a literal_error is the D261 face forward-compat
+        # does not cover. That cost ~6h of daemon downtime and 350 poisoned rows. Validating at
+        # the stamp turns a silent write into a loud, local failure at the only point that can
+        # still fix it.
+        if _arm is None:
+            yield cfg
+        else:
+            yield type(cfg).model_validate(
+                {**cfg.model_dump(mode="json"), "generation_arm": _arm}
+            )
