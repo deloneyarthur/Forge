@@ -56,6 +56,8 @@ Usage: freeze_tail_reading.py SNAPSHOT.db [--window 1200]
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import statistics
 from collections import Counter
 from pathlib import Path
@@ -63,7 +65,8 @@ from pathlib import Path
 from forge.persistence.db import db_connection
 
 _QUERY = """
-    SELECT json_extract_string(s.config_json,'$.hypothesis'),
+    SELECT s.config_hash,
+           json_extract_string(s.config_json,'$.hypothesis'),
            json_extract_string(s.config_json,'$.dte_bucket'),
            TRY_CAST(json_extract_string(v.gate_results,'$.cpcv_sharpe_p25.value') AS DOUBLE)
     FROM submissions s JOIN verdicts v ON v.config_hash = s.config_hash
@@ -82,12 +85,45 @@ _CENSOR_QUERY = """
     GROUP BY 1 ORDER BY 2 DESC
 """
 
-Obs = tuple[str, float]  # (cell, cpcv)
+Obs = tuple[str, float, float | None]  # (cell, cpcv, |corr to reference book| or None)
+
+# The redundancy leg's reference book. `frozen_b36f49a4` is used because it has FULL coverage
+# of our honest arm (13,480 of 13,480 joined rows) where the newest book covers only 2,494 --
+# a reference that appears mid-window would make the series discontinuous for a reason that has
+# nothing to do with our supply. If the operator's designation flips (D348: QuantIQ's mandate
+# currently prefers f52a05c8), the reference must be RE-PINNED AND RE-BASED, never silently
+# switched: the level differs between books, so swapping mid-window would read as redundancy
+# movement that never happened.
+_REF_BOOK = "frozen_b36f49a4"
+
+
+def _load_corr() -> dict[str, float]:
+    """`{config_hash: |corr to the reference book|}` from Crucible's newest export, or {}.
+
+    Fail-open: no export, unreadable, or the reference book absent -> empty map -> the
+    redundancy leg reports as unavailable rather than silently reading zero redundancy. A leg
+    that quietly passes when its input is missing is worse than one that says it cannot run.
+    """
+    root = Path.home() / "optbt_data" / "exports"
+    try:
+        files = sorted(root.glob("corr_to_book_*.json"), key=lambda q: q.stat().st_mtime)
+        if not files:
+            return {}
+        payload = json.loads(files[-1].read_text())
+    except (OSError, ValueError):
+        return {}
+    out: dict[str, float] = {}
+    for row in payload.get("rows", []):
+        c = (row.get("corr") or {}).get(_REF_BOOK)
+        h = row.get("config_hash")
+        if h and c is not None:
+            out[str(h)] = abs(float(c))
+    return out
 
 
 def _wq(obs: list[Obs], w: dict[str, float], p: float) -> float:
     """Weighted quantile: the value where cumulative weight crosses p."""
-    pairs = sorted(((v, w.get(c, 0.0)) for c, v in obs), key=lambda t: t[0])
+    pairs = sorted(((v, w.get(c, 0.0)) for c, v, _ in obs), key=lambda t: t[0])
     total = sum(x for _, x in pairs)
     if total <= 0:
         return float("nan")
@@ -102,8 +138,33 @@ def _wq(obs: list[Obs], w: dict[str, float], p: float) -> float:
 def _tcm(obs: list[Obs], w: dict[str, float], p: float = 0.90) -> float:
     """Weighted tail-conditional mean: mean of everything at/above the weighted p-quantile."""
     thr = _wq(obs, w, p)
-    num = sum(w.get(c, 0.0) * v for c, v in obs if v >= thr)
-    den = sum(w.get(c, 0.0) for c, v in obs if v >= thr)
+    num = sum(w.get(c, 0.0) * v for c, v, _ in obs if v >= thr)
+    den = sum(w.get(c, 0.0) for c, v, _ in obs if v >= thr)
+    return num / den if den > 0 else float("nan")
+
+
+def _tcm_corr(obs: list[Obs], w: dict[str, float], p: float = 0.90) -> float:
+    """THE REDUNDANCY LEG: weighted mean |corr to book| among the TOP-DECILE-BY-QUALITY configs.
+
+    Deliberately the same population as the quality leg -- same window, same weighted p90
+    threshold, same post-stratification -- because the question is not "is our average config
+    redundant" but "is the supply that would actually be USED becoming redundant". Crucible
+    measured IC(cpcv, corr_to_book) = +0.547 (zero-fill-equivalent, confirmed 2026-08-02): the
+    better components ARE the more correlated ones, so a quality-only freeze condition can
+    certify "done" exactly when the stream is most efficiently producing supply that dilutes
+    their books. Visible in our own data: top decile |corr| 0.3837 against 0.3171 for the rest.
+
+    RISING IS WORSE. The leg passes when this has NOT risen beyond its own measured floor.
+
+    Crucible's two conditions on this use, both honoured: it is a SUPPLY statistic and must
+    never become a generation target ("report it, do not tune against it"), and it is
+    COHORT-SCOPED -- post-stratified over (hypothesis, dte_bucket), because a pooled read would
+    reintroduce exactly the composition drift that contaminated the quality bar.
+    """
+    thr = _wq(obs, w, p)
+    top = [(c, r) for c, v, r in obs if v >= thr and r is not None]
+    num = sum(w.get(c, 0.0) * r for c, r in top)
+    den = sum(w.get(c, 0.0) for c, _ in top)
     return num / den if den > 0 else float("nan")
 
 
@@ -115,7 +176,7 @@ def _weights(window: list[Obs], ref: dict[str, float]) -> tuple[dict[str, float]
     silently returning a standardized-looking number built on half the strata.
     """
     n = len(window)
-    seen = Counter(c for c, _ in window)
+    seen = Counter(c for c, _, _ in window)
     w = {c: (ref[c] / (k / n)) for c, k in seen.items() if c in ref and k}
     coverage = sum(ref[c] for c in seen if c in ref)
     return w, coverage, (max(w.values()) if w else float("nan"))
@@ -135,9 +196,8 @@ def _decompose(series_by_width: dict[int, list[float]]) -> tuple[float, float, f
     movement "flat" and freezes a grammar that is still improving. Only one of those is
     recoverable, so the conservative choice is the wider floor.
     """
-    pts = [
-        (n, statistics.pstdev(s) ** 2) for n, s in sorted(series_by_width.items()) if len(s) >= 3
-    ]
+    clean = {n: [v for v in s if not math.isnan(v)] for n, s in sorted(series_by_width.items())}
+    pts = [(n, statistics.pstdev(s) ** 2) for n, s in clean.items() if len(s) >= 3]
     if len(pts) < 3:
         return float("nan"), float("nan"), float("nan")
 
@@ -165,8 +225,13 @@ def _series(obs: list[Obs], ref: dict[str, float], width: int, std: bool, stat: 
     out = []
     for i in range(0, len(obs) - width + 1, width):
         win = obs[i : i + width]
-        w = _weights(win, ref)[0] if std else dict.fromkeys({c for c, _ in win}, 1.0)
-        out.append(_tcm(win, w) if stat == "tcm" else _wq(win, w, 0.90))
+        w = _weights(win, ref)[0] if std else dict.fromkeys({c for c, _, _ in win}, 1.0)
+        if stat == "tcm":
+            out.append(_tcm(win, w))
+        elif stat == "tcm_corr":
+            out.append(_tcm_corr(win, w))
+        else:
+            out.append(_wq(win, w, 0.90))
     return out
 
 
@@ -179,11 +244,16 @@ def main() -> int:
     with db_connection(Path(args.snapshot)) as conn:
         raw = conn.execute(_QUERY).fetchall()
         censor = conn.execute(_CENSOR_QUERY).fetchall()
-    obs: list[Obs] = [(f"{h}/{b}", v) for h, b, v in raw if v is not None]
+    corr = _load_corr()
+    obs: list[Obs] = [(f"{h}/{b}", v, corr.get(ch)) for ch, h, b, v in raw if v is not None]
+    joined = sum(1 for o in obs if o[2] is not None)
     n = len(obs)
-    ref_counts = Counter(c for c, _ in obs)
+    ref_counts = Counter(c for c, _, _ in obs)
     ref = {c: k / n for c, k in ref_counts.items()}
-    print(f"honest arm, stage one, with cpcv: n={n}   cells={len(ref)}")
+    print(
+        f"honest arm, stage one, with cpcv: n={n}   cells={len(ref)}   "
+        f"joined to corr_to_book: {joined} ({100 * joined / n:.1f}%)"
+    )
 
     widths = (300, 400, 600, 800, 1200)
     print(
@@ -191,16 +261,17 @@ def main() -> int:
         f"{'b':>9}{'b_up':>9}{'BAR 2b_up':>10}"
     )
     bars: dict[str, float] = {}
-    for stat in ("p90", "tcm"):
+    for stat in ("p90", "tcm", "tcm_corr"):
         for std in (False, True):
             by_w = {w: _series(obs, ref, w, std, stat) for w in widths}
             _a, b, b_up = _decompose(by_w)
-            s = by_w[args.window]
+            s = [v for v in by_w[args.window] if not math.isnan(v)]
+            s400 = [v for v in by_w[400] if not math.isnan(v)]
             label = f"{stat} {'STANDARDISED' if std else 'raw (pooled)'}"
             bars[label] = 2 * b_up
             print(
                 f"{label:<28}{len(s):>4}{statistics.fmean(s):>10.4f}"
-                f"{statistics.pstdev(by_w[400]):>9.4f}{statistics.pstdev(s):>10.4f}"
+                f"{statistics.pstdev(s400):>9.4f}{statistics.pstdev(s):>10.4f}"
                 f"{b:>9.4f}{b_up:>9.4f}{2 * b_up:>9.4f}"
             )
 
@@ -227,10 +298,52 @@ def main() -> int:
             f"{'MOVING' if drift > bar else 'flat within the drift floor'}"
         )
 
+    _leg2(obs, ref, args.window, joined, n, bars["tcm_corr STANDARDISED"])
+
     print("\n=== companions (never the trigger) ===")
+    _companions(obs, censor, args.window)
+    return 0
+
+
+def _leg2(
+    obs: list[Obs], ref: dict[str, float], width: int, joined: int, n: int, b_bar: float
+) -> None:
+    """Leg 2 of freeze condition (C): has the GOOD supply become more redundant?"""
+    print("\n=== LEG 2 (redundancy): TCM-corr, composition-standardised ===")
+    if joined < 0.5 * n:
+        print("  UNAVAILABLE -- corr_to_book join below 50%; the leg does not run.")
+    else:
+        rser = _series(obs, ref, width, True, "tcm_corr")
+        print("  " + " ".join(f"{v:.4f}" for v in rser))
+        # DIRECTION: "worse" means MORE redundant, i.e. HIGHER. The reference is therefore the
+        # prior MAXIMUM -- exactly parallel to the quality leg asking whether the newest window
+        # exceeded its previous best. Comparing against the prior MINIMUM (the first thing this
+        # printed) is a max-drawup, which any noisy series clears; it reported WORSENED off a
+        # +0.0214 excursion from a lucky low window.
+        #
+        # BAR: max(2*b_up, 2*sd). The a/b split collapses here -- sd shrinks 0.0154 -> 0.0087
+        # from n=400 to n=1200, almost exactly 1/sqrt(n), so the fitted drift term is ~0 and
+        # 2*b_up alone would be 0.0034 against a series whose own spread is 0.0087. A bar three
+        # times tighter than the noise is not conservatism, it is a leg that always fails.
+        # Falling back to 2*sd keeps the test on the spread actually observed at the decision
+        # width; the rule reduces to 2*b_up whenever real drift dominates sampling.
+        rclean = [v for v in rser if not math.isnan(v)]
+        rsd = 2 * statistics.pstdev(rclean)
+        rbar = max(b_bar, rsd)
+        if len(rclean) >= 2:
+            rise = rclean[-1] - max(rclean[:-1])
+            print(
+                f"  newest vs worst-prior(highest): {rise:+.4f}  bar={rbar:.4f}"
+                f" (2b_up={b_bar:.4f}, 2sd={rsd:.4f})"
+                f"  -> {'WORSENED' if rise > rbar else 'not worsened within the floor'}"
+            )
+        print(f"  reference book: {_REF_BOOK}   (RISING = more redundant = worse)")
+
+
+def _companions(obs: list[Obs], censor: list, width: int) -> None:
     p1 = [
-        sum(1 for _, v in obs[i : i + args.window] if v >= 1.0)
-        for i in range(0, len(obs) - args.window + 1, args.window)
+        sum(1 for _, v, _ in obs[i : i + width] if v >= 1.0)
+        for i in range(0, len(obs) - width + 1, width)
     ]
     print(
         f"  P(cpcv>=1.0) counts/window: {p1}  (blind spot: p90/TCM cannot see a top-1%-only lift)"
@@ -238,7 +351,6 @@ def main() -> int:
     print("  P(cpcv|submitted) by hypothesis -- a shift here moves the measured population:")
     for h, sub, meas in censor[:6]:
         print(f"    {h!s:<22} {meas:>6}/{sub:<6} = {100 * meas / sub:5.1f}%")
-    return 0
 
 
 if __name__ == "__main__":
