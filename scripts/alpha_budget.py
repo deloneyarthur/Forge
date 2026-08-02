@@ -15,8 +15,8 @@ Answers, from a forge.db snapshot alone:
 The live ``~/forge_data/forge.db`` holds an intermittent RW lock, so snapshot first
 (``docs/tasks/investigate-live.md``) and point this at the copy:
 
-    cp ~/forge_data/forge.db /tmp/forge_snap.db
-    uv run python scripts/alpha_budget.py /tmp/forge_snap.db
+    SNAP=$(scripts/live_db_snapshot.sh)   # real disk; /tmp is tmpfs and the DB is 6.7G
+    uv run python scripts/alpha_budget.py "$SNAP"
 
 Read-only; no clock/RNG (run stamps derive from the snapshot's max decided_at so
 output is a pure function of the input). Hygiene per the scope: post-cost-floor cut

@@ -14,12 +14,33 @@ journalctl --user -u forge.service --since '1 hour ago' | grep -E 'blocked|error
 ## Forge DB (the lock trap)
 
 The running service holds an intermittent RW lock on `~/forge_data/forge.db` that blocks even
-`read_only` opens. Snapshot first; the copy is consistent (DuckDB file copy):
+`read_only` opens. Snapshot first; the copy is consistent (DuckDB file copy).
+
+**Use the helper — do NOT hand-roll a `cp`, and NEVER snapshot into `/tmp`:**
 
 ```bash
-cp ~/forge_data/forge.db /tmp/forge_snapshot.db
-python -c "import duckdb; print(duckdb.connect('/tmp/forge_snapshot.db', read_only=True).sql('SELECT status, COUNT(*) FROM submissions GROUP BY status'))"
+SNAP=$(scripts/live_db_snapshot.sh)          # real disk, reused if <15 min old, path on stdout
+uv run python -c "
+from pathlib import Path
+from forge.persistence.db import db_connection
+with db_connection(Path('$SNAP')) as c:
+    print(c.execute('SELECT status, COUNT(*) FROM submissions GROUP BY status').fetchall())
+"
+scripts/live_db_snapshot.sh --clean          # when you are done
 ```
+
+> **⚠️ WHY (2026-08-02, learned the expensive way).** This section used to say
+> `cp ~/forge_data/forge.db /tmp/forge_snapshot.db`. **`/tmp` on this box is a 62 GB tmpfs —
+> RAM — and the live DB is 6.7 GB.** Nine investigation snapshots in one session filled it and
+> **took the shell down twice**: every command, including `true` and `/bin/echo`, returned exit
+> 1 with *no output*, because the harness could not write its own output capture. It does not
+> present as "disk full", it presents as the tooling being broken, and it cost a mid-task
+> investigation both times. The helper enforces real disk, reuses one snapshot instead of
+> making a new 6.7 GB copy per question, and gives you `--clean`. `python` is also not on PATH
+> here — use `uv run python`, per the same class of stale instruction.
+
+Note the daemon writes to the tree it runs from, so a snapshot ages the moment you take it;
+`--force` re-copies when you need the current state rather than a fresh-enough one.
 
 Useful queries (tables: `docs/MANPAGE.md` FORGE STATE DB):
 

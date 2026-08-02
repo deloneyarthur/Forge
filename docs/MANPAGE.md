@@ -346,8 +346,8 @@ an intermittent RW lock — point `--forge-db` at a `/tmp` snapshot.
 | `--era-cut` | str | `2026-06-10T17:17:13Z` | ISO label-era cutoff override (naive = UTC). |
 
 ```
-cp ~/forge_data/forge.db /tmp/forge_snap.db
-forge ranker-model dataset --forge-db /tmp/forge_snap.db --out /tmp/verdict_dataset.parquet
+SNAP=$(scripts/live_db_snapshot.sh)   # real disk, reused; NEVER /tmp (tmpfs, see investigate-live.md)
+forge ranker-model dataset --forge-db "$SNAP" --out /tmp/verdict_dataset.parquet
 ```
 
 ### forge ranker-model train
@@ -456,9 +456,9 @@ service restart), and the block prints a placeholder line until then.
 | `--since` | str | clean-era boundary | ISO window start (naive = UTC). |
 
 ```
-cp ~/forge_data/forge.db /tmp/forge_snap.db
-forge ranker-model train --forge-db /tmp/forge_snap.db
-forge ranker-model eval --forge-db /tmp/forge_snap.db --since 2026-06-11T00:00:00Z
+SNAP=$(scripts/live_db_snapshot.sh)   # real disk, reused; NEVER /tmp (tmpfs, see investigate-live.md)
+forge ranker-model train --forge-db "$SNAP"
+forge ranker-model eval --forge-db "$SNAP" --since 2026-06-11T00:00:00Z
 ```
 
 ### forge ranker-model eval-robustness
@@ -616,7 +616,7 @@ coordination item, not pre-judged. Snapshot the live DB first (the daemon holds 
 `ranker-model` convention.
 
 ```
-cp ~/forge_data/forge.db /tmp/snap.db && forge alpha-budget --forge-db /tmp/snap.db
+SNAP=$(scripts/live_db_snapshot.sh) && forge alpha-budget --forge-db "$SNAP"
 ```
 
 ### forge campaigns list / audit
@@ -637,7 +637,7 @@ tripwire). Read-only; snapshot the live DB first (RW-lock pitfall).
 
 ```
 forge campaigns list
-cp ~/forge_data/forge.db /tmp/snap.db && forge campaigns audit --forge-db /tmp/snap.db --days 7
+SNAP=$(scripts/live_db_snapshot.sh) && forge campaigns audit --forge-db "$SNAP" --days 7
 ```
 
 ### forge yield-audit
@@ -656,7 +656,7 @@ row-45 cross-check. Caveat before acting: cross-check flags against the CURRENT 
 names no longer drawn save nothing. Always exit 0. Snapshot the live DB first.
 
 ```
-cp ~/forge_data/forge.db /tmp/snap.db && forge yield-audit --forge-db /tmp/snap.db
+SNAP=$(scripts/live_db_snapshot.sh) && forge yield-audit --forge-db "$SNAP"
 ```
 
 ### forge prereg

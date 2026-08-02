@@ -12,8 +12,8 @@ streak grows. Answers two questions on each run:
 The live ``~/forge_data/forge.db`` holds an intermittent RW lock, so snapshot
 first (``docs/tasks/investigate-live.md``) and point this at the copy:
 
-    cp ~/forge_data/forge.db /tmp/forge_snap.db
-    uv run python scripts/tail_verified_alignment.py /tmp/forge_snap.db
+    SNAP=$(scripts/live_db_snapshot.sh)   # real disk; /tmp is tmpfs and the DB is 6.7G
+    uv run python scripts/tail_verified_alignment.py "$SNAP"
 
 Read-only. ``verified`` mirrors ``honest_regime_coverage_row``
 (``forge.feedback.rejection_weights``): the ``regime_coverage`` gate passed AND

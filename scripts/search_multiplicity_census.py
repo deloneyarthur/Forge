@@ -26,7 +26,7 @@ RW lock — even read-only opens fail; ``cp`` it first, per the standing
 pitfall). ``--snapshot-from`` will do the copy for you.
 
 Usage:
-    uv run python scripts/search_multiplicity_census.py --db /tmp/forge_snap.db
+    uv run python scripts/search_multiplicity_census.py --db "$(scripts/live_db_snapshot.sh)"
     uv run python scripts/search_multiplicity_census.py \
         --snapshot-from ~/forge_data/forge.db --out census.json
 """

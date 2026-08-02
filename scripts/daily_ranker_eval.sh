@@ -27,8 +27,15 @@
 # still prints that cumulative view for continuity with `forge ranker-model eval`.
 #
 # Safety:
-#   * Live DB holds an intermittent RW lock -> cp to /tmp and read the copy
+#   * Live DB holds an intermittent RW lock -> snapshot and read the copy
 #     (docs/tasks/investigate-live.md). PID-suffixed: no clash with other snapshots.
+#     ON REAL DISK, NOT /tmp (2026-08-02): /tmp here is a 62 GB **tmpfs** and the live DB is
+#     6.7 GB, so this copy used to take 11% of RAM-backed storage for the length of the run
+#     and competed with anything else holding a snapshot. That is the direct cause of the
+#     2026-07-09 stall -- the cp failed on a full /tmp, F3/wf_p25 silently staled, and the
+#     `model` check only CRIT'd ~2 days later. D259 responded with a DETECTOR
+#     (`tmp_headroom`, WARN below 5x / CRIT below 3.5x); this removes the failure instead.
+#     The detector stays -- it now guards a surface that no longer routinely eats tmpfs.
 #   * Train writes to a staging dir on the same filesystem, then atomically mv's
 #     the artifact into ~/forge_data/models -- the 24/7 daemon (load_latest_model
 #     every batch) never sees a half-written file.
@@ -41,7 +48,8 @@ export PATH="$HOME/.local/bin:$PATH"
 PROJ="$HOME/proj/Forge"
 LIVE_DB="$HOME/forge_data/forge.db"
 MODELS_DIR="$HOME/forge_data/models"
-SNAP="/tmp/forge_ranker_eval_$$.db"
+SNAP_DIR="${FORGE_SNAPSHOT_DIR:-$HOME/forge_data/.snapshots}"
+SNAP="$SNAP_DIR/forge_ranker_eval_$$.db"
 STAGING="$HOME/forge_data/models_staging_$$"
 OUT_DIR="$HOME/forge_data/ranker_eval"
 STREAK_LOG="$OUT_DIR/streak.jsonl"
@@ -56,7 +64,7 @@ MIN_FRESH_TAIL=50
 cleanup() { rm -rf -- "$SNAP" "$STAGING"; }
 trap cleanup EXIT
 
-mkdir -p "$OUT_DIR" "$STAGING" "$MODELS_DIR"
+mkdir -p "$OUT_DIR" "$STAGING" "$MODELS_DIR" "$SNAP_DIR"
 cd "$PROJ"
 
 # --- snapshot (DuckDB single file; cp between the daemon's ~90s write bursts,
