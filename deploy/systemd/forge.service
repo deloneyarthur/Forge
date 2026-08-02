@@ -82,7 +82,10 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 # 4.5 hours on a nearly-finished prereg for 3.7 days on the A/B.
 # ⚠️ REVERT TO 40 THE MOMENT THE A/B RESOLVES. The last ramp's lesson stands: holding it past
 # its question costs ranked production and buys no information.
-Environment=FORGE_PREFILTER_SAMPLE_N=150
+# REVERTED TO 40, 2026-08-02 (D351): the A/B resolved (prereg `4e369b779ca9` REFUTED, D350) and
+# the ramp's question is answered, so the -31% ranked cost now buys nothing. The obligation was
+# honoured in the same window the experiment closed — that is the whole point of writing it here.
+Environment=FORGE_PREFILTER_SAMPLE_N=40
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
@@ -179,7 +182,14 @@ Environment=FORGE_TREND_LANE_SLOTS=40
 # so an inadmissible value fails loudly and locally instead of writing silently.
 # NOTE the constraint their one-field design carries: two generation experiments cannot run
 # concurrently on `generation_arm`. This A/B owns it while it runs.
-Environment=FORGE_GENERATION_ARM_B_SHARE=0.5
+# A/B CLOSED 2026-08-02 (D351): prereg `4e369b779ca9` REFUTED on the post-cut cohort — honest-arm
+# p90 delta -0.0039 (arm B WORSE), bootstrap P(delta<=0) = 0.5210, and the secondary book-usable
+# rate agrees (0.60% vs 0.97%). The registered FALSIFIER action is "revert to a single map", so
+# the share goes to 0 and the incumbent component-rate map keeps the draw. NOT a pause: the
+# frozen-weights forward test was the follow-up for a WIN and is not triggered. 0 = no arm coin
+# drawn, no rng consumed, no `generation_arm` stamped => byte-identical to the pre-feature stream.
+# The field is now FREE for the next generation experiment (their one-field constraint above).
+Environment=FORGE_GENERATION_ARM_B_SHARE=0
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30

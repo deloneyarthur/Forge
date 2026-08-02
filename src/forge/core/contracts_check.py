@@ -224,7 +224,16 @@ from crucible_contracts import (
 # PIN-ONLY adopt, no Forge code change — the emit path (D342's stamp-time `model_validate`)
 # already produces these values and simply stops raising. The two deliberately-red D341 tests
 # go green here, which is the intended signal that the gap closed rather than a fix to them.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.40.0"
+# 1.41.0 (Crucible `62ed159`, adopted 2026-08-02, D351): adds `selector_spread_bind: bool = False`
+# to `PromotedPortfolio` — whether the PROMOTING campaign ran with their §20 spread bind live.
+# PIN-ONLY adopt, no Forge code change, and verified additive rather than assumed: the diff is
+# models.py + tests + version only, the field is a DEFAULTED bool (absent == False == every book
+# promoted before it existed), and Forge never CONSTRUCTS a `PromotedPortfolio` — we only read the
+# export. So this is inert for us in both directions. Deliberately NOT the D261/D342 hazard class:
+# that class is a new Literal/enum VALUE (which `parse_forward_compatible` does not cover), and
+# this bump adds no vocabulary. The field is QuantIQ-facing — their interpreter matches its live
+# spread gate to it per book — so Forge carries the pin for `deploy_preflight` and nothing else.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.41.0"
 
 
 def check_contracts_version() -> str:

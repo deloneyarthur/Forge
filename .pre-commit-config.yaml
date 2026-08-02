@@ -48,7 +48,13 @@ repos:
           Refuse commits that change config/grammar.yaml without bumping
           grammar_version and staging the prior version under
           config/grammar_archive/. CLAUDE.md hard rule #10.
-        entry: python scripts/check_grammar_version_bump.py
+        # `uv run python`, not bare `python` (2026-08-02, D351): there is no `python` on this
+        # box's PATH — only `python3` and the uv-managed interpreter — so this hook could never
+        # execute and died "Executable `python` not found" on the FIRST grammar bump that tried
+        # to run it. A hard-rule-#10 guard that cannot run is worse than no guard: it reads as
+        # enforcement in the config and blocks the commit at the moment you most want a real
+        # answer. Same fix the mypy hook above already carries, and for the same reason.
+        entry: uv run python scripts/check_grammar_version_bump.py
         language: system
         pass_filenames: false
         files: ^(config/grammar\.yaml|config/grammar_archive/.*\.yaml)$
@@ -58,7 +64,7 @@ repos:
         description: |
           Every rule id in config/grammar.yaml must have a matching heading
           in docs/GRAMMAR.md (and vice versa).
-        entry: python scripts/check_grammar_doc_sync.py
+        entry: uv run python scripts/check_grammar_doc_sync.py   # see the note above
         language: system
         pass_filenames: false
         files: ^(config/grammar\.yaml|docs/GRAMMAR\.md)$

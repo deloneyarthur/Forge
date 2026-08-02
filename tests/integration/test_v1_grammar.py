@@ -186,7 +186,12 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # TIGHTENING, hard rule #4) and R1 is whole again. Its v47 exemption carried a defined
     # close-out and the adoption episode failed: 619 submitted / 603 decided / 0 components
     # / 0 promotes, median CPCV negative in both bare-drop buckets. Rules text unchanged.
-    assert grammar.grammar_version == "v52"  # type: ignore[attr-defined]
+    # v53 (2026-08-02, D351): CHAIN-INCEPTION FLOORS — the underlying pool excludes names whose
+    # first option-chain snapshot post-dates the config's backtest-window start, read per batch
+    # from Crucible's export. Emission-policy, rules text unchanged. The window is PER-BUCKET
+    # (1,825d short/mid, 2,555d swing_long); our flat-5y inference "verified" 5-of-5 on the
+    # boundary and was still wrong, because every recorded pre_inception failure is 5y-lane.
+    assert grammar.grammar_version == "v53"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 
