@@ -13,7 +13,16 @@
 - **THE DURABLE GUARD:** `tests/invariants/test_enumeration_inputs_reach_the_battery.py` — any local in `_run_one_iteration` sharing a name with a `_run_battery_for_seed` keyword must be forwarded. Static (`ast`) because the defect is a **missing edge in the call graph**; an emission test would need the whole daemon path to see what parsing proves in milliseconds. **Verified RED against the exact defect, then GREEN**, and its class sweep reports only this one name. It guards every future enumeration input.
 - **CRUCIBLE'S FIRST-LOOK §1 IS WRONG, and their §2 curiosity was the real signal** (their `aac80d7`). They read RIVN 38→0 / CEG 19→0 / ARM 27→0 as the loop closing. At their own sample — ~820 arrivals, ~9% single-name ≈ 74 configs over ~118 names — **the per-name expectation is under 1**, so three zeros are noise. **LCID ×3 against an expectation of ~0.6 pointed the other way.** The names they filed as a harmless curiosity were the tell; the names they used as proof could not discriminate.
 - **LIVE:** `active/running`, NRestarts=0, `grammar_version=v54`, `registry_loaded_from_export`, no traceback. Suite **2,135 passed / 1 skipped**. Contracts **1.41.0 → 1.42.0** adopted in the same window (`deployment_sizer_modes`; same pin-only class, re-verified additive).
-- **⏳ EMISSION PROOF PENDING, deliberately not claimed:** §7.3 is blocking at 22.1% gated, so no v54 batch has submitted yet. A watcher reports excluded-name count on the first ≥50 v54 rows. **Not calling this fixed until emission says so** — that is the entire lesson of this entry.
+- **✅ EMISSION PROOF LANDED — the filter is LIVE, verified through the production path** (not the log line):
+
+  | | single-name | **bucket-aware** violations |
+  |---|--:|--:|
+  | v53 (inert) | 125 | **5** — LCID ×4, COIN ×1 |
+  | v54 (fixed) | 28 | **0** |
+
+  Plus a full `forge run --dry-run --max-iterations 1` against a scratch DB copy: production path, v54, filter resolved 14/14/22 per bucket, 200 ranked, no submit.
+  **CAVEAT, stated rather than buried: n=28 single-name is small.** Zero violations is consistent with a working filter but is not by itself overwhelming, and per-name draw weights (D105/D106) make a naive binomial the wrong null. The load-bearing evidence is the **red→green invariant test against the exact defect** plus the `ast` confirmation of the call site; emission is corroboration that will firm up with volume.
+- **⚠️ THE BUCKET-vs-UNION CONFUSION BIT A THIRD TIME — mine, in the checker.** My watcher tested submissions against the **union** of all 22 excluded names instead of `for_bucket()`, and duly reported `STILL LEAKING` on SQQQ/swing_short and LYFT/swing_short — both **swing_long-only** exclusions, both legal in swing_short. A false alarm that would have triggered a needless third deploy. Same shape as the flat-5y inference (D351) and as Crucible's underpowered zero-count read: **the per-bucket rule has to be carried by every consumer of the exclusion set, including throwaway verification scripts.**
 - **⚠️ THE STAMP-FLIP HAZARD FIRED AGAIN** (grammar.yaml edited in the live tree, second time today). Next bump: worktree, or stop first.
 
 ## 2026-08-02 — **v53 DEPLOYED 03:17:49Z** (chain-inception floors + A/B teardown + honest-arm ramp revert, one window) (D351)
