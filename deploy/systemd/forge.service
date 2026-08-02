@@ -85,7 +85,24 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 # REVERTED TO 40, 2026-08-02 (D351): the A/B resolved (prereg `4e369b779ca9` REFUTED, D350) and
 # the ramp's question is answered, so the -31% ranked cost now buys nothing. The obligation was
 # honoured in the same window the experiment closed — that is the whole point of writing it here.
-Environment=FORGE_PREFILTER_SAMPLE_N=40
+#
+# RE-RAMPED TO 150, 2026-08-02 (D355, operator "we can increase sample-n to 150 again"). The
+# ~31% ranked cost is real and is being paid deliberately for a different question than last
+# time: the honest arm is now the FREEZE clock (prereg `f507e5da0677`), and at 40 the six
+# n=1200 windows take ~10 days against ~4 at 150.
+# TIMED DELIBERATELY: the switch lands at 23 of 7,200 post-cut rows (0.3%), so the post-cut
+# cohort is homogeneous at the new rate instead of a 40/150 blend. Switching later would have
+# mixed two rates inside the six windows being compared.
+# TWO THINGS THIS CHANGES, AND THE SECOND IS THE DANGEROUS DIRECTION:
+#   (1) The draw is unchanged — a uniform sample of prefilter REJECTS — so the measured
+#       distribution should not move; only the calendar time per window shrinks (~1.7d -> ~0.65d).
+#   (2) BECAUSE each window now spans less calendar time, its TRUE between-window drift is
+#       SMALLER than the `b` the bar was fitted on. Keeping the old (wider) bar therefore makes
+#       "flat" easier to declare — the direction that risks freezing a grammar still improving.
+#       Prereg caveat 4 already mandates re-deriving the a/b fit on post-change data BEFORE the
+#       read is treated as final; this ramp makes that mandatory rather than tidy.
+# ⚠️ REVERT TO 40 once prereg `f507e5da0677` is read. Same standing obligation as last time.
+Environment=FORGE_PREFILTER_SAMPLE_N=150
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
