@@ -249,6 +249,56 @@ counts on this arm — P(cpcv ≥ 1.0) carries 51 events at 0.427%, and p90 (0.5
 the freeze programme turns on. Instrument: `scripts/threshold_resolution_value.py` shares the
 basis discipline; the counts above are reproducible from any `forge.db` snapshot.
 
+### (C) TAIL HALF, RE-SPECIFIED 2026-08-02 (operator: "move forward with that") — prereg `90caf0cd877f`
+
+**The repair is narrow: keep the corrected basis, restore the ORIGINAL statistic.** The
+original (C) already used **p90** and was voided for its *basis*, not its statistic; the
+re-specification correctly moved the basis to the stage-one honest arm but also swapped p90
+for the 1.5-gate count, and nothing in D337/D338 required that second change. It is what made
+(C) undecidable.
+
+**Specification.** p90 of `cpcv_sharpe_p25`, honest arm (`selection_mode='prefilter_sample'`),
+stage one only, over **consecutive non-overlapping windows of n = 1,200** in submission order.
+
+**The bar is measured, not assumed** (`scripts/freeze_tail_reading.py`). Window-to-window
+variance decomposes as `sd² = a²/n + b²`:
+
+| window n | k windows | mean p90 | sd | 2sd |
+|--:|--:|--:|--:|--:|
+| 400 | 29 | 0.5946 | 0.0376 | 0.0752 |
+| 800 | 14 | 0.5921 | 0.0324 | 0.0648 |
+| 1,200 | 9 | 0.5875 | 0.0253 | 0.0506 |
+
+⇒ sampling **a = 0.681** (shrinks as 1/√n) and **irreducible drift b = 0.0159** (does not).
+**A p90 move counts only if it exceeds 2b = 0.0319.**
+
+**This is the enabling finding.** Crucible's "version-over-version deltas below ~0.15–0.20 are
+beyond resolution at ANY n" is about a different quantity; on *this* statistic the floor is
+**0.016**, an order of magnitude smaller. p90 is a usable decision metric here — which is
+exactly what the 1.5-count is not.
+
+**Reading rule.** The tail is EXHAUSTED when `best(p90) over the trailing K windows` does not
+exceed `best(p90) over the preceding K windows` by more than **0.0319**. NOT-exhausted on any
+excess above it. K = 6, fixed in advance; a single read, no peeking-to-threshold.
+
+**Current reading — flat, and this is the first EVALUABLE reading of the tail half:**
+9 consecutive windows spanning v49 → v54 read
+`0.574 0.532 0.613 0.580 0.616 0.600 0.587 0.612 0.572`; newest vs best-prior **−0.0437**,
+inside the floor. Six grammar versions produced no attributable p90 movement.
+
+**Three caveats, on the record before anyone reads exhaustion into that:**
+1. **10 days is short** for a claim about a grammar's ceiling, and the windows span a period
+   with no deliberate expansion — mostly prunes. Absence of movement from prunes is weak
+   evidence about what expansion could do.
+2. **The honest-arm RATE changed** at the v54 deploy (`FORGE_PREFILTER_SAMPLE_N` 150 → 40, so
+   ~1,851/day → ~718/day). The draw is still uniform over prefilter rejects, so the
+   *distribution* should be unchanged and only the clock slows — but a distributional shift
+   here would masquerade as a tail reading, and the first post-v54 windows should be checked
+   against the pre-v54 ones before they are pooled.
+3. **A flat p90 is necessary, not sufficient.** It is the ceiling of the *sampled* surface; a
+   grammar change that opens genuinely new structure would show up first as new cells, not as
+   a p90 move within existing ones. Condition (A) still carries that half.
+
 ---
 
 **SUPERSEDED — the original stage-two (C), retained for the record:**
