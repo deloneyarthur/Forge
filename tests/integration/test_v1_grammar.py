@@ -191,7 +191,11 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # from Crucible's export. Emission-policy, rules text unchanged. The window is PER-BUCKET
     # (1,825d short/mid, 2,555d swing_long); our flat-5y inference "verified" 5-of-5 on the
     # boundary and was still wrong, because every recorded pre_inception failure is 5y-lane.
-    assert grammar.grammar_version == "v53"  # type: ignore[attr-defined]
+    # v54 (2026-08-02, D352): v53's filter was never live — computed, journal-logged, and not
+    # passed to the battery, so enumeration ran unfiltered. This bump is what actually ships
+    # it. v53 is a VOID cohort for the feature (960 rows, 10 on excluded names); the floors
+    # comparison is v53-vs-v54, not v52-vs-v53.
+    assert grammar.grammar_version == "v54"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

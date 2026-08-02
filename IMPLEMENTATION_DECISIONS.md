@@ -3941,3 +3941,27 @@ Operator: *"work closely with Crucible to create a grammar freeze plan … optim
 **Deliberately NOT bundled:** the `young_explore` lane (D316 2d). Its configs stamp `selection_arm=None`, so they are invisible to the freeze criterion's honest-arm analysis; flipping it in the same restart that changes the submission mix twice over would make its effect unattributable. It gets its own window.
 
 **Files:** `src/forge/enumeration/chain_inception.py`, `sampler.py`, `iterator.py`, `src/forge/cli/main.py`, `tests/unit/test_enumeration/test_chain_inception.py`, `config/grammar.yaml`, `config/grammar_archive/v53.yaml`, `deploy/systemd/forge.service`, `STATUS.md`.
+
+## D352 — 2026-08-02 — v53 → **v54**: the chain-inception filter was NEVER LIVE — one missing keyword argument, and every gate we ran was blind to it
+
+**Spec section:** §3 (enumeration policy); hard rules #6 (determinism/emission identity), #10. Class: **enumeration-policy bump** (D098/v5); `rules:` text untouched. Operator-directed.
+
+**The defect.** `_run_one_iteration` computed `below_inception = underlyings_below_inception(...)` per batch, echoed it to the journal, and **never passed it** to `_run_battery_for_seed`. The parameter took its `None` default and enumeration ran unfiltered. One keyword argument, absent from one call site, from `fa00daf` through the entire v53 deploy.
+
+**WHY IT SURVIVED A FULL DEPLOY RITUAL — the part worth keeping.** Nothing we ran could have caught it:
+- The 13 unit tests exercise `underlyings_below_inception` **directly**, so they prove the predicate and never the call graph.
+- The **emission proof passed `below_inception` explicitly into a test harness** — it proved the FUNCTION works, not that production reaches it. This is the exact shape of the mistake: a proof constructed around the path production does not take.
+- The **journal line was the trap**: `chain_inception: excluding 22 underlying(s) (ABNB, ARM, …)` printed the resolved set faithfully, every batch, while nothing was excluded. [[D185]] says verify the FEATURE in the journal, not just restart health — this is its inverse, and the sharper rule is: **verify a filter by its EMISSION through the production path; a log line is not evidence.**
+- Crucible's independent first-look "verified" it too, and their verification was underpowered rather than wrong-headed — see below.
+
+**Measured contamination.** v53 cohort at discovery: **960 submissions, 96 single-name, 10 on excluded names** (LCID ×4, UVXY ×3, SQQQ, RTX, COIN). Nothing was actually burning cycles — the 7y-class names (UVXY/SQQQ/RTX) appeared in `swing_short` where they are legal, and LCID/COIN sit inside the 183-day margin zone, both clean today. **The only thing lost was the feature.**
+
+**v53 IS A VOID COHORT FOR THIS FEATURE.** It is stamped as the chain-inception version and emits like v52. `funnel --compare v52 v53` is not a floors comparison; the floors comparison is **v53-vs-v54**, and v53's 960 rows belong with v52 for that purpose. Relayed.
+
+**Why a bump and not a versionless fix.** Emission changes here, so hard rule #6 (versionless changes must be cold-start byte-identical) forbids shipping it unversioned, and doing so would split the v53 cohort at an unrecorded timestamp. The grammar-change taxonomy is explicit that a Python-side change altering the emitted population "still bumps `grammar_version` for cohort attribution."
+
+**The durable guard.** `tests/invariants/test_enumeration_inputs_reach_the_battery.py` — any local in `_run_one_iteration` whose name matches a `_run_battery_for_seed` keyword must be forwarded under that name. Static (`ast`) rather than behavioural, because the defect is a **missing edge in the call graph** and an emission test would need the whole daemon path (DB, registry, cache) to observe what parsing proves in milliseconds. Verified **red against the exact defect, then green**, and its class sweep reports only this one name — no false positives. It guards every future enumeration input, not just this one.
+
+**Crucible's first-look, corrected (their `aac80d7`).** They read RIVN 38→0, CEG 19→0, ARM 27→0 as the loop closing. At their own stated sample — ~820 arrivals, ~9% single-name ≈ 74 configs over a ~118-name universe — the per-name expectation is **under 1**, so three zeros are noise, not evidence. **LCID ×3 against an expectation of ~0.6 was the real signal, and it pointed the other way.** The names they filed as a harmless curiosity were the tell; the names they used as proof could not have discriminated. Their instinct to flag COIN/LCID was right and their §1 conclusion was premature.
+
+**Files:** `src/forge/cli/main.py` (the one line), `tests/invariants/test_enumeration_inputs_reach_the_battery.py`, `config/grammar.yaml`, `config/grammar_archive/v54.yaml`, `tests/integration/test_v1_grammar.py`, `STATUS.md`.

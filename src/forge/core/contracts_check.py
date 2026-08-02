@@ -233,7 +233,15 @@ from crucible_contracts import (
 # that class is a new Literal/enum VALUE (which `parse_forward_compatible` does not cover), and
 # this bump adds no vocabulary. The field is QuantIQ-facing — their interpreter matches its live
 # spread gate to it per book — so Forge carries the pin for `deploy_preflight` and nothing else.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.41.0"
+# 1.42.0 (Crucible `5b5b798`, adopted 2026-08-02, same window): adds
+# `deployment_sizer_modes: dict[str, str] = {}` to `PromotedPortfolio` — the §20 deployment
+# overlay mapping component config_hash -> the sizer mode the book actually trades under at
+# deployment NAV, so `designated == traded` without re-keying identity. IDENTICAL class to
+# 1.41.0 and adopted on the same reasoning, re-verified rather than waved through: models.py +
+# tests + version only, defaulted (empty == every component trades as certified), explicitly
+# NOT in `compute_config_hash`, and again on a model Forge only READS. No new Literal or enum
+# value, so the D261/D342 hazard does not apply. QuantIQ-facing; inert for us.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.42.0"
 
 
 def check_contracts_version() -> str:

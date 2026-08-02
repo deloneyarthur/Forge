@@ -2330,6 +2330,12 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             regime_gate_yield_weights=regime_gate_yield_weights,
             generation_arm_b_weights=generation_arm_b_weights,
             generation_arm_b_share=generation_arm_b_share,
+            # D352: this line is the whole feature. Without it the exclusion set is computed,
+            # PRINTED to the journal, and discarded — the parameter defaults to None and
+            # enumeration is unfiltered. That was the live state from fa00daf through v53, and
+            # the journal line above ("chain_inception: excluding 22 underlying(s)") is what
+            # made it look shipped. Verify a filter by its EMISSION, never by its log line.
+            below_inception=below_inception,
             refutation_effects=refutation_effects,
             trade_rate_priors=trade_rate_priors,
             forge_db_path=forge_db_path,
