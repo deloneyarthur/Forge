@@ -1,5 +1,22 @@
 # Forge — Status
 
+## 2026-08-02 (**THE MANDATE PICKS `f52a05c8` AND THE CHAMPION IS INFEASIBLE** — QuantIQ's D306 ran same-day; the flip is at the operator, and the champion trades **Monday 08-03**) (D348)
+
+- **QuantIQ D306 RESULT (`d306_scalar_read_2026-08-01.json`), objective sharpe, ceiling `DEFAULT_MAX_DD_CEILING_PCT = 8.0` %-of-NAV:**
+
+  | | split | tandem Sharpe | tandem DD of NAV | verdict |
+  |---|--:|--:|--:|:--|
+  | champion `aa315324` | 0.9665 | 1.777 | **11.48%** | **INFEASIBLE** |
+  | `f52a05c8` | 0.6792 | **1.899** | 6.81% (1.19pp margin) | **FEASIBLE → PICKED** |
+
+  It wins **both** axes — the only feasible configuration, and its quantized-sleeve Sharpe beats even the champion's most favourable measured arm ($25K, 1.863 < 1.899).
+- **⚠️ STRIKE FROM OUR RECORD: "the champion holds the mandate 27.86 vs 21.54" (D347) IS WRONG.** That is the retired hand-computed ratio, which Crucible killed as prose three relays ago and we then re-imported. **The coded mandate is a DD BUDGET, not a ratio** — and a *static capital split* maps card-DD through it **linearly**, which is a different object from the vol-target dial. Corrected in place below.
+- **OUR ARGUMENT DID NOT WIN THIS AND WE SHOULD NOT CLAIM IT.** The scale-down claim was refuted on the **vol dial** and stays refuted — Crucible's own words: *"if the champion falls, it falls to budget arithmetic — not to any claim you made or we refuted."* What our relays did contribute is narrower and real: surfacing that `c52c1ab3` had **never been compared**, and the **like-for-like unit find** (cpcv-p25 0.0543 → 0.0007 was the overlay, not an axis). The decisive arithmetic is theirs.
+- **Their pre-registered lot-floor read** (honest fills, real NBBO, identical rig): `f52a05c8` **1.899** at its $14.9K rail sleeve vs champion **1.777** at $21.3K — equal quantization cost from $25K (−0.084 vs −0.086), more trade breadth, lower same-basis NAV drawdown (6.8% vs 11.5%).
+- **NOTHING IS FLIPPED, AND THE SEQUENCING IS AN OPERATOR CALL WITH A CLOCK.** Import, triple-gate, champion retirement and pinning the 0.68 split are QuantIQ-side steps triggered only by the **operator's designation record**. **The champion trades Monday 2026-08-03, both legs due**; flip-vs-that-pass is explicitly the operator's decision.
+- **Our §4 handicap worry is ANSWERED and it eases:** the search lane is **PASS-not-BEAT by §20 design** — books promote on §8.7 alone, roster append-only, and no routing ever keyed on the champion gap. The handicap cost **narrative, not routing**. Our projection caveat on "1 of 82" and the recall-label refinement were both adopted at the width we gave them.
+- **Open on Crucible's side, not ours:** QuantIQ asks them to persist the four daily curves (`probe_designation_25k_read.py:105` discards `_e`) for curve-level confirmation, which is also their standing **CR-3** from 07-20. No Forge action.
+
 ## 2026-08-02 (**7th BOOK — and the champion comparison was never like-for-like: the champion has ALWAYS been tail-OFF while all four search books carried the tail. At matched unit the champion's cpcv-p25 win collapses 0.0543 → 0.0007.** Ask 1 still does not reopen.) (D347)
 
 - **`f52a05c8968bdc7a` PROMOTED 2026-08-01T21:04:19Z — the 7th book, and it is `c52c1ab3`'s exact three legs on the tail-OFF unit** (`91324e5d_dsjv45` + `ad566996` + `04c84871`). Verified in the export ourselves, not taken on trust; their ablation numbers reproduce to the digit.
@@ -22,7 +39,7 @@
   | Sharpe/DD | **27.86** | 21.54 | |
 
   **At matched unit the champion's advantage is drawdown and ONLY drawdown.** The cpcv-p25 axis — one of the three we named as champion-favourable — was a unit artifact.
-- **ASK 1 STILL DOES NOT REOPEN, and we are not reopening it.** worst-DD is **byte-identical** across the unit (0.1178 tail-ON and tail-OFF), so the tail was never the drawdown story; their 30%-cut experiment measured the book's own path and stands. Champion holds the mandate 27.86 vs 21.54.
+- **ASK 1 STILL DOES NOT REOPEN, and we are not reopening it.** worst-DD is **byte-identical** across the unit (0.1178 tail-ON and tail-OFF), so the tail was never the drawdown story; their 30%-cut experiment measured the book's own path and stands. ~~Champion holds the mandate 27.86 vs 21.54.~~ **STRUCK 08-02 ([[D348]]) — that is the retired ratio, not the mandate. The coded mandate is an 8%-of-NAV DD budget; under it the champion is INFEASIBLE at 11.48% and `f52a05c8` is the pick. Ask 1 still does not reopen: the refutation was of the VOL DIAL, and a static capital split is a different object.**
 - **CONSEQUENCE FOR THE WHOLE SEARCH LANE, not just this book:** applying the measured shift, `aa57f9f1` 15.3 → ~16.1 and `7f2a697e` 16.5 → ~17.3. The conclusion (champion holds) is **robust**; the *magnitude* of the gap was overstated for every search-lane book for its entire existence. This is a measurement correction, not a supply one.
 - **THEIR RATE ANSWER — measured, and it lands where we hoped.** Of 82 tail-ON-era portfolio rejects, applying the shift converts **exactly one** (`3205c242`, sole failure cpcv 1.457). PBO fails 54/82 and worst-DD 13/82; the unit moves **neither**. So no unit-driven promotion wave (~1%). **One caveat we owe them:** the +0.054/+0.111 shift is a *single-book* delta extrapolated to 82 heterogeneous books — their conclusion survives it anyway, because the PBO/DD failures that dominate are unit-invariant at any shift magnitude.
 - **THE RISE THEY DO EXPECT IS THE REACHABILITY REPAIR** (strong-base extensions enter the stream 08-02). Attribution rule, symmetric with ours: **a rate rise from 08-02 is lane repair, not supply.**
