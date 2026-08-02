@@ -36,6 +36,7 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
+from forge.core.seed import SeedHierarchy
 from forge.persistence.db import db_connection
 
 BOOK_FLOOR = 0.9439
@@ -62,13 +63,22 @@ def _parse(config_json: str) -> tuple[str, str, str] | None:
     )
 
 
+def _percentile(values: list[float], q: float) -> float:
+    """The table's own quantile, factored out so the bootstrap cannot drift from it.
+
+    Nearest-rank on the sorted sample. Any other convention here would make the reported
+    p90 and the bootstrapped p90 different statistics.
+    """
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+
+
 def _stats(values: list[float]) -> tuple[int, float, float, float]:
     n = len(values)
-    ordered = sorted(values)
     return (
         n,
         statistics.median(values),
-        ordered[min(n - 1, int(0.90 * n))],
+        _percentile(values, 0.90),
         sum(1 for v in values if v >= BOOK_FLOOR) / n,
     )
 
@@ -82,11 +92,50 @@ def _two_prop_z(k1: int, n1: int, k2: int, n2: int) -> float:
     return (p1 - p2) / se if se else float("nan")
 
 
+def _bootstrap_p_delta_le_zero(
+    arm_a: list[float],
+    arm_b: list[float],
+    *,
+    resamples: int = 2000,
+    seed: int = 42,
+) -> tuple[float, float]:
+    """`(observed p90 delta B-A, P(delta <= 0))` by paired independent resampling.
+
+    The registered statistic for prereg `4e369b779ca9`, which predicts arm B's honest-arm
+    p90 exceeds arm A's with bootstrap P(delta <= 0) < 0.05 over 2,000 resamples. It lives
+    here rather than in a notebook so the resolution read is reproducible from the artifact
+    instead of retyped — a resolved prereg nobody can re-run is not evidence.
+
+    RNG via `SeedHierarchy` (hard rule #8: no naked `random.seed()` anywhere), so the same
+    snapshot and cut reproduce the same p-value exactly.
+    """
+    rng = SeedHierarchy(seed).rng("generation_ab_bootstrap")
+    observed = _percentile(arm_b, 0.90) - _percentile(arm_a, 0.90)
+    na, nb = len(arm_a), len(arm_b)
+    le_zero = 0
+    for _ in range(resamples):
+        ra = [arm_a[rng.randrange(na)] for _ in range(na)]
+        rb = [arm_b[rng.randrange(nb)] for _ in range(nb)]
+        if _percentile(rb, 0.90) - _percentile(ra, 0.90) <= 0.0:
+            le_zero += 1
+    return observed, le_zero / resamples
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("snapshot")
     ap.add_argument("--by", choices=("arm", "category", "regime"), default="arm")
     ap.add_argument("--min-n", type=int, default=100)
+    ap.add_argument(
+        "--since",
+        default=None,
+        help=(
+            "ISO timestamp; keep only configs SUBMITTED at/after it. Required to reproduce a "
+            "pre-registration's cohort_cut — `forge prereg resolve` is post-cut-only by design, "
+            "and without this the read silently pools pre-registration accrual (for the "
+            "generation A/B that means folding in the interim peek the prereg discloses)."
+        ),
+    )
     args = ap.parse_args()
 
     with db_connection(Path(args.snapshot)) as conn:
@@ -102,14 +151,19 @@ def main() -> int:
                 SELECT config_json,
                        json_extract_string(config_json, '$.generation_arm') AS generation_arm_tag,
                        config_hash,
-                       selection_mode
+                       selection_mode,
+                       submitted_at
                 FROM submissions
             ) s
             JOIN verdicts v ON v.config_hash = s.config_hash
             WHERE s.selection_mode = 'prefilter_sample'
               AND v.measurement_basis IS DISTINCT FROM 'fullhist_refit'
-            """
+              AND (?::TIMESTAMP IS NULL OR s.submitted_at >= ?::TIMESTAMP)
+            """,
+            [args.since, args.since],
         ).fetchall()
+    if args.since:
+        print(f"COHORT CUT: submitted_at >= {args.since}\n")
 
     groups: dict[str, list[float]] = defaultdict(list)
     for config_json, arm_tag, version, cpcv in rows:
@@ -146,8 +200,15 @@ def main() -> int:
         kb_k = sum(1 for v in vb if v >= BOOK_FLOOR)
         z = _two_prop_z(ka_k, len(va), kb_k, len(vb))
         print(f"\nA/B READ  {ka} vs {kb}")
-        print(f"  book-usable rate: z = {z:+.2f}")
+        print(f"  book-usable rate: z = {z:+.2f}   (SECONDARY, explicitly underpowered)")
         print(f"  p90: {_stats(va)[2]:.4f} vs {_stats(vb)[2]:.4f}")
+        delta, p_le0 = _bootstrap_p_delta_le_zero(va, vb)
+        print(f"  PRIMARY  p90 delta ({kb} - {ka}) = {delta:+.4f}")
+        print(f"  PRIMARY  bootstrap P(delta <= 0) = {p_le0:.4f}   (2,000 resamples, seeded)")
+        print(
+            "  registered bar: delta > 0 AND P <= 0.05  ->  "
+            f"{'MET' if delta > 0 and p_le0 < 0.05 else 'NOT MET'}"
+        )
         print(
             "  NOTE: concurrent arms, so this is NOT drift-confounded — unlike any "
             "version-over-version comparison of the same quantity."

@@ -1,5 +1,24 @@
 # Forge — Status
 
+## 2026-08-02 (**GENERATION A/B RESOLVED: REFUTED.** The book-usable weighting does not beat the incumbent map — and the favourable interim did not replicate, it **reversed sign**. Reading post-cut is what caught it.) (D350)
+
+- **PREREG `4e369b779ca9` → REFUTED** (`forge prereg resolve`, post-cut evidence only — the tool enforces it). Single read at the registered gate, no peeking, no extension.
+
+  | | baseline (arm A) | book_usable (arm B) |
+  |---|--:|--:|
+  | decided honest stage-one | 2,193 | 2,209 |
+  | cpcv-bearing subset | 1,438 | 1,494 |
+  | median cpcv | 0.1678 | 0.1700 |
+  | **p90 cpcv (PRIMARY)** | **0.6028** | **0.5988** |
+  | P(cpcv ≥ 0.9439) (secondary) | **0.97%** | 0.60% |
+
+  **p90 delta = −0.0039 (arm B WORSE), bootstrap P(delta ≤ 0) = 0.5210** over 2,000 seeded resamples. Registered bar (delta > 0 AND P < 0.05) fails on **both** clauses. The secondary agrees: arm B is worse on the floor rate it was actually built to move (z = +1.14 toward baseline).
+- **⚠️ THE INTERIM DID NOT REPLICATE — IT REVERSED.** The disclosed pre-registration peek at n=1,123/arm read p90 0.6348 vs 0.5625, **delta +0.0723, bootstrap 0.001**. On the clean unpeeked cohort it is −0.0039 at p=0.52. **A +0.0723 "highly significant" effect became a coin flip on fresh data.** This is precisely the failure the late registration was flagged for, and the ONLY reason it surfaced is that the operator chose the post-cut basis over the cumulative one — the cumulative read would have folded the peek back in and likely confirmed.
+- **FALSIFIER ACTION (registered in advance): revert to a single map.** `FORGE_GENERATION_ARM_B_SHARE=0.5 → 0` at the next restart. **The frozen-weights forward test is NOT triggered** — that was the follow-up for a win, and there is no win to defend.
+- **⇒ `FORGE_PREFILTER_SAMPLE_N` 150 → 40 IS NOW UNBLOCKED.** The experiment that time-boxed the ramp is over; the ~31%/day of forgone ranked production has no remaining justification.
+- **TOOL FIX, and it was load-bearing:** `scripts/production_by_group.py` had **no cohort-cut filter** and did not compute the prereg's registered statistic at all. Running it as-shipped would have produced the *cumulative* read — the basis we rejected. Added `--since` (cut) + `_bootstrap_p_delta_le_zero` (2,000 resamples, `SeedHierarchy` per hard rule #8) and factored `_percentile` out of `_stats` so the reported p90 and the bootstrapped p90 cannot drift apart. **A resolved prereg nobody can re-run is not evidence.**
+- **BASIS NOTE, stated rather than buried:** the registered gate is "2,000 **decided**" and that is what was tested (2,193 / 2,209). The cpcv-bearing subset is ~1,450/arm because rejects without a stored cpcv cannot contribute to a p90 of cpcv. Waiting for 2,000 *cpcv-bearing* would have been extending an experiment whose answer was already visible — explicitly forbidden by the resolution rule.
+
 ## 2026-08-02 (**THE MANDATE PICKS `f52a05c8` AND THE CHAMPION IS INFEASIBLE** — QuantIQ's D306 ran same-day; the flip is at the operator, and the champion trades **Monday 08-03**) (D348)
 
 - **QuantIQ D306 RESULT (`d306_scalar_read_2026-08-01.json`), objective sharpe, ceiling `DEFAULT_MAX_DD_CEILING_PCT = 8.0` %-of-NAV:**
