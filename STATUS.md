@@ -26,7 +26,9 @@
   | | single-name | **bucket-aware** violations |
   |---|--:|--:|
   | v53 (inert) | 125 | **5** — LCID ×4, COIN ×1 |
-  | v54 (fixed) | 28 | **0** |
+  | v54 (fixed) | **145** | **0** |
+
+  **CAVEAT NOW CLOSED (re-read at comparable n):** v54 reached 145 single-name with **zero** violations against v53's 5-in-125. Under v53's observed 4% leak rate, P(0 in 145) ≈ 0.0027 — the earlier "0 in 28" reservation is discharged.
 
   Plus a full `forge run --dry-run --max-iterations 1` against a scratch DB copy: production path, v54, filter resolved 14/14/22 per bucket, 200 ranked, no submit.
   **CAVEAT, stated rather than buried: n=28 single-name is small.** Zero violations is consistent with a working filter but is not by itself overwhelming, and per-name draw weights (D105/D106) make a naive binomial the wrong null. The load-bearing evidence is the **red→green invariant test against the exact defect** plus the `ast` confirmation of the call site; emission is corroboration that will firm up with volume.
