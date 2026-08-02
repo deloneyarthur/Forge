@@ -1,5 +1,24 @@
 # Forge — Status
 
+## 2026-08-02 — **THE FREEZE CRITERION'S BINDING CONDITION IS UNEVALUABLE, NOT UNMET** — one of its two tail clearers was a basis violation, and it is specified on the statistic D341 proved cannot resolve. Plus: threshold-resolution measured, and the coarsening proposal REFUTED by its own feasibility check. (D353)
+
+- **THE COARSENING PITCH IS DEAD — killed by the check that should have preceded it.** The plan was: directional threshold resolution buys nothing ⇒ coarsen the grid ⇒ cut `search_n_trials` ⇒ lower the DSR hurdle. **The first two hold; the third does not.** Rounding the directional threshold to 1dp collapses **1 config out of 95,376**; coarsening *every* continuous parameter aggressively still leaves **74.8%** distinct. **The n_trials treadmill is driven by structural composition, not parameter resolution** — quantising grids cannot touch the DSR hurdle. Found before a grammar bump, not after.
+- **DIRECTIONAL THRESHOLD RESOLUTION BUYS NOTHING — a well-powered null.** Honest arm, stage one, within-cell (`scripts/threshold_resolution_value.py`): mean rho **−0.0032**, **0 of 21 cells clear their own MDE** (the largest could detect |rho| ≥ 0.09 and saw 0.02–0.03), top-decile permutation **1/21 against ~1.1 expected by chance**.
+- **THE REGIME GATE IS THE REAL FIND — and the collider check is what made it usable.** Within a cell the sampler assigns thresholds at *random*, so this is an experiment, not a fit — **but only if the threshold does not also decide whether a config gets measured**. It does, for one of them:
+
+  | gate | rho (2 independent cells) | observation rate across range | verdict |
+  |---|--:|---|---|
+  | `adx` | −0.226 / −0.190 (both clear MDE) | 78.2% → 76.1%, **5.1pp** | **clean** |
+  | `vix_term_slope` | −0.354 / −0.234 | 75.9% → **50.7%**, **25.2pp** | **CONFOUNDED** |
+
+  **The two largest correlations are the untrustworthy ones.** Both gates use `>`, so on `adx` a *tighter* gate means *worse* quality — replicated across two directional pairings. `vix_term_slope` must not be read causally.
+- **⚠️ FREEZE CONDITION (C) — TWO DEFECTS, and the second is structural.** Re-read at n=11,932 (1.6× the recorded 7,484):
+  - **(1) BASIS VIOLATION inside the measurement meant to enforce the basis.** `36c8aab4b0f6a360`'s quoted **1.6629 is its `fullhist_refit` (stage-TWO)** value; its stage-one row reads **1.1703, a reject**. The corrected stage-one honest-arm clearer count is **1, not 2** — and was 1 when written. The [[D337]]/[[D338]] error, committed inside the criterion that warns about it.
+  - **(2) IT IS SPECIFIED ON AN UNRESOLVABLE STATISTIC.** Corrected series: **1 → 1 clearers** across a 1.6× sample. That is equally consistent with "exhausted" and "produces at a constant 0.008%". **[[D341]], written the same day, measured that detecting a doubling of P(cpcv ≥ 1.5) needs ~183 days/arm** — which is exactly why the A/B was specified on p90 instead.
+  - **⇒ Neither "the tail did not converge" NOR "the tail is exhausted" is supported. (C) is UNEVALUABLE AS SPECIFIED, not unmet.** Reading a stall off a count of 1 is the same error we corrected Crucible on today.
+  - **What would fix it:** re-specify the tail half onto a bar with observable events — **P(cpcv ≥ 1.0) carries 51 events (0.427%)**, p90 is 0.5944 and moves on ~3 days per D341. **Operator-gated: it changes what the freeze programme turns on.**
+- **THE `vix_term_slope` WASTE CASE IS WEAKER THAN IT LOOKED, stated rather than pitched:** the high band (≥1.6) reaches a cpcv 45.1% of the time vs 66.2% below it, ~70 configs/day, so trimming it would save ~0.9% of throughput — **but 45% of it still produces**, unlike the chain-inception class where failure is guaranteed. That is a productivity trade needing a prereg, not a free waste cut.
+
 ## 2026-08-02 — earnings-coverage thread **CLOSED** (no asks either side): `uncoverable_upstream` shipped, ABNB/ARM reclassified, and VIXY is the first hole our stopgap has that the manifest closes
 
 - **`uncoverable_upstream` LIVE** in `earnings_covered_symbols_2026-08-02T053208Z.json` (149 covered): **ABNB ARM ASML BRK.B V**. Crucible measured it at the source rather than hardcoding, so a Polygon backfill drops a name automatically. **No Forge code change and none owed** — an uncoverable name is already absent from `covered_symbols`, so the intersection excludes it today; the key is diagnostic. We said so rather than wiring a consumer to justify having asked, and they preferred that answer.

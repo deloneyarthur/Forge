@@ -200,6 +200,55 @@ component** after our own prefilter rejected it. A prefilter false-negative at t
 distribution is a different problem from grammar exhaustion and does not belong in this
 criterion, but it should not be lost.
 
+### ⚠️ CORRECTION 2026-08-02 — the "2 clearers" above is a BASIS ERROR, and (C) is measured on a statistic that cannot resolve
+
+Two independent defects in the reading immediately above. Both were found by re-running it at
+a grown sample; neither changes the *criterion*, both change what it currently says.
+
+**(1) One of the two clearers was pooled across the basis boundary this document forbids.**
+`36c8aab4b0f6a360` carries two verdict rows:
+
+```
+measurement_basis   decision    cpcv
+fullhist_refit      component   1.6629   <- the number quoted above (STAGE TWO)
+standard_window     reject      1.1703   <- its actual STAGE-ONE reading
+```
+
+The 1.6629 is its **stage-two refit** value. On the stage-one honest arm — the declared basis
+of (C) — that config reads **1.1703 and does not clear 1.5**. This is the D337/D338 error the
+section's own basis paragraph warns against, committed inside the measurement meant to enforce
+it. **The corrected stage-one honest-arm count is 1, not 2** (only `d004043d`, 1.6326), and it
+was 1 at the time of writing too.
+
+**(2) The corrected series cannot discriminate, and D341 already proved it.** Re-read at
+n = 11,932 (a 1.6× larger sample than the 7,484 above):
+
+| reading | at n=7,484 | at n=11,932 |
+|---|--:|--:|
+| stage-one honest-arm configs clearing 1.5 | **1** (corrected) | **1** |
+| max CPCV | 1.6326 | 1.6326 |
+| clearing 1.25 | — | 4 (0.034%) |
+| clearing 1.0 | — | 51 (0.427%) |
+| median / p90 / p99 | — | 0.1428 / 0.5944 / 0.9104 |
+
+A count that goes 1 → 1 while n grows 1.6× is equally consistent with "the tail is exhausted"
+and "the tail produces at a constant 0.008% rate". It has essentially no power — and **[[D341]],
+dated the same day as this section, measured exactly that**: detecting a doubling of
+P(cpcv ≥ 1.5) needs ~183 days per arm, which is why the A/B was specified on p90 instead.
+**(C) is therefore specified on the one statistic the programme had already shown cannot be a
+decision metric.**
+
+**⇒ Neither "the tail did not converge" (the reading above) nor "the tail is exhausted" is
+supported.** (C) is *unevaluable as specified*, not unmet — a different claim, and the honest
+one. Reading a stall off a count of 1 is the same error we corrected Crucible on 2026-08-02
+(three zero-counts at a per-name expectation below 1).
+
+**What would make (C) decidable:** re-specify the tail half onto a bar with observable event
+counts on this arm — P(cpcv ≥ 1.0) carries 51 events at 0.427%, and p90 (0.5944) moves on a
+~3-day horizon per D341 — then set the exhaustion bar there. Operator-gated: it changes what
+the freeze programme turns on. Instrument: `scripts/threshold_resolution_value.py` shares the
+basis discipline; the counts above are reproducible from any `forge.db` snapshot.
+
 ---
 
 **SUPERSEDED — the original stage-two (C), retained for the record:**
