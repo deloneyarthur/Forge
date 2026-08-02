@@ -249,7 +249,9 @@ counts on this arm — P(cpcv ≥ 1.0) carries 51 events at 0.427%, and p90 (0.5
 the freeze programme turns on. Instrument: `scripts/threshold_resolution_value.py` shares the
 basis discipline; the counts above are reproducible from any `forge.db` snapshot.
 
-### (C) TAIL HALF, RE-SPECIFIED 2026-08-02 (operator: "move forward with that") — prereg `90caf0cd877f`
+### ⚠️ THE p90 SPEC BELOW IS SUPERSEDED — prereg `90caf0cd877f` resolved `insufficient`, never read; see the corrected spec at the end of this section (prereg `f507e5da0677`)
+
+### (C) TAIL HALF, RE-SPECIFIED 2026-08-02 (operator: "move forward with that") — prereg `90caf0cd877f` (SUPERSEDED)
 
 **The repair is narrow: keep the corrected basis, restore the ORIGINAL statistic.** The
 original (C) already used **p90** and was voided for its *basis*, not its statistic; the
@@ -298,6 +300,76 @@ inside the floor. Six grammar versions produced no attributable p90 movement.
 3. **A flat p90 is necessary, not sufficient.** It is the ceiling of the *sampled* surface; a
    grammar change that opens genuinely new structure would show up first as new cells, not as
    a p90 move within existing ones. Condition (A) still carries that half.
+
+### (C) TAIL HALF — CORRECTED SPEC, 2026-08-02, prereg `f507e5da0677` (THIS IS THE LIVE ONE)
+
+A four-agent review found **two defects in the spec above, before it was ever read.** Both are
+fixed here; `90caf0cd877f` is resolved `insufficient` (a specification defect, not an
+unfavourable result — its clock had not elapsed, so no peeking is involved).
+
+**Defect 1 — the bar was contaminated by COMPOSITION.** The pooled statistic confounds quality
+with mix. Measured: `swing_long`'s share of the honest arm moved **48.4% → 61.9%** across the
+ten windows, while its pooled p90 (**0.6447**) sits **0.149** above `swing_mid`'s (**0.4955**).
+Mix shift alone therefore moves pooled p90 by **~0.020 — 63% of the registered 0.0319 bar** —
+with no quality change at all. The traced cause is *our own* chain-inception filter
+([[D351]]/[[D352]]) adding and removing swing_long-only names at the window-9 boundary. And the
+old `b = 0.0159` was **fit on that drifting series**, so part of what was called irreducible
+noise was composition: the bar was wrong in both directions simultaneously.
+
+**Fix: post-stratification.** Each observation is weighted `p_c / q_c` — `p_c` the cell's share
+of the full reference sample, `q_c` its share of the window — so every window is read as if it
+carried the reference mix. Cells are `(hypothesis, dte_bucket)`, the granularity D341 measured
+as **signal** (z=+2.02) rather than noise (per-cell z=+0.29).
+
+**Defect 2 — the statistic was not the best available.** The **tail-conditional mean of the top
+decile** (mean of everything at/above the window's own weighted p90) uses the whole tail instead
+of one order statistic.
+
+| series | mean | sd@1200 | b | b_upper | **bar 2·b_up** |
+|---|--:|--:|--:|--:|--:|
+| p90 raw (pooled) | 0.5903 | 0.0255 | 0.0199 | 0.0211 | 0.0422 |
+| p90 standardised | 0.5939 | 0.0171 | 0.0085 | 0.0123 | 0.0245 |
+| TCM raw (pooled) | 0.7360 | 0.0187 | 0.0151 | 0.0208 | 0.0416 |
+| **TCM standardised** | **0.7371** | **0.0147** | **0.0019** | 0.0121 | **0.0242** |
+
+`p95`/`p99` were rejected **on evidence**: their small apparent floors are artifacts of thin
+tail density (the sampling term inflates 0.64 → 1.05 as per-window tail observations fall to
+~60 and ~12), and p90 is the only quantile where *both* variance components resolve. Median and
+mean were rejected for drift floors of **43%** and **52% of their own level**.
+
+**The bar is deliberately conservative.** `sd² = a²/n + b²` is fitted by OLS across five widths
+(300/400/600/800/1200), and the bar is **2·b_upper = 0.0242**, from a leave-one-width-out upper
+bound — *not* 2·b_point (0.004). An earlier two-width fit returned `b = 0.0000` exactly, which
+is not "no drift" but "cannot resolve drift" wearing a decisive-looking number. Direction
+justifies the choice: **too small a bar delays a freeze; too large a bar freezes a grammar that
+is still improving. Only the first is recoverable.**
+
+**Current reading:** `0.7206 0.7241 0.7448 0.7417 0.7512 0.7548 0.7209 0.7453 0.7141 0.7535`;
+newest vs best-prior **−0.0013**, inside the floor. Coverage 1.000/window, max weight 2.18.
+
+**Companions — reported, never the trigger.** (a) `P(cpcv ≥ 1.0)` per window (3 3 5 5 6 7 4 8 5
+5): TCM sits at rank ~120-from-top while promotion-grade events sit at rank ~0.4–5, so **a
+top-1%-only lift is arithmetically invisible to the trigger** — a case that falls between (A),
+which covers only *new* cells, and (C). (b) `P(cpcv|submitted)`: trend **73.1%**, MR 68.3%,
+`volatility_event` **20.6%**, driven by Crucible's per-bucket min-trade floors (100/60/30). A
+shift here changes the measured population with zero grammar action, and Crucible has a known
+live trigger (the `ref_trailing_return` writer gap) that would do exactly that.
+
+**Two corrections to claims made in the superseded spec:** "six grammar versions produced no
+attributable movement" is really **v51+v52 (>80% of the arm) flat plus four underpowered
+slivers**; and **the honest arm does not exist before v49** (the D335 campaign began
+2026-07-23), so **v43 and v47 — this programme's two headline prunes — cannot be validated on
+this basis at all.**
+
+**Still open, and NOT settled by any of this:** whether a *quality* statistic is the right
+target. Crucible measured `IC(cpcv, corr_to_book) = +0.547` — better components are more
+redundant — and located the binding constraint at assembly, not supply. A rising TCM could mean
+Forge is efficiently producing exactly the redundancy they asked us to reduce. Every
+Forge-native redundancy proxy tried has failed (threshold geometry R²=0.0018; the most- and
+least-orthogonal promoted legs share a label), so that leg must come from a relay. **(C) as
+specified is a supply-ceiling condition and should not be read as a promotion-likelihood one.**
+
+Instrument: `scripts/freeze_tail_reading.py` (standardised + raw, both statistics, companions).
 
 ---
 
