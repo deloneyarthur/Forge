@@ -922,7 +922,7 @@ decided_by: operator (in-session 2026-07-13, timestamp approximate-to-the-hour -
 decision_marker: null
 ---
 proposal_id: 682e1abd-ca1f-4e91-9695-c2bda05fbd42
-status: PENDING
+status: APPROVED
 proposed_at: '2026-07-13T17:29:53+00:00'
 proposal_type: tighten
 target: grammar_v32_earnings_coverage_manifest_wiring
@@ -999,8 +999,24 @@ proposal_yaml: |
   #   tests: absent==v31 golden; intersection blind-spot closure; corrupt fallback; cache
   #   grammar.yaml: v31 -> v32 + header note; archive; D-entry
   #   deploy relay: ask Crucible to start the publisher (loader shipped, file absent)
-decided_at: null
-decided_by: null
+decided_at: '2026-08-02T00:00:00+00:00'
+decided_by: 'operator-directed APPROVE, 2026-08-02 (D349). TWO PREMISE CORRECTIONS, both
+  verified today rather than assumed, and the conclusion survives BOTH.
+  (1) "publisher not yet started / dormant-until-publish" is VOID: Crucible has published
+  `earnings_covered_symbols_*.json` daily since ~2026-07-15 (18 files, newest
+  2026-08-01T030002Z, 140 covered symbols). The deploy relay item -- "ask Crucible to start
+  the publisher" -- is already satisfied and should be struck from the work.
+  (2) The wiring is nonetheless BYTE-IDENTICAL TODAY, for a different reason than the
+  proposal gives: measured now, the earnings-gated pool is 88 names (universe 118 minus the
+  30-name _NO_EARNINGS_UNDERLYINGS list) and the manifest is a strict SUPERSET of it --
+  gated INTERSECT covered = 88, dropping ZERO names (52 covered symbols are outside our
+  universe entirely). So the intersection is inert on current data and activates only when
+  a universe add lands uncovered, which IS the blind spot this proposal exists to close.
+  APPROVED ON THAT BASIS. The wiring still ships as its own operator-gated grammar bump and
+  still owes item (5): the resolved covered set shadows _pick_underlying draws while living
+  in neither registry_hash nor grammar_version, so it must be folded into the batch
+  fingerprint (H-3 pattern) or determinism (hard rule #6) is unprovable. Byte-identity is a
+  property of today''s manifest, not a guarantee -- re-measure the intersection at deploy.'
 decision_marker: null
 
 ---
@@ -1110,4 +1126,46 @@ decided_by: 'operator-directed decline, 2026-07-20 (D298, in-session AskUserQues
   failure-rate concentration is a property of almost any rejected config, and the
   counterfactual is the phase-1 binary safety floor (worst-case assumption), not a
   per-strategy measurement; the prefilter-tightening axis is retired (D206, permanent D298)'
+decision_marker: null
+---
+proposal_id: f59812c7-6cc2-4e90-ad42-f84b3300386a
+status: REJECTED
+proposed_at: '2026-07-25T04:41:18.809382+00:00'
+proposal_type: tighten
+target: grammar
+rationale: 0 of 243 (trend_continuation, swing_mid) candidates promoted; propose tightening
+  grammar to skip this cell.
+evidence:
+  trigger: param_no_promotion
+  hypothesis: trend_continuation
+  dte_bucket: swing_mid
+  sample_size: 243
+  confidence: 0.8072499999999999
+  counterfactual_rejection_rate: 0.0
+  counterfactual_promoted_count: 0
+  counterfactual_phase: 1_binary_safety_floor
+  counterfactual_note: 'phase-1 binary safety floor: rejection_rate is a worst-case
+    assumption (1.0 if any recent promotion, 0.0 otherwise), not a per-strategy measurement.
+    Implements draft Enhancement 8 phase 1.'
+proposal_yaml: |
+  # Proposed grammar tightening — remove (trend_continuation, swing_mid) cell
+  # Triggered by samples=243, promoted=0
+decided_at: '2026-08-02T00:00:00+00:00'
+decided_by: 'operator-directed decline, 2026-08-02 (D349) -- WRONG THREE WAYS, and the cell
+  is LIVE. (1) The statistic is noise: D341 measured per-cell dispersion at X2=38.9, df=37,
+  z=+0.29, indistinguishable from one common rate, and a 0-of-243 cell CI includes the pooled
+  rate -- this is the same misread D341 caught in our own Tier 0 work. (2) The cell is in
+  PRODUCTION BOOKS: trend_continuation/swing_mid supplies three promoted legs (fe782fb2 v39,
+  2e05436d v48, 94a2c68e v48) across portfolios aa57f9f1 and 7f2a697e; pruning it would cut
+  supply to a converting slot. (3) The estimand is dead: per-config `promoted_count` cannot be
+  nonzero under book-level promotion (D212-D216) -- the same reasoning D218 used to disarm the
+  sibling auto-tune path. Same degenerate class as the 2026-07-20 decline above.
+  CANNOT REGENERATE, verified not assumed: the Q58 source guard is already shipped
+  (`proposer.py:243`, `if feedback.promoted_count == 0: return []`, dated 2026-07-25) -- this
+  proposal fired at 04:41Z that same day, hours BEFORE it landed. It is the last of its class.
+  AND the D218 re-arm hazard ("the trigger becomes reachable the day the first book promotes")
+  has NOT materialised and structurally will not: Crucible returns portfolio promotions as
+  `component` verdicts on the legs, not `promote` -- 4 `promote` verdicts all-time and ZERO in
+  the last 14 days despite three new books, against 60,372 `component`. So `promoted_count`
+  stays 0 per batch and the guard holds. No code change needed.'
 decision_marker: null
