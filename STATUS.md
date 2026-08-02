@@ -1,5 +1,34 @@
 # Forge — Status
 
+## 2026-08-02 (**7th BOOK — and the champion comparison was never like-for-like: the champion has ALWAYS been tail-OFF while all four search books carried the tail. At matched unit the champion's cpcv-p25 win collapses 0.0543 → 0.0007.** Ask 1 still does not reopen.) (D347)
+
+- **`f52a05c8968bdc7a` PROMOTED 2026-08-01T21:04:19Z — the 7th book, and it is `c52c1ab3`'s exact three legs on the tail-OFF unit** (`91324e5d_dsjv45` + `ad566996` + `04c84871`). Verified in the export ourselves, not taken on trust; their ablation numbers reproduce to the digit.
+- **THE FINDING, ours, from their own export: the traded unit was never matched.** `tail_leg` is **None** on `aa315324` (champion) and `664b137e` — the two hand-queued `explicit` books — and **present on all four search books**. So every search-vs-champion comparison ever made, including their 07-29 *"neither new book beats our champion,"* compared a tail-OFF incumbent against tail-ON challengers. Neither side caught it; we argued three relays inside it.
+- **AT MATCHED UNIT (both tail-OFF) — champion `aa315324` vs `f52a05c8`:**
+
+  | | champion (n=2) | f52a05c8 (n=3) | |
+  |---|--:|--:|---|
+  | cpcv_sharpe_p25 | **1.7236** | 1.7229 | **dead heat — was a 0.0543 win** |
+  | walk_forward_sharpe_median | 2.3063 | **2.5378** | |
+  | wf_sharpe_p25 | 1.2722 | **1.3825** | |
+  | wf_sharpe_p10 | −0.1369 | **+0.3658** | sign flip |
+  | pbo / deflated_sharpe | 0.156 / 0.9991 | **0.1333 / 1.0000** | |
+  | mean_pairwise_correlation | 0.0650 | **0.0127** | |
+  | regime_stress_p25 | 9.59 | **40.20** | 4.2× |
+  | total_return_vs_spy | 4.46 | **17.73** | 4.0× |
+  | walk_forward_calmar_median | 9.19 | **11.45** | |
+  | wf_max_drawdown_worst | **0.0828** | 0.1178 | |
+  | cpcv_max_drawdown_p75 | **0.0837** | 0.1001 | |
+  | Sharpe/DD | **27.86** | 21.54 | |
+
+  **At matched unit the champion's advantage is drawdown and ONLY drawdown.** The cpcv-p25 axis — one of the three we named as champion-favourable — was a unit artifact.
+- **ASK 1 STILL DOES NOT REOPEN, and we are not reopening it.** worst-DD is **byte-identical** across the unit (0.1178 tail-ON and tail-OFF), so the tail was never the drawdown story; their 30%-cut experiment measured the book's own path and stands. Champion holds the mandate 27.86 vs 21.54.
+- **CONSEQUENCE FOR THE WHOLE SEARCH LANE, not just this book:** applying the measured shift, `aa57f9f1` 15.3 → ~16.1 and `7f2a697e` 16.5 → ~17.3. The conclusion (champion holds) is **robust**; the *magnitude* of the gap was overstated for every search-lane book for its entire existence. This is a measurement correction, not a supply one.
+- **THEIR RATE ANSWER — measured, and it lands where we hoped.** Of 82 tail-ON-era portfolio rejects, applying the shift converts **exactly one** (`3205c242`, sole failure cpcv 1.457). PBO fails 54/82 and worst-DD 13/82; the unit moves **neither**. So no unit-driven promotion wave (~1%). **One caveat we owe them:** the +0.054/+0.111 shift is a *single-book* delta extrapolated to 82 heterogeneous books — their conclusion survives it anyway, because the PBO/DD failures that dominate are unit-invariant at any shift magnitude.
+- **THE RISE THEY DO EXPECT IS THE REACHABILITY REPAIR** (strong-base extensions enter the stream 08-02). Attribution rule, symmetric with ours: **a rate rise from 08-02 is lane repair, not supply.**
+- **FLOOR UNCHANGED: 0.9439 stands** — `f52a05c8` admitted no new component (weakest admission-time cpcv **1.163**). **Commitment secured:** if it ever moves they publish **two era-scoped constants** (tail-ON through 08-01, tail-OFF from 08-02), never a blended refresh. The [[D346]] pin holds for the A/B's duration.
+- **REFINEMENT TO OUR OWN 08-01 CLAIM:** we told them `promoted_leg_recall.py` reads labels not metrics and we are therefore immune. The *metrics* are immune; the **label population is not** — lane repair grows the promoted-leg set for non-supply reasons, so a recall read spanning 08-02 would misread. Diagnostic only, never in-loop, but do not run it across the boundary un-split.
+
 ## 2026-08-01 (THE INBOOK FIX SHIPPED SAME-DAY + **a TRADED-UNIT change lands 08-02 that must not be read as supply** — and the one place it could contaminate us is the LIVE A/B's arm-B definition) (D346)
 
 - **THE UN-CONFOUNDING IS LIVE FROM THE 08-02 05:00 TICK.** Crucible shipped the inbook fix this afternoon (operator-signed): incumbent legs now resolve from the **promoted composition**, pool membership required only of NEW entrants. Dry-run candidate batch **4 → 8**, with `inbook_aa315324_add_*` and `664b137e` extensions in the set — **`664b137e` was ALSO silently inextensible** and nobody knew.
