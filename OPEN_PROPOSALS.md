@@ -1000,23 +1000,28 @@ proposal_yaml: |
   #   grammar.yaml: v31 -> v32 + header note; archive; D-entry
   #   deploy relay: ask Crucible to start the publisher (loader shipped, file absent)
 decided_at: '2026-08-02T00:00:00+00:00'
-decided_by: 'operator-directed APPROVE, 2026-08-02 (D349). TWO PREMISE CORRECTIONS, both
-  verified today rather than assumed, and the conclusion survives BOTH.
-  (1) "publisher not yet started / dormant-until-publish" is VOID: Crucible has published
-  `earnings_covered_symbols_*.json` daily since ~2026-07-15 (18 files, newest
-  2026-08-01T030002Z, 140 covered symbols). The deploy relay item -- "ask Crucible to start
-  the publisher" -- is already satisfied and should be struck from the work.
-  (2) The wiring is nonetheless BYTE-IDENTICAL TODAY, for a different reason than the
-  proposal gives: measured now, the earnings-gated pool is 88 names (universe 118 minus the
-  30-name _NO_EARNINGS_UNDERLYINGS list) and the manifest is a strict SUPERSET of it --
-  gated INTERSECT covered = 88, dropping ZERO names (52 covered symbols are outside our
-  universe entirely). So the intersection is inert on current data and activates only when
-  a universe add lands uncovered, which IS the blind spot this proposal exists to close.
-  APPROVED ON THAT BASIS. The wiring still ships as its own operator-gated grammar bump and
-  still owes item (5): the resolved covered set shadows _pick_underlying draws while living
-  in neither registry_hash nor grammar_version, so it must be folded into the batch
-  fingerprint (H-3 pattern) or determinism (hard rule #6) is unprovable. Byte-identity is a
-  property of today''s manifest, not a guarantee -- re-measure the intersection at deploy.'
+decided_by: 'CLOSE-OUT, 2026-08-02 (D349): this proposal was ALREADY IMPLEMENTED IN FULL as
+  grammar v32 and the row was simply never closed -- it has read PENDING for three weeks
+  against shipped code. Verified item by item in the live tree: (1) blessed contracts read
+  `_load_earnings_covered_symbols` (sampler.py:622, lru_cache, process-lifetime); (2)
+  `max_age_days=None` + the staleness teeth moved to `check_earnings_coverage_export`
+  (healthcheck_cmd.py:299, wired at :947); (3) QueryError -> loud
+  `earnings_coverage_export_unreadable` warn + () fallback; (4) `_earnings_gated_pool`
+  (sampler.py:863) = (universe & covered) - _NO_EARNINGS_UNDERLYINGS, with a disjoint-manifest
+  fallback so a bad publish cannot crash rng.choice; (5) determinism DONE --
+  `earnings_coverage_fingerprint()` (sampler.py:656) folded at enumeration/__init__.py:49,
+  live value 026dc6351bc9c05b; (6) hermetic tests; (7) v31 -> v32 bump (grammar is now v52).
+  RETRACTION OF AN EARLIER DECISION NOTE ON THIS ROW: it claimed the wiring was unbuilt, still
+  owed the fingerprint fold, and was byte-identical today. All three were WRONG. The
+  byte-identical claim came from a tautological measurement -- `_earnings_gated_pool()` already
+  applies the intersection, so intersecting its output with `covered` again necessarily drops
+  nothing. Measured correctly: v31 pool (frozen-list only) = 91, v32 live pool = 88, so the
+  manifest is ACTIVE and REMOVES THREE NAMES TODAY: ABNB, ARM, V.
+  ONE OF THOSE LOOKS LIKE A CRUCIBLE COVERAGE BUG, not a fact: V (Visa) is absent from the
+  covered set while MA, AXP, JPM, AAPL are all present. Visa has decades of earnings; ABNB/ARM
+  are plausible (short history, and both are also in the chain-inception exclusion set). Net
+  effect: Visa is silently excluded from ALL earnings-gated generation (event_momentum,
+  volatility_event, pre_earnings_setup). Relay to Crucible -- their manifest, their fix.'
 decision_marker: null
 
 ---
