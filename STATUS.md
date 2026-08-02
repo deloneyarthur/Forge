@@ -1,5 +1,21 @@
 # Forge — Status
 
+## 2026-08-02 — **v54 DEPLOYED 04:58:40Z — because v53's filter WAS NEVER LIVE.** One missing keyword argument; every gate we ran was blind to it, and the journal line we wrote is what made it look shipped. (D352)
+
+- **THE DEFECT.** `_run_one_iteration` computed `below_inception`, echoed it to the journal, and **never passed it** to `_run_battery_for_seed`. The parameter took its `None` default → **enumeration ran unfiltered from `fa00daf` through the entire v53 deploy**.
+- **WHY IT SURVIVED A FULL DEPLOY RITUAL — keep this, it is the transferable half:**
+  - the 13 unit tests exercise `underlyings_below_inception` **directly** → they prove the predicate, never the call graph;
+  - the **emission proof passed `below_inception` explicitly into a test harness** → it proved the FUNCTION works, not that production reaches it. A proof built around the path production does not take;
+  - the **journal line was the trap**: `chain_inception: excluding 22 underlying(s) (…)` printed the resolved set faithfully, every batch, while nothing was excluded. [[D185]] says verify the FEATURE in the journal; the sharper rule is **verify a filter by its EMISSION through the production path — a log line is not evidence.**
+- **CONTAMINATION MEASURED: v53 = 960 submissions, 96 single-name, 10 on excluded names** (LCID ×4, UVXY ×3, SQQQ, RTX, COIN). **Nothing was actually burning cycles** — the 7y-class names appeared in `swing_short` where they are legal, and LCID/COIN sit inside the 183-day margin zone. The only thing lost was the feature.
+- **⚠️ v53 IS A VOID COHORT FOR THIS FEATURE** — stamped as the chain-inception version, emitting like v52. **The floors comparison is `funnel --compare v53 v54`, NOT v52-vs-v53**; v53's 960 rows belong with v52 for that purpose. Owed to Crucible.
+- **WHY A BUMP, not a versionless fix:** emission changes here, so hard rule #6 (versionless ⇒ cold-start byte-identical) forbids it, and an unversioned fix would split the v53 cohort at an unrecorded timestamp.
+- **THE DURABLE GUARD:** `tests/invariants/test_enumeration_inputs_reach_the_battery.py` — any local in `_run_one_iteration` sharing a name with a `_run_battery_for_seed` keyword must be forwarded. Static (`ast`) because the defect is a **missing edge in the call graph**; an emission test would need the whole daemon path to see what parsing proves in milliseconds. **Verified RED against the exact defect, then GREEN**, and its class sweep reports only this one name. It guards every future enumeration input.
+- **CRUCIBLE'S FIRST-LOOK §1 IS WRONG, and their §2 curiosity was the real signal** (their `aac80d7`). They read RIVN 38→0 / CEG 19→0 / ARM 27→0 as the loop closing. At their own sample — ~820 arrivals, ~9% single-name ≈ 74 configs over ~118 names — **the per-name expectation is under 1**, so three zeros are noise. **LCID ×3 against an expectation of ~0.6 pointed the other way.** The names they filed as a harmless curiosity were the tell; the names they used as proof could not discriminate.
+- **LIVE:** `active/running`, NRestarts=0, `grammar_version=v54`, `registry_loaded_from_export`, no traceback. Suite **2,135 passed / 1 skipped**. Contracts **1.41.0 → 1.42.0** adopted in the same window (`deployment_sizer_modes`; same pin-only class, re-verified additive).
+- **⏳ EMISSION PROOF PENDING, deliberately not claimed:** §7.3 is blocking at 22.1% gated, so no v54 batch has submitted yet. A watcher reports excluded-name count on the first ≥50 v54 rows. **Not calling this fixed until emission says so** — that is the entire lesson of this entry.
+- **⚠️ THE STAMP-FLIP HAZARD FIRED AGAIN** (grammar.yaml edited in the live tree, second time today). Next bump: worktree, or stop first.
+
 ## 2026-08-02 — **v53 DEPLOYED 03:17:49Z** (chain-inception floors + A/B teardown + honest-arm ramp revert, one window) (D351)
 
 - **LIVE AND VERIFIED.** `active/running`, **NRestarts=0**, `grammar_version=v53`, `registry_loaded_from_export` (`registry_hash=03f0119f01df54e7`), reconcile line present, **0 traceback / SchemaVersionMismatch / GrammarVersionError**. Env confirmed IN THE PROCESS, not just the unit file: `FORGE_PREFILTER_SAMPLE_N=40`, `FORGE_GENERATION_ARM_B_SHARE=0`. Full uncontended suite **2,133 passed / 1 skipped**.
