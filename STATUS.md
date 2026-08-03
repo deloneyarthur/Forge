@@ -1,5 +1,12 @@
 # Forge — Status
 
+## 2026-08-03 — **honest-arm rate REVERTED 150 → 40** — the freeze clock has stopped, so the ramp that existed to run it is closed. Second consecutive ramp returned in the same window its question did. (D359)
+
+- **WHY NOW.** [[D355]] ramped `FORGE_PREFILTER_SAMPLE_N` 40 → 150 for exactly one purpose: the honest arm is the freeze clock, and at 40 the six n=1200 windows take ~10 days against ~4 at 150. **Both legs are read and resolved `confirmed` (D358)** — the clock has stopped, and the ~31% ranked-production cost now buys nothing.
+- **THE OBLIGATION WORKED, TWICE.** Both this revert and D351's were triggered by the ⚠️ note written **next to the variable in the unit file**, not by a ledger entry. A standing obligation kept where the operator sees it at the moment it binds is the difference between a ramp that closes and one that quietly becomes permanent.
+- **WHAT IT BOUGHT, AND WHAT IT COST THAT WE DID NOT PRICE.** Bought: the reads landed 08-03 instead of ~08-09, for ~110 extra known-rejected submissions per batch for a day. **Cost: it made both preregs' a/b re-derivation caveat UNSATISFIABLE.** The ramp landed 08-02T09:00Z, essentially **at** leg 1's cut (08:24Z), so there is no post-ramp *pre-cut* data to fit on — the post-ramp data is the judged data. D355 deliberately timed the switch to land at 0.3% of post-cut rows **to keep the cohort homogeneous**, which was right for the cohort and exactly wrong for the variance fit. **Now written into the unit file: a rate change for a clocked prereg must land BEFORE the cohort cut, or the caveat cannot be honoured.**
+- **Deploy:** preflight suite **2151 passed / 1 skipped**; unit-file change, so `daemon-reload` before `start`.
+
 ## 2026-08-03 — **FREEZE CONDITION (C) IS MET.** Both legs read once, on their registered slices, and both survive a bar **3.3× tighter** than the one they were judged against. (A) is now down to **one cell**. (D358)
 
 - **LEG 1 (quality) — CONFIRMED.** Windows 11–16 `0.7483 0.7589 0.7478 0.7552 0.7426 0.7457`; best-of-new **0.7589** vs registered baseline **0.7548** = **+0.0041** against bar **0.0242**. The quality ceiling has **not resumed rising**.

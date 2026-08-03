@@ -102,7 +102,17 @@ Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
 #       Prereg caveat 4 already mandates re-deriving the a/b fit on post-change data BEFORE the
 #       read is treated as final; this ramp makes that mandatory rather than tidy.
 # ⚠️ REVERT TO 40 once prereg `f507e5da0677` is read. Same standing obligation as last time.
-Environment=FORGE_PREFILTER_SAMPLE_N=150
+#
+# REVERTED TO 40, 2026-08-03 (D359, operator "yes move forward"). BOTH freeze legs are read and
+# resolved `confirmed` — `f507e5da0677` (+0.0041 vs bar 0.0242) and `13e4d2cece3f` (-0.0033 vs
+# 0.0173) — so the clock this ramp existed to run has stopped. Second consecutive ramp returned
+# in the same window its question closed; that is the standing obligation working, not luck.
+# WHAT THE RAMP BOUGHT: the reads landed ~08-03 instead of ~08-09. It also made the a/b
+# re-derivation caveat unsatisfiable (the ramp landed AT leg 1's cut, so post-ramp data IS the
+# judged data) — resolved by reading on the registered bar and publishing the tightened one as a
+# sensitivity (D358). If a future ramp is proposed for a clocked prereg, land it BEFORE the cut
+# or accept that the caveat cannot be honoured.
+Environment=FORGE_PREFILTER_SAMPLE_N=40
 # FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
 # floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
 # cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
