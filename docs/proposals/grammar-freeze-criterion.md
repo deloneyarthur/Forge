@@ -371,6 +371,85 @@ specified is a supply-ceiling condition and should not be read as a promotion-li
 
 Instrument: `scripts/freeze_tail_reading.py` (standardised + raw, both statistics, companions).
 
+### (C) LEG 2 — THE REDUNDANCY LEG, 2026-08-02, prereg `13e4d2cece3f`
+
+The "still open" paragraph above is now closed, and **not by a relay**. It was scoped as
+relay-dependent on the assumption that only Crucible could see corr-to-book. Wrong: their
+`corr_to_book_*.json` already publishes **116,329 per-run rows keyed by `config_hash`**, and our
+honest arm joins to it. We asked them to build a periodic export before checking whether the
+data was already on disk; it was, and we told them to stand down.
+
+**Statistic:** composition-standardised **TCM-corr** — the post-stratification-weighted mean
+`|corr to book|` among configs at/above the window's own weighted p90 of `cpcv_sharpe_p25`.
+Deliberately the *same* population, window, threshold and weights as leg 1, because the question
+is not "is our average config redundant" but **"is the supply that would actually be USED
+becoming redundant."** Crucible's entanglement finding reproduces here: top-decile `|corr|`
+**0.3837** against **0.3171** for the rest. **RISING IS WORSE**, so the comparison reference is
+the prior **maximum**. Bar `max(2·b_up, 2·sd) = 0.0173`; the fallback is load-bearing, not
+decorative, because the a/b split degenerates for this statistic (sd shrinks almost exactly
+1/√n, leaving `2·b_up = 0.0034` against a series whose own spread is 0.0087 — a bar three times
+tighter than the noise is not conservatism, it is a leg that always fails).
+
+**Crucible's two conditions are binding:** it is a *supply* statistic and must never become a
+generation target ("report it, do not tune against it"), and it is cohort-scoped — honoured by
+the same `(hypothesis, dte_bucket)` post-stratification as leg 1, since a pooled read would
+reintroduce the very composition drift that contaminated leg 1's original bar.
+
+#### The reference book is pinned to `frozen_b36f49a4` and does NOT track the designation
+
+Recorded because it is the leg's most reversible-looking decision and the one most likely to be
+"helpfully" changed later. `frozen_b36f49a4` is the minted series of the **second promotion**
+(2026-07-20) — the book the operator **retired on 2026-08-01** in favour of `f52a05c8968bdc7a`
+(QuantIQ D306: the old champion was infeasible at 11.48% NAV drawdown against an 8% ceiling).
+The flip therefore landed **before** this leg's prereg cut (2026-08-02T17:26Z), so the entire
+registered series was already read against one fixed reference and **nothing needs re-basing**.
+
+It stays pinned, on Crucible's recommendation and our own measurement. On the 2,497 configs
+carrying correlations to both books:
+
+| | value | note |
+|---|--:|---|
+| per-config agreement, pearson | **+0.9582** | the choice costs ~no ordering power |
+| per-config agreement, spearman | **+0.9531** | |
+| leg-2 level vs `frozen_b36f49a4` | **0.4228** | the registered reference |
+| leg-2 level vs `f52a05c8968bdc7a` | **0.3770** | the designated book |
+| **level gap** | **−0.0458** | **2.6× the leg's own 0.0173 bar** |
+
+The two books rank our configs almost identically but sit at materially different **levels**. So
+a silent switch would have printed a large unearned **improvement** — biasing the freeze toward
+being declared MET on a reference change rather than a supply change. **That is the
+unrecoverable direction.** A coverage-chosen yardstick that chased the designation would also
+inherit a re-base on every future flip, and there will be more. If coverage on the designated
+book ever overtakes (it is climbing: 2,497 and rising against 13,480), re-point **at a boundary
+with the series split**, never mid-window.
+
+**The yardstick is self-checking, not promise-checked.** Crucible undertook to flag changes to
+`corr_to_book`'s window or `min_overlap` before shipping them. A promise depends on someone
+remembering, and this week produced a defect of exactly that shape on each side. So the
+instrument fingerprints the reference book's identity fields (`spec_note`, `window`, `n_days`,
+`weights`, `traded_unit`, `minted_at`), pins the hash (`ae47a4749c9d`, stable across every
+export on disk), and **refuses to run leg 2 on any mismatch** — same principle as the existing
+50%-join refusal. A re-mint can move the level either way, so an unnoticed one could manufacture
+a false PASS.
+
+**The registered read must not set its own bar.** Left alone the instrument re-fits `a`/`b` on
+every run — *including the windows under judgement* — so the threshold moves with the data it
+judges. That is peeking wearing a formula: leg 2's bar read 0.0173 at registration and 0.0210
+one window later, purely from refitting. `--leg1-bar` / `--leg2-bar` pass the registered values
+and label the output `REGISTERED`; without them the run is labelled **EXPLORATORY — NOT the
+registered read**. Resolve against the prereg's literal baseline (0.4411), not the recomputed
+one: post-stratification re-weights past windows as the sample grows, moving them ~0.0002 (1.2%
+of the bar).
+
+**Reading rule (fixed in advance):** a single read once **6 new n=1200 windows** accrue after the
+cut, best-of-new-6 against the prior max. **The freeze decision requires BOTH legs** and is taken
+at the *later* of the two reads. Backdating leg 2's cut to align with leg 1's would mean
+registering a prediction against data already seen.
+
+**Current status — EXPLORATORY, not the read:** leg 1 **−0.0174** vs 0.0183; leg 2 **−0.0420**
+vs 0.0173. Both inside their floors, neither is a freeze decision, and **both legs remain
+arithmetically blind to a top-1%-only lift** by the same rank argument as above.
+
 ---
 
 **SUPERSEDED — the original stage-two (C), retained for the record:**

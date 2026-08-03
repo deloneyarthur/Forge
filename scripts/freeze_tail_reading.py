@@ -56,6 +56,7 @@ Usage: freeze_tail_reading.py SNAPSHOT.db [--window 1200]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import statistics
@@ -87,38 +88,69 @@ _CENSOR_QUERY = """
 
 Obs = tuple[str, float, float | None]  # (cell, cpcv, |corr to reference book| or None)
 
-# The redundancy leg's reference book. `frozen_b36f49a4` is used because it has FULL coverage
-# of our honest arm (13,480 of 13,480 joined rows) where the newest book covers only 2,494 --
-# a reference that appears mid-window would make the series discontinuous for a reason that has
-# nothing to do with our supply. If the operator's designation flips (D348: QuantIQ's mandate
-# currently prefers f52a05c8), the reference must be RE-PINNED AND RE-BASED, never silently
-# switched: the level differs between books, so swapping mid-window would read as redundancy
-# movement that never happened.
+# The redundancy leg's reference book. `frozen_b36f49a4` is the minted series of the SECOND
+# promotion (2026-07-20), used because it has FULL coverage of our honest arm (13,480 of 13,480
+# joined rows) where the newest book reaches only 2,497.
+#
+# IT DOES NOT TRACK THE DESIGNATION, AND THAT IS DELIBERATE (2026-08-02, agreed with Crucible).
+# The operator's designation flipped to `f52a05c8968bdc7a` on 2026-08-01 -- BEFORE this leg's
+# prereg cut (13e4d2cece3f, 2026-08-02T17:26Z) -- so the whole registered series was already
+# read against one fixed reference and nothing needs re-basing. It stays pinned because a
+# coverage-chosen yardstick that chased the designation would inherit a re-base on every future
+# flip, and there will be more. Measured on the 2,497 configs carrying both:
+#
+#   per-config agreement   pearson +0.9582   spearman +0.9531   <- the choice costs ~no ordering
+#   leg-2 level            0.4228 (this ref) vs 0.3770 (designated)  = -0.0458
+#
+# The level gap is 2.6x the leg's own decision bar of 0.0173, and it points DOWN -- so silently
+# switching would have printed a large unearned IMPROVEMENT and biased the freeze toward being
+# declared MET on a reference change. That is the unrecoverable direction.
 _REF_BOOK = "frozen_b36f49a4"
 
+# Fingerprint of the reference book's identity fields as Crucible publishes them, stable across
+# all five exports on disk (2026-07-30 .. 2026-08-02). Crucible undertook to flag basis changes
+# before shipping them; this makes the undertaking self-checking rather than memory-dependent,
+# which is the same lesson both sides drew twice this week. A re-mint can move the level either
+# way, so an unnoticed one could manufacture a false PASS.
+_REF_BASIS_FIELDS = ("spec_note", "window", "n_days", "weights", "traded_unit", "minted_at")
+_REF_BASIS_FP = "ae47a4749c9d"
 
-def _load_corr() -> dict[str, float]:
-    """`{config_hash: |corr to the reference book|}` from Crucible's newest export, or {}.
 
-    Fail-open: no export, unreadable, or the reference book absent -> empty map -> the
-    redundancy leg reports as unavailable rather than silently reading zero redundancy. A leg
-    that quietly passes when its input is missing is worse than one that says it cannot run.
+def _basis_fp(book: dict[str, object]) -> str:
+    """Stable short hash over the fields that decide WHICH SERIES the correlations are against."""
+    ident = {k: book.get(k) for k in _REF_BASIS_FIELDS}
+    return hashlib.sha256(json.dumps(ident, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def _load_corr() -> tuple[dict[str, float], str | None]:
+    """`({config_hash: |corr to the reference book|}, basis fingerprint)` from the newest export.
+
+    Fail-open on every path: no export, unreadable, the reference book absent, or the reference
+    book RE-BASED -> empty map -> the redundancy leg reports as unavailable rather than silently
+    reading a number. A leg that quietly passes when its input is missing or changed underneath
+    it is worse than one that says it cannot run.
     """
     root = Path.home() / "optbt_data" / "exports"
     try:
         files = sorted(root.glob("corr_to_book_*.json"), key=lambda q: q.stat().st_mtime)
         if not files:
-            return {}
+            return {}, None
         payload = json.loads(files[-1].read_text())
     except (OSError, ValueError):
-        return {}
+        return {}, None
+    book = (payload.get("books") or {}).get(_REF_BOOK)
+    if not isinstance(book, dict):
+        return {}, None
+    fp = _basis_fp(book)
+    if fp != _REF_BASIS_FP:
+        return {}, fp
     out: dict[str, float] = {}
     for row in payload.get("rows", []):
         c = (row.get("corr") or {}).get(_REF_BOOK)
         h = row.get("config_hash")
         if h and c is not None:
             out[str(h)] = abs(float(c))
-    return out
+    return out, fp
 
 
 def _wq(obs: list[Obs], w: dict[str, float], p: float) -> float:
@@ -239,12 +271,20 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("snapshot")
     ap.add_argument("--window", type=int, default=1200)
+    # THE REGISTERED READ MUST NOT SET ITS OWN BAR. Left to itself this script re-fits a/b on
+    # every run -- including the windows under judgement -- so the threshold moves with the data
+    # it is meant to judge. That is peeking wearing a formula: leg 2's bar was 0.0173 at
+    # registration and 0.0210 one window later, purely from refitting. Pass the bar registered in
+    # the prereg (f507e5da0677 / 13e4d2cece3f) and the read is a real test; omit it and the run
+    # is labelled EXPLORATORY so no one can mistake a recomputed pass for the registered one.
+    ap.add_argument("--leg1-bar", type=float, default=None, help="registered bar, quality leg")
+    ap.add_argument("--leg2-bar", type=float, default=None, help="registered bar, redundancy leg")
     args = ap.parse_args()
 
     with db_connection(Path(args.snapshot)) as conn:
         raw = conn.execute(_QUERY).fetchall()
         censor = conn.execute(_CENSOR_QUERY).fetchall()
-    corr = _load_corr()
+    corr, basis_fp = _load_corr()
     obs: list[Obs] = [(f"{h}/{b}", v, corr.get(ch)) for ch, h, b, v in raw if v is not None]
     joined = sum(1 for o in obs if o[2] is not None)
     n = len(obs)
@@ -254,6 +294,12 @@ def main() -> int:
         f"honest arm, stage one, with cpcv: n={n}   cells={len(ref)}   "
         f"joined to corr_to_book: {joined} ({100 * joined / n:.1f}%)"
     )
+    print(f"reference book: {_REF_BOOK}  basis_fp={basis_fp or 'ABSENT'} (pinned {_REF_BASIS_FP})")
+    if basis_fp != _REF_BASIS_FP:
+        print(
+            "  *** REFERENCE RE-BASED OR ABSENT -- leg 2 will not run. Re-pin and re-base the\n"
+            "      series at the boundary; do NOT compare across the change."
+        )
 
     widths = (300, 400, 600, 800, 1200)
     print(
@@ -292,21 +338,34 @@ def main() -> int:
     )
     if len(ser) >= 2:
         drift = ser[-1] - max(ser[:-1])
-        bar = bars["tcm STANDARDISED"]
+        bar, mode = _bar(args.leg1_bar, bars["tcm STANDARDISED"])
         print(
-            f"  newest vs best-prior: {drift:+.4f}  bar 2b={bar:.4f}  -> "
+            f"  newest vs best-prior: {drift:+.4f}  bar 2b={bar:.4f} [{mode}]  -> "
             f"{'MOVING' if drift > bar else 'flat within the drift floor'}"
         )
 
-    _leg2(obs, ref, args.window, joined, n, bars["tcm_corr STANDARDISED"])
+    _leg2(obs, ref, args.window, joined, n, bars["tcm_corr STANDARDISED"], args.leg2_bar)
 
     print("\n=== companions (never the trigger) ===")
     _companions(obs, censor, args.window)
     return 0
 
 
+def _bar(registered: float | None, recomputed: float) -> tuple[float, str]:
+    """The registered bar if one was supplied, else the refit one -- labelled either way."""
+    if registered is not None:
+        return registered, "REGISTERED"
+    return recomputed, "EXPLORATORY, refit on the judged data -- NOT the registered read"
+
+
 def _leg2(
-    obs: list[Obs], ref: dict[str, float], width: int, joined: int, n: int, b_bar: float
+    obs: list[Obs],
+    ref: dict[str, float],
+    width: int,
+    joined: int,
+    n: int,
+    b_bar: float,
+    registered: float | None = None,
 ) -> None:
     """Leg 2 of freeze condition (C): has the GOOD supply become more redundant?"""
     print("\n=== LEG 2 (redundancy): TCM-corr, composition-standardised ===")
@@ -327,14 +386,23 @@ def _leg2(
         # times tighter than the noise is not conservatism, it is a leg that always fails.
         # Falling back to 2*sd keeps the test on the spread actually observed at the decision
         # width; the rule reduces to 2*b_up whenever real drift dominates sampling.
+        # WHY THE HISTORICAL WINDOWS DRIFT BETWEEN RUNS, stated because a reader will notice it
+        # and should not have to wonder: post-stratification weights each window to the mix of
+        # the FULL sample, and the full sample grows, so every past window is re-weighted on
+        # every run. Registration recorded 0.4190 0.4137 ... max 0.4411; this run reads 0.4186
+        # 0.4140 ... max 0.4409. The shift is ~0.0002 -- about 1.2% of the 0.0173 bar -- and
+        # cannot flip a decision unless the read lands within 0.0002 of the threshold, in which
+        # case the honest call is "at the bar" anyway. The prereg pinned the baseline as a
+        # LITERAL (0.4411) precisely so the comparison does not float; use that number, not the
+        # recomputed one, when resolving.
         rclean = [v for v in rser if not math.isnan(v)]
         rsd = 2 * statistics.pstdev(rclean)
-        rbar = max(b_bar, rsd)
+        rbar, mode = _bar(registered, max(b_bar, rsd))
         if len(rclean) >= 2:
             rise = rclean[-1] - max(rclean[:-1])
             print(
-                f"  newest vs worst-prior(highest): {rise:+.4f}  bar={rbar:.4f}"
-                f" (2b_up={b_bar:.4f}, 2sd={rsd:.4f})"
+                f"  newest vs worst-prior(highest): {rise:+.4f}  bar={rbar:.4f} [{mode}]"
+                f" (refit would be 2b_up={b_bar:.4f}, 2sd={rsd:.4f})"
                 f"  -> {'WORSENED' if rise > rbar else 'not worsened within the floor'}"
             )
         print(f"  reference book: {_REF_BOOK}   (RISING = more redundant = worse)")
