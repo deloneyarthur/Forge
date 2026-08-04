@@ -25,7 +25,23 @@ WorkingDirectory=/home/aj/proj/Forge
 # (Crucible-validated 2026-06-29: PC1 load 0.10, mixed book CSCV PBO 0.107). A/B
 # feedback knob; empty/unset => byte-identical (hard rule 6). REVERT = delete this
 # line + restart. Pre-registered (D208) + alpha-budget-charged (D207); confirm §8.4.
-Environment=FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20
+# RETIRED 2026-08-03 (D367, operator "recommendation is good"). The floor's founding evidence was
+# RETRACTED: Crucible's 07-19 ve close-out re-derived 23/25 stored-cpcv ve components as GHOSTS and
+# the clean-cache mixed-book PBO came back 0.40 — "real-but-MARGINAL, no solo promotion case". It
+# was then held open for the v39 exit repair, and THE REPAIR DID NOT WORK: ve reads 2-10% conversion
+# with median cpcv +0.20..+0.33 through v21 (the ghost era, i.e. the retracted evidence), then 0-1%
+# with median -0.23..-0.53 from v22 onward and STAYS there — v39 0.40%/-0.439, v54 0.10%/-0.413,
+# indistinguishable from pre-repair v38. The assembly axis was checked too, because per D361 a solo
+# statistic cannot condemn a family (that was our swing_long error the same week): ZERO ve legs in
+# 7 promoted books / 20 legs, ZERO ve rows in the 12 component_contributions. swing_long is
+# bad-solo/7-of-7; ve is bad-solo/0-of-7, and that contrast is the argument.
+# UN-PROPPING, NOT PRUNING: the floor was a max-normalized weight delivering ~10-12%; removing it
+# returns ve to its learned weight plus the D067 5% exploration floor, so the family stays samplable
+# and the per-cell question (each ve cell carries only 3-24 honest verdicts) stays open.
+# REVERT = re-add the line below + restart. Prereg d4b1efd26bb3 — falsifier is the freeze leg-2
+# TCM-corr (D216's real concern was HOMOGENEITY, not conversion; predicting a conversion rise would
+# be predicting arithmetic). Restore the floor if TCM-corr rises >0.0173 above 0.4457.
+# Environment=FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20
 # FORGE_QUALITY_RANK_MODE=gate-tail (D252, prereg 9063b405): the P1.1 hard-gate form of the
 # quality lane — P(component) GATES eligibility at FORGE_REWIRE_P_FLOOR and the wf_p25 tail
 # ORDERS the survivors (the §6.2 composite is bypassed), matching the shadow A/B (Δ +0.180
