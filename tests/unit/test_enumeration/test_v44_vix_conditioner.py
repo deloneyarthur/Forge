@@ -135,14 +135,24 @@ def test_conditioner_dormant_without_vix_as_trend_gate() -> None:
 
 
 def test_conditioner_emits_double_gate_on_adx_hurst_primary(v44_configs: list) -> None:
+    """INVERTED at v55 (D366): the conditioner is RETIRED, so this asserts UNREACHABILITY.
+
+    Kept rather than deleted, per the v52 precedent — a deleted test cannot catch silent
+    re-admission. The shape assertions below still describe what a double-gate WOULD have to
+    look like if the share were ever restored, so they run against the (currently empty) set
+    and would immediately police a revert that did not re-open the decision.
+    """
     doubles = [
         c
         for c in _trend_xsect(v44_configs)
         if _VIX_CONDITIONER_ID in _gates(c)
         and any(g in _VIX_CONDITIONER_PRIMARY_GATES for g in _gates(c))
     ]
-    assert doubles, "the vix conditioner never produced a double-gate"
-    for c in doubles:
+    assert not doubles, (
+        f"{len(doubles)} vix double-gates emitted — v55 retired the conditioner "
+        "(_VIX_CONDITIONER_SHARE = 0.0); see test_v55_vix_conditioner_retired"
+    )
+    for c in doubles:  # vacuous while retired; the shape guard for any future revert
         gates = _gates(c)
         assert len(gates) == 2  # primary + vix — max 2, never 3
         others = [g for g in gates if g != _VIX_CONDITIONER_ID]
@@ -240,8 +250,15 @@ def test_conditioner_fires_near_target_share() -> None:
                 fired += 1
     assert eligible >= 20, f"too few eligible configs to test the share ({eligible})"
     rate = fired / eligible
-    # Tight band around the CONSTANT now that the denominator is right (measured 0.1208).
-    assert 0.09 <= rate <= 0.17, f"fire rate {rate:.3f} off target {_VIX_CONDITIONER_SHARE}"
+    # INVERTED at v55 (D366): the share is 0.0, so the fire rate must be EXACTLY zero. The
+    # eligibility denominator assertion above is the load-bearing half now — it proves the
+    # population still EXISTS and the zero is a real non-firing rate, not an empty denominator
+    # quietly passing. That distinction is the Q57 lesson (2026-07-24) that fixed this same
+    # test once before: a denominator that silently drops non-firing configs fakes the rate.
+    assert rate == 0.0, (
+        f"fire rate {rate:.3f} over {eligible} eligible configs — expected 0.0 at "
+        f"_VIX_CONDITIONER_SHARE={_VIX_CONDITIONER_SHARE}"
+    )
 
 
 # --- validity -----------------------------------------------------------------
@@ -257,7 +274,9 @@ def test_double_gate_configs_are_grammar_valid(v44_configs: list) -> None:
         and any(g in _VIX_CONDITIONER_PRIMARY_GATES for g in _gates(c))
         and len(_gates(c)) == 2
     ]
-    assert doubles  # yielded ⇒ grammar-valid
+    # INVERTED at v55 (D366): retired, so the emitted set is empty and grammar-validity of the
+    # double-gate is no longer demonstrable by emission. Kept as a re-admission guard.
+    assert not doubles, f"{len(doubles)} double-gates emitted after the v55 retirement"
 
 
 # --- v45: hurst-only (adx dropped) --------------------------------------------

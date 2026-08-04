@@ -195,7 +195,17 @@ def test_v1_grammar_loads(grammar: object) -> None:
     # passed to the battery, so enumeration ran unfiltered. This bump is what actually ships
     # it. v53 is a VOID cohort for the feature (960 rows, 10 on excluded names); the floors
     # comparison is v53-vs-v54, not v52-vs-v53.
-    assert grammar.grammar_version == "v54"  # type: ignore[attr-defined]
+    # v55 (2026-08-03, D366): Q46 CONDITIONER RETIRED — `_VIX_CONDITIONER_SHARE` 0.125 -> 0.0.
+    # Crucible closed Q46: the hurst x vix double-gate was proposed as a DECORRELATION mechanism
+    # and measures MORE correlated to the champion book (median |corr| 0.3782 vs 0.3564, n=1,335
+    # vs 118,189), reproduced on our ledger at 0.3682 vs 0.3520 before we accepted it. Their
+    # pinned pool-entry metric was separately unmeasurable (~1,506 days to ONE expected entry),
+    # so decorrelation was the only axis that could decide, and it decided against. ZEROED not
+    # deleted: the draw site short-circuits, so keeping the predicate keeps the rng.random()
+    # consumption in place, and their own caveat (one reference book) makes this revertible in
+    # one line. Emission-policy, rules text unchanged; goldens NOT re-pinned because the minimal
+    # fixture never served vix as a trend gate, so the cold path stays byte-identical.
+    assert grammar.grammar_version == "v55"  # type: ignore[attr-defined]
     assert len(grammar.rules) == 21  # type: ignore[attr-defined]
 
 

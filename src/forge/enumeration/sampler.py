@@ -289,7 +289,26 @@ _REGIME_VETO_SHARE: float = 0.5
 # added signal: the divergence onset is the first eligible xsect-trend-adx/hurst
 # config (the golden re-pin scoping proof).
 _VIX_CONDITIONER_ID: str = "vix_term_slope"
-_VIX_CONDITIONER_SHARE: float = 0.125
+# v55 (D366) — RETIRED, share zeroed. Crucible closed Q46 on 2026-08-03: the double-gate was
+# proposed as a DECORRELATION mechanism and measures MORE correlated to the champion book, not
+# less (median |corr| 0.3782 vs 0.3564, n=1,335 against 118,189 controls). Reproduced on our own
+# ledger before accepting: 0.3682 (n=1,172) vs 0.3520 (n=109,384). Their pinned pool-entry metric
+# was separately shown structurally unmeasurable — ~1,768 components for ONE expected entry, i.e.
+# 1,506 days — so the decorrelation axis was the only one that could ever have decided this.
+#
+# ZEROED, NOT DELETED, on two grounds. (1) DETERMINISM: the draw site short-circuits
+# (`_vix_conditioner_eligible(...) and rng.random() < SHARE`), so keeping the predicate keeps the
+# `rng.random()` consumption exactly where it was — only the params draw inside the branch is
+# skipped. Removing the predicate would delete that call and churn the sequence far more.
+# (2) REVERSIBILITY: their reading is correlation to ONE reference (frozen_b36f49a4, the retired
+# champion pinned for coverage); they wrote that the door is not nailed shut and the measurement
+# is cheap to repeat against f52a05c8. A constant is a one-line revert; a deleted path is not.
+#
+# The reclaimed ~20 configs/day are REDISTRIBUTED, not subtracted: with `added_second_gate` now
+# always False on this arm, the regime-VETO branch becomes reachable for configs that previously
+# took the conditioner. Prereg `c14fa12cd4da`. Tests inverted to assert unreachability rather
+# than deleted (v52 precedent: a deleted test cannot catch silent re-admission).
+_VIX_CONDITIONER_SHARE: float = 0.0
 # v45 (D319): hurst ONLY (was {adx, hurst} in v44) — adx x residual_momentum is
 # dead (see the block above); the pilot conditions the working hurst base only.
 _VIX_CONDITIONER_PRIMARY_GATES: frozenset[str] = frozenset({"hurst"})
