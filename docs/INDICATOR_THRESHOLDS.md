@@ -109,20 +109,13 @@ This document is the **threshold map** that informs Forge's per-indicator thresh
 
 **Recommendation:** Forge should NOT generate threshold signals on these. Use them only in `passthrough` or comparison signals where the predicate compares two indicators rather than indicator-vs-constant.
 
-### 9. ~~Stubs (NaN-only on real data)~~ — **SUPERSEDED by D031 (2026-05-15): all five are LIVE.**
+### 9. (deleted) Stubs that were never stubs
 
-> **This entire section is obsolete.** It reflects the 2026-05-14 audit *before* Crucible shipped real
-> implementations. Per `indicator_thresholds.py:18-22` (D031) and Crucible's 2026-06-15 coverage handoff,
-> all five compute real values and are enumerated with live threshold specs. **Do NOT skip them.** The table
-> below is retained only as a historical record of the pre-D031 state; the "skip" suggestions are WRONG today.
-
-| Indicator | ~~Why NaN (pre-D031)~~ | **Live status (D031+, current)** |
-|---|---|---|
-| `iv_rank` | ~~needs ATM IV history~~ | **LIVE** — non-NaN ~100% single-name; spec `directional_range=(20,40)`, `regime_range=(10,50)` (R1 ≤ 50 honored). The §3.5 R1 mean_reversion gate. |
-| `expected_value_estimator` | ~~needs prior trade history~~ | **LIVE** (v2); now the X2 fractional-Kelly sizer feature (D138 nulled its directional range). |
-| `pairs_zscore` | ~~needs pair definitions~~ | **LIVE** (v2); relative_value's directional pool. |
-| `put_call_flow` | ~~needs options-flow data~~ | **LIVE** (v2). |
-| `vix_level` | ~~needs VIX bars~~ | **LIVE** (v2); calm-regime gate `regime_range=(15,30)`. |
+The original audit classed five indicators (`iv_rank`, `expected_value_estimator`,
+`pairs_zscore`, `put_call_flow`, `vix_level`) as NaN-only stubs and recommended skipping
+them. **Wrong since D031 (2026-05-15)** — Crucible shipped real implementations of all five;
+they are live and enumerated with threshold specs in `_INDICATOR_THRESHOLD_TABLE`. The
+struck-through table was deleted 2026-08-06; the pre-D031 text is in git history.
 
 ### 10. Microstructure (low signal on SPY) (1 indicator)
 
@@ -132,63 +125,17 @@ This document is the **threshold map** that informs Forge's per-indicator thresh
 
 ---
 
-## Implementation plan (Forge `sampler.py`)
+## What the audit produced (landed long ago)
 
-Replace the universal `params={"threshold": 30.0}` default in `sampler.py:132/138` with an indicator-aware sampler:
-
-```python
-def _sample_threshold(indicator_id: str, role: str, rng: Random) -> dict:
-    """Sample a threshold (and optionally op) appropriate for the indicator + role."""
-    spec = _INDICATOR_THRESHOLD_TABLE.get(indicator_id)
-    if spec is None or spec.is_skip:
-        raise EnumerationSkip(f"{indicator_id!r} has no usable threshold under real Crucible compute")
-    # role-aware: directional signals fire on "extreme" values; regime_filter fires on "allow window"
-    if role == "directional":
-        return spec.directional_sample(rng)
-    elif role == "regime_filter":
-        return spec.regime_sample(rng)
-    elif role == "confluence":
-        return spec.confluence_sample(rng)
-```
-
-`_INDICATOR_THRESHOLD_TABLE` lives in a new `forge.enumeration.indicator_thresholds` module with one entry per indicator family.
-
-**~~Skip-list (5 indicators)~~ — OBSOLETE (D031):** `iv_rank`, `expected_value_estimator`, `pairs_zscore`,
-`put_call_flow`, `vix_level` are **all LIVE** and enumerated. The only true skips are the price-scale
-indicators (`ema`, `ema_50`, `sma`) and raw $-scale (`gex`/`vex`/`cex`/`atr`), per `_SKIP_SPEC` in
-`indicator_thresholds.py`.
-
-**Skip from directional** but allow as passthrough/comparison **(3 indicators)** — price-scale:
-- `ema`, `ema_50`, `sma`
-
-**~~Conditional skip~~ — OBSOLETE:** ~~`days_to_earnings` only enumerable for non-SPY (single-name) underlyings; v1 SPY-only so skip~~. The universe has been multi-name for months and `days_to_earnings` is **live** — it serves as a `volatility_event` R3 regime gate. The part that remains true: it is only meaningful for single-name underlyings (no earnings date for SPY/index).
-
-**Registry vs. Forge table gap (current, derive-from-source).** The live registry advertises more
-indicators than `_INDICATOR_THRESHOLD_TABLE` carries. Any registry id absent from the table returns
-`is_threshold_skippable() == True` (defensive invariant: no empty-params threshold leak) — so Forge does
-**not** enumerate it as a directional/regime threshold signal; it is at most a `passthrough`/`confluence`
-indicator. As of the `2026-06-24T070003Z.json` snapshot, the published-but-not-in-table set was:
-`butterfly_25d`, `cs_dispersion`, `iv_vs_index`, `ivol`, `realized_skew`, `skew_25d`, `vix_term_slope`,
-`vol_of_vol` (families `iv_structure` / `macro` / `volatility`). This list is a moving target — re-derive
-it from the diff of the newest registry snapshot against the table, not from this line. Adding any of these
-to the threshold table is a grammar/operator decision (and for the skew-surface ids, a *direction* decision
-— classic skew is seller-signed; see the banner).
-
-**~~Grammar impact (§3.5 R1 / X2 caveats)~~ — OBSOLETE (D031): both constraints are satisfied.**
-- §3.5 R1: `iv_rank` is **live**, so R1 is **satisfiable** and `iv_rank` is a valid mean_reversion regime gate
-  (`regime_range=(10,50)`). Caveat that *is* current (D150, not stale): the sampler **de-weights** `iv_rank`
-  3:1 vs the ranging proxies (`gamma_flip`/`hurst`) for mean_reversion because it *fires sparsely* (trade-count
-  prefilter), but it stays explorable (weight 1.0, never zeroed). It is also excluded from the
-  `cross_sectional_rank` path (D116, `rank_per_name_coherent=false`) — single-name path only.
-- §3.5 X2: `expected_value_estimator` is **live**; the fractional-Kelly sizer constraint is satisfied.
-
-These are **operator-decision** items beyond this audit's scope.
-
----
-
-## Q13 closure note
-
-Q13 in `OPEN_QUESTIONS.md` documented "100% rejection at permutation_test under synthetic cache." With the real Crucible cache active (`b447597`), the rejection has shifted to `signal_density` because threshold defaults don't match real indicator scales. The fix is indicator-aware threshold sampling per this audit. Logged as **Q14** in `OPEN_QUESTIONS.md`.
+The audit's implementation plan SHIPPED as `forge.enumeration.indicator_thresholds`
+(`_INDICATOR_THRESHOLD_TABLE`, role-aware `sample_threshold_params`). Durable behaviors, all
+enforced in code/tests rather than here: any registry id absent from the table is
+threshold-skippable (defensive — no empty-params threshold leak; it can still ride as
+passthrough/confluence); price-scale ids (`ema`/`ema_50`/`sma`) and raw $-scale
+(`gex`/`vex`/`cex`/`atr`) are permanent skips (`_SKIP_SPEC`); adding a published-but-untabled
+id is a grammar/operator decision (for skew-surface ids also a *direction* decision — classic
+skew is seller-signed). The shipped-plan prose and Q13/Q14 closure notes were deleted
+2026-08-06 (git history holds them).
 
 ---
 

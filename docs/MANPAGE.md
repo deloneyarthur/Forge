@@ -133,18 +133,13 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 | `--config` | path | `config/forge.yaml` | YAML defaults file. |
 | `--no-config` | flag | off | Ignore YAML; use hardcoded defaults + CLI flags only. |
 
-**Env-only knob — `FORGE_ORTHOGONAL_FAMILY_FLOOR`** (Layer-2 decorrelated-supply lever, D216): comma-separated
-`family=floor` pairs (e.g. `volatility_event=0.20`) that lift the named hypothesis families to a minimum
-sampling weight over the learned component-rate weights, so the estimand stops starving the PBO-orthogonal
-family (single-name `volatility_event`) to the D067 5% floor. The `floor` is a **max-normalized weight** (the
-top learned family = 1.0), NOT a delivered sampling share — the realized share is `floor / sum(weights)`, so
-it floats with the other (oscillating) families: `volatility_event=0.20` delivered ~10.7% share with trend
-saturated at 1.0. Judge the A/B on the journal's `floor ACTIVE` delivered share, not the floor number. Unset
-(default) → byte-identical (hard rule 6).
-Only ever RAISES a family (`max` semantics; starves nothing). A/B feedback-change: activation is an
-operator-gated deploy, pre-registered (`forge prereg`, D208) + alpha-budget-charged (`forge alpha-budget`,
-D207) + later-cohort-confirmed (§8.4). Revert = drop the env var. Consumed by
-`forge.cli.main._orthogonal_family_floors` → `rejection_weights.apply_orthogonal_family_floor`.
+**Env-only knob — `FORGE_ORTHOGONAL_FAMILY_FLOOR`** (D216; **RETIRED from the unit at D367** —
+the ve floor's founding evidence was retracted; the knob stays functional as a one-line revert):
+comma-separated `family=floor` pairs lifting named hypothesis families to a minimum
+**max-normalized** sampling weight (NOT a delivered share — judge on the journal's `floor
+ACTIVE` line). Only ever raises (`max` semantics); unset → byte-identical (hard rule 6).
+Consumed by `forge.cli.main._orthogonal_family_floors` →
+`rejection_weights.apply_orthogonal_family_floor`. History: D216/D367.
 
 **`search_n_trials` stamping (D310, automatic, self-gated)**: every submitted config is stamped with its
 per-slot cumulative search multiplicity (slot = hypothesis × dte_bucket × xsect-vs-named, counted from
@@ -182,17 +177,13 @@ slots (the holdout REPLACES rank slots — total submitted stays ≤ batch_size,
 so evals can split biased-vs-unbiased. Consumed by `forge.cli.main._resolve_exploration_holdout_frac` →
 `rank_batch_with_holdout`. Activation is an operator-gated submission-mix change (deploy ritual + the D220 hold).
 
-**Experiment-cell selection floor (D287)** — `forge.ranking.experiment_cells.EXPERIMENT_CELLS`
-(hand-pinned constants, currently `{(residual_momentum, vix_term_slope)}`) reserves
-`EXPERIMENT_CELL_SLOTS` (4) of each batch's ranked slots per pinned (directional, regime) cell,
-via a diversifier reservation phase (same greedy rule). WHY: under gate-tail the hard P floor
-pinned the resid x vix arm to 0.0 (16% eligible vs hurst's 87% — the F3 model learned from
-hurst-carried history), starving the two-arm EXPERIMENT at selection after v37/D286 fixed its
-generation draw — the D119/D136 "learned systems must not bias an experiment" principle at the
-selection layer. Per-batch audit line in the journal: `experiment_cell_floor: {...}`. The pin
-retires on Crucible's relay (when the two-arm read concludes), never from learned feedback.
-D299 moved the pin's home to the campaign registry (`forge.ranking.campaigns`) — the constants
-here DERIVE from farming campaigns, pinned byte-identical by test.
+**Experiment-cell selection floor (D287/D299)** — `forge.ranking.experiment_cells.EXPERIMENT_CELLS`
+DERIVES from farming campaigns in the registry (`forge.ranking.campaigns`) and reserves
+`EXPERIMENT_CELL_SLOTS` (4) ranked slots per pinned (directional, regime) cell via a diversifier
+reservation phase, so a learned ranker cannot starve a live experiment at selection (the
+D119/D136 principle). **The pin set is currently EMPTY** — the resid×vix campaign retired on
+Crucible's relay (D305) — so the reservation phase is a no-op until a future campaign pins a
+cell. Journal line when active: `experiment_cell_floor: {...}`. History: D287/D299/D305.
 
 **Env kill-switch — `FORGE_YOUNG_CELL_FLOOR`** (D307, Theme 2b): default `off` — must be exactly
 `on` to activate the YOUNG-cell exploration floor (diversifier phase 0c): any (directional,
@@ -205,73 +196,27 @@ window). Activation is an operator-gated deploy (flip the env on `forge.service`
 journal line when active: `cell_floor: mature_cells=N …`.
 
 **Env-only knob — `FORGE_TAIL_LANE_SLOTS`** (prereg `8cfe95f4a6e9`): ranked slots per batch
-reserved for the **tail arm**, ordered by `P(top-N by sharpe_baseline)` from the
-`train-tail` artifact instead of the merit lane's `E[cpcv]`. Tagged
-`selection_mode='tail_lane'` — a FOURTH lane, kept apart from `ranked` so the arm
-comparison is a query rather than an inference. It keeps `pool_size` (it competed for ranked
-slots), unlike `prefilter_sample`.
+reserved for the **tail arm**, ordered by `P(top-N by sharpe_baseline)` from the `train-tail`
+artifact; tagged `selection_mode='tail_lane'` (a concurrent arm — arm splits inside the same
+batches cancel Crucible's measured drift floor, which a before/after read cannot; the arm draws
+FIRST so merit and holdout never see its picks). Unset/0 → byte-identical; no artifact → lane
+logs `inert`; clamp **[0, 150]** so a control arm always survives. Journal:
+`tail_lane: ACTIVE N slots (…)`. Activation is an operator-gated deploy.
 
-A **concurrent arm, not a switch**: Crucible's `k5_share` fix read at +5.09 sigma *because*
-it was an arm split, and their instrument carries a drift floor (bootstrap SEs understate
-across-window variation 1.3–2.1× and do **not** shrink with n), so a before/after read
-across time is unreadable at any sample size while two arms in the same batches cancel the
-drift. Tail slots come **out of** the merit lane, so batch size and throughput are unchanged
-and the comparison is like-for-like. The arm draws FIRST and its picks leave the pool, so
-merit and holdout never see them and the holdout stays uniform over configs *neither* arm
-took.
+**Env-only knob — `FORGE_TREND_LANE_SLOTS`** (prereg `8cfe95f4a6e9`, trend leg): the second
+objective lane, ordered by `P(top-200 by wf_sharpe_p10)`, tagged `selection_mode='trend_lane'`
+— the target is REGIONAL (the metric rejected for MR is the trend winner; the wf_p10 label
+carries a count cliff, so it is pinned at top-200). Clamp **[0, 60]** so the merit arm survives
+both lanes. Needs a `train-tail --base-target target_wf_p10 --n-pos 200` artifact; without one
+the lane logs `inert`. Measurement narrative: the prereg + its D-entries.
 
-Unset/0 → **byte-identical**; no artifact → lane inert (degrades to the incumbent, never to
-an empty batch); clamp **[0, 150]** of ~190 ranked slots — a hard ceiling that keeps a
-control arm alive whatever the value says, because an arm split with no control is not an
-experiment. Journal when active: `tail_lane: ACTIVE N slots (model=… base=… top-…)`.
-Activation is an operator-gated deploy.
-
-**Env-only knob — `FORGE_TREND_LANE_SLOTS`** (prereg `8cfe95f4a6e9`, trend leg): the SECOND
-objective lane, ordered by `P(top-200 by wf_sharpe_p10)`, tagged
-`selection_mode='trend_lane'`. Exists because **the target is REGIONAL, not global.**
-Measured 2026-07-27 on the trend slice, absolute strong components over disjoint windows:
-incumbent 44, `wf_p10` top-200 **59 (+34%)**, `cpcv` top-1600 56, and `sharpe_baseline` —
-the MR lane's winner, running 4.23× live there — **41, worse than the incumbent.** The
-metric rejected for MR is the trend winner.
-
-Sized small deliberately: the trend tail is thin (988 configs ≥ the 0.9439 book floor, only
-**2 ≥ 1.5** in 132,425 trend rows) and `wf_p10` carries a cliff (59 strong at top-200, 40 at
-top-800, **13** at top-1600), so the label must be pinned by COUNT at 200. It is a
-supply-diversity leg against the single-trend-spine dependency in all four promoted books,
-not a gate-clearer play. Clamp **[0, 60]** — the merit arm must survive both lanes and is
-currently our only meaningful trend supply (trend fell 52.9% → 36.2% of the batch when the
-MR lane alone went live). Needs a `train-tail --base-target target_wf_p10 --n-pos 200`
-artifact; without one the lane logs `inert`.
-
-**Env-only knob — `FORGE_GENERATION_ARM_B_SHARE`** (Tier 1, D341): the **generation**-side
-concurrent A/B. The fraction of enumerated configs drawn under arm B's regime-gate weights
-instead of the incumbent map; both arms draw inside **every batch**, and each config is
-tagged with the contracts 1.39.0 `generation_arm` field (`"baseline"` / `"book_usable"`).
-
-**Why concurrent, not sequential.** A weighting change read across TIME confounds the change
-with the measurement window. Crucible's drift floor puts version-over-version deltas below
-~0.15–0.20 beyond resolution at **any** n, because the noise is *between* windows and does not
-shrink with sample size — the same reason the ranked lanes are arm splits and read at z=+6.27
-where a before/after read would have been unusable.
-
-**What the arms differ by.** Only which map steers the regime draw. The incumbent
-(`--regime-gate-yield`) scores a gate by **component rate** on ranker-selected runs; arm B
-scores it by **book-usable rate** (cpcv ≥ 0.9439) on the **honest arm** — the one population
-unselected by both prefilter and ranker, so it is not collider-conditioned. On live data the
-two disagree by ~9× across gates (`vol_regime` 2.87 down to `vix_term_slope` 0.31), so the
-choice is consequential rather than cosmetic.
-
-**Estimator note:** a cell gets its own rate only past n=100 and inherits its regime's marginal
-otherwise. That is forced by measurement — per-cell book-usable rates on the honest arm are not
-distinguishable from a single common rate (X²=38.9, df=37, z=+0.29), while the regime-gate
-marginal is (z=+2.16). A barren gate is de-emphasised to a 0.05 floor, **never zeroed**:
-zeroing removes it from the draw, which is a *prune* and belongs in an operator-gated version
-bump, not a map that reloads every batch.
-
-Unset/0/malformed → **0.0**, and the iterator then draws no arm coin, consumes no rng and
-stamps no `generation_arm` — byte-identical (hard rule #6). Clamped **[0.0, 0.5]**: arm B may
-never exceed half the stream, because an experiment with no control is not an experiment. No
-honest-arm rows yet → empty map → logs `arm INERT` and every config uses the incumbent.
+**Env-only knob — `FORGE_GENERATION_ARM_B_SHARE`** (D341; **A/B CLOSED REFUTED at D351** — the
+unit carries `0`): the generation-side concurrent A/B — a fraction of enumerated configs drawn
+under arm B's book-usable-rate regime-gate weights instead of the incumbent component-rate map,
+tagged via the contracts 1.39.0 `generation_arm` field. Unset/0/malformed → no arm coin, no rng
+consumed, no stamp — byte-identical (hard rule #6). Clamp [0.0, 0.5] (an experiment keeps a
+control). The `generation_arm` field is free for the next generation experiment
+(`contracts_check.py` note). History: D341/D351.
 
 **Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D316, Theme 2d): extra seeded-random
 submission slots per batch reserved for YOUNG-cell members, tagged
@@ -837,7 +782,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 | `grammar.yaml` | The 21 grammar rules (S/C/R/X families). Operator-owned; version-bumped + archived on change. |
 | `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation, auto-tune bounds). |
 | `ranker.yaml` | Composite-score weights + diversification method. |
-| `auto_tightened_thresholds.yaml` | Generated indicator threshold overrides (tighten-only). Sampler prefers these when tighter than baseline. |
+| `auto_tightened_thresholds.yaml` | RETIRED-EMPTY (`tightenings: []`, D206, permanent per D298). Retained because its fingerprint feeds `enumeration_inputs_hash` — deleting it changes the determinism identity. |
 | `grammar_archive/v{N}.yaml` | Frozen copies of each prior grammar version. |
 
 ---

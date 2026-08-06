@@ -134,7 +134,7 @@ a doc may state where a value lives, never the value.
 | Lint / test / commit / hooks | `docs/tasks/quality-gates.md` |
 | Crucible / contracts coordination (relays: `~/proj/freeze/relays/`) | `docs/tasks/crucible-handoff.md` |
 | Active proposals / freeze programme | `docs/proposals/` (terminal ones: `_archive/PROPOSAL_*.md`) |
-| Domain terms | `docs/glossary.md` |
+| Domain terms | `docs/architecture.md` §Terms |
 | Indicator value distributions | `docs/INDICATOR_THRESHOLDS.md` |
 | New machine / migration | `deploy/NEW_BOX_TRANSFER.md` |
 

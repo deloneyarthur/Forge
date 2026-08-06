@@ -514,11 +514,20 @@ From the pool of pre-filtered candidates, select the top-N for submission to Cru
 
 ### 6.2 Composite score
 
-Each candidate has a composite score: a weighted sum over
-`{signal_density, novelty, regime_exposure, permutation_test, prior_promotion_proximity}`
-scores. **The weights live in `config/ranker.yaml`** (they are learned-adjacent operational
-values and have been rebalanced by D-entry since v1 — the original draft's literals are
-history, not spec).
+Each candidate has a composite score:
+
+```
+score = (
+    w_sd × signal_density_score +
+    w_nv × novelty_score +
+    w_re × regime_exposure_score +
+    w_pt × permutation_test_score +
+    w_pp × prior_promotion_proximity_score
+)
+```
+
+**The weights live in `config/ranker.yaml`** — they are learned-adjacent operational values
+and have been rebalanced by D-entry since v1, so this spec names the terms, never the numbers.
 
 `regime_exposure_score`: output of the §5.3.6 `regime_exposure` filter (named after the property being measured — concentration of trade dates in any one regime label). Earlier drafts called this `regime_diversity_score`; the rename keeps §6.2's score names in lockstep with §5.3 filter names. The corresponding weight key in `config/ranker.yaml` is `regime_diversity` (back-compat — yaml key intentionally preserved across this rename).
 

@@ -128,8 +128,13 @@ def test_q9_cross_batch_trigger_deferral_is_logged() -> None:
 
 
 def test_q10_feature_cache_deferral_is_logged() -> None:
+    # Q10 is RESOLVED (real cache shipped 2026-07-05); resolved entries rotate to the
+    # archive (Step A3, 2026-08-06), so the record check spans live file + archive.
     text = _OPEN_QUESTIONS.read_text(encoding="utf-8")
-    assert "Q10" in text, "Q10 (FeatureCache deferral) missing from OPEN_QUESTIONS.md"
+    archive = _OPEN_QUESTIONS.parent / "_archive" / "OPEN_QUESTIONS_RESOLVED.md"
+    if archive.exists():
+        text += archive.read_text(encoding="utf-8")
+    assert "Q10" in text, "Q10 (FeatureCache deferral) missing from the Q-ledger record"
     assert "FeatureCache" in text
 
 
