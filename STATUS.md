@@ -1,5 +1,11 @@
 # Forge — Status
 
+## 2026-08-06 — repo-simplification plan DRAFTED (operator ask: "too expansive, AI making mistakes") — `docs/proposals/repo-simplification-2026-08.md`, awaiting operator sequencing
+
+- Five-track audit (root/docs/src/scripts/tests) → phased plan: Steps 0–C are docs/records hygiene (no restart, no behavior change), D–F operator-gated; Step F1 = execute `fable-audit/code-complete-retirement/REPORT.md` on freeze declaration.
+- Found in passing, needs triage: `PROMPT_QUANTIQ_new_training_signals_for_the_rankers_2026-08-03.md` is an **unhandled inbound relay** (untracked, zero references anywhere in Forge); `scripts/joint_frontier.py` untracked; 4 ACF relays in `_archive/` untracked with stale "NOT YET SENT" banners.
+- Nothing executed; no code, config, or service touched.
+
 ## 2026-08-06 — **WE HAVE NOT HIT THE CEILING — and the binding constraint is refit TRIAGE, not generation.** 14 of 23 configs clearing BOTH binding gates were never refit. (D368)
 
 - **THE CEILING QUESTION, ANSWERED.** "Flat" and "reached" are different claims and (C) only tests the first. Record progression (distribution-free: records arrive at rate 1/n, so E[count] = ln(n)+γ): ranked lane **13 vs 12.58 expected, z=+0.13** — exactly the unbounded-search rate — still climbing through the gate to **+1.7397 on 08-03**. Better selection reaches a ceiling faster, it cannot exceed one. **(C) reads the top-decile mean at rank ~120-from-top; records live at rank 1** — the bulk tail stopped moving, the extreme tail did not, exactly the blind spot (C) names in its own text.
