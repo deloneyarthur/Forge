@@ -2,8 +2,16 @@
 
 **Version:** 1.0
 **Audience:** Implementing engineer or AI coding agent
-**Status:** Authoritative design for v1
-**Last updated:** 2026-05-13
+**Status:** Authoritative design for v1 — **intent and invariants**, not an as-built inventory
+**Last updated:** 2026-08-06 (as-built reconciliation, D201 pattern; original 2026-05-13)
+
+> **How this spec relates to the living repo:** § numbers here are the citation currency of the
+> whole project — they are stable. Anything *volatile* (file layout, config values, weights,
+> thresholds, table DDL) is owned by the artifact itself and is deliberately NOT restated here:
+> layout → `docs/architecture.md`; configs → `config/*.yaml`; DB schema →
+> `src/forge/persistence/schemas.py` (summaries in `docs/MANPAGE.md`); live grammar →
+> `config/grammar.yaml` + `docs/GRAMMAR.md` (sync-enforced). Where this spec's v1 prose
+> conflicts with those, they win, and the conflict is either bannered here or a bug.
 
 ---
 
@@ -11,9 +19,9 @@
 
 Forge is the **generator** in the Forge → Crucible → QuantIQ pipeline. Before reading this document:
 
-1. Read `PIPELINE.md` for the system-of-systems context
-2. Have access to `crucible/DESIGN.md` for Crucible's interfaces (especially §11, §13, §25)
-3. Have access to `crucible_contracts/` source for the data models you'll consume
+1. Read `../PIPELINE.md` for the system-of-systems context
+2. Have access to `../Crucible/docs/DESIGN.md` for Crucible's interfaces
+3. Have access to `../crucible_contracts/` source for the data models you'll consume
 
 Forge's job is **narrow**: produce candidate strategy configurations that respect a hypothesis grammar, cheaply pre-filter them, submit survivors to Crucible. It does not backtest. It does not validate. It learns from Crucible's promotion decisions and refines its grammar over time.
 
@@ -134,9 +142,10 @@ Same as Crucible where applicable:
 
 Forge-specific:
 - `pyyaml` for grammar file parsing
-- `networkx` for grammar dependency analysis (rule → rule constraints)
 
 No LLM dependencies. No GPU. No additional data sources beyond what Crucible already provides.
+(The v1 draft named `networkx`/`python-constraint` for CSP-style enumeration; the as-built
+enumerator is a hand-rolled stratified rejection sampler with no graph/CSP dependency.)
 
 ---
 
@@ -364,7 +373,8 @@ If `sizer.mode == fractional_kelly`: the strategy must include `expected_value_e
 
 ### 3.6 Total rule count and search-space impact
 
-v1 grammar has 25 rules across 6 categories. Combined, they reduce the raw combinatorial space from ~10^15 (every possible config) to ~10^5-10^6 (grammar-valid configs). Pre-filters then reduce this further to ~10^3-10^4 candidates worth submitting to Crucible.
+v1 grammar has 21 rules across 6 categories (the "25" in the original draft was a
+miscount — literal count 21, operator-confirmed, D001; hard rule #1 in `CLAUDE.md`). Combined, they reduce the raw combinatorial space from ~10^15 (every possible config) to ~10^5-10^6 (grammar-valid configs). Pre-filters then reduce this further to ~10^3-10^4 candidates worth submitting to Crucible.
 
 This is the right order of magnitude. Lower would mean the grammar is too strict (you'd miss things). Higher would mean the grammar is too loose (Crucible drowns in junk).
 
@@ -378,25 +388,20 @@ Given the current grammar and Crucible's registry, enumerate grammar-valid strat
 
 ### 4.2 Algorithm
 
-The enumerator is a constraint-satisfaction problem solver, not a brute-force enumerator.
+The enumerator walks the grammar-valid space lazily, never brute-force:
 
-```python
-def enumerate(grammar: Grammar, registry: RegistrySnapshot,
-              max_candidates: int = 100_000) -> Iterator[StrategyConfig]:
-    """
-    Yields grammar-valid configs lazily. Uses CSP-style search:
-    1. Pick a hypothesis (6 options)
-    2. Constrain compatible directional signals (~10-30 per hypothesis)
-    3. Constrain compatible DTE buckets (1-2 per signal)
-    4. Constrain compatible regime gates (3-10 per hypothesis)
-    5. Sample parameter values from valid ranges
-    6. Compose exits per E-rules
-    7. Compose sizer per X-rules
-    8. Yield the config
-    """
-```
+1. Pick a hypothesis
+2. Constrain compatible directional signals
+3. Constrain compatible DTE buckets
+4. Constrain compatible regime gates
+5. Sample parameter values from valid ranges
+6. Compose exits per E-rules
+7. Compose sizer per X-rules
+8. Yield the config
 
-Implementation uses `networkx` to model rule dependencies and `python-constraint` (or a custom CSP solver if dependencies bloat) to satisfy them.
+The as-built implementation is a hand-rolled **stratified rejection sampler**
+(`src/forge/enumeration/sampler.py`) — the v1 draft's CSP-solver framing
+(`networkx`/`python-constraint`) was never built and neither dependency exists.
 
 ### 4.3 Output
 
@@ -423,19 +428,10 @@ For each enumerated config, run cheap statistical and structural checks. Reject 
 
 ### 5.2 Filter ordering
 
-Filters run in ascending order of cost. Cheap first; expensive last. A failed filter short-circuits the rest.
-
-| Order | Filter | Cost | Rejects |
-|---|---|---|---|
-| 1 | Structural redundancy | O(1) | Configs equivalent to already-tested ones |
-| 2 | Resource feasibility | O(1) | Configs whose lookback > available data |
-| 3 | Signal density | O(N) feature rows | Configs whose directional signal has < 30 historical activations |
-| 4 | Expected trade count | O(N) | Configs whose expected trade count < 50 over 4yr backtest |
-| 5 | Novelty | O(M) prior configs | Configs with > 80% temporal overlap with already-tested configs |
-| 6 | Regime exposure | O(N) | Configs that only activate in 1 regime (insufficient diversification) |
-| 7 | Permutation test | O(K) permutations | Configs whose signal lacks statistical information |
-
-Total per-config cost: 50ms-2s depending on which filters trigger.
+Filters run in ascending order of cost. Cheap first; expensive last. A failed filter
+short-circuits the rest. **The live battery and its order are code** —
+`src/forge/prefilters/battery.py` (it grew past the original seven v1 filters; per-filter
+semantics below, thresholds in `config/prefilter.yaml`).
 
 ### 5.3 Filter details
 
@@ -505,17 +501,11 @@ From the pool of pre-filtered candidates, select the top-N for submission to Cru
 
 ### 6.2 Composite score
 
-Each candidate has a composite score:
-
-```
-score = (
-    0.30 × signal_density_score +
-    0.25 × novelty_score +
-    0.20 × regime_exposure_score +
-    0.15 × permutation_test_score +
-    0.10 × prior_promotion_proximity_score
-)
-```
+Each candidate has a composite score: a weighted sum over
+`{signal_density, novelty, regime_exposure, permutation_test, prior_promotion_proximity}`
+scores. **The weights live in `config/ranker.yaml`** (they are learned-adjacent operational
+values and have been rebalanced by D-entry since v1 — the original draft's literals are
+history, not spec).
 
 `regime_exposure_score`: output of the §5.3.6 `regime_exposure` filter (named after the property being measured — concentration of trade dates in any one regime label). Earlier drafts called this `regime_diversity_score`; the rename keeps §6.2's score names in lockstep with §5.3 filter names. The corresponding weight key in `config/ranker.yaml` is `regime_diversity` (back-compat — yaml key intentionally preserved across this rename).
 
@@ -674,90 +664,22 @@ The operator approves, rejects, or modifies. Approved changes get applied to `gr
 
 ### 9.1 Forge's own DB
 
-DuckDB file at `~/forge_data/forge.db`. Tables:
-
-```sql
-CREATE TABLE submissions (
-    forge_candidate_id  UUID PRIMARY KEY,
-    forge_batch_id      UUID NOT NULL,
-    config_hash         VARCHAR(16) NOT NULL,
-    config_json         JSON NOT NULL,
-    submitted_at        TIMESTAMP NOT NULL,
-    status              VARCHAR(20) NOT NULL,  -- 'pending', 'gated', 'rejected_by_crucible'
-    crucible_run_id     UUID                   -- links to Crucible's runs table
-);
-
-CREATE TABLE batch_summaries (
-    forge_batch_id      UUID PRIMARY KEY,
-    batch_size          INTEGER NOT NULL,
-    submitted_at        TIMESTAMP NOT NULL,
-    completed_at        TIMESTAMP,
-    promotion_rate      DOUBLE,
-    common_failures     JSON,
-    grammar_version     VARCHAR(20) NOT NULL,
-    registry_version    VARCHAR(20) NOT NULL
-);
-
-CREATE TABLE pre_filter_logs (
-    forge_candidate_id  UUID,
-    filter_name         VARCHAR(64),
-    passed              BOOLEAN,
-    score               DOUBLE,
-    details_json        JSON,
-    evaluated_at        TIMESTAMP,
-    PRIMARY KEY (forge_candidate_id, filter_name)
-);
-
-CREATE TABLE grammar_versions (
-    version             VARCHAR(20) PRIMARY KEY,
-    rule_count          INTEGER NOT NULL,
-    yaml_sha256         VARCHAR(64) NOT NULL,
-    changed_at          TIMESTAMP NOT NULL,
-    change_type         VARCHAR(20) NOT NULL,  -- 'auto_tighten', 'supervised_loosen', 'manual'
-    change_description  TEXT,
-    operator_initials   VARCHAR(10)  -- null for auto changes
-);
-
-CREATE TABLE grammar_proposals (
-    proposal_id         UUID PRIMARY KEY,
-    proposed_at         TIMESTAMP NOT NULL,
-    proposal_type       VARCHAR(20) NOT NULL,  -- 'tighten', 'loosen', 'add_rule', 'remove_rule'
-    proposal_yaml       TEXT NOT NULL,
-    rationale           TEXT NOT NULL,
-    evidence_json       JSON NOT NULL,
-    status              VARCHAR(20) NOT NULL,  -- 'pending', 'approved', 'rejected', 'auto_applied'
-    decided_at          TIMESTAMP,
-    decided_by          VARCHAR(64)
-);
-
-CREATE TABLE promoted_patterns (
-    pattern_id          UUID PRIMARY KEY,
-    discovered_at       TIMESTAMP NOT NULL,
-    pattern_type        VARCHAR(40),  -- 'hypothesis_dominance', 'parameter_cluster', etc.
-    pattern_json        JSON NOT NULL,
-    promoted_count      INTEGER NOT NULL,
-    sample_size         INTEGER NOT NULL
-);
-```
+DuckDB file at `~/forge_data/forge.db`, opened ONLY via
+`forge.persistence.db.db_connection()`. **The DDL is the code** —
+`src/forge/persistence/schemas.py` (per-table summaries in `docs/MANPAGE.md`). The v1 draft
+carried an inline 6-table DDL sketch; the live schema has grown (verdicts, shadow scores, …)
+and the sketch drifted, so it was removed rather than maintained twice. Core spec-level facts
+that ARE stable: `submissions.config_hash` is unique-indexed (§13.4), and cross-batch state
+lives only in this DB, never in process memory.
 
 ### 9.2 What Forge reads from Crucible
 
-Read-only access to Crucible's DuckDB:
-
-```sql
--- Forge queries
-SELECT r.run_id, r.config_hash, r.status, pd.decision, pd.gate_results_json,
-       m.value AS sharpe_value
-FROM runs r
-LEFT JOIN promotion_decisions pd ON r.run_id = pd.run_id
-LEFT JOIN metrics m ON r.run_id = m.run_id AND m.metric_name = 'walk_forward_sharpe_median'
-WHERE r.source = 'forge'
-  AND r.status = 'gated'
-  AND r.finished_at > '<last_seen>'
-ORDER BY r.finished_at;
-```
-
-Forge never writes to Crucible's DB.
+**File exports only, through `crucible_contracts` helpers — never Crucible's DuckDB.** The v1
+draft sketched read-only SQL against Crucible's runs DB; as-built, `runs.duckdb` is
+single-writer-locked and all inter-system traffic is files under `~/optbt_data/`
+(gated/failed-run exports, registry snapshots, universe tickers — see
+`docs/architecture.md`). Direct DB reads are a boundary violation (hard rule #2 territory),
+not an optimization.
 
 ### 9.3 What Forge writes to Crucible
 
@@ -767,161 +689,33 @@ Only YAML files in `{crucible_data_root}/inbox/`. Never direct DB writes.
 
 ## 10. Configuration
 
+Three YAML files own their contents — this spec states only what each is FOR:
+
 ### 10.1 `config/forge.yaml`
-
-```yaml
-forge:
-  data_root: ~/forge_data
-  db_path: ~/forge_data/forge.db
-  log_root: ~/forge_data/logs
-
-  crucible:
-    inbox_path: ~/optbt_data/inbox     # where Forge writes
-    db_path: ~/optbt_data/results.duckdb  # where Forge reads (read-only)
-    # contracts pin lives in core/contracts_check.py
-    # (FORGE_EXPECTED_CONTRACT_VERSION), not here — see §13.5
-
-  enumeration:
-    max_candidates_per_batch: 100000
-    seed: 42
-
-  submission:
-    batch_size: 200
-    inflight_threshold: 0.80         # wait until 80% of prev batch is gated
-    poll_interval_seconds: 600       # check Crucible status every 10 min
-
-  feedback:
-    light_consumption_after_every: 1     # every batch
-    full_analysis_after_every: 10        # every 10 batches
-    deep_review_after_every: 50          # every 50 batches
-```
+Runtime knobs: data/DB/log paths, enumeration batch size + seed, §7.3 submission thresholds
+(completion fraction, poll interval, `max_inflight`), feedback cadence. Precedence: CLI flag >
+`config/forge.yaml` > hardcoded default (`forge.config.forge_config`). The contracts pin does
+NOT live here — it is `FORGE_EXPECTED_CONTRACT_VERSION` in `core/contracts_check.py` (§13.5).
 
 ### 10.2 `config/prefilter.yaml`
-
-```yaml
-prefilter:
-  signal_density:
-    min_activations: 30
-  expected_trade_count:
-    min_trades: 50
-  novelty:
-    max_jaccard_overlap: 0.80
-  regime_exposure:
-    max_single_regime_concentration: 0.80
-  permutation_test:
-    n_permutations: 100
-    p_value_threshold: 0.10
-  auto_tune:
-    enabled: true
-    min_promotion_rate: 0.005          # 0.5%
-    max_promotion_rate: 0.05           # 5%
-    adjustment_pct_per_step: 0.10
-    max_cumulative_adjustment: 0.30
-```
+Per-filter thresholds for the §5 battery (§5.5 calibration). The §5.5 auto-tune trigger was
+retired (D206, permanent per D298); `config/auto_tightened_thresholds.yaml` is retained EMPTY
+because its fingerprint feeds `enumeration_inputs_hash` — deleting it changes the determinism
+identity (§13.1).
 
 ### 10.3 `config/ranker.yaml`
-
-```yaml
-ranker:
-  weights:
-    signal_density: 0.30
-    novelty: 0.25
-    regime_diversity: 0.20
-    permutation_test: 0.15
-    prior_promotion_proximity: 0.10
-  diversification:
-    method: greedy   # 'greedy' or 'dpp'
-    similarity_metric: jaccard
-```
+§6.2 composite weights + diversification method. The yaml key `regime_diversity` maps to the
+§6.2 `regime_exposure` term (historical key name, intentionally preserved).
 
 ---
 
 ## 11. File structure
 
-```
-forge/
-├── pyproject.toml
-├── uv.lock
-├── README.md
-├── docs/
-│   ├── DESIGN.md            # this file
-│   ├── GRAMMAR.md           # narrative grammar documentation
-│   └── DECISIONS.md         # implementation decisions log
-├── config/
-│   ├── forge.yaml
-│   ├── prefilter.yaml
-│   ├── ranker.yaml
-│   ├── grammar.yaml         # machine-readable grammar (current version)
-│   └── grammar_archive/     # previous versions
-│       ├── v1.yaml
-│       ├── v2.yaml
-│       └── ...
-├── src/forge/
-│   ├── __init__.py
-│   ├── version.py
-│   ├── grammar/
-│   │   ├── loader.py        # parses grammar.yaml into rule objects
-│   │   ├── predicates.py    # built-in predicate types
-│   │   ├── custom_predicates.py  # escape-hatch for code rules
-│   │   ├── validator.py     # checks a config against the grammar
-│   │   └── archive.py       # version management for grammar changes
-│   ├── enumeration/
-│   │   ├── enumerator.py    # main enumerator
-│   │   ├── csp.py           # constraint-satisfaction primitives
-│   │   └── candidate.py     # candidate config representation
-│   ├── prefilters/
-│   │   ├── base.py          # Filter protocol
-│   │   ├── registry.py      # filter registry
-│   │   ├── structural_redundancy.py
-│   │   ├── resource_feasibility.py
-│   │   ├── signal_density.py
-│   │   ├── expected_trades.py
-│   │   ├── novelty.py
-│   │   ├── regime_exposure.py
-│   │   └── permutation_test.py
-│   ├── ranking/
-│   │   ├── scorer.py        # composite score computation
-│   │   ├── diversifier.py   # greedy / DPP selection
-│   │   └── queue.py         # batch queue management
-│   ├── submission/
-│   │   ├── submitter.py     # main submission logic
-│   │   └── rate_limiter.py  # in-flight tracking
-│   ├── feedback/
-│   │   ├── consumer.py      # reads Crucible's gated runs
-│   │   ├── analyzer.py      # extracts patterns from results
-│   │   └── proposer.py      # generates grammar proposals
-│   ├── persistence/
-│   │   ├── db.py            # DuckDB wrapper for Forge's DB
-│   │   └── schemas.py       # DDL
-│   └── cli/
-│       ├── main.py
-│       ├── run.py           # `forge run` — full cycle
-│       ├── enumerate.py     # `forge enumerate` — just enumerate
-│       ├── analyze.py       # `forge analyze` — feedback analysis
-│       └── grammar.py       # `forge grammar` — proposal management
-├── scripts/
-│   ├── init_db.py
-│   ├── seed_grammar.py
-│   └── audit_proposals.py
-└── tests/
-    ├── unit/
-    │   ├── test_grammar/
-    │   ├── test_enumeration/
-    │   ├── test_prefilters/
-    │   └── test_ranking/
-    ├── integration/
-    │   ├── test_end_to_end.py
-    │   ├── test_crucible_integration.py
-    │   └── test_grammar_refinement.py
-    ├── invariants/
-    │   ├── test_enumeration_determinism.py
-    │   ├── test_no_circular_grammar.py
-    │   └── test_submission_idempotency.py
-    └── fixtures/
-        ├── synthetic_registry.py
-        ├── known_promoted_strategies.py
-        └── adversarial_grammars.py
-```
+**Owned by `docs/architecture.md`** (module map, data flow, invariant→test bookmarks). The v1
+draft's inline tree described modules that were never built under names that never existed; it
+was fiction within weeks and was removed rather than maintained twice. Naming conventions that
+ARE spec: one file per pre-filter / predicate type / CLI command; grammar versions archive to
+`config/grammar_archive/v{N}.yaml`.
 
 ---
 
@@ -1046,9 +840,9 @@ Forge respects `worker_mem_limit_mb` from Crucible's `runtime.yaml` shared confi
 ## 14. Decision log
 
 > **HISTORICAL (banner added 2026-07-20, D300, operator-approved):** the design-time
-> (2026-05-13) decision table, kept verbatim and closed. Post-design decisions live in
-> `IMPLEMENTATION_DECISIONS.md` (repo root); a design-level supersession would go to
-> `docs/DECISIONS.md`.
+> (2026-05-13) decision table, kept verbatim and closed. All post-design decisions live in
+> `IMPLEMENTATION_DECISIONS.md` (repo root) — including design-level supersessions (the
+> separate `docs/DECISIONS.md` was never used and was deleted, 2026-08-06).
 
 Append-only. Major design decisions documented here for the implementing agent.
 
