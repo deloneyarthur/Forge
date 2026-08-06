@@ -33,4 +33,5 @@ and env knobs; the authoritative flag set is the unit's `ExecStart` in
 | `docs/HOW-TO.md` | Operator runbook: start/stop, health checks, recovery |
 | `docs/GRAMMAR.md` | Narrative for each grammar rule (sync-enforced with `config/grammar.yaml`) |
 | `STATUS.md` | Live project state |
+| `docs/proposals/` | Active proposals + the freeze programme (terminal ones: `_archive/PROPOSAL_*.md`) |
 | `../PIPELINE.md` | System-of-systems context |

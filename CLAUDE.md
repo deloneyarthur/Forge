@@ -114,7 +114,8 @@ rather than trusting context memory.
 
 Docs are part of the change: if a commit alters a CLI command/flag, a ritual, a config file's
 meaning, or module layout, update the doc that owns it (routing table below) in the same commit.
-Volatile facts (versions, weights, counts) belong in `STATUS.md`/D-entries, never in docs.
+Volatile facts (versions, weights, counts) belong in `STATUS.md`/D-entries, never in docs —
+a doc may state where a value lives, never the value.
 
 ## Where to look
 
@@ -131,7 +132,8 @@ Volatile facts (versions, weights, counts) belong in `STATUS.md`/D-entries, neve
 | Feedback / learned-weight changes | `docs/tasks/feedback-change.md` |
 | Debugging live behavior, DB/export queries | `docs/tasks/investigate-live.md` |
 | Lint / test / commit / hooks | `docs/tasks/quality-gates.md` |
-| Crucible / contracts coordination | `docs/tasks/crucible-handoff.md` |
+| Crucible / contracts coordination (relays: `~/proj/freeze/relays/`) | `docs/tasks/crucible-handoff.md` |
+| Active proposals / freeze programme | `docs/proposals/` (terminal ones: `_archive/PROPOSAL_*.md`) |
 | Domain terms | `docs/glossary.md` |
 | Indicator value distributions | `docs/INDICATOR_THRESHOLDS.md` |
 | New machine / migration | `deploy/NEW_BOX_TRANSFER.md` |

@@ -111,12 +111,10 @@ so every root file should match a row below.
 
 | Pattern | What it is |
 |---|---|
-| `STATUS.md` | Live state; newest block on top, marked SUPERSEDES. Read first, every session |
-| `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger; referenced everywhere as "D###" |
-| `OPEN_QUESTIONS.md` | Append-only logged uncertainties (Q##) with severity |
-| `OPEN_PROPOSALS.md` | Grammar loosening proposals awaiting operator sign-off (hard rule #4) |
-| `GRAMMAR_REVIEW_AND_EXPANSION.md`, `LEARNED_SYSTEMS_AND_GENERATION_REVIEW.md` | **Live roadmap/reference reviews** (grammar expansion paths; learned-systems best-practice gaps) — current working documents, deliberately kept in root, not archived |
-| `PROMPT_CRUCIBLE_*.md` (also the swept patterns `*_AGENT_PROMPT.md`, `CRUCIBLE_*_HANDOFF.md`, `CONTRACTS_*`) | **Outgoing** cross-repo messages the operator carries to the Crucible/contracts agent (`docs/tasks/crucible-handoff.md`). Only pending/held/current relays stay in root; answered ones move to `_archive/` |
-| `../Crucible/docs/handoffs/FORGE_*.md` | **Incoming** responses/handoffs from Crucible |
-| `_archive/` | Completed/landed records: prompt↔response pairs, answered `PROMPT_CRUCIBLE_*` relays, phase handoffs, and finished scoping/planning artifacts (`*_PLAN.md`/`*_SPEC.md`/`*_DRAFT.md`/…) — swept from root once their D-entry lands (D202) |
-| `AUDIT.md`, `docs/STRATEGY_GENERATION_STATE.md` | Point-in-time deep reviews — stale-bannered; historical context only |
+| `STATUS.md` | Live state; newest block on top. Read first, every session. Older months rotate to `_archive/STATUS_<era>.md` |
+| `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger ("D###"), currently D301+; D001–D300 in `_archive/IMPLEMENTATION_DECISIONS_*` slices |
+| `OPEN_QUESTIONS.md` | **OPEN** questions only (Q##, severity); resolved entries sweep to `_archive/OPEN_QUESTIONS_RESOLVED.md` in the resolving commit |
+| `OPEN_PROPOSALS.md` | Grammar loosening proposals awaiting operator sign-off (hard rule #4). Machine-consumed (`forge-proposals/v1`); never rotated (D298) |
+| `GRAMMAR_REVIEW_AND_EXPANSION.md`, `LEARNED_SYSTEMS_AND_GENERATION_REVIEW.md` | **Live roadmap/reference reviews** — deliberately kept in root; re-verdict due at the freeze declaration (expansion roadmaps and a frozen grammar are in tension) |
+| `PROMPT_CRUCIBLE_PATHC_DEBIT_VERTICAL_SIZING.md` | The one operator-**parked** relay (D152, Path C). The root-relay channel itself is RETIRED — relays live in `~/proj/freeze/relays/` + the two INDEX ledgers (D362, `docs/tasks/crucible-handoff.md`); never create new `PROMPT_*` files at root |
+| `_archive/` | Completed/landed records, swept from root/docs once their D-entry lands (D202/D241 criterion): relay pairs, phase handoffs, finished planning artifacts, terminal proposals (`PROPOSAL_*.md`), point-in-time reviews (`AUDIT.md`, `STRATEGY_GENERATION_STATE.md`), and the ledger-rotation slices |
