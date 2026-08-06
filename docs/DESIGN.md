@@ -269,6 +269,19 @@ predicate:
 
 Below is the v1 grammar. These are the rules we (operator + Claude) have worked through together, with rationales. The implementing agent should review them but **does not modify them** without operator approval.
 
+> **⚠️ DRIFT BANNER (2026-08-06; the D071/S5 amendment pattern, generalized).** The rule
+> statements below are the 2026-05-13 originals, kept verbatim as design intent per hard rule
+> #1. Since v1, operator-approved grammar versions have amended several rule *bodies*; the
+> LIVE bodies are `config/grammar.yaml` (machine) + `docs/GRAMMAR.md` (narrative,
+> sync-enforced per rule id). **Where a statement below conflicts with GRAMMAR.md, GRAMMAR.md
+> wins.** Known drifted as of v55: **S5** (single-required exits → substitutable sets; D071
+> banner below), **C1** (family list grew 11 → 12, `trend_strength`; D019), **C2**
+> (`mean_reversion`/`volatility_event` also accept `dealer_positioning` directionals; D062),
+> **E1** (3 mandatory exits → 4, `liquidity_exit`; D007/D014), **R1** (`iv_rank ≤ 50` → a
+> multi-member MR-protection gate pool; D013→D280 lineage), **R2** (`adx`/`hurst` → a
+> 6-member pool; D077→D264), **R3** (2 event gates → 6; D039/D135). The per-rule GRAMMAR.md
+> headings carry each admission's D-lineage.
+
 #### Structural rules
 
 **S1: One hypothesis per strategy.**
