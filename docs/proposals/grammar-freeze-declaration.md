@@ -151,6 +151,40 @@ the surface promotion requires. (Note the three WF-family gates are easy to conf
 retarget rationale correctly described `wf_sharpe_p25` as admitting 100%; `walk_forward_sharpe_median`
 is a different gate and binds hard.)
 
+**AND THE JOINT FRONTIER SAYS THE BINDING CONSTRAINT IS NOT GENERATION AT ALL.** Measured
+2026-08-06 (`scripts/joint_frontier.py`). A config is a *frontier advance* if nothing earlier beat
+it on **both** axes; the null is a PERMUTATION of arrival order over the fixed point set, which
+preserves the cpcv/WF dependence — the closed-form `(ln n)²/2` assumes independence and would have
+manufactured a saturation finding.
+
+```
+RANKED LANE   73 advances vs permutation null 37.0 (sd 10.0)   z = +3.60, p = 0.003  STILL ADVANCING
+HONEST ARM    28 advances vs null 32.9                          z = -0.50, p = 0.708  STATIONARY
+```
+
+Our best effort is still pushing the joint frontier outward faster than chance; the unselected
+supply is stationary, consistent with leg 1 reading flat. **But the frontier is not where the loss
+is.** Restricting to the window where `measurement_basis` is 100% populated (decided ≥ 2026-07-27):
+
+```
+  stage-one configs clearing BOTH binding gates (cpcv >= 1.5 AND WF-median >= 2.0):  23
+     all 23 IDENTICAL at stage one: decision=reject, failed [deflated_sharpe, regime_coverage]
+      9 refit into fullhist_refit  ->  9 became components
+     14 never refit
+```
+
+Refit latency is **median 0h, p99 2h, max 3h** over 36,061 pairs, and 13 of the 14 are 1–5 days
+past their stage-one decision — so they were **passed over, not queued**. Same eligibility, same
+failure set, different outcome: the difference is which rows the newest-first scanner reached.
+**61% of our best-ever supply never entered the only lane that can produce a component.**
+
+Not claimed: that the 14 are better than what was refit (9/9 is consistent with the lane's ~80%
+base rate, p=0.13). Claimed only: they were identically eligible. Relayed to Crucible 2026-08-06.
+
+**This is the single most important qualifier in this document.** Adding grammar surface while
+losing 61% of what already clears both binding gates would be solving the wrong problem — and it
+is further evidence that freezing *generation policy* is the correct call.
+
 **Coverage is not the same as having tested the surface.** An indicator audit (2026-08-06) found
 **19 of 72 registered indicators completely dark** — 5 by recorded decision, 11 by accident, and
 one (`yz_rank`) structurally identical to `rv_rank`, which carries 17% of all configs. It also
@@ -204,21 +238,27 @@ generation against `IC(cpcv, corr_to_book)`.
 The §4 findings change this from a rhetorical question to a measurable one. Ordered by what has
 to be true before the next thing is worth doing.
 
-**Step 1 — measure the JOINT frontier, because we have never measured the binding one.**
-Every ceiling instrument we own (condition C's two legs, the record test, the tail model's target)
-reads `cpcv_sharpe_p25` alone. Promotion needs cpcv **and** `walk_forward_sharpe_median`, and the
-latter rejects 62–80% of our best-cpcv configs. Build the 2-D analogue: the Pareto frontier of
-(cpcv, WF-median) over time, and a record test on **frontier advances** rather than on either
-coordinate. Until that exists, "the ceiling is flat" is a statement about one axis of a
-two-axis wall. Read-only analysis, no deploy, no grammar change — and it gates everything below.
+**Step 1 — DONE 2026-08-06, and it reordered everything below.** `scripts/joint_frontier.py`.
+The joint frontier is still advancing (z=+3.60, p=0.003) — so no ceiling — but the measurement
+found the real constraint one step further down: **14 of 23 configs clearing both binding gates
+were never refit**, with an identical stage-one profile to the 9 that were, and refit latency of
+p99 = 2h proving they were passed over rather than queued. **The binding constraint on component
+production is refit triage, not generation.**
 
-**Step 2 — re-read (C) under the restored capacity.** (C) was read at 25% eligible stage-two
+**Step 2 — the highest-value item is now a Crucible-side question, and it is already asked.**
+Relayed 2026-08-06: is newest-first refit ordering deliberate under the doubled capacity? Stage one
+has already computed cpcv and WF before the scanner chooses. Nothing is needed from Forge either
+way, and if the ordering changes it is worth more than any grammar work on this board — we would
+rather they refit our best 2,000 than a recency-sampled 2,000.
+
+**Step 3 — re-read (C) under the restored capacity.** (C) was read at 25% eligible stage-two
 coverage; Crucible has since doubled the drain (`--limit` 20 → 40). A fresh prereg with required-n
-stated at registration would remove the largest caveat in this document. Independent of Step 1 and
-can run concurrently.
+stated at registration would remove the largest caveat in this document. Independent of Steps 1–2.
 
-**Step 3 — probe the untested surface, but score it on the frontier, not on cpcv.** Two concrete
-targets, both discovered 2026-08-06 and neither yet acted on:
+**Step 4 — probe the untested surface — DEPRIORITISED, and the reason is Step 1.** Adding grammar
+surface while 61% of what already clears both binding gates never reaches stage two is solving the
+wrong problem. Retained here because the targets are real and named, not because they are next.
+Two concrete targets, both discovered 2026-08-06 and neither yet acted on:
 - the `rv_rank`-primaried trend cell — **77,416 configs, the single largest, has never once
   carried a second regime gate**, blocked by a C1 family collision rather than by evidence.
   C1-legal candidates: `market_state` (macro) or `adx`/`hurst` (trend_strength).
@@ -226,14 +266,15 @@ targets, both discovered 2026-08-06 and neither yet acted on:
   appears in 17% of all configs and in the most recent record-setter. It has no threshold spec and
   has never been discussed anywhere.
 
-**The scoring rule is the point of Step 1.** The dsj precedent is the warning: dsj produced a real
-stage-one cpcv effect (z=+5.44) and, through our own generator, **zero promoted components in
-6,707 tries.** Probing new surface and grading it on cpcv would repeat that exactly. Each probe is
-a full increment under §6 — prereg first, required n stated, emission proof, funnel attribution.
+**If Step 4 is ever taken, score it on the joint frontier, not on cpcv.** The dsj precedent is the
+warning: dsj produced a real stage-one cpcv effect (z=+5.44) and, through our own generator, **zero
+promoted components in 6,707 tries.** Probing new surface and grading it on cpcv would repeat that
+exactly. Each probe is a full increment under §6 — prereg first, required n stated, emission proof,
+funnel attribution.
 
-**Step 4 — housekeeping that blocks clean measurement.** `scripts/second_gate_contrast.py` pools
+**Step 5 — housekeeping that blocks clean measurement.** `scripts/second_gate_contrast.py` pools
 across `measurement_basis` (the D360 defect) and is the instrument we would naturally reach for
-when judging any new second gate. Fix before Step 3.
+when judging any new second gate. Fix before Step 4.
 
 **Not proposed:** re-opening the grammar for expansion, or acting on any of the 11 accidental dark
 indicators as a group. Those are coverage findings; nothing yet says they carry alpha, and D361's

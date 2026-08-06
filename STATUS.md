@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-08-06 — **WE HAVE NOT HIT THE CEILING — and the binding constraint is refit TRIAGE, not generation.** 14 of 23 configs clearing BOTH binding gates were never refit. (D368)
+
+- **THE CEILING QUESTION, ANSWERED.** "Flat" and "reached" are different claims and (C) only tests the first. Record progression (distribution-free: records arrive at rate 1/n, so E[count] = ln(n)+γ): ranked lane **13 vs 12.58 expected, z=+0.13** — exactly the unbounded-search rate — still climbing through the gate to **+1.7397 on 08-03**. Better selection reaches a ceiling faster, it cannot exceed one. **(C) reads the top-decile mean at rank ~120-from-top; records live at rank 1** — the bulk tail stopped moving, the extreme tail did not, exactly the blind spot (C) names in its own text.
+- **WE HAD BEEN MEASURING ONE AXIS OF A TWO-AXIS WALL.** Promotion needs cpcv **and** `walk_forward_sharpe_median` (stage-one pass 0.00% and 0.49%; `wf_sharpe_p25`/`p10` admit 100% — three WF gates, easily conflated). Joint frontier, permutation null over the fixed point set: **73 advances vs 37.0, z=+3.60, p=0.003 — STILL ADVANCING.** Honest arm stationary, consistent with leg 1.
+- **THE REAL FINDING IS ONE STEP PAST THE FRONTIER.** `23` stage-one configs cleared **both** binding gates, **all 23 identical** (`reject`, failing `deflated_sharpe` + `regime_coverage`). **9 refit → 9 components. 14 never refit.** Latency median 0h / **p99 2h** / max 3h over 36,061 pairs, and 13 of the 14 are 1–5 days past decision — **passed over, not queued.** **61% of our best-ever supply never entered the only lane that can make a component.**
+- **NOT CLAIMED:** that the 14 are better. 9/9 is consistent with the lane's ~80% base rate (p=0.13). Claimed only: identically eligible.
+- **OUR OWN FIRST COUNT WAS WRONG AND WE CAUGHT IT BEFORE RELAYING.** We said 24-of-33; `measurement_basis` is **0% populated before the week of 07-20**, so older refits are invisible to us as stage two. Unverifiable, not un-refit. Same class as the D360 pooled-conversion artifact.
+- **PLAN REORDERED.** Probing untested surface (the `rv_rank` blind zone, 19 dark indicators) is **deprioritised** — adding surface while losing 61% of what already clears is the wrong problem. Highest-value item is Crucible-side and **relayed**: is newest-first refit ordering deliberate under the doubled capacity, when stage one has already computed cpcv and WF before the scanner chooses?
+- **This STRENGTHENS the freeze** — more evidence the binding constraint is not generation. Declaration §4/§8 updated.
+
 ## 2026-08-03 — **the D216 ve floor is RETIRED.** Its founding evidence was retracted by Crucible's ghost close-out, and the v39 repair it was held open for did not work. `young_explore` stays OFF — 87% of its budget would have funded the same family. (D367)
 
 - **FOUNDING EVIDENCE WITHDRAWN.** The floor existed because Crucible validated ve on 06-29 as **the second factor** (PC1 load 0.10, book at CSCV PBO 0.107). Their **07-19 close-out retracted it**: 23/25 stored-cpcv ve components were **ghosts**; clean-cache PBO came back **0.40**, "real-but-MARGINAL, no solo promotion case."
