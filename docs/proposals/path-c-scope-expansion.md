@@ -1,7 +1,7 @@
 # Path C — defined-risk scope expansion (grammar v2): PARKED resume dossier
 
 > **STATUS (2026-07-08):** OPEN / PARKED — **RE-PRICED (§0 below): resume signals #1 and #2
-> are now MET**, quantified by the alpha-budget retrospective (`ALPHA_BUDGET_SCOPE.md` §7).
+> are now MET**, quantified by the alpha-budget retrospective (`_archive/ALPHA_BUDGET_SCOPE.md` §7).
 > The decision to un-park remains the operator's; nothing is sent, nothing is built.
 > (Prior banner 2026-06-24: held as last resort, provability gate satisfied.)
 
@@ -9,7 +9,7 @@
 
 **Requested context:** the operator asked whether Forge (not Crucible) is the viable half of
 the pipeline; the answer ran through the Dim-C alpha-budget retrospective
-(`scripts/alpha_budget.py`, results `ALPHA_BUDGET_SCOPE.md` §7, committed `f1ade2e`). This
+(`scripts/alpha_budget.py`, results `_archive/ALPHA_BUDGET_SCOPE.md` §7, committed `f1ade2e`). This
 section re-prices the parked decision against §3's resume signals. It advocates a *first
 step*, not the build.
 

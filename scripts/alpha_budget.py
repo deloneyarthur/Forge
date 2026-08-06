@@ -1,6 +1,7 @@
 """Alpha-budget / effective-N retrospective for the enumeration campaign.
 
-Scope + methodology: ``ALPHA_BUDGET_SCOPE.md`` (grammar-review Dim C prerequisite).
+Scope + methodology: ``_archive/ALPHA_BUDGET_SCOPE.md`` (grammar-review Dim C prerequisite;
+archived 2026-08-06 — prereg 098ea730d5f2 resolved confirmed).
 Answers, from a forge.db snapshot alone:
 
   Q1  Is the observed honest max cpcv-p25 consistent with a ZERO-EDGE search of the

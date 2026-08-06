@@ -2,7 +2,7 @@
 
 **Status:** research / findings · no code, grammar, or config changed · all expansions operator- (and
 Crucible-) gated. **Companion to** `LEARNED_SYSTEMS_AND_GENERATION_REVIEW.md`, the parked
-`docs/proposals/path-c-scope-expansion.md`, and `docs/proposals/long-options-exhaustion-assessment.md`.
+`docs/proposals/path-c-scope-expansion.md`, and `_archive/PROPOSAL_long-options-exhaustion-assessment.md`.
 **Method:** an exhaustive read of the live grammar (`grammar.yaml` v22, the 21 §3.5 rules, the 50+-indicator
 registry) + four cited web-research pillars (option structure primitives; predictive signal families;
 grammar/DSL design methodology), adversarially verified and confidence-tiered. This **validates and

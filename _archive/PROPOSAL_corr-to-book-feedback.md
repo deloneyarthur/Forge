@@ -1,4 +1,5 @@
 # Proposal: corr-to-promoted-book feedback signal (contracts ask) (Theme 3)
+> **EXECUTED (banner added at the 2026-08-06 archive sweep): the ask was carried 07-20, answered, and closed via the D357-era exchange — `corr_to_book_*.json` ships 116k+ per-run rows, the freeze leg-2 yardstick joins to it, and both INDEX ledgers carry the standing basis-change obligation.**
 
 Status: **BRAINSTORM DRAFT — operator-gated; the ASK ITSELF needs operator go
 before any relay is carried.** No Forge build until Crucible answers.

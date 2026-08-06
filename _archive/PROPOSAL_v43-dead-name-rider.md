@@ -1,4 +1,5 @@
 # Proposal: v43 — 30-name structural exclusion rider (yield-audit round 1)
+> **SHIPPED 2026-07-21 as v43 itself (D309, frozen list 8→38; row-45 confirmed same-hour). Header below ("awaiting the deploy window") is the pre-deploy state; banner added at the 2026-08-06 archive sweep.**
 
 Status: **APPROVED-STAGED (operator "Ship all 30", 2026-07-20) — awaiting the
 deploy window.** Ships as its own bump or rides the next Crucible-driven bump,

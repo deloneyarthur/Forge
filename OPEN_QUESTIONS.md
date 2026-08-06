@@ -214,7 +214,7 @@ that floor (`_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES`), reclaiming ~6%/batch for the
 pool while rv still competes on merit. Ranking-stage only (enumeration byte-identity intact, no
 grammar bump). `em` kept on the floor (data-sparse, not structural). The grammar de-scope half
 (spreads / bear-paying expressivity) stays operator-gated and is now folded into
-`docs/proposals/worst-quartile-complement-supply.md` + the OverlaySpec relay to Crucible.
+`_archive/PROPOSAL_worst-quartile-complement-supply.md` + the OverlaySpec relay to Crucible.
 
 **Tag:** `grammar-adjacent`, `phase-2-defect-hunt`, `relates-to-Q39`, `options-only-limit`, `operator-gated`, `RESOLVED-D145`
 

@@ -1,4 +1,5 @@
 # Proposal: v50 — `rank_k=5` bias, scoped to `trend_continuation` (Crucible-validated)
+> **SHIPPED 2026-07-25 in v50 (D336) and REVERTED SAME-NIGHT at v51 (D337): the validating evidence was collider bias, true sign reversed. Banner added at the 2026-08-06 archive sweep.**
 
 Status: **STAGED — awaiting the operator's deploy word.** Prereg `b13b0f893a11` is on
 record (cohort cut 2026-07-25T00:53:56Z) BEFORE any code.

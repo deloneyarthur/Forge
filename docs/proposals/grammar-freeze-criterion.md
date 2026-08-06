@@ -541,7 +541,7 @@ Each retirement is its own operator-gated increment:
 
 | Item | Flow share | Disposition |
 |---|---|---|
-| `relative_value` (dormant) | ~0% (surface only) | **Clean prune** — refuted (D215/D276), retire to shrink the surface + prove the machinery (v47, `docs/proposals/v47-dead-hypothesis-retirement.md`). |
+| `relative_value` (dormant) | ~0% (surface only) | **Clean prune** — refuted (D215/D276), retire to shrink the surface + prove the machinery (v47, `_archive/PROPOSAL_v47-dead-hypothesis-retirement.md`). |
 | Single-name (`named`) trend/MR gated axis | bulk of the 2.8% | **Deferred** — single-name components are Crucible's assembly-diversity source (~15.9% of the honest pool, D215/D186); needs a Crucible "do books consume these?" read before retiring. Draft the relay. |
 | `event_momentum` `named` | ~0.4% | **Deferred** — dead in its `named` form, productive cross-sectional form not generated; joins the single-name-axis read (not a standalone clean prune). |
 | Single-name `volatility_event` | (protected today) | **On probation** — `ve-exit-repair` farming campaign; re-anchors on the v38-vs-v39 ve funnel, not a prune target until then. |

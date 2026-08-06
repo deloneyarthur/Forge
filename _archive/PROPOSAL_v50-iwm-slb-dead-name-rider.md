@@ -1,4 +1,5 @@
 # Proposal: v50 — IWM + SLB structural-exclusion rider (yield-audit round 2)
+> **SHIPPED 2026-07-25 in the bundled v49→v50 deploy (D336). Header below ("awaiting the deploy window") is the pre-deploy state; banner added at the 2026-08-06 archive sweep.**
 
 Status: **STAGED (operator "yes", 2026-07-24) — awaiting the deploy window.** Ships
 as its own bump (v50) or rides the next Crucible-driven bump, whichever comes first.
