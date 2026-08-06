@@ -104,6 +104,53 @@ Forge nor Crucible holds a statistic that ranks buckets or families on that axis
 expensively: `swing_long` is bad on every solo metric and sits in **7 of 7 promoted books** as the
 exclusive trend carrier.
 
+**THE EXTREME TAIL IS STILL SETTING RECORDS — (C) measures the bulk tail and says so itself.**
+Added 2026-08-06 after the operator asked whether "flat" means "we hit the ceiling." Those are
+different claims and only the first is tested by (C). The distribution-free record test
+(`scripts/ceiling_record_test.py`): in *n* i.i.d. draws, running-maximum records arrive at rate
+1/n, so the expected count is `H_n ≈ ln(n) + γ` regardless of the underlying shape. A deficit is
+the signature of a bounded distribution being approached.
+
+```
+RANKED LANE   n=163,901   records 13   expected 12.58 (sd 3.31)   z = +0.13
+              last record at draw 154,576 of 163,901 — 5.7% of the sample ago
+HONEST ARM    n= 28,126   records  5   expected 10.82 (sd 3.03)   z = -1.92
+              last record at draw 784 — but only 5 records, so almost no power
+```
+
+The ranked lane is setting records at **exactly** the unbounded-search rate, and the trail is
+still climbing through the promotion gate: 1.4738 → 1.5325 → 1.5501 → 1.6006 → **+1.7397 on
+2026-08-03**. This direction cannot be explained by our ranker improving: **better selection
+reaches a ceiling faster, it cannot exceed one.** The honest arm's apparent deficit is a sampling
+artifact — it draws prefilter-*rejected* configs, so its maximum is a lucky early draw from the
+reject pile.
+
+(C) reads the top-*decile* mean, rank ~120-from-top; records live at rank 1. So the observed state
+is exactly the blind spot (C) names in its own text: **the bulk tail has stopped moving, the
+extreme tail has not.** This does not invalidate the freeze — but it forecloses reading it as
+"the grammar cannot produce a better component," and the +1.7397 is the concrete refutation.
+
+**AND WE HAVE BEEN MEASURING THE WRONG COORDINATE.** Promotion is a JOINT requirement, and
+stage-one pass rates show which gates actually bind:
+
+```
+wf_sharpe_p25 / wf_sharpe_p10   100.00%   <- the non-binding enrichment labels
+walk_forward_sharpe_median        0.49%   <- a DIFFERENT gate, second-most binding
+cpcv_sharpe_p25                   0.00%   (11 of 198,360)
+```
+
+Of the 11 stage-one configs that have **ever** cleared cpcv ≥ 1.5, **7 failed
+`walk_forward_sharpe_median`**; the single one that promoted failed nothing at all. WF-median pass
+rate does rise with cpcv rank (0.7% overall → 38% in the top 100), so the two are positively
+correlated — but it still rejects 62–80% of our best cpcv configs.
+
+**Condition (C), the freeze legs, and the record test all measure cpcv alone.** None of them sees
+the binding joint surface. That is not an error in (C) — it measures what it was specified to
+measure — but it means the question *"can the ceiling go higher"* has never actually been asked on
+the surface promotion requires. (Note the three WF-family gates are easy to conflate: the v50
+retarget rationale correctly described `wf_sharpe_p25` as admitting 100%; `walk_forward_sharpe_median`
+is a different gate and binds hard.)
+
 **Coverage is not the same as having tested the surface.** An indicator audit (2026-08-06) found
 **19 of 72 registered indicators completely dark** — 5 by recorded decision, 11 by accident, and
 one (`yz_rank`) structurally identical to `rv_rank`, which carries 17% of all configs. It also
@@ -152,7 +199,55 @@ generation against `IC(cpcv, corr_to_book)`.
 
 ---
 
+## 8. Next steps — can the ceiling go higher?
+
+The §4 findings change this from a rhetorical question to a measurable one. Ordered by what has
+to be true before the next thing is worth doing.
+
+**Step 1 — measure the JOINT frontier, because we have never measured the binding one.**
+Every ceiling instrument we own (condition C's two legs, the record test, the tail model's target)
+reads `cpcv_sharpe_p25` alone. Promotion needs cpcv **and** `walk_forward_sharpe_median`, and the
+latter rejects 62–80% of our best-cpcv configs. Build the 2-D analogue: the Pareto frontier of
+(cpcv, WF-median) over time, and a record test on **frontier advances** rather than on either
+coordinate. Until that exists, "the ceiling is flat" is a statement about one axis of a
+two-axis wall. Read-only analysis, no deploy, no grammar change — and it gates everything below.
+
+**Step 2 — re-read (C) under the restored capacity.** (C) was read at 25% eligible stage-two
+coverage; Crucible has since doubled the drain (`--limit` 20 → 40). A fresh prereg with required-n
+stated at registration would remove the largest caveat in this document. Independent of Step 1 and
+can run concurrently.
+
+**Step 3 — probe the untested surface, but score it on the frontier, not on cpcv.** Two concrete
+targets, both discovered 2026-08-06 and neither yet acted on:
+- the `rv_rank`-primaried trend cell — **77,416 configs, the single largest, has never once
+  carried a second regime gate**, blocked by a C1 family collision rather than by evidence.
+  C1-legal candidates: `market_state` (macro) or `adx`/`hurst` (trend_strength).
+- `yz_rank` — structurally identical to `rv_rank` (volatility, lookback 252, rank-coherent), which
+  appears in 17% of all configs and in the most recent record-setter. It has no threshold spec and
+  has never been discussed anywhere.
+
+**The scoring rule is the point of Step 1.** The dsj precedent is the warning: dsj produced a real
+stage-one cpcv effect (z=+5.44) and, through our own generator, **zero promoted components in
+6,707 tries.** Probing new surface and grading it on cpcv would repeat that exactly. Each probe is
+a full increment under §6 — prereg first, required n stated, emission proof, funnel attribution.
+
+**Step 4 — housekeeping that blocks clean measurement.** `scripts/second_gate_contrast.py` pools
+across `measurement_basis` (the D360 defect) and is the instrument we would naturally reach for
+when judging any new second gate. Fix before Step 3.
+
+**Not proposed:** re-opening the grammar for expansion, or acting on any of the 11 accidental dark
+indicators as a group. Those are coverage findings; nothing yet says they carry alpha, and D361's
+standing result is that supply composition is not currently an actionable lever on the promotion
+axis.
+
+---
+
 **Recommendation.** Declare the freeze, with §4 attached and non-optional. The conditions are met
 as written and the writing was honest. The single most likely misuse of this document is someone
 quoting "(C) MET" as evidence that the grammar cannot produce a better component — it is not that,
 it was never that, and §4 exists so the record says so before anyone needs it to.
+
+**And declare it as a supply-hygiene result, not an exhaustion result.** The evidence in §4 is that
+the extreme tail is still moving and that the binding axis has never been measured. Freezing
+generation *policy* while those remain open is coherent — Step 1 is analysis, and Steps 2–3 are
+reopener-class work the criterion already anticipates. Declaring exhaustion would not be.
