@@ -31,21 +31,32 @@ repos maintained by separate agents; the operator carries messages between them.
   healthcheck's `inbox_rejections` check, D246, CRITs on it within hours). Adoption plans must
   name both restarts explicitly: Forge `forge.service` AND Crucible's inbox watcher + exporter.
 
-## Outgoing (Forge → Crucible)
+## The channel (D362 — the shared repo IS the transport)
 
-Write `PROMPT_CRUCIBLE_<topic>.md` at repo root. Include:
+All relays live in **`~/proj/freeze/relays/`**, both directions. **Committing there is
+delivering** — there is no separate "send" step and no unsent queue to track (the pre-D362
+"N unsent" bookkeeping was a fiction; every tracked relay had already been answered).
+
+- Outgoing: `FORGE_<topic>_<YYYY-MM-DD>.md`, commit message `relay(crucible): …` /
+  `relay(quantiq): …`.
+- Incoming: `CRUCIBLE_*` / `QUANTIQ_*` files appear the same way; watch the repo, not root.
+- Standing obligations and what each side has already handled: **`freeze/INDEX_forge_answered.md`**
+  (ours) and **`freeze/relays/INDEX_crucible_answered.md`** (theirs). Update ours in the same
+  commit when an exchange creates or discharges a standing obligation.
+- Never write `PROMPT_CRUCIBLE_*.md` at Forge root — that channel is retired; the historical
+  pile is in `_archive/`.
+
+## Outgoing content (unchanged by the channel move)
 
 1. Exact asks, numbered, each independently answerable.
 2. Evidence (queries run, journal lines, counts) — not conclusions alone.
 3. Version strings and UTC timestamps for any cohort you want them to cut on.
 4. What Forge will do under each possible answer.
 
-Tell the operator it's ready to pass. After a grammar deploy, always relay the new version string
-+ deploy timestamp so Crucible can run `crucible funnel --compare`.
+After a grammar deploy, always relay the new version string + deploy timestamp so Crucible can
+run `crucible funnel --compare`.
 
-## Incoming (Crucible → Forge)
-
-Responses and handoffs land in `../Crucible/docs/handoffs/FORGE_*.md`.
+## Incoming
 
 **Verify premises against live data before acting** — handoffs have arrived stale (D103: "dies in
 the funnel" was a stale-cohort artifact) or with wrong mechanism theories (D104). Re-derive the
@@ -53,5 +64,7 @@ headline numbers via `investigate-live.md` first; record agreements/corrections 
 
 ## Lifecycle
 
-Completed prompt/response pairs move to `_archive/`. Older deleted prompts are recoverable via
+Not every relay needs a reply: one that carries no ask is closed by its D-entry (D362). Answered
+exchanges stay in `freeze/relays/` — the mailbox is the record. The retired root-file channel's
+prompt/response pairs are in `_archive/`; pre-archive deleted prompts are recoverable via
 `git show e85f0d4^:<filename>` (see the note atop `IMPLEMENTATION_DECISIONS.md`).
