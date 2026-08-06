@@ -1,0 +1,982 @@
+# Forge — Open Questions archive: resolved/closed entries
+
+Swept out of `OPEN_QUESTIONS.md` 2026-08-06 (repo-simplification Step A3). Entries
+verbatim, original order; every heading carries its own RESOLVED/CLOSED marker and
+date. Q-numbers are cited from D-entries — grep here first, then the live file.
+
+---
+
+## 2026-05-13 — Q7 — Grammar fields missing from `crucible_contracts.StrategyConfig` — **HIGH SEVERITY, BLOCKING PHASE 1** — **RESOLVED 2026-05-13 (contracts v1.2.0, D007/D008; header banner added in the D295 sweep)**
+
+**Question:** The §3.5 grammar rules reference fields that do not exist on `crucible_contracts.StrategyConfig` / `SignalSpec`. How should these be carried?
+
+**What's missing (cross-referenced spec rule → contracts field):**
+
+| Spec rule cites | Spec field name | Contracts has? |
+|---|---|---|
+| S1 ("one hypothesis per strategy") | `hypothesis` ∈ {trend_continuation, mean_reversion, regime_arbitrage, relative_value, volatility_event, tail_hedge} | **NO** — no `hypothesis` field on `StrategyConfig` |
+| S2 ("one directional signal") | `signals[*].role` ∈ {directional, regime_filter, filter, confluence} | **NO** — `SignalSpec` has only `id`, `type`, `indicators`, `params` |
+| S3 ("at least one regime gate") | `signals[*].role == regime_filter` | **NO** (same as S2) |
+| C1, C2 (family rules) | `signals[*].family` ∈ {trend, mean_reversion, volatility, iv_structure, dealer_positioning, flow, macro, calendar, fundamental, smart_money, pairs} | **PARTIAL** — `IndicatorMetadata.family` exists but uses a different 9-value enum: `mean_revert, price_trend, realized_vol, iv, macro, pairs, smart_money, multi_factor, dealer`. Spec lists 11 families; 3 don't exist in contracts (`flow, calendar, fundamental`); 1 contracts-only (`multi_factor`). Renaming conventions also differ (`mean_revert` vs `mean_reversion`, `price_trend` vs `trend`, etc.). |
+| E1 (mandatory exits) | "Every strategy includes `expiry_exit`, `theta_cliff_exit`, `earnings_exit`" — **3 exits** | Contracts `MANDATORY_EXIT_IDS` has **4**: `expiry_exit, theta_cliff_exit, earnings_exit, **liquidity_exit**`. |
+
+**What I did instead:** halted before any code lands. Phase 1 cannot proceed because:
+- I can't write a `cardinality` predicate for `field: hypothesis` if `hypothesis` doesn't exist on the model.
+- I can't write a `cardinality` predicate for `field: signals.role.directional` if `role` doesn't exist on `SignalSpec`.
+- I can't write a `forbids` predicate referencing `signals.family` without a lookup convention.
+
+**Severity:** **high** — structural blocker for Phase 1. Picking silently means either (a) inventing fields on a model the contracts package owns (violates hard rule #2), (b) shimming with `signals[*].params["role"]` strings (loose typing, will break refactors), or (c) deriving fields via lookups that the spec doesn't define.
+
+**Options for the operator (numbered for reference in reply):**
+
+1. **Extend `crucible_contracts`** (cleanest; treats this as the gap the kickoff anticipated):
+   - Add `hypothesis: Literal[...]` to `StrategyConfig`.
+   - Add `role: Literal["directional","regime_filter","filter","confluence"]` to `SignalSpec`.
+   - Reconcile `IndicatorMetadata.family` enum with the §3.5 C1 family list (decide: 9, 11, or some merged set; pick canonical spellings).
+   - Resolve E1 mandatory-exit count (3 vs 4; recommend accepting contracts' 4 since the contracts validator enforces it).
+   - Bump `crucible_contracts` to **1.2.0** (additive: minor). Forge's `FORGE_EXPECTED_CONTRACT_VERSION` follows.
+
+2. **Encode in `SignalSpec.params`** (no contracts change):
+   - `hypothesis` lives on `StrategyConfig.signals[0].params["hypothesis"]` (or a separate top-level convention).
+   - `role` lives on `signal.params["role"]`.
+   - `family` is derived: `signal.indicators[0]` → `RegistrySnapshot.indicators` lookup → `IndicatorMetadata.family`.
+   - Forge encodes/decodes via helpers; the grammar predicates use dotted paths into `params`.
+   - Stringly-typed; refactors brittle; no validation that the params dict carries the expected keys.
+
+3. **Forge-side annotation field** (least clean):
+   - Forge submits configs with an extra `forge_metadata: dict` field that Crucible ignores. Hypothesis/role live there.
+   - Violates the "no extra fields" extra="forbid" pydantic config on `StrategyConfig` — would require a contracts change too. So this collapses into option 1.
+
+4. **Defer Phase 1 grammar to v1.1; ship a simpler grammar for v1.0** that only validates fields actually present on contracts (`dte_bucket`, `sizer.mode`, `signals[*].type`, `exits[*].id`, etc.). Loses S1, S2, S3, parts of C1, C2 — about 1/3 of the spec rules. The grammar becomes structurally weaker but immediately implementable.
+
+**Recommendation:** option 1. The contracts package is explicitly named in PIPELINE.md §7 as "the integration boundary" and the kickoff anticipates "missing model or field — surface as a contracts gap." This is precisely that case. Minor version bump (1.1 → 1.2) is additive and won't break Crucible / QuantIQ.
+
+**Note on family-list mismatch (sub-question if option 1 chosen):** the spec's `flow`, `calendar`, `fundamental` families aren't in contracts; contracts' `multi_factor` isn't in the spec. Pick the canonical list and align both sides. My read: spec list (11) is more domain-faithful; contracts is missing common categories. But this is a domain question.
+
+**Surfaced 2026-05-13 by agent.** Awaiting operator decision before any Phase 1 code.
+
+**Resolution 2026-05-13:** Operator chose **option 1** (extend `crucible_contracts` to v1.2.0) and **11-family canonical list** (spec's). See `IMPLEMENTATION_DECISIONS.md` D007 for the full resolution. Forge remains paused at Phase 1 kickoff until contracts v1.2.0 ships. Owner of the contracts change still TBD.
+
+**Closure 2026-05-13:** `crucible_contracts` v1.2.0 shipped (`crucible_contracts/master` commit `7d0f359`). Forge bumped `FORGE_EXPECTED_CONTRACT_VERSION` to `"1.2.0"` (see D008). All v1.2.0 surface assertions pass against the installed package. Q7 closed; Phase 1 resumed.
+
+---
+
+## 2026-05-13 — Q8 — §3.5 R2 + C1 are jointly unsatisfiable under v1 family vocabulary — **HIGH SEVERITY, BLOCKING PHASE 2** — **RESOLVED 2026-05-13 (contracts v1.4.0 `trend_strength`, D019; header banner added in the D295 sweep)**
+
+**Question:** §3.5 R2 ("trend_continuation strategies must include `adx` or `hurst` as a regime gate") combined with §3.5 C1 ("no duplicate indicator families in one strategy") and the contracts v1.1–1.3 family list (no `trend_strength`) creates a contradiction: any trend_continuation strategy with a trend-family directional plus adx/hurst as regime gate violates C1, because adx/hurst would also need to be `trend` family. The Phase 1 fixture (`tests/fixtures/strategy_configs.py`) worked around this by classifying adx/hurst as `volatility`, which is semantically false and was flagged inline + in D018's surface-item.
+
+**What I did instead:** Phase 1 shipped with the misclassification in fixtures only (production grammar engine is registry-driven, so the production behavior depends on what the *real* registry says). The Phase 2 enumerator picks indicators directly from the registry and will hit this on day one — cannot be deferred further.
+
+**Severity:** **high** — structural blocker for Phase 2 enumerator. Picking silently means continuing to claim adx is a vol indicator, which will be wrong the moment Crucible's actual registry ships.
+
+**Options:** (a) keep the lie in production, (b) add `trend_strength` to contracts, (c) special-case C1, (d) tighten C1's semantics to per-role. (See Phase 2 closure plan D1 in this session's conversation log.)
+
+**Resolution 2026-05-13:** Operator chose **(b) — add `trend_strength` to contracts**. Most honest; smallest blast radius outside the immediate fix. See `IMPLEMENTATION_DECISIONS.md` D019.
+
+**Closure 2026-05-13:** `crucible_contracts` v1.4.0 shipped (`crucible_contracts/master` commit `d84240a`) adding `trend_strength` to the canonical 12-family list. Forge bumped `FORGE_EXPECTED_CONTRACT_VERSION` to `"1.4.0"`; fixture reclassified. Q8 closed; Phase 2 unblocked.
+
+---
+
+## 2026-05-13 — Q10 — Crucible-backed FeatureCache — DEFERRED to contracts dependency — **RESOLVED 2026-07-05 (real cache shipped)**
+
+**Question:** Phase 3 D1 introduced `forge.prefilters.feature_cache.FeatureCache` Protocol + `SyntheticFeatureCache` implementation. The synthetic cache deterministically stubs `expected_trades_per_year`, `signal_density`, `regime_label`, etc. The real Crucible-backed cache was deferred at Phase 3 (D021), again at Phase 5 (D024/D9), and again at Phase 6 (D025/D9). Each deferral has been honest about the upstream blocker.
+
+**Blocker:** `crucible_contracts` v1.6.0 does not expose a feature-cache surface (no `get_feature_cache()` helper, no FeatureCache Pydantic model with statistics rows, no realized-trade-count read-path). Until Crucible exposes such a surface, Forge cannot build the real implementation — the Protocol is in place, but there's nothing to adapt against.
+
+**Severity:** **medium** — synthetic-cache numbers are deterministic but not data-grounded. Pre-filter scores are correct relative to themselves (good for ranking) but absolute thresholds (e.g., "≥ 20 trades/year") cannot be validated against real Crucible feature behaviour. As soon as the first batch of real Crucible runs lands, the gap shows in the gated-run promotion rate vs Forge's expected_trades estimates.
+
+**Resolution 2026-05-13 (Phase 6 closure):** **D025/D9 — deferred**. Re-confirmed at every phase boundary; the contracts gap is upstream and outside Forge's scope to resolve. Phase 6 ships with synthetic cache. Next action: when Crucible/contracts adds a feature-cache surface, swap `forge.prefilters.feature_cache.SyntheticFeatureCache` to the real adapter behind the same Protocol — call sites need no changes.
+
+**Tag:** `contracts-dependency`
+
+**RESOLVED 2026-07-05 (code-health review):** the real Crucible-backed cache shipped — `src/forge/prefilters/crucible_feature_cache.py`, wired into `prefilters/battery.py` + `cli/main.py`, replacing `SyntheticFeatureCache` behind the same Protocol exactly as this entry's next-action prescribed. The entry was stale (never back-annotated when the swap landed). **Q10 closed.**
+
+---
+
+## 2026-05-13 — Q11 — v1 go-live paused; Crucible Phase 9 v2 is the real prerequisite — **HIGH SEVERITY** — **RESOLVED 2026-05-13 (Crucible Phase 9 v2 closed gaps 3/4/5; header banner added in the D295 sweep)**
+
+**Question:** First v1 go-live attempt (this session) surfaced three stacked gaps between Forge's emitted configs and Crucible's current runtime, with no honest path forward until Crucible's Phase 9 v2 lands. How does v1 go-live actually achieve closed-loop operation?
+
+**What we discovered during go-live:**
+
+1. **Inbox layout mismatch** (resolved as D026, this session) — Forge wrote `inbox/{batch_id}/{config_hash}.json`; Crucible's contract-compliant inbox watcher skips subdirectories. Fixed by writing flat per `INBOX_LAYOUT`. Crucible queued the 2 stranded submissions within 30s of the move.
+
+2. **Name-prefix routing gap** (resolved in Crucible commit `98f1eeb`, this session) — Crucible's `_detect_strategy_name` only routed `genome_<...>` configs; Forge emits `forge_<hypothesis>_<bucket>_<hash>`. Stale convention. Added `forge_` arm matching the existing scaffold comment. One run then completed; the second hit gap #3 below.
+
+3. **Exit-vocabulary divergence (NEW, unresolved):** `crucible_contracts.KNOWN_EXIT_IDS` (per D011) lists 14 exit IDs; Crucible's backtest engine implements 10. The intersection misses 6 contract-only exits:
+   - `atr_underlying_stop_loss` (per D012 stop-loss family)
+   - `event_passed_exit` (tail_hedge hypothesis-required exit per S5)
+   - `hard_profit_target` (trend_continuation forbids; harmless if unimplemented)
+   - `premium_stop_loss` (per D012 — Crucible has `premium_stop` instead; likely an unsynced rename)
+   - `regime_flip_exit` (regime_arbitrage hypothesis-required exit per S5; surfaced as Run 2's failure)
+   - `roll_on_schedule_exit` (calendar hypothesis-required exit)
+   Plus 2 Crucible-only ids missing from the contract: `blow_out_exit`, `premium_stop`.
+
+4. **From-config dispatcher gap (NEW, unresolved):** Even Run 1 (mean_reversion) "completed" with all-zeros metrics (`n_trades=0`, `final_equity=100000=initial`). Per `Crucible/src/optbt/data/runner.py:199` comment: *"v2: a proper 'from-config' dispatcher."* Crucible currently routes Forge configs to the `regime_mean_revert` template — it ignores Forge's actual signal config and runs the template. Honest backtests of Forge configs require Phase 9 v2.
+
+5. **Promotion gate gap (NEW, unresolved):** `promotion_decisions` table is empty across the test runs. Crucible's gate evaluator for `source='forge'` runs isn't wired (refit-source has a stub via `_make_refit_evaluator_stub`; forge-source has nothing). `_GATED_QUERY_BASE` is an INNER JOIN with `promotion_decisions`, so even successfully-completed runs never appear gated. **Forge's rate limiter (§7.3, ≥80% gated) blocks indefinitely** in current state.
+
+**What I did instead:** Stopped `forge.service` (left enabled). Documented the three new gaps and the v1 go-live status here.
+
+**Severity:** **high** — v1 go-live is the boundary between "code is structurally complete" and "system actually produces strategy candidates." Forge cannot achieve the latter alone; Crucible v2 must (a) sync exit vocabulary with the contract, (b) implement from-config dispatch so Forge configs backtest honestly, (c) wire a forge-source gate evaluator that writes `promotion_decisions`.
+
+**Resolution 2026-05-13 (operator choice):** **Pause v1 go-live, scope Crucible Phase 9 v2 in a separate session.** Forge's Phase 7 (minimal + Q9) work loses its testing ground until real promotion data exists; reassess Phase 7 scope after Crucible v2 ships at least one real `gated` row.
+
+**Action items for the Crucible Phase 9 v2 scoping session:**
+- Reconcile `crucible_contracts.KNOWN_EXIT_IDS` with the runtime exit table. Determine which side renames (`premium_stop` ↔ `premium_stop_loss`?), which exits Crucible must implement vs deferred, and whether `blow_out_exit` should be added to the contract.
+- Implement a from-config dispatcher in `runner.py` so source='forge' runs evaluate Forge's actual signal config (not a placeholder template).
+- Wire a forge-source gate evaluator that writes `promotion_decisions` after each completed forge-source run (decision can be reject for v1, mirroring the refit stub — what matters is the row exists for `_GATED_QUERY_BASE`).
+- Validate end-to-end: Forge submits → Crucible queues → backtests with Forge's signals → writes promotion_decisions → Forge consumes feedback + rate-limiter unblocks → submits batch 2.
+
+**Tag:** `crucible-v2-prerequisite`, `v1-go-live`
+
+**Closure update 2026-05-13 (Phase 9 v2 shipped):** Crucible Phase 9 v2 closed Gaps 3, 4, 5 above (commits `5623d85` exit-vocab parity, `d1322f5` from-config dispatcher, `7c7cd5d` Gap 3 stub, `e45a90e` Gap 3 minimal evaluator). First v2 re-process of the 2 stranded forge-source runs surfaced a **fourth layer** of mismatch, logged below as Q12.
+
+---
+
+## 2026-05-13 — Q12 — Indicator-vocabulary divergence between Forge demo registry and Crucible runtime — **HIGH SEVERITY** — **RESOLVED 2026-05-14 (Crucible Phase 9 v3 + contracts v1.8.0 export reads; header banner added in the D295 sweep)**
+
+**Question:** After Phase 9 v2 re-processed the 2 stranded Forge configs, both failed with `Unknown indicator: 'iv_rank'` (mean_reversion run) and `Unknown indicator: 'expected_value_estimator'` (regime_arbitrage run). Forge's enumerator is sourcing from an in-Forge stub registry (`forge.enumeration._demo_registry`) that advertises indicators Crucible's runtime doesn't implement. How does the system reach indicator-vocabulary parity for v1 go-live?
+
+**Scope of the divergence:**
+
+| Side | Count | Notes |
+|---|---:|---|
+| Forge `_demo_registry` (Phase 2 stub — "ships ahead of the Phase 4 Crucible-registry wiring") | 14 | adx, days_to_earnings, days_to_fomc, ema_50, **expected_value_estimator** (X2-required), hurst, **iv_rank** (R1-required), momentum_252, pairs_zscore, put_call_flow, realized_vol, rsi_2, rsi_14, vix_level |
+| Crucible runtime (`features/` registry) | 23 | adx, amihud, atr, atr_pct, bb_pct, donchian, ema, ema_cross, garman_klass_vol, hurst, keltner_pct, macd, parkinson_vol, realized_vol, returns_12m_skip1, rolling_sharpe, rsi, rsi_2, sma, supertrend, vol_regime, yang_zhang_vol, zscore_returns |
+| **Intersection** | **4** | adx, hurst, realized_vol, rsi_2 |
+
+§3.5 R1 requires `iv_rank` for mean_reversion regime gates; §3.5 X2 requires `expected_value_estimator` for fractional Kelly sizing. Both are operator-owned grammar rules (CLAUDE.md hard rule #1) and cannot be relaxed Forge-side.
+
+**Architectural root cause:** Crucible's `EXPORT_LAYOUT.registry_snapshot_*.json` was never wired. Forge has been enumerating against a fictional registry the whole time. Phase 2 D6 + Phase 4 D5 + Phase 5 D9 all acknowledged this in passing (carrying `_demo_registry` forward) but the wiring was never built.
+
+**Severity:** **high** — first v1 go-live attempt is blocked here exactly the same way Q11 blocked it. The pipeline can't honestly produce candidates Crucible can backtest until the registry alignment lands.
+
+**Resolution 2026-05-13 (operator choice):** **Path A — Crucible implements all 10 missing indicators + publishes RegistrySnapshot per EXPORT_LAYOUT.** Driven via separate Crucible-side agent following `CRUCIBLE_PHASE9_V3_AGENT_PROMPT.md` at Forge repo root. Forge side pre-stages `forge.persistence.registry_loader` with graceful demo-registry fallback so Forge picks up the real snapshot automatically when it lands.
+
+Alternatives rejected:
+- **Path B** (shrink Forge grammar to Crucible's 23 known indicators) — would amputate §3.5 R1 + X2 + several hypothesis families; violates hard rule #1.
+- **Path C** (Crucible implements only load-bearing iv_rank + expected_value_estimator + aliases) — operator preferred completeness over band-aid; some of the deferred indicators (vix_level, days_to_earnings) are non-trivially load-bearing for hypotheses Forge can't dodge.
+
+**Action items:**
+1. Crucible side (per `CRUCIBLE_PHASE9_V3_AGENT_PROMPT.md`):
+   - Implement 10 new registered indicators (most have existing math/scaffolding to wrap)
+   - Publish `~/optbt_data/exports/registry_snapshot_<timestamp>.json`
+   - Verify the 2 stranded runs re-process cleanly under v3
+2. Forge side (this session):
+   - `forge.persistence.registry_loader` shipped with 8 unit tests
+   - 5 CLI sites threaded (4 in main.py + 1 in feedback_cmd.py) — fallback to demo on miss
+   - When Crucible publishes, no Forge code changes needed
+3. Operator restart `forge.service` after Crucible v3 ships; observe end-to-end loop close.
+
+**Tag:** `crucible-v3-prerequisite`, `v1-go-live`
+
+**Closure update 2026-05-14 (v1 go-live operational):** Crucible Phase 9 v3 shipped 10 new indicators + EXPORT_LAYOUT publishing (Crucible commit `phase9v3`). Plus a runtime architectural gap surfaced — DuckDB's writer holds an exclusive lock blocking Forge's direct read-only opens. Closed by `crucible_contracts` v1.8.0 (`load_recent_gated_runs_from_export`) + Crucible's `crucible-gated-runs-publisher.service` writing `gated_runs_*.json` snapshots + Forge's rate limiter & feedback consumer switching to file-based reads. Q11 + Q12 considered closed; new survival-rate concern logged below as Q13.
+
+---
+
+## 2026-05-14 — Q13 — 100% pre-filter rejection at permutation_test under real Crucible registry — **MEDIUM SEVERITY** — **CLOSED AS SUPERSEDED 2026-07-05**
+
+**Question:** First v1 go-live iteration after the registry/publisher work landed: enumerate 5000 candidates → 0 survivors. Diagnostic via `uv run forge prefilter --seed 42 --max 200 --summary` showed `permutation_test: 200 rejections` (the only rejecting filter; the other 6 in the cost-ascending battery passed every candidate). Auto-tune (Phase 5 D5) is designed to handle this over time, but the immediate effect is zero promotions per batch. Is the current pre-filter calibration honest under the real registry?
+
+**Root cause:** `SyntheticFeatureCache` (Phase 3 D1 stopgap) deterministically stubs feature values from config_hash. Under the demo registry (14 indicators) most candidates had p-values in a range that produced ~5-20% survival; under the real registry (33 indicators) the config_hash distribution shifts and the synthetic cache yields uniformly low signal-strength → uniform permutation_test failure.
+
+**This is `SyntheticFeatureCache` fidelity meeting calibration tuning** — both are known stopgaps:
+- Q10 (already deferred): the real Crucible-backed FeatureCache requires a contracts surface that hasn't shipped.
+- §5.5 auto-tune mechanism (Phase 5 D5): on 95%+ rejections by a single filter, auto-tighten/loosen proposes a calibration adjustment. Phase 5 ships the trigger; it requires a few batches of evidence before it fires.
+
+**What I did instead:** confirmed the pipeline is structurally correct (Forge submits 0, Crucible has nothing to backtest, Forge's feedback consumer cleanly reports 0 — no crash). Let `forge.service` continue to run; auto-tune will accumulate evidence over batches.
+
+**Severity:** **medium** — the loop closes end-to-end without errors; the 0-survivor signal is the auto-tune's intended trigger. Long-term: real feature cache is the right fix. Short-term: operator may manually relax `config/prefilter.yaml` `permutation_test.p_value_threshold` to bootstrap survival until auto-tune fires.
+
+**Resolution 2026-05-14:** Logged + watching auto-tune behavior across iterations. Not blocking v1 go-live operability.
+
+**Tag:** `auto-tune-candidate`, `synthetic-cache-fidelity`
+
+**CLOSED AS SUPERSEDED 2026-07-05 (code-health review):** the failure mode this entry watched no longer exists — the `SyntheticFeatureCache` fidelity gap was closed by the real Crucible-backed feature cache (Q10 closure), the permutation_test calibration was flipped by D238, and the auto-tune path this entry deferred to was retired outright by D206 (thresholds back to D031 baselines). Nothing left to watch. **Q13 closed as superseded.**
+
+---
+
+## 2026-05-19 — Q15 — `trend_continuation` blocked by registry family mismatch on `adx`/`hurst` — **HIGH SEVERITY** — **RESOLVED 2026-05-19 (Crucible `e298138` family split verified live; header banner added in the D295 sweep)**
+
+**Question:** Why does the `trend_continuation` hypothesis produce zero sampler attempts in production despite D067's 5% exploration floor and D037's 2% stratified rotation? Iter 36 telemetry (D064 `prefilter_rejections_by_hypothesis:`):
+
+```
+sampler_attempts: trend_continuation=0, mean_reversion=1520, regime_arbitrage=1102, relative_value=1142, volatility_event=1236, tail_hedge=0
+```
+
+**Diagnosis.** The production registry (`registry_snapshot_2026-05-18T033529Z.json`) assigns `family="trend"` to **both** `adx` and `hurst`, the §3.5 R2 regime indicators for `trend_continuation`. Forge's grammar requires:
+
+- §3.5 C2[`trend_continuation`] = `("trend",)` — directional must be `trend` family.
+- §3.5 R2 = literal IDs `("adx", "hurst")` — regime must be one of these.
+- §3.5 C1 — directional family ≠ regime family.
+
+When the sampler picks `trend_continuation`, it draws a directional from `trend` family (e.g., `momentum_252`). Then for the regime it picks `adx` or `hurst` — but both have `family="trend"` in the production registry. C1 fires → `SamplerError`. After 20 forced-rotation retries hit the `_FORCED_FAILURE_CAP`, `trend_continuation` is blacklisted for the batch. The weighted-sample path also fails on every pick, producing **zero successful samples** in the entire 5,000-candidate batch.
+
+Forge has historically expected `adx`/`hurst` to live in a separate `trend_strength` family. Evidence:
+
+- `tests/unit/test_enumeration/test_search_space.py:116-119` asserts `indicators_by_family["trend_strength"] == ("adx", "hurst")` and references the move as "post-contracts-v1.4.0, adx + hurst live in the `trend_strength` family rather than `volatility` (D019)."
+- `tests/fixtures/strategy_configs.py::minimal_registry_snapshot()` ships `adx` and `hurst` with `family="trend_strength"`.
+- D019 in `IMPLEMENTATION_DECISIONS.md` formalized the split.
+
+**The production registry has them as `family="trend"` — same family as the directional pool.** This is a regression from D019's contract.
+
+**What I did instead:** Logged this question. Did not modify the grammar (hard rule #1). Did not change `_R2_TREND_STRENGTH_INDICATORS` (Forge would silently break the cross-system contract and the test suite). Did draft `CRUCIBLE_TREND_STRENGTH_FAMILY_AGENT_PROMPT.md` at the repo root for the operator to hand off to a Crucible agent — it specifies moving `adx` and `hurst` from `family="trend"` to `family="trend_strength"` (with no other changes), citing this Q15 entry and D019.
+
+**Severity:** **high** — fully blocks the `trend_continuation` hypothesis from ever being sampled. Crucible's post-mortem cohort (3,829 configs) shows `trend_continuation` at 0/3,829 = 0.0%; consistent with this finding being persistent rather than transient.
+
+**Tag:** `crucible-registry-regression`, `trend-strength-family`, `cross-system-contract`
+
+**Resolution 2026-05-19:** Crucible shipped `e298138 fix(exports): split adx + hurst into trend_strength family per D019`. Verified live in `registry_snapshot_2026-05-19T211742Z.json` — `adx` and `hurst` now have `family="trend_strength"`. Forge's first iter to load the new registry (iter 37, `registry_hash=fc0dd3bd55a35177`) immediately produced ~1,500 sampler attempts for `trend_continuation` per batch (was 0). Those configs now die at `permutation_test` (~85% of kills) — a separate signal-quality issue addressed by Phase 3 (D073) and not blocking. **Q15 closed.**
+
+---
+
+## 2026-05-20 — Q16 — `expected_trades` pre-filter measures indicator activations, not trades — **HIGH SEVERITY** — **RESOLVED 2026-05-20 (D076 empirical-prior filter; header banner added in the D295 sweep)**
+
+**Question:** Why does the `expected_trades` filter (`src/forge/prefilters/expected_trades.py`) reject 0 / 16,253 configs while 77% of submitted configs produce 0 trades in Crucible? Diagnostic across 1,213 distinct gated runs (decided 2026-05-15 → 2026-05-20):
+
+```
+Trade count distribution (n=1213):
+       0:   934 (77.0%)
+     1-9:   211 (17.4%)
+   10-49:    39 (3.2%)
+   50-99:    19 (1.6%)
+    100+:    10 (0.8%)
+```
+
+`pre_filter_logs` (Forge DB) corroborates the filter is structurally a no-op for its intended purpose — **every one of 16,253 attempts passed**, with median `estimated_trades` well above the `min_trades=50` floor (samples show 60, 367, 367, 73, ...).
+
+**Root cause.** `ExpectedTradesFilter.apply()` computes:
+
+```python
+n_activations = len(ctx.feature_cache.activation_dates(directional.id))
+capacity = 5 * (ctx.registry.data_history_days / hold_days)   # ≈ 418 for swing_short
+estimated = min(n_activations, int(capacity))
+passed = estimated >= ctx.calibration.expected_trade_count.min_trades  # default 50
+```
+
+This counts how many times the directional signal's indicator crosses its threshold over the 5-year cache window. Under realistic thresholds (e.g., `pairs_zscore < -1.26`, `vix_level > 18`), threshold crossings happen many times per year so `n_activations >> 50` almost always — even when zero actual trades will open downstream.
+
+What the filter does NOT check:
+- Whether the **selector** can find a matching option contract on activation dates.
+- Whether the **sizer** would skip the trade (risk budget, position cap, fractional-Kelly EV miss).
+- Whether the **exit rules** would close at zero P&L.
+- Whether the **regime_filter** signals would veto the directional signal at runtime.
+
+The mental model conflates "indicator-would-fire times" with "trades the strategy would execute." Threshold-distribution medians for 0-trade vs trading configs are nearly identical (`pairs_zscore`: -1.26 vs -1.07; `expected_value_estimator`: 0.0046 vs 0.0046) — so threshold strictness isn't the lever; the filter cannot discriminate.
+
+**Possible directions (operator decision needed before any rewrite):**
+
+1. **Empirical-prior filter (recommended).** Replace activations-based estimate with a learned trade-rate prior per `(hypothesis, dte_bucket, directional_signal_family)`. Feedback consumer maintains rolling `gated_trade_count / submitted_config`; filter rejects if predicted < `min_trades`. Builds on Q10's deferred FeatureCache work. Self-corrects from real data; no Crucible API change required.
+2. **Crucible-side dry-run estimator.** Crucible exposes a fast no-execution endpoint returning "would-have-opened N trades" given a config (skip option-chain pricing, just signal-fire × selector-feasibility). Cleaner semantics; new `crucible_contracts` surface required.
+3. **Tighten activations threshold heuristically.** Raise `min_trades` from 50 toward `capacity` (~400). Catches lowest-activation 0-traders but won't catch most of them (96.75% zero-trade `pairs_zscore` configs already show plenty of activations).
+
+**What I did instead:** Logged. Did NOT modify the filter — the §5.3.4 motivation cites Crucible's 100-OOS-trade floor without prescribing the activations heuristic, so there is freedom to redesign, but the redesign needs operator review (likely a Decision Log entry).
+
+**Related observation (filed inline, not as separate Q):** As of 2026-05-20, **all 9 pre-filters pass every config — 0 rejections across the entire battery.** Q15's 2026-05-19 closure noted `permutation_test` was killing ~85% of `trend_continuation` configs. Either auto-tune (D053-era) has loosened `permutation_test` to pass everything, or another regression. If the pre-filter battery is universally pass-through, Forge is effectively submitting raw-grammar output to Crucible — the rate limiter (Q19-area / spec §7.3) is the only remaining flow control, and it isn't engaging either.
+
+**Severity:** **high** — `expected_trades` is the spec's intended structural mitigation against the 0-trade flood (§5.3.4). With it inert, every downstream computation (Crucible queue time, gauntlet compute, gated-runs storage) burns on configs that will never trade.
+
+**Tag:** `prefilter-semantic-gap`, `zero-trade-root-cause`, `phase-7-candidate`
+
+**Resolution 2026-05-20:** Closed by **D076** — empirical-prior `expected_trades` filter learns per-`(hypothesis, dte_bucket, directional_family)` posterior P(n_trades ≥ min_trades) from the gated_runs cohort, rejects buckets with ≥20 samples + posterior < 0.10, falls back to legacy activations heuristic for cold-start buckets. Bundled with the `pre_filter_logs` audit-gap fix (rejected configs now logged with `config_hash` + `forge_batch_id` columns). **Q16's sidenote correction:** the battery was NOT a no-op — `batch_summaries.prefilter_rejections` showed ~50% rejection per batch all along; `pre_filter_logs` only ever held survivor rows, the audit gap masked the truth. Real per-filter rejection telemetry: see D062 + D064. Restart required to activate.
+
+---
+
+## 2026-05-20 — Q17 — `pairs_zscore` and `expected_value_estimator` show >93% zero-trade rate — Q14 follow-up status — **HIGH SEVERITY** — **RESOLVED/STALE 2026-06-25 (pre-fix cohort, D210; header banner added in the D295 sweep)**
+
+> **✅ RESOLVED / STALE 2026-06-25 ([[D210]]).** The 96–98.7% zero-trade was a PRE-FIX cohort — Crucible's
+> pairs-loading bug (each run reached only 1–5 of 37 pairs), fixed in `4f5271f`; D098 cold-start then
+> deliberately DROPPED that poisoned cohort. Measured on the current honest-era pool (live `forge.db`
+> snapshot, 2026-06-25): `relative_value` zero-trade is **0.5% on v22** (1/218), **0.0% on v20/v21**, ≤2.2%
+> v17–v19 — i.e. it now trades fine and is one of the best-trading hypotheses (max_trades 376), and the
+> only `pairs`/cross-sectional diversity source. Suppressing it (sub-q 2/3) would DESTROY working diversity
+> for no gain — DECLINED. The global zero-trade-waste problem is independently solved ([[D206]]: 89% of
+> gated runs trade ≥10; highest current v22 zero-rate is volatility_event at 10.1%, not relative_value).
+> Same stale-evidence shape as the iv_rank stub trap [[D154]]. No grammar/filter change.
+
+**Question:** Q14 (2026-05-14) flagged 5 Crucible-registered indicators as stubs returning NaN: `iv_rank`, `expected_value_estimator`, `vix_level`, `pairs_zscore`, `put_call_flow`. Resolution authored `CRUCIBLE_STUB_IMPLEMENTATIONS_AGENT_PROMPT.md` and adopted "long-term hold" — include stubs in enumeration honestly while waiting for upstream. Six days later, gated-runs evidence shows the stubs have not been replaced (or were replaced with implementations that produce ~zero trades):
+
+**Per-indicator 0-trade rate in 1,213-run gated cohort (2026-05-15 → 2026-05-20):**
+
+| indicator | 0-trade | trading | 0-rate |
+|---|---:|---:|---:|
+| `pairs_zscore` | 596 | 20 | **96.75%** |
+| `expected_value_estimator` | 378 | 26 | **93.56%** |
+| `rsi_14` | 66 | 12 | 84.62% |
+| `hurst` | 21 | 4 | 84.00% |
+| `rsi` | 31 | 6 | 83.78% |
+| `momentum_252` | 65 | 18 | 78.31% |
+| `rsi_2` | 66 | 19 | 77.65% |
+| `iv_rank` | 108 | 42 | 72.00% |
+| `realized_vol` | 200 | 111 | 64.31% |
+| `vix_level` | 170 | 167 | 50.45% |
+
+**Hypothesis × DTE 0-trade rate** (most affected — driven by `pairs_zscore`):
+
+```
+relative_value × swing_short:  370/375  (98.7%)
+relative_value × swing_mid:    202/205  (98.5%)
+volatility_event × swing_short: 105/147 (71.4%)
+regime_arbitrage × swing_long:  43/67   (64.2%)
+```
+
+`relative_value` is effectively non-functional. 580 of 596 zero-trade `pairs_zscore` configs come from `relative_value` × `swing_short`/`swing_mid`.
+
+**Severity:** **high** — Forge is filling Crucible's gauntlet queue with structurally hopeless candidates from the `relative_value` hypothesis, and to a lesser extent `volatility_event`/`regime_arbitrage` via the other stubs. Compounds Q16 (filter doesn't catch them) and the Crucible queue latency (separate, ~5d).
+
+**What I did instead:** Logged. Did NOT modify grammar or filter (hard rule #1; Q14 chose long-term hold). Did NOT verify whether the prompt file `CRUCIBLE_STUB_IMPLEMENTATIONS_AGENT_PROMPT.md` is still at repo root or in `e85f0d4`-history.
+
+**Open sub-questions:**
+1. Have the 5 stub indicators shipped real implementations? If yes, why does the cohort still show NaN-like behavior? If no, what's the ETA?
+2. Should Forge temporarily down-weight `relative_value` enumeration until `pairs_zscore` is real, to reduce queue contamination?
+3. Should Forge's sampler treat known-stub indicators with a per-indicator suppression weight derived from rolling gated trade-rate (auto-discovery rather than a hard-coded list)?
+
+**Tag:** `crucible-stub-followup`, `zero-trade-root-cause`, `relates-to-Q14`
+
+---
+
+## 2026-05-20 — Q18 — Grammar R3 (ETF + `days_to_earnings`) documented in `grammar.yaml` but inbox/errors shows it isn't fully enforced — **MEDIUM SEVERITY** — **RESOLVED 2026-07-05 (enforced in custom_predicates)**
+
+**Question:** `config/grammar.yaml` R3 (v2, D039) documents that ETF underlyings paired with `days_to_earnings` must be rejected ("sentinel-value silent-failure case from translation corpus"). However, two pieces of evidence indicate the rule is not being enforced for at least some emitted configs:
+
+1. **`inbox/errors/` contains 10 Forge submissions** that failed Crucible's preflight. Sample rejection reason:
+
+> `queue_run failed: queue-time preflight: hypothesis='volatility_event' + underlying='SPY' (Tier-1 ETF) + regime indicator(s) ['days_to_earnings'] that require single-name earnings — days_to_earnings returns the 999 sentinel for ETFs so the gate never fires.`
+
+Both `SPY` and `QQQ` (the Tier-1 ETFs) appear in the error sample. This is exactly the case R3 was authored to prevent — Crucible's preflight is acting as a downstream safety net for a Forge-side rule that should have caught it.
+
+2. **123 configs in the 1,213-run gated cohort use `days_to_earnings`** and produce 0 trades each (100% zero-rate). Some of these may be Tier-2/3 single-name configs where `days_to_earnings` is technically valid but never reaches a useful window — but at least the 10 ETF cases are clear R3 violations that shipped.
+
+**Possible explanations:**
+1. R3 exists in `grammar.yaml` only as documentation, not in the validator.
+2. R3 is wired but bypassed by a specific enumeration path (e.g., sampler emits before validator runs, or a tier check is off).
+3. R3 catches Tier-1 but not Tier-2 ETFs (or vice versa).
+
+**What I did NOT verify:** whether R3 is enforced in `src/forge/grammar/predicates.py` or `validator.py`. Defer that to whoever resolves this — the question itself is the deliverable.
+
+**Severity:** **medium** — 10 confirmed preflight rejects on the Forge side (we sent invalid configs Crucible caught) plus unknown share of the 123 zero-trade `days_to_earnings` cohort. The blast radius is small, but per hard rule #1 grammar rules are operator-owned and silent under-enforcement is a contract violation worth surfacing.
+
+**Next step:** grep `predicates.py` / `validator.py` for R3 / `days_to_earnings` enforcement; either confirm it works and the 10 errors are an unrelated edge case (e.g., universe/registry drift), or fix the validator.
+
+**Tag:** `grammar-enforcement-gap`, `zero-trade-root-cause`, `inbox-errors`
+
+**RESOLVED 2026-07-05 (code-health review):** R3's ETF + earnings-proximity incompatibility is enforced in production grammar code — `src/forge/grammar/custom_predicates.py` defines `_R3_ETF_INCOMPATIBLE_INDICATORS` (`days_to_earnings`, `pre_earnings_setup`; ~line 284) and the ETF-underlying rejection branch fires on it, so the sentinel-999 combination can no longer be emitted. The "documentation-only" hypothesis (explanation 1) is dead; the 2026-05-20 `inbox/errors` sample predates the enforcement. **Q18 closed.**
+
+---
+
+## 2026-05-20 — Q20 — `volatility_event` is the edge-density leader at 2.1% cohort share — re-weight under D067 / re-tune under D073 once round-robin is live — **LOW SEVERITY** — **CLOSED AS SUPERSEDED 2026-07-05**
+
+**Question:** Crucible's 2026-05-20 post-D066 analysis (see `PROMPT_FORGE_POST_D066_FINDINGS.md` §"Forward-looking observation") shows 9 of the top 10 traded configs by n_trades are `volatility_event` (max 171 trades, Sharpe 0.91) while the hypothesis is only 2.1% of post-D066 cohort. Forge is sampling under its empirical edge density. Three downstream levers exist: (i) D067 stratification weights can bias toward higher-density hypotheses; (ii) D073 per-(indicator, role) priors can tighten `volatility_event` thresholds more aggressively now that the bucket has signal; (iii) the signal-poverty diagnosis from `PROMPT_FORGE_GENERATOR_GAPS.md` §1 can be revisited per-hypothesis (maybe `volatility_event`'s exit set is fine; the gap is concentrated in `relative_value` / `regime_arbitrage`).
+
+**What I did instead:** flagged as a future action; no code change. Gated on the Crucible round-robin scheduler being live ~24h so the gated-runs cohort is hypothesis-representative — otherwise rebalancing now just amplifies sampling noise from the current `relative_value`-flooded queue. To be clear (and per the handoff), this is not a "raise weight to promote" ask — Crucible's gate doesn't move (hard rule #3). It's a "your strongest edge-density hypothesis is your second-rarest" observation worth acting on once the feedback signal is clean.
+
+**Severity:** **low** — observational. No production breakage. Pure enumeration-shape question.
+
+**Next step:** revisit when (a) Crucible round-robin commit lands and gated_runs shows 5%+ floor per hypothesis, AND (b) ≥24h of gated runs have accumulated under the new scheduler. At that point: re-run the per-hypothesis trade-density analysis Forge-side, propose a D067 weight update (auto-tightening goes through `OPEN_PROPOSALS.md` per hard rule #4 if it relaxes anything; pure re-weighting toward higher-density hypotheses is the auto-tighten side).
+
+**Tag:** `edge-density`, `enumeration-weights`, `D067`, `D073`, `awaiting-crucible-roundrobin`
+
+**CLOSED AS SUPERSEDED 2026-07-05 (code-health review):** the "revisit once round-robin lands" re-weighting was overtaken by purpose-built machinery — the D105 yield-map allocation plus the D182/D183 cohort-yield and regime-gate-yield axes now steer hypothesis share from measured yield directly, and `volatility_event`'s share is governed by the D216-era supply strategy (single-name vol_event quantity/durability), not a manual D067 weight edit. The contemplated action can no longer fire as written. **Q20 closed as superseded.**
+
+## 2026-05-29 — Q25 — `universe_fallback_hardcoded` is a Crucible publisher gap, not a Forge bug; 24 tickers IS the canonical Tier1+2 universe — **LOW/MEDIUM SEVERITY** — **RESOLVED 2026-07-05 (publisher wired; read path exercised)**
+
+**Symptom:** the live service logs `universe_fallback_hardcoded n_tickers=24` every iteration, suggesting generation is degraded to a hardcoded 24-ticker pool instead of the full universe (D093's `load_universe_tickers_from_export` read path).
+
+**Root cause (read-only investigation):** NOT a Forge or contracts bug — both work as designed and fall back correctly. Crucible never *publishes* `universe_tickers.json`: it has `build_universe_tickers()` / `write_universe_tickers()` (`Crucible/src/optbt/data/exports.py:752-803`) but NO `publish_universe_tickers()` and no `scripts/export_universe.py` / `crucible-universe-publisher.service` — unlike the three working exports (registry / gated_runs / promoted_strategies), each of which has a publisher script + enabled systemd unit. `write_universe_tickers` is referenced only by Crucible tests; in production the file has never been written (confirmed absent on disk; the other exports are fresh). D093 deliberately scoped only the READ side; the "Crucible export-side confirm" in `PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md` was assumed-satisfied but never wired.
+
+**Important secondary finding:** even once published, the file would currently yield **24 tickers** — `build_universe_tickers()` reads `Crucible/config/universe.yaml` (tier_1=4 + tier_2=20) and deliberately excludes tier_3. Those 24 are identical to Forge's hardcoded fallback. So the symptom is cosmetic (a log line); the pool is not actually narrowed below canonical. The "~152" figure is the set Crucible has bar data for (tier_3 = dynamic ranks 25-100), NOT a configured universe.
+
+**What I did instead:** logged; no Forge change (Forge is correct). Two separable follow-ups, both Crucible-side + operator scope: (a) wire a universe publisher so the read path is exercised + the log stops falling back (cosmetic; a one-shot `write_universe_tickers()` + `forge.service` restart unblocks it immediately — note Forge's `lru_cache` on `_load_underlyings` requires the restart); (b) the *real* lever — widening beyond 24 — is a deliberate `config/universe.yaml` tier_2/tier_3 expansion decision with downstream effects (more underlyings → more trade diversity, but also more bar-data + compute). Surfaced to the operator as a scope decision.
+
+**Severity:** **low** for the cosmetic symptom; **medium** if the operator wants universe breadth as a zero-trade / diversity lever (then it is a real Crucible-side expansion, with a fresh handoff).
+
+**Tag:** `universe`, `crucible-coordination`, `operator-decision`, `relates-to-D093`, `relates-to-Q23`
+
+**RESOLVED 2026-07-05 (code-health review):** follow-up (a) landed Crucible-side — `~/optbt_data/exports/universe_tickers_*.json` snapshots exist on disk and the D093 `load_universe_tickers_from_export` read path is exercised; the `universe_fallback_hardcoded` symptom is gone. Follow-up (b) — widening beyond the canonical Tier1+2 universe — was and remains a deliberate operator scope decision, not tracked here. **Q25 closed.**
+
+## 2026-06-02 — Q26 — `hurst` regime-gate `op` is `<` (allow when hurst LOW = mean-reverting), which looks backwards for `trend_continuation` — **RESOLVED 2026-06-03 (D100 / v7)**
+
+**Symptom:** `trend_continuation`'s R2 regime gate may admit `hurst`, whose threshold-table entry uses the default `op_regime="<"` — i.e. the gate "allows" (is open) when hurst is *below* threshold. But low hurst (H < 0.5) is the **mean-reverting** regime; trend-continuation wants the **trending** regime (high hurst). So as written, the hurst gate appears to admit precisely the regime the hypothesis does *not* want — a plausible secondary contributor to the "trend_continuation ~58% regime-gated" firing decomposition that motivated D099.
+
+**Status / why surfaced not fixed:** found while building D099 (percentile thresholds). D099 percentile-izes `hurst` regime **preserving the existing op** (`<`), which still *loosens* the gate per the diagnosis (a wider allow-rate regardless of direction), so v6 does not depend on resolving this. Flipping the op is a **semantic** change to the operator-owned grammar's intent, not a percentile-parameterization — out of D099's scope, and CLAUDE.md says log + surface rather than silently change rule semantics. (NB `adx` regime is correctly `op=">"` — allow when trend strong — so this is hurst-specific.)
+
+**Resolve by:** operator confirms whether `trend_continuation`'s `hurst` regime gate should be `op=">"` (allow when trending). If yes, it is a small `_INDICATOR_THRESHOLD_TABLE` change (`op_regime=">"` on the `hurst` entry) + a percentile-range flip (allow ~top 50-75% → `regime_percentile_range` like adx's `(0.25, 0.50)`), shipped as its own decision/version bump. If the current direction is intentional (e.g. "fade exhausted trends"), document the rationale and close.
+
+**Resolution (2026-06-03, D100/v7):** operator confirmed the trending-regime thesis — `hurst`'s `trend_continuation` regime gate should allow when TRENDING. Flipped `op_regime` to `>` + set `regime_percentile_range=(0.25, 0.50)` (allow ~top 50-75%, mirroring `adx`) on the `hurst` table entry. `hurst`'s separate `mean_reversion` **directional** use (`op_directional="<"`, fire when mean-reverting) is correct and untouched — only the regime op moved. Shipped in the v7 bump alongside the mean_reversion cold-start (orthogonal by hypothesis). Test: `test_hurst_regime_op_is_trending_but_directional_unchanged`.
+
+**Tag:** `grammar`, `firing-rate`, `relates-to-D099`, `relates-to-D100`, `operator-decision`, `resolved`
+
+## 2026-06-07 — Q28 — vol_event x swing_mid (the 9.7%-yield cell) is structurally capped by §3.5 S4: only `iv_rank` among vol_event directionals is medium-horizon-class — **RESOLVED 2026-06-11 (v18/D135: cap fully lifted)**
+
+**RESOLVED in two operator-approved steps:** v17/D131 activated `iv_minus_rv` (21d medium horizon → first new medium-class ve directional; partial lift, first ve×swing_mid cohort verified live — 2 components / 41 decided at the v18 reassessment). v18/D135 activated `iv_term_slope` (21d medium) — the roadmap A2 condition ("class BOTH iv_term_slope and iv_minus_rv as medium-horizon S4 anchors") is now satisfied and the structural cap is gone: three medium-horizon ve directionals (`iv_rank`, `iv_minus_rv`, `iv_term_slope`) reach swing_mid via the lead-20 event bracket. Original entry below.
+
+**Symptom:** the D105 emission proof showed the bucket-weighted sampler can only push vol_event's swing_mid share to ~9% (5.1% cold → 9.2% weighted) even with the cell weighted hot. Mechanically: the DTE bucket is derived from the DIRECTIONAL's horizon (D102), and every vol_event directional except `iv_rank` (horizon 30 → medium class) is short-class (put_call_flow 5, vix_level 1, dealer family 1, days_to_* 5 → S4 permits swing_short only), so all three event-lead options snap to swing_short. The highest-yield cell in Crucible's map (9.7% on 31 decided) is reachable only via `iv_rank` + lead-20 draws.
+
+**Why surfaced not fixed:** any widening — e.g. re-classing an indicator's horizon, adding a medium-horizon vol_event directional to C2, or letting the event bracket extend (longer post-event window) — ENLARGES enumeration scope = a loosening. Hard rule #4: loosenings go to `OPEN_PROPOSALS.md` and wait; they cannot ship with D105. Also genuinely uncertain: the 9.7% may partly BE the iv_rank+long-lead structure rather than the bucket per se — more decided volume in the cell (which D105's allocation shift will produce) settles that before any grammar change is worth proposing.
+
+**Resolve by:** let D105 run ≥1 yield-map refresh (≥1,500 newly-decided). If ve x swing_mid yield holds ≥2x ve x swing_short on materially more volume AND its share stays pinned ~9%, write the OPEN_PROPOSALS entry (options: extend `_VOL_EVENT_POST_WINDOW_TD` variants, or audit whether any existing vol-family indicator legitimately carries a 7-89d horizon). Otherwise close as working-as-intended.
+
+**Tag:** `grammar`, `S4`, `dte-buckets`, `relates-to-D105`, `relates-to-D102`, `loosening-candidate`, `operator-decision`
+
+## 2026-06-09 — Q30 — v12's H2 arm emits ZERO event_momentum configs live: the published registry snapshot predates Crucible's `days_since_earnings` family reclassification — **RESOLVED 2026-06-09**
+
+**RESOLVED (verified during the D112 emission proof):** Crucible republished the registry snapshot at 2026-06-09T18:45:50Z (`registry_snapshot_2026-06-09T184550Z.json`, hash `a99e00d68567af59`); `days_since_earnings` is now `family='calendar'`. A 3,000-sample emission proof on the new snapshot draws event_momentum 610 (vs 0 before) with a healthy 5-way mix. No Forge change was needed, as predicted — the run loop re-loads the registry each iteration. Original entry kept below for the mechanism record.
+
+**Symptom:** a 3,000-config emission proof against the live export (seed 0, cold weights) yields 0 `event_momentum` configs; every draw is structurally rejected with `no directional indicator has a §3.5 S4-permitted DTE bucket with a C1/C4/R-valid regime partner`. Mix: trend_continuation 788 / volatility_event 747 / mean_reversion 742 / relative_value 723 / event_momentum 0.
+
+**Mechanism:** the newest snapshot (`registry_snapshot_2026-06-08T132237Z.json`, hash `8f7e44d198bbc5e5` — the SAME hash recorded at the D109 deploy verify, so v12 has run on it since launch) still carries `days_since_earnings` with `family='post_event_drift'`. D109's design depends on Crucible's `days_since_earnings`→`calendar` reclassification (confirmed landed in `FORGE_days_since_earnings_family_response.md`), because §3.5 C1 requires the regime gate's family to differ from the directional's (`sampler._compatible_regimes`): with the stale family, `days_since_earnings` (event_momentum's ONLY permitted regime gate, `_EVENT_MOMENTUM_REGIME_INDICATORS`) shares `sue`'s `post_event_drift` family → no valid regime partner → `_directional_candidates` empty → 100% structural rejection. Forge's v12 tests pass because fixtures use the post-reclassification family. `crucible-registry-publisher` is oneshot-at-startup, so Crucible's code-side reclassification never reached the published export.
+
+**What I did instead:** nothing Forge-side — correct per design (Forge defers to the export; hard rule #2 says a stale export is Crucible's to republish, not Forge's to patch around). Logged here + STATUS; emission-proof recipe added to `docs/tasks/grammar-change.md` (this finding came out of its doc-verification walkthrough).
+
+**Resolve by:** operator asks Crucible to republish the registry snapshot (restart `crucible-registry-publisher` or equivalent). No Forge restart needed — the run loop calls `load_registry()` fresh every iteration (`cli/main.py`), so the next batch picks up the new snapshot (registry_hash changes; expected under #6). Verify with the emission-proof recipe (event_momentum > 0) and the journal submission mix. Note H1 is unaffected for trend/mean_reversion rank draws; the event_momentum rank-eligible arm is dead until this clears. Outgoing prompt ready: `PROMPT_CRUCIBLE_REGISTRY_SNAPSHOT_REPUBLISH.md`.
+
+**Tag:** `crucible-coordination`, `registry`, `relates-to-D109`, `event_momentum`, `operator-action`
+
+## 2026-06-09 — Q31 — event_momentum clears the grammar (post-Q30) but is 100% killed by the signal_density prefilter — **RESOLVED 2026-06-09: Crucible wiring bug, fixed in their `fd96707` + writer restart 17:18:21 PDT; post-restart probe matches their published ranges EXACTLY — H2/em unblocked, zero Forge changes**
+
+**CLOSED (post-restart probe, 17:21 PDT, `/tmp/q31_probe_rerun.py`):** dse<7 = 92–165/name (their range 92–165), sue>1.0 = 60–505 (theirs 60–505), non-NaN dse 2,023–2,047 (~2,030 published; COIN 1,212 = 2021 IPO, legitimate), sue 527–1,413 (theirs 527–1,413) — **endpoint-exact agreement** with the distributions Crucible computed through the fixed path; control rsi_2<10 unchanged (324–434). One-liner relayed to Crucible via operator. **H2/event_momentum is data-unblocked as of 2026-06-09 17:18:21 PDT (2026-06-10 00:18:21Z) — the em-onset cohort boundary for all future em reads (mid-v14, writer-restart-keyed, NOT a grammar bump).** First live em emission will show as `ranked_top_n_by_hypothesis: event_momentum>0` at the next unblocked iteration; em rank draws stay dse-gated until the v15 re-key (class-map response, separate thread).
+
+**Crucible response processed 2026-06-09 (~17:00 PDT, via operator relay):** (1) EPS ingest was fine — the writer's feature computations never received the symbol; fixed in Crucible commit `fd96707` (17:03:59 PDT), no Forge change needed. (2) **Hypothesis 1 CLOSED by their post-fix distribution numbers** (2126-day window, real bars): `days_since_earnings < 7` ≈ 92–165 activations/name; `sue > 1.0` ≈ 60–505 (SUE carries forward between prints — not print-count-bounded); non-NaN days dse ~2,030/name, sue 527–1,413 (NaN until ~11 quarters accrue; COIN's 2021 IPO → `sue > 1.5` = 0 is legitimate). All comfortably clear the §5.3.3 `min_activations=30` floor — **no event-cadence signal_density branch needed**; only deep-OTM combos (e.g. `sue > 2.0` on short-history names) die, correctly. (3) Their ask: after their writer restart, re-run the probe through the socket and relay the one-liner. **Probe re-run ~16:50 PDT (`/tmp/q31_probe_rerun.py`, existence + realistic specs + control): dse/sue still 0 on all 6 names, control rsi_2<10 healthy 324–434 — expected: the running writer (up since 16:09:35 PDT) predates `fd96707`. Re-run after their restart; if counts land in their published ranges, Q31 closes.** Cohort-hygiene note: when the fix goes live, H2/em starts passing signal_density MID-v14 — the em-onset boundary is the writer-restart timestamp, not a grammar bump. Original entry below.
+
+**Update 2026-06-09 (probe executed):** ran the resolve-by probe against the live db-writer (`FeatureCacheClient`, registry `a99e00d68567af59`). Existence-level specs (`sue > −1000`, `days_since_earnings > −1` — any non-NaN day activates) return **0 activation dates on every name probed** (AAPL/NVDA/AMD/TSLA/NFLX/COIN) while the control `rsi_2 < 10` returns 324–434; the sentinel check (`days_since_earnings > 500`) is also 0. The series are entirely NaN/absent in the cache — **hypothesis 2**; signal_density is doing its job and no Forge change is warranted yet. Outgoing prompt: `PROMPT_CRUCIBLE_SUE_FEATURE_CACHE_COVERAGE.md` (asks: wire the EPS ingest to the feature computations; give us the real post-fix activation distribution — if it lands under the `min_activations=30` floor, the event-cadence signal_density branch (hypothesis 1) becomes a live operator-gated calibration decision SECOND). Original entry below.
+
+**Symptom:** first post-v13 live iteration (batch `0e186240`, 2026-06-09 21:04Z): `sampler_attempts: event_momentum=783` (enumeration healthy after the Q30 registry republish) but `prefilter_rejections_by_hypothesis: event_momentum[signal_density=783]` — every em config rejected by §5.3.3, `ranked_top_n_by_hypothesis: event_momentum=0`. H2 has still never reached Crucible.
+
+**Two hypotheses (decide with data before fixing):**
+1. **`sue` activations are genuinely < 30 per name (likely).** PEAD is quarterly: ~20 earnings prints per single name in the data window, so a surprise-threshold directional structurally cannot reach `min_activations=30`. Same failure shape as the pre-D109 `expected_trades`-vs-rank mismatch — a prefilter calibrated on daily technical indicators mis-measures event strategies. The prefetch line `data_unavailable=[]` suggests the cache HAS the series (supports this hypothesis).
+2. **`sue` series missing/empty in the db-writer feature cache** (Polygon EPS ingest is new; the writer restarted 2026-06-08). Then activations=0 and the fix is Crucible-side.
+
+**Resolve by:** check `ctx.feature_cache.activation_dates("sig_directional")` counts for a sampled em config against the real cache (the daemon computes this every iteration — a small probe via the prefilter battery path answers it). If (1): propose an event-strategy branch for signal_density (e.g., density floor scaled by the regime gate's event cadence, or count post-event windows instead of raw activations) — prefilter calibration change, operator-gated, likely v14 or versionless per change taxonomy. If (2): outgoing Crucible prompt re: cache coverage for `sue`/`days_since_earnings`. Note em is also rank-eligible (H1) — but the rank draw happens at the sampler, and signal_density kills the config regardless of combiner, so the rank path is equally dead until this clears.
+
+**Tag:** `prefilters`, `event_momentum`, `relates-to-D109`, `relates-to-Q30`, `signal-density`
+
+## 2026-06-09 — Q32 — Crucible began ENFORCING `regime_coverage` (§20) ~2026-06-08 09:00 PDT: the single-name composable path now admits 0% of components, and the only config ever to pass BOTH promotion-quality gates was rejected on coverage alone — **RESOLVED 2026-06-10 (all four asks answered: coverage parity + fullhist-refit deploys + the v118 response; D124)**
+
+**RESOLVED 2026-06-10 (processed as D124; full record there).** (1) Intent: intentional and doubled-down — rank got a real §20 floor (`6f2fa2e`, live 01:28:03Z) and pairs too (`4fd6ee2`, live 01:00:02Z); portfolio assembly filters to honestly-evaluated coverage (`28257e1` — only 19/295 all-time components were honest). (2) Windows: single-name DOES get full-history via the fullhist-refit two-stage lane (hourly, cap 20; the reject branch `coverage_blocked_component` reaches exactly the rejected-on-coverage-alone class) → **single-name confluence emission is NOT structurally dead; no emission change**. (3) Parity: shipped both paths. (4) **d964e908 re-gated and decided: child `b8b83495` (same config_hash) = component with honest coverage (3,072d span, start=0), but WF-median 2.225→0.280, CPCV-p25 1.537→0.953** — the only both-quality-gates pass ever was recency-fit; honest full-history reads it as positive-but-weak. Verified in the export + our verdicts table (both rows flow in automatically). Era-split keys for everything this entry warned about: cost-floor value-cut 2026-06-09T22:52:57Z + the `honest_regime_coverage` row marker — see D124 / `docs/tasks/investigate-live.md`. Original entry below for the record.
+
+**Found during a read-only "what are we missing" analysis of the new `verdicts` table (10,089 rows, /tmp snapshot 2026-06-09 14:42 PDT).**
+
+**Timeline (decided_at is PDT-naive per the documented trap):** components with `regime_coverage` FAIL were minted right up to 06-08 08:06 (29 that morning alone; 211 of the 241 all-time components have rc=FAIL — the gate was advisory). From 06-08 09:03 onward, **every** new component (30) passes rc only via the DEGRADED path (`coverage_unverified: no period/chain_floor supplied` — the rank/pairs runner paths); zero post-cut components have rc=FAIL.
+
+**Post-cut decisions (06-08 09:00 → 06-09 14:42, n≈1,072):**
+- Real-rc-evaluated path (single-name composable): **720 decisions → 0 components.** 716 fail rc; 4 pass rc but fail quality.
+- Degraded path (rank + pairs): 352 → 30 components (8.5%).
+- **66 rejects pass every gate except rc (+ at most the two promotion-quality gates)** — would-be components killed solely by coverage (49 on 06-08, 17 on 06-09; top directionals put_call_flow 20, returns_12m_skip1 15, put_wall_distance_pct 15; 3 of the 4 all-time joint near-misses are in this stream).
+- **`d964e908f9aea66e`** (v9 volatility_event × SOXL, put_wall_distance_pct > −0.0061 × days_to_cpi < 9.5, swing_short, 123 trades, decided 06-08 11:07): passed **all ten other gates including WF-median 2.225 (gate 2.0) AND CPCV-p25 1.537 (gate 1.5)** — the only config in the table ever to pass both — rejected on rc alone. (Corrects the 06-09 review's "no config has ever passed both": that read predated the verdicts backfill.)
+
+**Mechanism:** the gate demands window start ≤30 sessions after the data floor (2018-01-02) AND span ≥1460d. The dominant single-name runner window is 1825d starting **859 sessions (~3.4y) late** (~May 2021 → May 2026): 601/720 post-cut real evaluations show exactly 859. A handful of full-history runs (start=30) DO pass rc — so the runner can produce compliant windows but almost never does on this path. Meanwhile the composable-rank path supplies no period/chain_floor at all, so 100% of current component admission flows through an *unverified* gate.
+
+**Why it matters:** (a) **~52% of current emission (last 5 batches: 522/1,000 single-name confluence) routes to a path with an observed 0% admission rate** while Crucible decisions are the binding resource (D110); (b) the D105/D106/H4 weight engines learn P(component) — the post-cut cohort will teach them "single-name died" when the truth is "the gate changed" (same cohort-trap class as D104; era-split at 2026-06-08 09:00 PDT needed for any weight load or analysis spanning the cut); (c) it beheads the only promote-grade frontier ever observed (v9 vol_event × dealer-flow × macro-calendar on SOXL/high-idio names).
+
+**What I did instead:** read-only; logged here + STATUS; no code or weights change. **Needs a Crucible handoff** (operator-gated): (1) is rc enforcement on component admission intentional and permanent? (2) if yes, will single-name runs get full-history windows (the start=30 runs prove the data reaches the floor)? (3) should the rank/pairs path supply period/chain_floor so component admission isn't 100%-via-unverified-gate? **Forge contingency per answer:** intentional + windows stay 5y → emission to single-name confluence is dead weight; tightening it away is the auto-tighten path (hard rule #4 allows), or constrain to indicator sets with full-floor history; runner bug → no Forge change, but either way split cohorts at the enforcement boundary.
+
+**Tag:** `crucible-coordination`, `gates`, `regime-coverage`, `verdicts`, `cohort-hygiene`, `relates-to-D111`, `operator-action`
+
+## 2026-06-09 — Q33 — Crucible's fail-open sweep: EVERY chain-reading regime gate is broken per-name on the rank/pairs paths — §3.5 R1 makes the entire MR rank arm structurally noise-gated (17.2% of current emission) — **RESOLVED 2026-06-09: operator chose option 1 (tighten now), shipped as grammar v14 (D116)**
+
+**Resolution (2026-06-09, same session):** operator picked option 1 via AskUserQuestion. Shipped as **D116 / grammar v14** — `CHAIN_READING_INDICATOR_IDS = {iv_rank, put_call_flow}` joins the dealer family as single-name-only at both D112 enforcement points (rank-branch skip + rv regime pool). MR structurally never ranks until Crucible's reference-underlying gate ships (the D115 trigger, AGREED-DEFERRED their side). Original entry below.
+
+**Map residual CLOSED (2026-06-09 evening, D118/v15):** Crucible's map landed (`FORGE_rank_gate_class_map.md` + `rank_gate_class_map.json`, 45 indicators) and the interim set was re-keyed same session — `sue`/`days_since_earnings`/`days_to_earnings` (any role) + `expected_value_estimator` (gate/directional; the X2 kelly chain exempt) join the exclusion; **em joins MR as structurally never-ranking**; v15 deployed 2026-06-10T00:44:37Z. Their corrections: **EV is NOT garbage-mode** (runs-DB reference read, hidden-uniform w/ inert fallback) and **the pairs path evaluates NO regime filters at all** → the historical rv cohort (15,913/15,913 confluence, Forge-verified) re-reads as "ungated pairs," not noise-gated — the Q33 worst case ("garbage at scale on rv") did not occur. Still deferred: the feedback-side gate-class tag for rank verdicts (D114 sibling — now mechanically keyable on their map artifact); re-admission = their `rank_per_name_coherent` flip, not capacity.
+
+**Origin:** incoming `../Crucible/docs/handoffs/FORGE_rank_gate_failopen_sweep.md` (2026-06-09, their answer to our D115 prompt's soft flag). Their probe (`probe_results/rank_gate_failopen_sweep.json`, same harness as the dealer probe) generalizes the D115 finding from one mode to **three**, classed by how the indicator uses spot — all stemming from the same `params.get("underlying","SPY")` decoupling (verified structurally in `iv_rank.py:73` and `put_call_flow.py:52`):
+
+| mode | indicators (probed) | what the per-name rank gate actually computes | verdict-reading consequence |
+|---|---|---|---|
+| `inert_failopen` | dealer greeks (`gamma_flip` …) | NaN → `allow=True` no-op | arm was **ungated** (the D115/D112 case) |
+| `garbage_mismatch` | `iv_rank` (any spot-dependent chain ind.) | SPY's chain IV interpolated at the NAME's spot | gate **fires on noise** — WF/CPCV confounded either direction; can spuriously *pass* configs |
+| `hidden_uniform_reference` | `put_call_flow` (volume-only chain ind.) | SPY's value, identical for every name | a **market gate in disguise** — coherent but mislabeled |
+| `coherent_per_name` (control) | `rv_rank` + all bar-only (rsi/adx/…) | the name's own bars | **fine** — read normally |
+
+Modes are **structural/era-invariant** (code-level, window-independent) — no era-split needed for mechanism; era only matters for counting affected cohort rows.
+
+**Forge-side exposure quantified (fresh /tmp snapshot, submissions ⋈ verdicts, 10,153 verdict rows):**
+- **R1 tension (the HIGH part):** R1's MR regime pool is exactly `{iv_rank, gamma_flip_distance_pct}` (D107). D112/v13 removed gamma from rank eligibility → **every v13 MR rank config is iv_rank-gated: 172/172 — and on the rank path that gate fires on noise.** That is 63% of current rank emission and **17.2% of ALL v13-era emission (172/1,000)** routed to configs whose declared regime semantics do not compute. Trend rank is clean (R2 pool post-D112 = adx/hurst/rv_rank, all bar-only; 101/101 v13 trend rank coherent). No chain-reading rank *directionals* survive v13 either (the only one ever was gamma_flip ×52, killed by D112).
+- **All-time rank components: 18/36 confounded** — 10 noise-gated (iv_rank MR rank), 8 ungated (gamma_flip; per D115). The 18 bar-gated (hurst/adx/rv_rank trend + none MR) are clean. Every weight-engine read of "rank mints" (v12's 21.4% headline, D110/D112 rank-share reasoning) includes this pollution; same mislearning class as Q32, now with a structural (not era) split key: regime-gate indicator class.
+- **rv/pairs path: minor today** — v13-era 4/97 iv_rank-gated, 0 put_call_flow; legacy v9 rv components include 4 dealer-inert + 2 iv_rank + 1 put_call_flow of 31. **Open classification gap:** `expected_value_estimator` — the all-time top rv regime gate (1,824 uses) — is unclassified (chain-reading? spot-dependent?); fell out of the current rv mix but dominates historical rv cohorts. Asked Crucible for the full registry→mode map (they offered).
+
+**Why surfaced, not fixed (the operator gates):** the minimal fix mirrors D112 exactly — chain-reading regime gates exclude the rank branch (and rv pool), keyed on the indicator *class* instead of the dealer family. But (a) under R1's operator-owned pool that **zeroes the MR rank arm entirely** (both pool members are now rank-broken) — a §3.5 rule in tension with reality, CLAUDE.md stop-and-ask trigger; (b) any alternative that keeps MR rank alive (e.g. admitting bar-only `rv_rank` as an R1 gate, conceptually the same vol-regime thesis) is an **edit to an operator-owned rule + a loosening** → `OPEN_PROPOSALS.md` + operator + arguably Crucible coordination; (c) a grammar bump (v14) is operator-gated regardless of direction. **Options queued for the operator:**
+1. **Tighten (v14, D112 pattern):** chain-reading regime gates never take the rank branch → MR rank goes to zero until Crucible's reference-gate/hoist guard ships (same evidence trigger as the dealer re-admission, now class-wide). Trend rank (clean) keeps the breadth lever. Recommended: stops semantic lying + binding-resource waste + evidence pollution at the source.
+2. **Status quo:** keep emitting noise-gated MR rank pending Crucible's §20 class-wide fix (their proposal doc now scopes the whole chain-reading family, still DEFERRED behind the single-name MR×gamma evidence trigger — i.e. indefinite). Costs 17.2% of emission on the binding resource.
+3. **R1 pool widening (loosening + rule edit):** propose `rv_rank` (bar-only realized-vol percentile) as an R1-acceptable MR regime gate on the rank path only — keeps MR rank alive with coherent gating; needs `OPEN_PROPOSALS.md` + operator + likely a Crucible sanity-check that rv_rank-gated MR rank is worth decisions.
+- (Feedback-side, any option: rank-cohort verdicts need the gate-class tag before weight loads — third sibling to D114's deferred era-split items; the verdicts table + config_json join above is the recipe.)
+
+**Resolve by:** operator picks an option (AskUserQuestion pending this session). Response prompt to Crucible drafted regardless (accept the map offer; report our tagging numbers; flag `expected_value_estimator`).
+
+**Tag:** `crucible-coordination`, `grammar`, `rank-path`, `R1-tension`, `verdicts`, `weight-pollution`, `operator-action`, `relates-to-D112`, `relates-to-D115`, `relates-to-Q32`
+
+---
+
+## 2026-06-09 — Q35 — P3's delta bands put trend's long-options expression in the literature's worst zone (embedded-leverage premium): swing_long trend = 0.20–0.35Δ, exactly the high-embedded-leverage region documented to carry negative alpha drag — **LOW** — **RESOLVED 2026-07-05 (evidence-to-relax shipped as v16/D125)**
+
+**Update (2026-06-09, operator walkthrough):** within-band delta readout RUN (trend cohort: single=2,354, rank=121; eras split at the cost-floor cut; rank coverage-honesty marker applied — 82/121 rank rows unverified-pass): **suggestive of the higher-delta side, not proposal-grade.** HighD wins 6 of 8 usable value comparisons: rank WF medians both buckets both eras (e.g. swing_mid cost-floor era WF 0.57 vs 0.38), rank component rates (swing_long 58.8% vs 47.1%), single swing_long components 3.5% (7/200) highD vs ~0.7% low/mid with medTC 8.5 vs 0. **Counterexample:** single swing_mid — highD tercile (>0.40Δ) = 0 components in 576 rows; ALL 5 swing_mid components sit at 0.31–0.38Δ → within-band quality may peak mid-delta, not rise monotonically (consistent with embedded-leverage drag at the low end AND something else binding at the high end — theta/gamma at 14–21 exit-DTE is the suspect). Cells are thin (rank n=17–44; single values gutted by 40–56% zero-trade). **Re-check trigger set: ≥300 decided post-cost-floor-era trend configs → re-run the readout (recipe in entry + agent SQL preserved in session transcript); if the high-delta tilt holds at weight, that is P3's "Evidence to relax."** No proposal now.
+
+**Question:** Frazzini & Pedersen (RAPS 2022, "Embedded Leverage"): options with high embedded leverage (low-delta/OTM, short-dated) earn LOWER risk-adjusted returns — long-low-leverage/short-high-leverage portfolios significant at t=8.6 (equity options) / t=6.3 (index options). Leverage-constrained buyers overpay for embedded leverage; a systematic long-OTM-options buyer pays that premium structurally. P3 maps trend_continuation's longest horizon (swing_long, 60–90 DTE) to delta 0.20–0.35 — the most embedded-leverage-rich band Forge emits — and caps all bands at 0.55, so no ITM/low-leverage expression exists for any hypothesis. The literature design rule for expressing a directional anomaly in options: prefer higher delta / longer date, or spread structures that sell the expensive leverage back (debit spreads), unless deliberately net-selling embedded leverage.
+
+**Tension, not error:** P3's rationale (low gamma, room for trend, convexity) is real, and trend's convex-payoff design (no hard_profit_target, S5) deliberately wants tail payoff. The cost side (FP2022's drag) was just never priced into the band choice. Whether 0.20–0.35Δ trend longs are net-positive after the embedded-leverage premium is an empirical question Crucible's gate answers — but the prior says the high-delta edge of each band should outperform, and a band widening (e.g. trend swing_long up to ~0.50–0.55, or >0.55 if ever warranted) is an operator-gated grammar change + Crucible position-builder question.
+
+**What I did instead:** logged as a literature prior; no proposal. Cheap evidence first: when enough trend verdicts accumulate, read promotion/quality vs sampled delta_target within-band (verdicts table + config_json) — if the high-delta edge dominates, that's the "Evidence to relax" for P3.
+
+**Tag:** `grammar`, `P3`, `literature-priors`, `evidence-readout-recipe`, `relates-to-D114`
+
+**RESOLVED 2026-07-05 (code-health review):** the "Evidence to relax" this entry set up completed its loop — the P3 delta-band widening went through the operator gate as OPEN_PROPOSALS `343e71fd` (APPROVED, citing this Q35) and shipped as grammar v16/D125 (annotated at the enforcement site in `src/forge/grammar/custom_predicates.py`). Readout → proposal → operator approval → grammar bump, exactly as prescribed. **Q35 closed.**
+
+---
+
+## 2026-06-09 — Q36 — Literature-validated regime conditioners Forge cannot currently express: IV−RV spread, VIX term-structure slope, market-state, cross-sectional dispersion (contracts/indicator gaps); ADX/Hurst (R2's pool) lack peer-reviewed OOS validation — **LOW** — **RESOLVED 2026-07-05 (all four gaps shipped + activated; residual re-tracked in Q41)**
+
+**Question:** the deep-research pass ranked conditioning variables by replication strength. The top of the list is only partially expressible in the current 45-indicator registry:
+
+| Conditioner | Evidence | Forge today |
+|---|---|---|
+| Strategy-specific trailing realized vol (scale/gate by own RV) | Barroso & Santa-Clara JFE 2015 (~2× momentum Sharpe, kills crash tail); Daniel & Moskowitz JFE 2016 | **HAVE** — `rv_rank` (R2 pool), `realized_vol` + X1 `vol_target` sizer; best-supported members of their pools |
+| VIX term-structure slope (contango/backwardation) | Johnson JFQA 2017 (slope predicts variance-swap/VIX-futures/straddle returns at ALL maturities; the validated short-vol gate); Simon & Campasano JoD 2014 | **GAP** — `vix_level` is a stub; no VIX term-structure data at all |
+| IV − trailing-RV spread (per name) | Goyal & Saretto JFE 2009 (see Q34) | **GAP** — `iv_rank` is IV-vs-own-IV-history, not IV-vs-RV |
+| Market state (sign of trailing 12–36m INDEX return; bear-rebound flag) | Cooper/Gutierrez/Hameed JF 2004 (momentum +0.93%/mo after up-markets vs −0.37% after down); Daniel-Moskowitz crash indicator | **GAP** — indicators evaluate on the name's own bars; no market-level state gate exists for single-name configs (`vix_level` stub is the closest cousin) |
+| Cross-sectional return dispersion | Stivers & Sun JFQA 2010 (high dispersion → cut momentum, favor reversal/pairs) | **GAP** — no universe-level dispersion indicator |
+| Pair quality: OU half-life, formation zero-crossings, sector homogeneity | Avellaneda & Lee 2010; Do & Faff 2010/12 | **Crucible-side** (it selects pairs/half-life); relevant to the deferred "should rv draw regime gates at all" — literature answer is yes: turbulence/dispersion gates (Do-Faff: pairs work in prolonged turbulence; Zhu Yale 2024: +0.8%/mo per +1% BAA−AAA, robust to VIX substitution) |
+| ADX / Hurst trend gates | **No peer-reviewed OOS validation found** (Hurst appears only in pairs-allocation literature; ADX practitioner-only) | R2's pool — they stay (operator-owned); prior says `rv_rank`/`gamma_flip` are the evidence-backed members |
+
+Note all four GAP rows are `market_wide_by_design`-class (or per-name chain-derived for IV−RV) — the rank-coherence classification from Q33/D118 applies and should be declared at birth if any ship.
+
+**What I did instead:** logged; gaps are contracts asks to queue for a future Crucible round-trip (not workarounds — hard rule #2); no emission change. Full research report delivered in-session (2026-06-09 deep-research: ~45 sources, claims adversarially verified, zero refutations on 27 votes).
+
+**Update (2026-06-09, operator walkthrough):** dedicated prompt DRAFTED — **`PROMPT_CRUCIBLE_INDICATOR_GAPS.md`** (operator: pass when convenient; explicitly sequencing-free vs the 1.18.0 flag chain). Asks prioritized P1 `vix_term_slope` > P2 `iv_minus_rv` > P3 `market_state` > P4 `cs_dispersion`, each with literature cite, intended rule/hypothesis use, and rank-coherence class pre-declared per Crucible's map (P1/P3/P4 market-wide → coherent; P2 chain-reading → single-name only). The Q34 template-direction question rides the same prompt (§1).
+
+**Update (2026-06-10): all four SHIPPED Crucible-side** (`FORGE_indicator_gaps_response.md` §3 — implemented, tested, committed; registry republish pending one coordinated publish that also carries a 5th id `iv_term_slope` + the §2 fix bumps). As built: `vix_term_slope` (VIX3M−VIX, vol points; median +2.1, 8.7% backwardation; data 2018→now, one-shot ingest — nightly refresh flagged their side), `iv_minus_rv` (annualized decimals; AAPL 2024 median +0.01, range −0.14…+0.25; `requires_symbol` from birth, single-name-only as pre-declared), `market_state` (±1; ~18% down-state vs SPY 2019–2026), `cs_dispersion` (decimal stdev; tier-2-only full history — 20 tech-heavy names, tier-3 NaN before 2026-05; NOT a vol proxy — correlated crashes read LOW, Stivers-Sun by design). Three table corrections absorbed: `vix_level` was NOT a stub since v2 (real CBOE bars; the actual gap was VIX3M); market-wide ids export `rank_per_name_coherent=false` + `market_wide_by_design=true` (v16 eligibility is `coherent OR market_wide` — verified correct in our code, D126); all three market-wide ids land `family=macro` → C1 blocks combining them in one config (per-id family override = operator-gated ask their side, on request). **Forge-side integration = v17 candidate, blocked on the republish:** threshold-table + horizon entries from their observed ranges (in D126; until added the ids are `is_threshold_skippable` → invisible to sampling, so the republish is SAFE with zero Forge changes — verified). Expect ≥49 ids, `iv_rank` v4 / `put_call_flow` v3.
+
+**Update (2026-06-10, decision walkthrough): v17 scope LOCKED (operator, AskUserQuestion)** — at the republish: activate `iv_minus_rv` only (threshold + horizon entries → ve directional pool via C2); for `market_state`/`vix_term_slope` as R2 trend gates, the rule-edit case gets DRAFTED for operator review as part of v17 and approved separately on its merits. Rationale: without R-rule edits the market-wide trio only auto-flows into the pairs gate pool, which Crucible structurally ignores — corrected value proposition in the D127/D128 walkthrough.
+
+**Tag:** `contracts-gap`, `literature-priors`, `regime-gates`, `crucible-coordination`, `relates-to-Q34`, `shipped-awaiting-republish`, `v17-scope-locked`
+
+**RESOLVED 2026-07-05 (code-health review):** all four GAP-row indicators shipped Crucible-side, were republished, and the activation path completed Forge-side — `iv_minus_rv` activated at v17/D131, `iv_term_slope` at v18/D135 (the market-wide trio published and rank-coherence-classed per the updates above). The residual tail — live-but-unwired ids (`vix_term_slope`, `cs_dispersion`, …) — is re-tracked as a generation-coverage question in Q41; nothing remains open under this entry. **Q36 closed.**
+
+---
+
+## 2026-06-10 — Q37 — Crucible's evidence-review notes: pre-earnings region only HALF-expressible (the carrying conditioner has no slot in the 1-gate structure); trend dead-middle ≈28% of draws — three operator decisions scoped — **LOW** — **RESOLVED 2026-07-05 (pre_earnings_setup live at v18; calendar blocker cleared)**
+
+**Question:** Crucible's own literature review (`FORGE_evidence_review_indicators_and_grammar_notes.md`, processed as D127) handed Forge three sampling-side notes. Two need operator decisions; none is urgent.
+
+**1. Pre-earnings IV-run-up region (their §3).** Their "expressible TODAY with existing vocabulary" is half-true: ve × `days_to_earnings` ≤10 × swing_short IS expressible but rarely lands (**1.2% of ve emission** — threshold ≤10 is 6.6% of the (7,60) regime range, days_to_earnings is 1-of-5 R3 gates); the low-recent-RV conditioner — which their own text says carries the documented effect — is structurally inexpressible (one regime slot, R3-pinned; rv_rank not a ve directional under C2). Options: **(A)** partial nudge — tighten/weight ve's days_to_earnings regime range toward [7,10] (threshold-table policy, grammar bump; weak fidelity — buys the window, not the conditioner); **(B)** composed indicator THEIR side — `pre_earnings_setup` = days_to_earnings∈[5,10] AND rv_rank<q as ONE id, fits the 1-gate slot with zero structural change (a contracts ask for the next prompt; recommended if the experiment is wanted at full fidelity); **(C)** two-gate config support (structural change — hard-to-reverse stop applies); **(D)** wait for their v10 re-measure (their own sequencing rule for new vocabulary).
+
+**2. Trend-lookback bimodality (their §4).** Measured: the trend directional pool is uniform across 7 ids; short-node (donchian 20d / supertrend 10d / macd 26d) ≈42%, long-node (momentum_252 / returns_12m_skip1) ≈29%, **dead-middle (ema_cross 50d / rolling_sharpe 60d) ≈28%** — the literature says that 28% mostly buys correlated noise. No per-directional learned weights exist (bucket weights steer only indirectly), so a tilt = deliberate policy. Evidence-first alternative: read ema_cross/rolling_sharpe's own verdict record before tilting.
+
+**3. Their two new shelf indicators** (`iv_term_slope`, `option_momentum`) adopt on THEIR post-v10 schedule — no Forge decision until then; the S4 medium-horizon classing for iv_term_slope + iv_minus_rv (the Q28 ve×swing_mid cap condition, roadmap A2) rides that same cut.
+
+**What I did instead:** measured both claims (numbers above, recipe in D127), logged, no change. Severity LOW — opportunity cost only, no correctness issue.
+
+**Tag:** `enumeration-policy`, `literature-priors`, `operator-action`, `relates-to-Q28`, `relates-to-Q36`, `crucible-coordination`
+
+**Update (2026-06-10, decision walkthrough — all four queue items decided via AskUserQuestion):** (1) **Pre-earnings region → option B**: composed `pre_earnings_setup` indicator ask drafted (`PROMPT_CRUCIBLE_PRE_EARNINGS_SETUP.md`, operator: pass when convenient) — full fidelity, fits the 1-gate slot, their schedule. (2) **Trend tilt → evidence readout RAN, tilt NOT supported**: our own data partitions differently than the literature — weak set = {rolling_sharpe 1.6% (3 honest/501), macd 2.0%, supertrend 0/41} spanning short AND mid nodes; ema_cross (the other "dead-middle" id) has the pool's HIGHEST rate (7.3%, n=41 Fisher-fragile); strong set = donchian 4.1% (18 honest/984) + momentum_252 5.0% (20 honest/722) + returns_12m_skip1 4.6%. A lookback-keyed tilt would de-weight our best fragile performer and keep two underperformers → **leave alone**; revisit when post-cost-floor columns thicken (post-cut n = 12–196/id). (3) v17 scope locked (see Q36 update). (4) D124-queued feedback build → BUILT as [[D128]] (era/honesty keys live at next restart).
+
+**Tag-update:** `decisions-recorded`
+
+**Update (2026-06-10, coda): option B SHIPPED their side (`pre_earnings_setup`, b29822f, 52-id class map) — then their validation found THE BLOCKER: the forward earnings calendar never existed.** `days_to_earnings` = 999 every bar all-time → with our `<` ops every such gate never admits; exposure measured at 86 submissions (one 2026-05-17 batch, zero verdicts — the §5 prefilter absorbed the class ever since); D127's "1.2% expressible half" re-reads as a sampling share that dies at the prefilter — the §3 region is fully data-inert today, BOTH halves. Global reading note: E1's mandatory `earnings_exit` is data-starved too — every historical backtest held through earnings; calendar-live = a future metric-era boundary for all single-name cohorts. Calendar derivation prioritization: recommended YES (`PROMPT_CRUCIBLE_CALENDAR_PRIORITY_ACK.md`, operator: pass). Two spec corrections accepted (rv_q [0,100]; all-NaN no-data; calendar-day windows ≈ [7,14]). Full record: [[D129]].
+
+**RESOLVED 2026-07-05 (code-health review):** all three queue items terminated — the option-B composed `pre_earnings_setup` indicator shipped Crucible-side and was ACTIVATED at v18/D135; the D129 forward-earnings-calendar blocker cleared (the 2026-06-11 live probe showed real `days_to_earnings` values flowing, ending the 999-sentinel era); item 2's lookback tilt was declined on evidence (readout above) and item 3 rode the v18 cut as planned. **Q37 closed.**
+
+---
+
+## 2026-06-11 — Q38 — §7.3 limiter never trips during an upstream Crucible stall (feedback consumer pins on the oldest unflushed batch) — **MEDIUM — DESIGN APPROVED 2026-06-11: `docs/proposals/limiter-stall-guard.md` (all four §8 decisions, recommended options); build pending** — **RESOLVED 2026-07-05 (BUILT as D137)**
+
+**Question:** During the 2026-06-10T23:55:05Z runner wedge (~17 h, zero new verdicts — see
+`PROMPT_CRUCIBLE_RUNNER_WEDGE.md`), Forge kept submitting at full cadence: ~15.6 k v17
+configs into a gate that was deciding nothing. The §7.3 limiter never blocked because the
+feedback consumer stays pinned on the oldest unflushed batch (`00dbf3b8`, 199/200 gated —
+pre-stall), so "prev batch % gated" kept reading healthy while every batch AFTER it sat at
+0 % gated. The limiter's designed signal (Crucible backpressure via gated fraction) is
+blind to the stall mode where the export goes stagnant but stays fresh-by-mtime
+(publisher republishing byte-identical content every minute). Should the limiter also
+consider `newly_gated_total` stagnation across N consecutive reconciles (a cheap,
+already-computed signal) before submitting?
+
+**Why not just fix it:** limiter/consumer semantics have history (D052 → D061 → D110
+aged-out watermark) and the CLAUDE.md pitfalls list says limiter behavior is not to be
+"fixed" casually; a wrong tightening here wedges US (the documented failure mode is the
+inverse). Needs a deliberate design pass, not a hotfix.
+
+**Cost of the gap:** no correctness issue — submissions are idempotent (hard rule #9),
+the inbox/queue is durable, and Crucible will flush the backlog on restart. Cost is
+unbounded queue growth their side + ~22 h of compute spent enumerating/prefiltering/
+ranking batches whose feedback value is zero until the stall clears.
+
+**What I did instead:** logged; evidence relayed to Crucible
+(`PROMPT_CRUCIBLE_RUNNER_WEDGE.md`); no behavior change.
+
+**Update 2026-06-11 (design pass — `docs/proposals/limiter-stall-guard.md`):** the
+suggested signal does not survive contact with the code — `newly_gated_total` is
+mislabeled: `consume_batch_results` re-derives outcomes from the export window for ALL
+batch rows each pass, so the line read ~199 (not 0) throughout the wedge; a stagnation
+detector on it needs a semantics fix plus cross-iteration state. The proposal instead
+recommends a stateless decision-clock predicate: block iff a `submitted` row postdates
+the export's `max(decided_at)` by ≥ T (default 3 h; knob `stall_after_seconds`).
+Backtested against all four >2 h decision gaps on record: fires on both true stalls
+(05-30 17.1 h, 06-10 18.1 h), correctly silent on healthy-slow (06-04) and the
+Forge-quiet migration window (06-07 — the deadlock-immunity guard). The runner
+recovered 2026-06-11T17:59:34Z (18.08 h). **All four §8 decisions APPROVED same
+session (recommended options: predicate / 3 h / direct enforce / extend
+`check_rate_limit`); build pending, service-inert until the next ritual restart.**
+
+**Tag:** `feedback-loop`, `limiter`, `crucible-coordination`, `relates-to-D110`
+
+**RESOLVED 2026-07-05 (code-health review):** the "build pending" completed — the stall guard shipped as D137: `src/forge/submission/rate_limiter.py` carries the `Q38/D137 stall guard` decision-clock predicate (~line 143) and the `stall_after_seconds` knob lives in `src/forge/config/forge_config.py` (default 0 = off, preserving the no-config/dev path contract as designed). **Q38 closed.**
+
+## 2026-06-11 — Q39 — `option_momentum` is data-starved on the current tier: 0 non-NaN bars on 6/10 probed names over ~8.5y — adoption HELD at the v18 cut despite the GO doc listing it — **RESOLVED 2026-06-13 (D138 — NOT coverage; the zeros were min_months=6 sparsity; activated in v19)**
+
+**Symptom:** the v18 pre-activation calibration probe (FeatureCacheClient activation
+sweep, 2026-06-11, `data_history_days=2400`) found `option_momentum`'s series almost
+entirely NaN: **0 non-NaN bars on MSFT / AMZN / GOOGL / META / NFLX / TSLA** (control
+`rsi_2` healthy at ~2,119 bars on the same names), and only AAPL 68 / AMD 22 / KO 146
+non-NaN. Where values exist the cross-name scale is wildly heterogeneous (NVDA's 64
+values ALL below −0.30 while KO sits mostly above 0 — a fixed absolute threshold would
+mostly encode name identity). Percentile mode (`use_percentile`) works mechanically but
+yields ≤ 26 activations. **Every parameterization on every probed name lands below the
+§5.3.3 `min_activations=30` signal_density floor** — the arm cannot produce a viable
+config today.
+
+**What I did instead:** held the activation out of v18 (no `_INDICATOR_THRESHOLD_TABLE`
+entry → structurally unsamplable; test-pinned) while shelf-classing its horizon
+(126 td → long) so re-activation is a one-line table add + version bump. The GO doc's
+item-4 family question (`smart_money` pin) is moot until then — no C2 edit shipped,
+which also keeps `expected_value_estimator` out of any directional pool. Relay drafted
+with the probe numbers (their construction needs both straddle legs quoted at
+month boundaries ≥6 consecutive months — the zero-coverage names suggest the chain
+history tier, not the math; the NVDA all-below-−0.30 pattern is worth their look
+regardless).
+
+**Resolve by:** Crucible investigates coverage (data-tier vs construction bug),
+republishes or confirms; Forge re-probes (same sweep), and if ≥ the activation floor
+on a reasonable name set, activates in the next grammar cut with an audited range
+(+ the C2/family decision made deliberately at that point).
+
+**RESOLVED 2026-06-13 (D138):** Crucible's reply
+(`../Crucible/docs/handoffs/FORGE_option_momentum_coverage_response.md`, 2026-06-12)
+corrected the premise — **not coverage.** Chains are fully present; the zeros were the
+shipped default **`min_months = months = 6`** (six *consecutive* clean reconstructed-
+straddle months) × a ~40% honest per-month exit-match miss. The v18 "percentile tops out
+at 26" was the *same* `min_months=6` ceiling, not a percentile limit. Forge re-probed
+(`scripts/probe_option_momentum_min_months.py`, committed — closing the reproducibility
+gap; `probe_results/option_momentum_min_months_sweep.json`): (1) the writer reads
+`min_months` from per-config SignalSpec params (`default == mm=6 ~0 → mm=4 hundreds →
+mm=3 ~1000s`), so the unblock is **fully Forge-side, no Crucible republish**; (2) at
+`min_months=3` the percentile range (0.80, 0.90) clears the §5.3.3 floor on **all 10
+names** (worst NVDA p>0.90 = 57). The cross-name "NVDA all < −0.30" scale heterogeneity
+was real and systematic (a theta/IV-level confound) — addressed by activating
+**percentile-only** (op ">", normalizes the IV offset). **Activated in v19 (D138):**
+`smart_money` pinned to `trend_continuation`'s C2 directional families (operator pin);
+`expected_value_estimator` pinned OUT of the directional path. Open follow-up (not
+blocking): Crucible offered a **constant-maturity** straddle construction (their §20) as
+the principled fix for an *absolute*-threshold arm — request it if the funnel says
+option_momentum is worth deepening.
+
+**Tag:** `crucible-coordination`, `data-starvation`, `relates-to-D135`, `resolved-by-D138`, `operator-visibility`
+
+---
+
+## 2026-06-15 — Q42 — Strategy generation enumerates exit IDs but leaves them PARAMETRICALLY INERT: the sampler ships every exit at Crucible's default threshold → the one trade-count-NEUTRAL, tail-shaped lever is unswept — **LOW-but-distinct (tail-shaped, not breadth; probe-gated), enum/grammar lane, operator-gated** — **RESOLVED 2026-07-05 (fair test shipped as D169/v22)**
+
+**Question (for the enum/grammar lane + operator):** Q41 is the *entry/breadth* coverage gap. This is its *exit/tail* sibling, surfaced when the operator asked "what would help the CPCV-p25 tail — different regime filters or different exit criteria?" Forge's grammar expresses exits richly (`StrategyConfig.exits`, 4 `MANDATORY_EXIT_IDS`, 18 `KNOWN_EXIT_IDS`, E1–E3, S5), but the sampler varies only *which* exits compose, never *how* they fire. Should exit **parameters** (stop tightness, profit-target level, time-stop horizon, theta-cliff DTE) be swept?
+
+**The gap (code-verified):**
+- `_build_exits` (`sampler.py:943-983`) composes the exit *set* (E1 mandatory + S5 `required_always` + one from `required_from_set` + 0..2 `optional_additions`, Bernoulli p=0.5) — the **ID set** varies.
+- `_exit_params` (`sampler.py:1179-1183`) returns **`{}` for every exit except `trailing_atr`** (which gets `activate_after_gain_pct ∈ [0.30,0.50]` only because E3 *forces* it). So every `premium_stop_loss`/`hard_profit_target`/`time_stop`/`theta_cliff_exit` runs at Crucible's **default** threshold across the whole population — the stop/target/horizon knobs are a **dark axis.**
+- Contrast the **sizer**, where D074 already sweeps `vol_target_annual ∈ [0.10,0.30]` and `kelly_fraction ∈ [0.10,0.50]` (`sampler.py:905-940`) — exit-param sweeping is the precedent-following extension of D074 to the exit half of the risk-shape family.
+
+**Why this is tail-shaped (distinct from Q41):** CPCV-p25 is a worst-quartile robustness number; exits reshape the **left tail** of the trade-return distribution (truncate theta-bled losers), which is what that percentile keys on — and it is **trade-count-NEUTRAL** (same entries, earlier exits), so it **sidesteps the D156 headwind** that makes every entry gate (Q41's levers, D161) a center-knob-not-tail-knob. Corroborated by the one tail-positive lever on file: Crucible's **M2 vol-target (+0.07 to p25**, D152) is the same risk-shape family. S5 already encodes hypothesis-specificity (trend forbids `hard_profit_target` — wants the convex right tail; mr's natural knobs are `target_exit`/`zscore_reversion_exit`).
+
+**What I did instead (logged, not acted):** nothing wired. Scoped the change surface in `docs/proposals/exit-tail-shaping.md` (sampler-only `_exit_params` sweep, **no grammar bump**, S5-aware) and drafted a **held** gating relay `PROMPT_CRUCIBLE_EXIT_TAIL_ATTRIBUTION.md` (NOT sent) asking Crucible to (1) attribute the CPCV-p25 worst-fold trades by exit reason / hold / give-back — does exit-shapeable headroom exist, or is the worst quartile adverse-regime structural bleed? — and (2) confirm which exit IDs honor per-config `ExitSpec.params` vs. a template default (the D068/D138 inertness hazard). Build only if the probe shows headroom.
+
+**Severity:** LOW (bounded by the structural sign ceiling — D152/D154; a robustness/dispersion-tightening gain, not a 1.5 unlock; the worst-quartile *regime* fix is sell-side = Path C) **but distinct** from Q41: tail-shaped, trade-count-neutral, and genuinely unswept. Probe-gated, enum/grammar lane (operator-gated). Full scope + mechanism: `docs/proposals/exit-tail-shaping.md` ([[D163]]).
+
+**ANSWERED 2026-06-15 ([[D165]], `../Crucible/docs/handoffs/FORGE_exit_tail_attribution_response.md`):** params ARE honored 7/8 (no D068/D138 inertness hazard — the gap is purely Forge sampler-side `_exit_params`), so the coverage gap is real and fixable. **But the lever is CONFIRMED NON-TAIL:** ~60% of the worst-quartile tail loss is structural (crater losers underwater from entry, median MFE-peak 0.0), give-back headroom (14%) lives off the wall in higher-p25 MR, and the convex winners cap any profit-target. **Disposition: viable pool-hygiene, NOT a wall-mover → deprioritized below Lever B; batch the `_exit_params` sweep onto the Lever B v22 deploy if built at all.** Spec correction: drop `hard_profit_target` (no-op), add `event_passed_exit.n_bars_after_entry` (#1 wall-setter exit). The tail wall is edge magnitude (a generation problem), confirmed on a third axis (entry D161 · construction D164 · exit D165).
+
+**ADDENDUM 2026-06-15 ([[D168]], `FORGE_exit_tail_attribution_addendum.md`, commit 81a4e15) — PARTIALLY REOPENED:** the D165 "non-tail" was premature for the 2 wall-setters that compose `event_passed_exit` — stripping that over-tight early time-cut flips their worst-quartile crater net **−$2.9k→+$31.9k** and drops never-peaked loss **76%→44%** (a slice that read "structural" was cut-too-early-to-peak → exit-shapeable). **The lever is LOOSENING early time-exits (`event_passed_exit.n_bars_after_entry`, `time_stop.n_bars`), NOT truncating** — fits the convex payoff. Hard-caveated (in-sample optimism; single-config; NOT trade-count-neutral) → a **suspect for a fair OOS test**, not a win. **Disposition: fair test = emit wider time-exit thresholds → Crucible re-selects fresh (OOS) → funnel-compare; sequenced as the NEXT exit experiment AFTER the clean Lever B v22 (not batched).** The magnitude-wall close is softened on the exit axis.
+
+**Tag:** `enum-grammar-lane`, `generation-coverage`, `exit-axis`, `tail-shaped`, `trade-count-neutral`, `low-EV`, `ANSWERED-non-tail`, `operator-gated`, `relates-to-D146/D152/D156/D161/D165`
+
+**RESOLVED 2026-07-05 (code-health review):** the addendum's disposition executed — the fair OOS test shipped as D169/v22: the `event_passed_exit` `n_bars_after_entry` loosening ladder is sampled in `src/forge/enumeration/sampler.py` (~lines 1309–1340), emitting wider time-exit thresholds as fresh config_hashes that Crucible selects/CPCVs from scratch — exactly the "emit wider → re-select OOS → funnel-compare" experiment D168 sequenced. The exit-parameter inertness this entry tracked is answered in code; outcome-reading belongs to the funnel, not this entry. **Q42 closed.**
+
+---
+
+## 2026-06-15 — Q43 — Indicator-THRESHOLD axis: is there a sweep/calibration lever beyond entry + exit? — **AUDITED + CLOSED (flat on the tail), [[D171]]**
+
+**Question (operator):** we explored entry-gate composition + exit timing; is there a probe-able lever in sweeping indicator parameters/thresholds?
+
+**What I did (cheap Forge-side read-only audit, `/tmp` snapshot):** unlike exits, thresholds are NOT inert — swept per-config from audited ranges (`indicator_thresholds.py`, absolute + percentile) AND auto-learned (D073 `threshold_proposer` → `auto_tightened_thresholds.yaml`, optimizing trade-count). Terciled each indicator's threshold (10,004 component rows / 2,016 verified) vs median CPCV-p25, split on `honest_regime_coverage_row`. **Result: the verified threshold-response is FLAT** (momentum/adx/hurst flat; rv_rank faint cheap-tilt ~0.06; iv_rank faint mid-hump ~0.10) — per-config CPCV-p25 is insensitive to the threshold value.
+
+**Verdict:** the D073 tightener is NOT Goodharting (no edge gradient to miss); the threshold axis is the **third confirmed-flat selection lever** (entry [[D161]] · exit [[D165]]/[[D168]] · threshold). Faint gradients are per-trade **center** effects (rv_rank's per-trade +0.095 → ~+0.06 per-config), not tail. **Nothing to pursue** — the frontier stays magnitude/generation (Path C / learned conditioner), not selection.
+
+**Severity:** LOW (confirms exhaustion from a third angle). **Tag:** `selection-axis`, `threshold`, `AUDITED-flat-on-tail`, `magnitude-wall`, `relates-to-D155/D161/D165/D171`
+
+## 2026-07-10 — Q46 — Multi-condition regime gates unreachable by generation (contract allows N, Forge emits 1 + hypothesis-specific veto) — **LOW-MEDIUM** — **RESOLVED 2026-08-03 (Crucible closed Q46: the double-gate measures MORE correlated, refuted as a decorrelation lever, D364; conditioner share zeroed at v55, D366)**
+
+**Question:** `crucible_contracts` SignalSpec carries a tuple of signals and Crucible's engine ANDs
+all `regime_filter` gates, but Forge's sampler emits exactly ONE primary regime gate (the R-rule
+pool draw) plus at most one hypothesis-specific veto (D258 dsj on trend, D263 ivol on MR —
+family-guarded, registry-gated). Multi-condition regime theses (e.g. calm AND near-52wk-high) are
+unreachable by generation; `pre_earnings_setup` was hand-COMPOSED into a single indicator precisely
+to work around this. §3.5 C1 additionally blocks same-family gate pairs (e.g. two macro gates —
+vix_term_slope + market_sma_cross), which any generalization must respect. Crucible flags this as
+"worth a look when convenient — not blocking" (their resid_vix ask is single-gate).
+
+**What I did instead:** logged only. The natural seam is the D258/D263 veto machinery — it already
+solved the hard parts (per-hypothesis additive-gate pools, C1 family guard via
+`regime_veto_family_by_hypothesis`, registry-gated dormancy, byte-identical cold path); the
+generalization is widening per-hypothesis veto pools beyond one id/family and letting the guard
+filter per-draw. Enumeration-policy bump when taken up (grammar_version attribution), no `rules:`
+text change expected, but it multiplies the config space — needs its own evidence-backed proposal,
+not a ride-along.
+
+**Severity:** low-medium — representational ceiling, explicitly non-blocking per Crucible.
+
+---
+
+## 2026-07-15 — Q50 — Cold-start goldens depend on LIVE export files (`_UNIVERSE_EXPORT_DIR` resolved at import, defeating `_isolated_home`) — **CLOSED 2026-07-16 (D286/v37: option (a) shipped — conftest autouse pin `_pinned_universe` on the frozen 07-16 snapshot + `real_universe_loader` re-bind; goldens re-pinned once more, environment-matched)**
+
+`sampler._UNIVERSE_EXPORT_DIR` is expanded at module IMPORT time, before the `_isolated_home`
+autouse fixture patches `Path.home()` — so both lru-cached loaders that read it bypass test
+isolation and consume the operator's live `~/optbt_data/exports/`:
+
+- **`_load_earnings_covered_symbols` (v32/D272): FIXED for tests (D274).** The moment Crucible
+  started the coverage publisher (2026-07-13T23:32:11Z) the earnings-gated pool intersection
+  activated INSIDE the test run and broke all 9 exact-hash cold-start goldens (deploy-preflight
+  NO-GO on an untouched enumeration surface). Now pinned dormant-`()` by a global autouse fixture.
+- **`_load_underlyings` (D078): STILL LIVE-COUPLED.** The goldens pass today against the live
+  `universe_tickers_2026-07-07T222959Z.json` (stable since 07-07); when the export is ABSENT they'd
+  pin against the D033 fallback list instead. Consequence: a Crucible universe republish with
+  different tiers, or running the suite on a box without exports, changes cold-start emission and
+  can flip goldens — the same class of surprise as the D274 incident, just on a slower-moving file.
+
+Durable options (pick at next test-infra touch, NOT mid-deploy): (a) autouse-pin
+`_load_underlyings` to a fixture universe and re-baseline all goldens once (biggest diff, cleanest);
+(b) resolve `_UNIVERSE_EXPORT_DIR` lazily via `Path.home()` at call time so `_isolated_home` covers
+it, and re-baseline goldens against the fallback universe (same re-pin, plus prod-inert code churn);
+(c) leave universe live-coupled and accept re-pinning goldens on universe republish (status quo,
+documented here). Any golden re-baseline must be its own commit with the trigger recorded
+(hard rule #6 discipline). Related: D274, D272, D078/D033, `_isolated_home` (tests/conftest.py).
+
+**2026-07-16 ESCALATION — the universe half bit exactly as predicted, MID-DEPLOY (D282).**
+Crucible's July tier export (`universe_tickers_2026-07-16T082754Z.json`, −7 names +APH/MDT,
+pre-announced in their cohort-read relay §2) landed 17 minutes before the v36 deploy preflight and
+broke all 9 goldens at position 0. Goldens re-pinned a second time that day (licensing harness
+re-run environment-matched). **Resolution chosen: option (a)**, staged as v37 build item 3
+(`docs/proposals/v37-cohort-followups.md`) — conftest autouse pin on `_load_underlyings` (the D274
+shape), loader/fingerprint tests re-bind the real loader, goldens re-pin once more under the frozen
+tuple. Q50 CLOSES when v37 ships.
+
+## Q57 — RESOLVED same-day — the v44 vix-conditioner fires at ~22% against a 12.5% target constant (2026-07-24, severity: medium)
+
+**RESOLVED 2026-07-24 — the SAMPLER WAS CORRECT; the TEST's denominator was wrong.**
+Read both predicates side by side: `_vix_conditioner_eligible` is evaluated BEFORE any
+optional second gate is appended, whereas the test judged the FINAL config and required
+every gate to sit in an allowed-set `{hurst, vix_term_slope}`. A conditioner-eligible
+config that did NOT fire can then take a regime VETO (`days_since_jump`,
+`_REGIME_VETO_SHARE = 0.5`); its final gates are `{hurst, days_since_jump}`, which the
+allowed-set rejects — so the test silently dropped it from the denominator. It only ever
+dropped NON-FIRING configs, which is why the rate inflated.
+
+Predicted `0.125 / (0.125 + 0.875 x 0.5) = 0.222`; measured exactly that. On seed 11:
+
+| predicate | fired / eligible | rate |
+|---|---:|---:|
+| old (allowed-set on final config) | 176 / 795 | 0.2214 |
+| **sampler's actual eligibility** | **176 / 1457** | **0.1208** |
+| constant | | 0.125 |
+
+662 configs dropped by the old predicate, **0 of them fired**.
+
+**Fix:** the test now keys eligibility on the PRIMARY gate's signal id (`sig_regime`),
+mirroring the sampler's own structure, so optional second gates (conditioner OR veto)
+cannot disqualify a config. Band tightened from the fitted [0.05, 0.28] back to a real
+[0.09, 0.17] around the constant. **No supply distortion on the resid_vix pilot cell** —
+Crucible's P2 in-book figures are unaffected; the provisional flag in the v50 deploy
+relay is withdrawn.
+
+
+**Question.** `_VIX_CONDITIONER_SHARE = 0.125`, but the realized fire rate measured by
+`test_conditioner_fires_near_target_share` is **~0.22 across every seed tried** (v50 code,
+6 seeds: 0.208 / 0.212 / 0.215 / 0.221 / 0.221 / 0.244). That is ~5.7σ above the constant
+at the test's n, i.e. systematic rather than sampling noise.
+
+**How it surfaced.** The v50 rank_k trend bias changed rng consumption for trend-xsect
+draws, moving the sample from 0.22 to 0.223 and tripping the old `<= 0.22` ceiling. So v50
+**re-sampled** the discrepancy into view; it did not cause it — the pre-v50 code produces
+~0.22 as well, which is precisely why the old band ceiling sat at 0.22. The band had been
+fitted to the realized rate, not to the target constant.
+
+**Most likely cause (unverified).** The TEST's `eligible` predicate (trend-xsect, exactly
+one adx/hurst primary, no gate outside the allowed set) is probably **narrower** than the
+sampler's own eligibility check, so `fired / test_eligible` divides by a smaller
+denominator and inflates the rate. If so the sampler is honouring 0.125 correctly and only
+the test's denominator is wrong — but the opposite (the sampler over-firing the
+conditioner onto ~76% more configs than intended) would be a real supply-mix issue on the
+resid_vix pilot cell, so this needs resolving rather than assuming.
+
+**What I did instead.** Re-pinned the band to `[0.05, 0.28]` as a sequence re-pin (same
+class as the golden re-pin in the same commit) with an inline warning that the band tracks
+the realized rate and must NOT be read as evidence the share constant is honoured.
+Deliberately did NOT silently widen without recording it, and did NOT chase it inside a
+deploy window.
+
+**To resolve.** Instrument the sampler's own conditioner-eligibility branch and compare its
+denominator against the test's predicate over one enumeration; if they differ, fix the test
+predicate (cheap) — if they agree, the share constant is not being applied as written and
+that is a v-bump-worthy supply correction on the resid_vix cell.
+
+## Q58 — RESOLVED (guard shipped 2026-07-26; decline staged for the next restart) — the `param_no_promotion` proposer trigger is degenerate in a 0-promotion regime, and it just targeted our BEST cell (2026-07-25, severity: high)
+
+**What happened.** At 2026-07-25T04:41:18Z the daemon auto-wrote proposal
+`f59812c7-6cc2-4e90-ad42-f84b3300386a` (`proposal_type: tighten`, `status: PENDING`):
+*"0 of 243 (trend_continuation, swing_mid) candidates promoted; propose tightening
+grammar to skip this cell"*, confidence 0.807.
+
+**Why it is degenerate.** **Total promotions in the entire ledger: 4**, against 385,770
+rejects + 42,212 components (~428k verdicts). Expected promotions at n=243 is therefore
+~0.002. **Observing zero is the expected outcome for EVERY cell**, so this trigger fires
+on any cell that merely accumulates samples — it measures sample size, not quality.
+
+**This is a known class with an existing guard elsewhere.** D034 already guarded the
+`gate_failure_concentration` trigger with a `promoted_count == 0` check for exactly this
+reason — four proposals were declined 2026-06-24 as *"degenerate pre-D034 …
+100% failure rate is an artifact of the 0-promotion regime; the trigger is now guarded
+off at source."* `param_no_promotion` appears to lack the equivalent guard. This is the
+first `param_no_promotion` proposal ever emitted.
+
+**Why the target makes it urgent rather than academic.** `(trend_continuation,
+swing_mid)` is the highest-weighted converting cell in the same batch's own learned
+weights — `directional_bucket_weights` resid×swing_mid **0.306 (highest)**,
+`cohort_yield_weights` …×xsect **0.338 (highest)**, `bucket_weights` **0.142 (2nd)** —
+and it is exactly where v50's `rank_k=5` change just landed. Applying it would delete
+the cell the current grammar work is built on.
+
+**Not urgent in the safety sense.** Verified there is no auto-apply path: `apply-proposal`
+is a separate CLI command, called ZERO times from the run loop, and the daemon's
+ExecStart is only `forge run --loop`. Hard rule #4's structural enforcement holds — the
+proposal sits PENDING until a human acts.
+
+**What I did instead.** Nothing to the proposal (declining is operator-gated) and nothing
+to the proposer (a real code change deserving its own increment). Logged here.
+
+**Recommended.** (1) DECLINE `f59812c7` with the 0-promotion-regime rationale, reusing
+the D034 wording. (2) Guard `param_no_promotion` at source the way D034 guarded
+`gate_failure_concentration` — a promotion-denominator trigger cannot be meaningful while
+the global promotion count is 4. If a cell-kill trigger is wanted, base it on COMPONENT
+conversion, which has a real base rate (42,212), not promotion.
+
+## Q59 — RESOLVED 2026-07-26 (fixed, deployed, confirmed in production at z=+5.09) — the collider is IN THE LIVE RANKER MODEL, not just in our analyses (2026-07-25, severity: high)
+
+**Finding.** Reverting the v50 sampler bias did NOT restore v49 behaviour, and the reason
+is that the collider propagated one layer deeper than either side realised.
+
+| version | submitted k5 share (trend xsect) | σ vs 0.50 |
+|---|---:|---:|
+| v49 | 0.4942 | −0.86 (= the draw rate) |
+| v50 | 0.7834 | +21.72 (the sampler bias) |
+| **v51 (post-revert)** | **0.5714** | **+4.44** |
+
+The DRAW is uniform — 0.4921 (−1.0σ) over 3,973 cold-enumerated non-resid trend configs —
+so the sampler is already at v49 behaviour. **The residual elevation is SELECTION.**
+
+**Cause: the cpcv robustness model learned `rank_k` backwards.**
+
+| model | `rank_k` coefficient | |
+|---|---:|---|
+| `target_cpcv_p25` (live since v50) | **−0.0423** | its 4th-largest \|coef\|; prefers k=5 |
+| `target_wf_p25` (live through v49) | +0.0034 | ~zero, no preference |
+
+Negative = higher `rank_k` → lower predicted cpcv, i.e. it ranks k=5 ABOVE k=10 — the
+relationship stage-one data says is backwards (k5−k10 = −0.1712 in swing_mid). This is why
+v49 submitted at the draw rate and v51 does not: the sampler was fixed, the ranker
+independently learned the same wrong thing.
+
+**Mechanism: the trainer's population is coverage-conditioned.**
+`FORGE_HONEST_LABEL_SCOPE=on` is live on `forge-ranker-eval.service`, and
+`dataset.py:159` drops every row failing `honest_regime_coverage_row`. Measured survival
+through that filter (decided ≥ 2026-07-10, xsect):
+
+```
+rank_k=5    6,609 / 65,816 = 10.0%
+rank_k=10  10,531 / 57,753 = 18.2%
+```
+
+**Correction to our own first hypothesis:** we guessed k=5 would survive MORE often (the
+D328 breadth floor `n_min = 2 × rank_k` is easier for k=5). It is the opposite. That makes
+the collider WORSE rather than better — the k=5 survivors are a far more heavily selected
+10% minority, so within the filtered population they look artificially good. That is
+exactly the stage-two sign flip we measured (swing_mid k5−k10 = **+0.0776** conditioned vs
+**−0.1712** unconditioned), and the model fit it.
+
+**Scope — this is the part that matters.** `rank_k` is only the coefficient we can check
+against known stage-one ground truth. **Every feature correlated with coverage-resolution
+probability is biased the same way.** The live cpcv model has 29,419 training rows drawn
+entirely from the conditioned population.
+
+**Not yet actioned, deliberately.** The fix is a trainer-population change and D331 Part B
+turned `FORGE_HONEST_LABEL_SCOPE` ON for a measured reason (it fixed the ranker's inverted
+cell allocation via F3's eligibility gate). Turning it off may regress that, and the F3
+classifier and the robustness regressor may not want the same population. Needs a designed
+increment, not a 07:30 flag flip.
+
+**Options to weigh.** (a) Scope honest-label filtering to the F3 classifier only and train
+the robustness regressor on the unconditioned population. (b) Retrain the robustness model
+on stage one explicitly. (c) Revert the ranker to `target_wf_p25` — rejected: wf is inert
+on the cpcv gate (Run C: +0.009 vs +0.178), so that trades a biased signal for no signal.
+
+**RESOLVED 2026-07-26 — fixed, deployed, and CONFIRMED IN PRODUCTION.** Shipped versionless
+2026-07-25T18:46:52Z (`6b662ac`, D337 follow-on) as **two entangled fixes that only work
+together**: (1) `FORGE_HONEST_LABEL_SCOPE` on → **off** (option (b) above — the drop is
+quality-correlated AND deletes whole strata: `rank_k=20` is 55,820 rows unconditioned and
+**zero** under the drop, so the model could not learn the cliff at any encoding); (2)
+`rank_k` re-encoded from a linear slope to **one-hot**, because its relation to outcome is
+NON-MONOTONIC (P(F3 label) = 0.0735 / 0.1336 / **0.0000**) and one slope through a
+peak-then-cliff is dragged negative by the cliff. Validated OOS before shipping: robustness
+rank-IC **0.0321 → 0.3962**, F3 AUC **0.5910 → 0.6936**, overfit gap unchanged.
+
+**Production confirmation (prereg `b1eb98fab4cc`, CONFIRMED):** on the **ranked arm** — the
+only arm the ranker controls — trend-xsect `k5_share` went **0.7683 (n=82) → 0.4294
+(n=177), z = +5.09**, and now sits *below* the 0.486 uniform rate, i.e. correctly preferring
+k=10. The `prefilter_sample` control arm did **not** move (0.5000 → 0.4892, both ~uniform),
+giving a clean difference-in-differences that rules out enumeration, grammar, and universe
+confounds.
+
+**Two corrections to this entry's own text, for the record.** (i) *"Every feature correlated
+with coverage-resolution probability is biased"* was an overstatement — measured, **9 of 81**
+shared coefficients sign-flip, not all. (ii) The live model's `rank_k` was the **only**
+continuous categorical; `hypothesis`/`dte_bucket`/`dir_id`/`regime_id` were already one-hot,
+so the "known failure mode in our pipeline" framing was withdrawn. A systematic sweep found
+`n_signals` non-monotonic, but its one-hot **failed OOS validation** (sign-unstable across
+temporal splits, mean −0.0020) and was NOT shipped — the severity of a smeared categorical
+depends on the SHAPE (a cliff to exact zero), not on the significance of its steps.
+
+## Q61 — RESOLVED 2026-07-31 — `test_campaigns_audit_exit_1_on_starvation` was a TIME-BOMB FIXTURE, not a membership bug
+
+**Resolution.** Fixed by seeding the fixture relative to `utc_now()` instead of a hardcoded
+date. The suite is fully green again.
+
+**The recorded diagnosis was WRONG, and worth recording why.** It suspected membership
+resolution — that `_seed_db`'s bare `{"hypothesis": ...}` config was too thin for
+`campaign_member_fn("ve-exit-repair")` to recognise. It is not: `ve-exit-repair` declares
+`hypothesis="volatility_event"`, so `campaign_member_fn` returns the plain hypothesis matcher
+(`campaigns.py:111-113`), which matches a bare config perfectly.
+
+**Actual cause.** `audit_carriage` filters `WHERE submitted_at >= _watermark(now, days)` with
+`now = utc_now()` — a window that rolls forward in real time. The fixture pinned
+`datetime(2026, 7, 20)` and wrote rows at `now - 1 day` = 2026-07-19. Once the real clock
+passed **2026-07-27**, those rows aged out of the 7-day window: zero rows in scope →
+`ranked_total = 0` → `ranked_share = None` → `carriage_ratio = None` → nothing can be starved
+→ the audit correctly exits 0 and the assertion fails. The test was written 2026-07-26, one
+day inside the boundary, which is why it passed when authored and failed the next day.
+
+**So the behavioural question that blocked this — "should an under-specified config count as
+a campaign member?" — was never real.** It does not need a D299/D305 owner decision.
+
+**Live impact: NONE, now verified rather than assumed.** `forge campaigns audit` against a
+2026-07-31 snapshot resolves both farming campaigns with real carriage and exits 0:
+`mr-timer-duration` ranked 0.3311 / holdout 0.1611, ratio 2.055; `ve-exit-repair` ranked
+0.1133 / holdout 0.0651, ratio 1.741. Neither starved. Membership resolution works on real
+configs, which is what production writes.
+
+**Durable lesson (the reason this is kept rather than deleted):** any fixture seeding rows a
+rolling-window query must read is a time bomb. Seed relative to `forge.core.clock.utc_now()`,
+never at a literal date. The failure mode is a test that passes at authoring time, breaks
+days later, and presents as a logic bug in whatever the query touches.

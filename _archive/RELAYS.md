@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-08-06.** The relay channel moved to `~/proj/freeze/relays/` + the two INDEX ledgers (`freeze/INDEX_forge_answered.md`, `freeze/relays/INDEX_crucible_answered.md`) at D362. This table indexes the OLD root-file channel only; archived with the relay pile it indexes.
+
 # Relay ledger — live cross-system relay files (root `PROMPT_CRUCIBLE_*.md`)
 
 One row per LIVE relay file; answered relays are archived to `_archive/` on
