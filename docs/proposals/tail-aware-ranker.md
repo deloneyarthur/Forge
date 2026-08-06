@@ -30,7 +30,7 @@ diversifier.
 **§1.2** (Forge computes NO strategy metrics — the central design constraint), §1.3.
 **Cross-system fact:** the promotion criterion is the full §8.7 battery at **portfolio**
 scope (`../Crucible/docs/handoffs/FORGE_portfolio_promotion_wiring_status.md`).
-**Decision-log home:** a `docs/DECISIONS.md` entry on approval; each shipped part its own D.
+**Decision-log home:** a `IMPLEMENTATION_DECISIONS.md` entry on approval; each shipped part its own D.
 
 ---
 

@@ -40,8 +40,8 @@ Scope: Forge/pipeline jargon. Code identifiers are findable by grep; this covers
 - **Cold-start** — sampler behavior with empty learned inputs (`{}` weights / no priors); pinned
   byte-identical by golden tests. `COLD_START_HYPOTHESES` (trade_rate_priors) drops poisoned
   pre-vN rows from the expected-trades prior so a hypothesis can re-learn.
-- **Exploration floor** — minimum 0.05 hypothesis weight (D067); no learned tilt may starve a
-  hypothesis to zero.
+- **Exploration floor** — the D067 minimum hypothesis weight; no learned tilt may starve a
+  hypothesis to zero (the value is `DEFAULT_EXPLORATION_FLOOR` in `feedback/rejection_weights.py`).
 - **Anti-Goodhart** — feedback rewards must track what Crucible *accepts* (component rate, D105),
   never proxies like raw trade counts (the D094 reward got Goodharted; regression tests pin this).
 - **Emission proof** — before deploying enumeration changes: sample thousands of configs against

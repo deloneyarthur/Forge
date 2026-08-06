@@ -34,7 +34,7 @@ The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_
    score). It is under no git, and the running service holds an intermittent RW lock — stop the
    service before copying so the snapshot is consistent (DuckDB + WAL).
 
-> The grammar on the tree is committed (currently `grammar_version: v22`, archived under
+> The grammar on the tree is committed (whatever `grammar_version:` reads in `config/grammar.yaml`, archived under
 > `config/grammar_archive/`). Carrying `.git` is for any *in-flight* operator work, not because a
 > clone would drop the grammar — a clean tree is the production tree (D104).
 
@@ -160,7 +160,7 @@ Forge **skips iterations cleanly** rather than submitting a noise-filtered batch
 crash, it just waits.
 
 Watch: `journalctl --user -u forge.service -f`. On a healthy start the journal prints the contracts
-line, `grammar_version: v22`, and the enabled rank/yield axes the unit carries
+line, the `grammar_version` matching `config/grammar.yaml`, and the enabled rank/yield axes the unit carries
 (`--cohort-yield` / `--regime-gate-yield` D182/D183; `--quality-rank` D193) before the per-iteration
 prefetch.
 
@@ -200,6 +200,6 @@ set one on the new box if the host has only one disk.
       `forge-healthcheck` all three scheduled (king arm absent — D190; eod-check retired — D253)
 - [ ] `ls ~/proj/Forge/scripts/*.sh` → backup/ranker-eval/preflight scripts present + executable
 - [ ] Crucible up + `~/optbt_data/exports/` populated → start Forge
-- [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version: v22`) without
+- [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version` matching `config/grammar.yaml`) without
       `SchemaVersionMismatch`
 - [ ] `uv run forge healthcheck` → green (alive AND productive) once a batch or two have run

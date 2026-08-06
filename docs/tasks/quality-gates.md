@@ -24,13 +24,13 @@ uv run mypy --strict src                       # must be zero violations
 | ruff + ruff-format | *.py | auto-fixes |
 | mypy --strict (local venv) | src/ | runs `uv run mypy` — needs the editable contracts dep, hence local |
 | hygiene (whitespace, yaml, large files) | all | |
-| grammar-version-bump | `config/grammar.yaml`, archive | enforces hard rule #10; `entry: python scripts/...` — needs `python` on PATH |
+| grammar-version-bump | `config/grammar.yaml`, archive | enforces hard rule #10; `entry: uv run python scripts/...` (D351: bare `python` is absent on this box — the hook could never execute until 2026-08-02) |
 | grammar-doc-sync | grammar.yaml, `docs/GRAMMAR.md` | rule ids ↔ headings pairing |
 
-As of 2026-06-09 hooks run clean end-to-end (a stale `uv.lock` previously broke the mypy hook's
-stash/restore). History contains `--no-verify` commits with checks run manually — avoid adding
-more; if a sandboxed shell lacks `python` on PATH for the grammar hooks, run them via the venv and
-record that in the commit/STATUS rather than skipping.
+History contains `--no-verify` commits with checks run manually — avoid adding more. If a hook
+fails to *execute* (as opposed to failing its check), treat that as a broken guard and fix the
+hook (the D351 class: a guard that cannot run reads as enforcement while enforcing nothing);
+record any manual-verification fallback in the commit/STATUS rather than skipping silently.
 
 ## Commit conventions
 

@@ -10,7 +10,7 @@ prediction models for strategy generation?").
 **Spec anchors:** §6.2 (composite score; the `prior_promotion_proximity` learning slot),
 §8.3 ("metric distributions … used to weight the ranker"), §10.3 (`config/ranker.yaml`),
 §1.2/§1.3 (success = stream becomes more promotable; 1–3% target, >5% Goodhart warning).
-**Decision-log home:** on F3 approval this becomes the first entry in `docs/DECISIONS.md`
+**Decision-log home:** on F3 approval this becomes the first entry in `IMPLEMENTATION_DECISIONS.md`
 (design-level: §6.2's learning term generalized). Each shipped phase gets its own D-entry.
 
 ---
@@ -60,7 +60,7 @@ literal reading is inert. This design generalizes the term's *computation* — f
 "Jaccard similarity to promoted configs" to "calibrated promotion-proximity learned from
 all honest verdicts" — while keeping the term's *intent*, name, slot, and weight. §8.3
 already sanctions outcome-driven ranker inputs. The generalization is the deviation;
-it is proposed here, never silently applied, and lands in `docs/DECISIONS.md` on
+it is proposed here, never silently applied, and lands in `IMPLEMENTATION_DECISIONS.md` on
 approval. Until F3 is approved the production formula does not change at all.
 
 ## 4. Architecture — three phases, three operator gates
@@ -261,7 +261,7 @@ Mechanism (the D103 per-hypothesis-floor precedent, same insertion point):
   eval CLI + invariant 4. Then it runs at the daily checkpoints and accrues evidence.
 - **F3** (~1 session, **only after the F2 criterion is met and operator re-approves**):
   scorer wiring + guards + `model_id` cohort key + per-arm floor + invariants 5–6 +
-  `docs/DECISIONS.md` entry + MANPAGE/architecture doc updates in the same commit.
+  `IMPLEMENTATION_DECISIONS.md` entry + MANPAGE/architecture doc updates in the same commit.
 
 ## 8. Operator decisions — DECIDED 2026-06-10 (in-session AskUserQuestion)
 
