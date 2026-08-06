@@ -1379,3 +1379,26 @@ configs, which is what production writes.
 rolling-window query must read is a time bomb. Seed relative to `forge.core.clock.utc_now()`,
 never at a literal date. The failure mode is a test that passes at authoring time, breaks
 days later, and presents as a logic bug in whatever the query touches.
+
+## Q62 — QuantIQ's 08-03 training-signals relay: six new streams need a feature/label/era-split triage (2026-08-06, severity: medium)
+
+**What.** QuantIQ's enrichment relay (filed at
+`~/proj/freeze/relays/QUANTIQ_new_training_signals_for_the_rankers_six_streams_triage_open_2026-08-03.md`;
+it sat untracked and unreferenced at Forge root for 3 days — found during the repo-simplification
+audit) lists six streams the rankers do not train on: (1) wire-accurate execution ground truth
+(`live_arrival_spread_pct` in `spread_feedback/`, live 08-04); (2) `selector_spread_bind`
+(contracts 1.41.0) — a measurement-basis flag; pooling verdict training across the pre/post-bind
+boundary without it as a feature or era split changes what the gate-pass label means; (3)
+`deployment_sizer_modes` (contracts 1.42.0) — the overlay, not the certified config, is what
+trades; (4) designation WIN/LOSS as a label source (sharper than promotion PASS/FAIL); (5) live
+fill/abandon labels (first negative fill labels, small N); (6) wings-quote staleness caveat for
+any future spread feature.
+
+**The ask (theirs, our call):** which of these earn features / labels / era splits in the two
+rankers. Nothing blocks on their side. Item (2) is the time-sensitive one — it is a D337/D338
+collider-class hazard for verdict training the day the first `true`-era campaigns appear in our
+labels; the others accumulate value passively.
+
+**Next action.** A dedicated triage pass over `ranking/features.py` + `dataset.py` against the
+six streams, answered via `freeze/relays/`. Not done during the simplification sweep — it is
+ranker design work, not hygiene.
