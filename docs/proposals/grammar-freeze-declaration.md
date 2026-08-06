@@ -185,6 +185,38 @@ base rate, p=0.13). Claimed only: they were identically eligible. Relayed to Cru
 losing 61% of what already clears both binding gates would be solving the wrong problem — and it
 is further evidence that freezing *generation policy* is the correct call.
 
+**PER-LANE: ALL THE REMAINING CEILING IS IN `swing_mid`, AND NO LANE IS SATURATING.** Joint
+frontier by bucket (ranked, stage one), with a per-lane permutation null:
+
+```
+bucket           n       advances   null      z       max cpcv @ WF>=2.0
+swing_mid    139,730        68      35.8   +3.71      +1.601
+swing_long    18,611        34      35.6   -0.19      +1.084   never reached cpcv 1.5
+swing_short    5,560        26      26.3   -0.05      +0.714
+```
+
+`swing_mid` is the only lane still advancing, the only one that has ever cleared both binding
+gates, and it holds every record. **But `swing_long`/`swing_short` are STATIONARY, not exhausted** —
+a distinction we initially got wrong and corrected the same day. Advances per *doubling* of
+cumulative search is the saturation metric, and it declines only when a bound is being reached:
+
+```
+swing_mid    2 3 2 2 2 2 3 3 6 4 4 3 5 6 5 7 10     <- RISING; improving, not saturating
+swing_long   1 2 2 3 1 3 2 0 2 3 3 3 4 1  5         <- FLAT; stationary, still advancing
+```
+
+Neither shows the declining signature. What is true of `swing_long` is that its frontier sits far
+**below** the promotion gate — a low ceiling, not a reached one.
+
+**And the lane with ceiling left is the capacity-bound one.** `swing_long` converts at STAGE ONE
+(29.1%, so it needs no refit and is immune to Crucible's queue); `swing_mid`/`swing_short` convert
+0.0% at stage one and depend entirely on refit. Our mix is 80.7% swing_mid. **So the ceiling cannot
+be bought by shifting toward the unthrottled lane — that lane's ceiling is below the gate.**
+
+The saturation experiment that would settle exhaustion is designed and **HELD** at
+`ceiling-saturation-experiment.md`, blocked on the refit-ordering answer; its honest cost is ~33
+days per doubling, ~3 months for the full falsifier.
+
 **Coverage is not the same as having tested the surface.** An indicator audit (2026-08-06) found
 **19 of 72 registered indicators completely dark** — 5 by recorded decision, 11 by accident, and
 one (`yz_rank`) structurally identical to `rv_rank`, which carries 17% of all configs. It also
