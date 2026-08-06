@@ -217,6 +217,23 @@ The saturation experiment that would settle exhaustion is designed and **HELD** 
 `ceiling-saturation-experiment.md`, blocked on the refit-ordering answer; its honest cost is ~33
 days per doubling, ~3 months for the full falsifier.
 
+**AND OUR "ZERO PROMOTES" WAS A MEASUREMENT SHADOW (D370).** Crucible reproduced our 23/9/14
+exactly, then found that validating it exposed a validator crash: §20 (2026-07-22) made
+`deflated_sharpe` recorded-but-non-binding while their `PromotionDecision` validator still required
+a promote to carry zero failed gates — and §20 keeps the exempt DSR *recorded as failed*. **Every
+stage-two child good enough to promote since has crashed at the stamp: 31 configs, 67 children, 12
+permanently blacklisted, 9 first crashing 08-05/08-06 and accelerating with v55 quality.** Failed
+runs never export, so this was structurally invisible to us. Verified on our ledger: **4 promote
+verdicts ever, all pre-§20, ZERO since 2026-07-23.**
+
+Two of our "14 never refit" were in fact refit within seconds and destroyed at the stamp, so 61%
+decomposes as **52% passed over + 9% destroyed at the finish line**.
+
+**(C) and the frontier/record tests are UNAFFECTED** — all read stage-one distributions, and the
+crash is at the stage-two stamp. What is shadowed is any claim resting on recent promote counts.
+**The freeze premise holds with MORE force**, as Crucible put it: the binding constraint sits even
+further downstream of generation than we had measured.
+
 **Coverage is not the same as having tested the surface.** An indicator audit (2026-08-06) found
 **19 of 72 registered indicators completely dark** — 5 by recorded decision, 11 by accident, and
 one (`yz_rank`) structurally identical to `rv_rank`, which carries 17% of all configs. It also
