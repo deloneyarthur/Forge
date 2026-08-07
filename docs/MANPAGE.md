@@ -542,28 +542,6 @@ use `forge ranker-model eval` / `eval-robustness`.
 forge status
 ```
 
-### forge alpha-budget
-
-Reports how much statistical search the stream has spent and the search-luck Sharpe hurdle it
-implies (Tier-1a honesty ledger, D207). Historically Forge submitted with `search_n_trials`
-unset, so the gate charged `n_trials=1` and never deflated for the breadth of the search; since
-D310 the stamp populates the honest per-slot multiplicity once armed (recorded-not-binding on
-forge-source rows per their (a) resolution — per-run decisions still don't deflate; the post-hoc
-family lane adjudicates). This command measures the search-breadth gap from the per-batch counts
-already in `batch_summaries`
-(no new schema). It brackets the honest trial count by `Σ batch_size` (distinct gated configs —
-the floor) and `Σ enumerated_count` (configs the ranker selected among — the breadth ceiling), and
-prints the Bailey-Lopez de Prado `E[max]` benchmark for each end (the Sharpe, in cross-trial
-SR-stdev units, a candidate must clear to beat the luckiest draw of a search that wide) plus a
-per-grammar-version breakdown. Read-only — the production loop never reads it; the accounting
-boundary (per-version vs cumulative) and the effective-N redundancy reduction are left to a Crucible
-coordination item, not pre-judged. Snapshot the live DB first (the daemon holds an RW lock), per the
-`ranker-model` convention.
-
-```
-SNAP=$(scripts/live_db_snapshot.sh) && forge alpha-budget --forge-db "$SNAP"
-```
-
 ### forge campaigns list / audit
 
 The campaign registry — the discover→concentrate→farm loop as a first-class object (D299).
@@ -770,12 +748,13 @@ history. `scripts/` holds only wired, ritual, and in-flight instruments.
 |---|---|
 | WIRED — machinery executes them | `daily_ranker_eval.sh` (05:00 timer), `backup_forge_db.sh` (04:00 timer), `search_multiplicity_census.py` (invoked by the daily eval), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` (pre-commit), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom) |
 | RITUAL / standing monitor | `tail_verified_alignment.py` (D155 verified-coverage alignment monitor; run against a `live_db_snapshot.sh` snapshot), `production_by_group.py` (per-arm/per-category production reads) |
-| IN-FLIGHT freeze/ceiling instruments | `freeze_tail_reading.py` (+ its importer `freeze_registered_read.py` — spent once its prereg-pinned tests retire with the declaration), `ceiling_record_test.py`, `joint_frontier.py` (D368), `second_gate_contrast.py` (carries the D360 measurement_basis pooling defect — repair queued in the freeze declaration), `threshold_resolution_value.py` (D353), `promoted_leg_recall.py`, `alpha_budget.py` (D207 retrospective; spec archived at `_archive/ALPHA_BUDGET_SCOPE.md`) |
+| IN-FLIGHT freeze/ceiling instruments | `freeze_tail_reading.py` (+ its importer `freeze_registered_read.py` — spent once its prereg-pinned tests retire with the declaration), `ceiling_record_test.py`, `joint_frontier.py` (D368), `second_gate_contrast.py` (carries the D360 measurement_basis pooling defect — repair queued in the freeze declaration), `threshold_resolution_value.py` (D353), `promoted_leg_recall.py` |
 
 Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
 Retired 2026-07-20 (D295 post-promotion sweep; recoverable from git history, tests removed with them): `backfill_verdicts.py` (D111 one-time catch-up, completed), `migrate_verdicts_decided_at.py` (D117 one-time era repair, completed), `requeue_high_value_configs.py` (one-off recovery, completed), `probe_option_momentum_min_months.py` (Q39 one-shot probe + its `probe_results/` output; Q39 resolved at v19/D138).
 Retired 2026-07-20 (D298 — D206 made permanent): `propose_threshold_tightenings.py` + `forge.feedback.threshold_proposer` (D073 threshold-range proposer; the axis measured flat on CPCV-p25, monoculture risk; `auto_tightened_thresholds.yaml` stays empty and the reader/fingerprint stay — determinism-load-bearing).
 Retired 2026-08-06 (repo-simplification Step C; conclusions all shipped and D-cited): the tail-target sweep chain `exceedance_target_sweep.py`, `exceedance_extreme_sweep.py`, `exceedance_merge_sweep.py`, `wf_blend_sweep.py`, `wf_p10_validation.py`, `sharpe_baseline_nested_test.py`, `tail_target_headtohead.py`, `tail_lane_tradeoff.py`, `trend_tail_target_sweep.py`, `target_sweep.py` (→ the live `FORGE_TAIL_LANE_SLOTS`/`FORGE_TREND_LANE_SLOTS` values + the cpcv retarget, D336/D345-era); the winner-prior trio `winner_prior_signal_probe.py`, `winner_prior_shadow.py`, `winner_prior_stage_one.py` (programme parked, prereg `916d79109b4d` refuted); `collider_fix_sweep.py` (Q59 → `FORGE_HONEST_LABEL_SCOPE=off`); `vix_conditioner_stage_decomposition.py`, `resid_vix_construct_split.py` (D339; superseded by the inline share computation in `daily_ranker_eval.sh`); the freeze-prep set `tail_lane_model_era_split.py`, `trend_lane_arm_read.py`, `exhaustion_power_assessment.py`, `honest_cell_scorecard.py`, `export_generation_by_version.py`, `tail_target_rank_ic.py` (preregs resolved / Tier-1 A/B closed D351).
+Retired 2026-08-06 (Step E2, D373 — the alpha-budget question is ANSWERED): `forge alpha-budget` (`feedback/alpha_budget.py` + `cli/alpha_budget_cmd.py` + tests) and `scripts/alpha_budget.py`. Its prereg `098ea730d5f2` resolved confirmed 2026-07-21; the exhaustion monitor it closed cannot reopen (dossier §0); the *standing* multiplicity accounting lives in `submission/search_multiplicity.py` (D310), which is unrelated code and stays. Spec/results record: `_archive/ALPHA_BUDGET_SCOPE.md`.
 
 ---
 

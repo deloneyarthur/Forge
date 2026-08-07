@@ -2073,3 +2073,26 @@ design record) and notes the instruments' retirement. Revert = `git revert`; re-
 programme later starts from the proposal, not from dead code in the tree.
 **Verification:** `tests/unit/test_ranking` green post-delete; `forge.cli.main` imports clean.
 Restart NOT required (dead code); rides the pending contracts-1.43.0 adoption window.
+
+## D371 — 2026-08-06 — contracts 1.42.0 → **1.44.0** adopted (pin-only): the promote-stamp fix and the lane tag we asked for
+
+**Spec section:** §13.5 contracts pin; [[D370]]. Crucible shipped the D370 chain in the order they proposed, and the last gate was ours — our reader had to restart on ≥1.44.0 before any promote row could reach it. **1.43.0 (`284558a`) — THE STAMP FIX.** `PromotionDecision` now accepts `promote` iff the failed gates lie within the §20 recorded-not-binding set (`{'deflated_sharpe'}`); any **other** failed gate still raises, and the error now names the offenders. Verified additive-for-us by reading the diff rather than trusting the note: it is a **relaxation of a validator we only READ**, so strictly more rows parse and nothing we emit changes. This ends the D370 shadow — the pre-07-22 zero-failed-gates rule destroyed **67 stage-two would-be promotes** between 07-23 and 08-06, which is exactly why our ledger showed 4 promotes ever and **zero since 07-23**. **1.44.0 (`bcb8290`) — THE LANE TAG.** `RunResult.refit_selection: str | None = None`: `None` marks the unconditioned newest-first drain (the like-conditioned cohort marker), `'quality_margin'` the new quality sub-budget. This is our D370 §5 ask answered as a first-class field, and **they made it a FREE STRING rather than a Literal, citing the 1.24.0 vocabulary-growth lesson** — which is precisely the [[D261]]/[[D342]] hazard: `parse_forward_compatible` does **not** cover enum values, so a new Literal member would have hard-failed our registry reader on arrival. Optional with a `None` default, so pre-1.44 rows still validate. **THE TWO-LANE SPLIT IS LIVE ON THEIR SIDE:** quality sub-budget of `limit // 5` (8 of 40) ranked by margin over **both** promotion bars with a −0.3 floor set from the measured crashed-parent range; the remainder stays newest-first and **unstamped**, so the absence of the tag is the like-conditioned cohort marker — which preserves the version-delta yardstick that produced our v55 read, the methodological cost they correctly raised and we would have missed. **THE LANE ALREADY PROVED THE FINDING:** their 17:10 timer tick beat the hold drop-in by 43 seconds and ran one quality pass under the old runner code. Its 8 picks were **precisely the passed-over elite dual-clearers** our D368 relay identified; **7 gated as honest components immediately** and 1 computed promote and crashed at the old stamp — a **12.5% elite promote rate**, consistent with their 2-of-11 estimate and ~280× the 0.06% lane base rate. Damage bounded to one burned attempt, recovered by the requeue driver. **Deploy:** preflight **2,155 passed / 1 skipped**, stop → commit → restart, then ack by relay (they are monitoring the relay directory). **WATCH, carried from D370:** the requeue of the crash cohort will arrive as a **burst of promote verdicts** — a basis boundary of the same class as the tail-OFF unit change and the designation flip. Their requeue driver prints the exact queue-time bounds and they will relay them; record that timestamp and split any version-delta or learned-weight series that spans it.
+
+## D373 — 2026-08-06 — E2: the alpha-budget feature RETIRED (`forge alpha-budget` + module + script) — its question is answered and cannot re-open
+
+**Spec section:** Tier-1a honesty ledger (D207). Classification: dead-feature removal, no
+behavior change (read-only telemetry the production loop never read).
+**Why it is spent, precisely:** (1) its prereg `098ea730d5f2` resolved **confirmed** 2026-07-21;
+(2) the long-options exhaustion monitor it existed to close is CLOSED — the Path-C dossier §0
+re-priced on its output 07-08 and accumulation cannot reopen the monitor; (3) charged DSR fired
+once (07-03) and was made not-standing by Crucible's `dffbb83` answers; (4) the STANDING half of
+search-multiplicity honesty is `submission/search_multiplicity.py` (D310, self-gated stamping) —
+separate code, untouched. The operator named alpha-budget as the archetype of the debt class.
+**Removed:** `feedback/alpha_budget.py` (162), `cli/alpha_budget_cmd.py` (105) + the two
+`main.py` wiring lines, `scripts/alpha_budget.py` (743), both test files (157). **Kept:** the
+preregistration machinery (shares nothing but a docstring, repointed); `_archive/ALPHA_BUDGET_SCOPE.md`
+(the spec + §7 results record); `config/preregistrations.jsonl` untouched.
+**Docs same-commit:** MANPAGE command section removed + retirement-ledger row; architecture cli
+row + honesty-ledgers bullet updated.
+**Verification:** `test_cli` + `test_feedback` + `test_cli_help` (the every-command-in-MANPAGE
+contract) — 419 green. Restart not required; rides the contracts-1.43.0 adoption window.

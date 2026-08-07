@@ -241,7 +241,20 @@ from crucible_contracts import (
 # tests + version only, defaulted (empty == every component trades as certified), explicitly
 # NOT in `compute_config_hash`, and again on a model Forge only READS. No new Literal or enum
 # value, so the D261/D342 hazard does not apply. QuantIQ-facing; inert for us.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.42.0"
+# 1.43.0 (284558a) — the promote-stamp fix. `PromotionDecision` accepts 'promote' iff the failed
+# gates lie within the §20 recorded-not-binding set ({'deflated_sharpe'}); any OTHER failed gate
+# still raises, now naming the offenders. This is a RELAXATION of a validator we only READ, so
+# strictly more rows parse for us and nothing we emit changes. It ends the shadow recorded in D370:
+# the pre-07-22 zero-failed-gates rule destroyed 67 stage-two would-be promotes at the stamp
+# between 07-23 and 08-06 — our "4 promotes ever, zero since 07-23" was measuring that crash.
+# 1.44.0 (bcb8290) — `RunResult.refit_selection: str | None = None`, the lane tag we asked for in
+# D370 §5, answered as a first-class field. None = the unconditioned newest-first drain (the
+# like-conditioned cohort marker); 'quality_margin' = the new quality sub-budget. Deliberately a
+# FREE STRING, not a Literal — which is why the D261/D342 hazard does not apply here: enum values
+# are precisely what `parse_forward_compatible` does NOT cover, and a new Literal member would have
+# hard-failed our registry reader. Optional with a None default, so pre-1.44 rows still validate.
+# Pin-only adopt on both: additive + relaxing, nothing Forge parses is removed or narrowed.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.44.0"
 
 
 def check_contracts_version() -> str:

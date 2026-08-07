@@ -5,7 +5,8 @@ operator's manual prunes/retargets — observe a pattern in a cohort and then ac
 the *same* cohort that revealed it. "0 promotions in 200+ submissions with param Z
 above T -> tighten Z" confirmed on the very batch that motivated it is guaranteed to
 look good: it is post-selection bias, the multiple-testing trap one rung down from
-the alpha budget (see :mod:`forge.feedback.alpha_budget`).
+the alpha budget (D207; module retired 2026-08-06 with its question answered — the
+record is `_archive/ALPHA_BUDGET_SCOPE.md`).
 
 Pre-registration is the fix the GRAMMAR_REVIEW (§5) and LEARNED_SYSTEMS_REVIEW name
 but nothing implemented: record the claim *with a cohort cut* before the confirming

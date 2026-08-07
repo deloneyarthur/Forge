@@ -46,7 +46,7 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
 | `persistence/` | `db.py` (the blessed DB open), `schemas.py` (forge.db DDL — table summaries in `docs/MANPAGE.md`), `verdicts.py` (durable per-candidate verdict recording, D111; +label provenance `source_export`/`contracts_version`, D316), `registry_loader.py` | §9 | `test_persistence.py` |
 | `core/` | `clock.py` + `seed.py` (the ONLY time/RNG sources, hard rule #8); `contracts_check.py` (holds the `FORGE_EXPECTED_CONTRACT_VERSION` pin, §13.5); `logging.py` | §13 | `test_phase0_smoke.py` |
 | `config/` | `forge_config.py` — precedence: CLI flag > `config/forge.yaml` > hardcoded (`--no-config`) | §10 | `test_config/` |
-| `cli/` | `main.py` (`forge` entry point + run loop), `grammar_cmd.py` (`grammar` sub-app), `feedback_cmd.py`, `ranker_model_cmd.py` (`ranker-model` sub-app: dataset/train/eval + the wf_p25 robustness variants, D132/D191), `healthcheck_cmd.py` (`forge healthcheck` — alive-AND-productive read, D197), `status_cmd.py` (`forge status` — learning-signal clocks, D198), `alpha_budget_cmd.py` (`forge alpha-budget` — search-spend honesty ledger, D207), `prereg_cmd.py` (`forge prereg` — preregistered prune ledger, D208), `campaigns_cmd.py` (`forge campaigns` — campaign-registry list + region-carriage audit, D299), `yield_audit_cmd.py` (`forge yield-audit` — dead-cell detector printout, D302) | — | `test_cli/` |
+| `cli/` | `main.py` (`forge` entry point + run loop), `grammar_cmd.py` (`grammar` sub-app), `feedback_cmd.py`, `ranker_model_cmd.py` (`ranker-model` sub-app: dataset/train/eval + the wf_p25 robustness variants, D132/D191), `healthcheck_cmd.py` (`forge healthcheck` — alive-AND-productive read, D197), `status_cmd.py` (`forge status` — learning-signal clocks, D198), `prereg_cmd.py` (`forge prereg` — preregistered prune ledger, D208), `campaigns_cmd.py` (`forge campaigns` — campaign-registry list + region-carriage audit, D299), `yield_audit_cmd.py` (`forge yield-audit` — dead-cell detector printout, D302) | — | `test_cli/` |
 
 **`ranking/` breakdown** (the most fragmented package — 23 files):
 - Scoring + selection: composite scorer (weights in `config/ranker.yaml`); `queue.py`
@@ -75,8 +75,9 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
   `promoted_patterns.py` / `stuck_state.py`.
 - Learned weights: `rejection_weights.py` (the D094→D108 lineage), `trade_rate_priors.py`
   (expected-trades prior + cold-start), `auto_tune.py` (tighten-only calibration).
-- Honesty ledgers: `preregistration.py` + `alpha_budget.py` (behind `forge prereg` /
-  `forge alpha-budget`, D208/D207); `yield_audit.py` (D302 dead-cell detector, writes nothing).
+- Honesty ledgers: `preregistration.py` (behind `forge prereg`, D208; the D207 alpha-budget
+  sibling retired 2026-08-06, question answered); `yield_audit.py` (D302 dead-cell detector,
+  writes nothing).
 - Deleted: `threshold_proposer.py` (D298; git history has it).
 
 A `king/` package (the meta-king generator arm) was retired at D190 and **removed from
