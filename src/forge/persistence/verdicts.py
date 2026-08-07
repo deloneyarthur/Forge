@@ -108,6 +108,7 @@ def record_verdicts(
             str,
             str | None,
             str | None,
+            str | None,
         ]
     ] = []
     for gr, decided in candidates:
@@ -131,6 +132,7 @@ def record_verdicts(
                 contracts_version,
                 gr.run.measurement_basis,
                 gr.run.fullhist_refit_of,
+                gr.run.refit_selection,
             )
         )
     if not rows:
@@ -142,8 +144,8 @@ def record_verdicts(
         INSERT OR IGNORE INTO verdicts
         (crucible_run_id, config_hash, decision, decided_at, trade_count,
          grammar_version, gate_results, recorded_at, source_export,
-         contracts_version, measurement_basis, fullhist_refit_of)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         contracts_version, measurement_basis, fullhist_refit_of, refit_selection)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rows,
     )

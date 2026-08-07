@@ -162,6 +162,18 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     # Idempotent ALTERs; NULL on legacy rows and on any producer that omits them.
     "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS measurement_basis VARCHAR",
     "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS fullhist_refit_of VARCHAR",
+    # D375 — REFIT-LANE provenance (`RunResult.refit_selection`, contracts 1.44.0). Crucible's
+    # stage-two scanner used to drain newest-first only; from 2026-08-06 17:10 PDT it reserves a
+    # quality sub-budget ranked by margin over both promotion bars. The tag names which sub-lane
+    # queued the refit, and the field exists because we asked for it (D370 §5): a quality-ordered
+    # cohort is CONDITIONED ON STAGE-ONE METRICS, so pooling it with the newest-first drain would
+    # silently break the like-conditioned version-delta yardstick that produced the v55 read.
+    # Vocabulary is a FREE STRING by their design (the 1.24.0 vocabulary-growth lesson — a Literal
+    # would have hard-failed our reader on any new member, the D261/D342 hazard): NULL = the
+    # unconditioned newest-first drain and is the cohort marker, 'quality_margin' = the reserved
+    # sub-lane, 'promote_stamp_recovery' = the 31-config requeue of the D370 stamp-crash cohort.
+    # Idempotent ALTER; NULL on legacy rows and on any producer that omits it.
+    "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS refit_selection VARCHAR",
     """
     CREATE TABLE IF NOT EXISTS promoted_patterns (
         pattern_id          UUID PRIMARY KEY,

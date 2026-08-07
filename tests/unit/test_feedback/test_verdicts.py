@@ -38,6 +38,7 @@ def _gated_run(
     grammar_version: str | None = "v12",
     measurement_basis: str | None = None,
     fullhist_refit_of: str | None = None,
+    refit_selection: str | None = None,
 ):
     from crucible_contracts import GatedRun
     from crucible_contracts.models import GateResult, PromotionDecision, RunResult
@@ -54,6 +55,7 @@ def _gated_run(
             grammar_version=grammar_version,
             measurement_basis=measurement_basis,
             fullhist_refit_of=fullhist_refit_of,
+            refit_selection=refit_selection,
         ),
         decision=PromotionDecision(
             run_id=rid,
@@ -126,6 +128,7 @@ def test_verdicts_table_created_by_ensure_schema() -> None:
         # the D128 label cannot be scoped. On the wire since contracts 1.27.0.
         "measurement_basis",
         "fullhist_refit_of",
+        "refit_selection",
     }
 
 
@@ -402,3 +405,39 @@ def test_lane_provenance_is_nullable_for_legacy_and_stage_one_rows() -> None:
         record_verdicts(conn, [_gated_run(config_hash="cccc000011112222")])
         row = conn.execute("SELECT measurement_basis, fullhist_refit_of FROM verdicts").fetchone()
     assert row == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# D375 — refit_selection: Crucible's REFIT-LANE tag, persisted
+# ---------------------------------------------------------------------------
+
+
+def test_refit_selection_is_persisted_and_legacy_rows_stay_null() -> None:
+    """The lane tag must survive the writer, or the field is decorative.
+
+    Crucible built `RunResult.refit_selection` (contracts 1.44.0) as a first-class field in
+    answer to our D370 ask, and it arrives on every exported row — but a field we parse and
+    then drop at the writer is a field we cannot filter on. The point of the tag is that its
+    ABSENCE marks the like-conditioned newest-first cohort, which is the yardstick our
+    version-delta reads depend on; reconstructing that split from timestamps is exactly what
+    the tag exists to replace.
+
+    Wire vocabulary: None = the unconditioned newest-first drain, 'quality_margin' = the
+    reserved quality sub-lane (live 2026-08-06 17:10 PDT), 'promote_stamp_recovery' = the
+    31-config requeue batch.
+    """
+    with db_connection(Path(":memory:")) as conn:
+        for h in ("aaaa000011112222", "bbbb000011112222", "cccc000011112222"):
+            _insert_submission(conn, config_hash=h)
+        runs = [
+            _gated_run(config_hash="aaaa000011112222", refit_selection="quality_margin"),
+            _gated_run(config_hash="bbbb000011112222", refit_selection="promote_stamp_recovery"),
+            _gated_run(config_hash="cccc000011112222"),  # newest-first drain: tag absent
+        ]
+        assert record_verdicts(conn, runs) == 3
+        rows = dict(conn.execute("SELECT config_hash, refit_selection FROM verdicts").fetchall())
+    assert rows["aaaa000011112222"] == "quality_margin"
+    assert rows["bbbb000011112222"] == "promote_stamp_recovery"
+    assert rows["cccc000011112222"] is None, (
+        "the newest-first cohort must stay NULL — its ABSENCE is the cohort marker"
+    )
