@@ -786,25 +786,6 @@ def _resolve_prefilter_sample_n() -> int:
     return max(0, min(n, _MAX_PREFILTER_SAMPLE_N))
 
 
-def _resolve_young_explore_slots() -> int:
-    """Parse ``FORGE_YOUNG_CELL_EXPLORE_SLOTS`` (D316 / Theme 2d): extra seeded-random
-    submission slots per batch reserved for YOUNG-cell members, tagged
-    ``young_explore`` (a third lane — never pollutes the uniform holdout estimand).
-    Requires the D307/D312 young-cell floor to be ON (needs `mature_cells`); inert
-    without it. Unset/empty/0 → 0 (byte-identical). Malformed → 0 (degrade-never-
-    crash); valid values clamp to [0, 8]."""
-    import os
-
-    raw = os.environ.get("FORGE_YOUNG_CELL_EXPLORE_SLOTS", "").strip()
-    if not raw:
-        return 0
-    try:
-        slots = int(raw)
-    except ValueError:
-        return 0
-    return max(0, min(slots, 8))
-
-
 def _resolve_tail_lane_slots() -> int:
     """Parse ``FORGE_TAIL_LANE_SLOTS`` (prereg `8cfe95f4a6e9`): ranked slots per batch
     reserved for the TAIL arm, ordered by `P(top-N by sharpe_baseline)` instead of the
@@ -2498,9 +2479,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
     # byte-identical, `_holdout_hashes` empty → every submission tagged 'ranked'.
     _holdout_frac = _resolve_exploration_holdout_frac()
     _holdout_n = round(_holdout_frac * batch_size) if _holdout_frac > 0.0 else 0
-    # D316 (2d) — the young-cell explore quota rides the same engine; inert
-    # without the D307 floor's maturity data (mature_cells is None).
-    _young_n = _resolve_young_explore_slots() if mature_cells is not None else 0
     # Prereg `8cfe95f4a6e9` — the TAIL arm. Ordered by P(top-N by sharpe_baseline), which
     # offline delivers 313 strong components per 4,520 selected against the incumbent's 133
     # (8 splits, per-window disjoint counts, 4/4 windows). Runs CONCURRENT with the merit
@@ -2547,25 +2525,22 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             f"base={_lm.base_target} top-{_lm.n_pos}, population={_pop}) — "
             f"concurrent arm, merit arm is the control"
         )
-    if _holdout_n > 0 or _young_n > 0 or _extra_lanes:
+    if _holdout_n > 0 or _extra_lanes:
         from forge.core.seed import SeedHierarchy
         from forge.ranking import rank_batch_with_exploration
 
-        _selected, _holdout, _young, _extra = rank_batch_with_exploration(
+        _selected, _holdout, _extra = rank_batch_with_exploration(
             ranker,
             reports,
             promoted_strategies=tuple(promoted),
             n=batch_size,
             holdout_n=_holdout_n,
             rng=SeedHierarchy(seed).rng("exploration_holdout"),
-            young_explore_n=_young_n,
-            young_rng=SeedHierarchy(seed).rng("young_cell_explore") if _young_n > 0 else None,
             extra_lanes=tuple(_extra_lanes),
             **_rank_kwargs,  # type: ignore[arg-type]
         )
-        ranked = [*_selected, *_holdout, *_young, *[c for v in _extra.values() for c in v]]
+        ranked = [*_selected, *_holdout, *[c for v in _extra.values() for c in v]]
         _holdout_hashes = frozenset(c.report.config.config_hash for c in _holdout)
-        _young_hashes = frozenset(c.report.config.config_hash for c in _young)
         _lane_hashes = {
             tag: frozenset(c.report.config.config_hash for c in picks)
             for tag, picks in _extra.items()
@@ -2574,11 +2549,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             f"exploration_holdout: {len(_holdout)} of {len(ranked)} submitted "
             f"(frac={_holdout_frac:.3f}, seeded bypass of the ranker)"
         )
-        if _young_n > 0:
-            typer.echo(
-                f"young_explore: {len(_young)} of {len(ranked)} submitted "
-                f"(quota {_young_n}, young-cell seeded draw; tagged young_explore)"
-            )
         for _tag, _picks in _extra.items():
             if _picks:
                 typer.echo(
@@ -2594,7 +2564,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             **_rank_kwargs,  # type: ignore[arg-type]
         )
         _holdout_hashes = frozenset()
-        _young_hashes = frozenset()
         _lane_hashes = {}
     timings["rank"] = _time.monotonic() - _t_rank
     typer.echo(f"ranked_top_n={len(ranked)} (target {batch_size})")
@@ -2713,7 +2682,6 @@ def _run_one_iteration(  # noqa: PLR0915, PLR0912 — D065/D105/D106 observabili
             survived_count=passed,
             enumerated_by_hypothesis=_enumerated_by_hypothesis(reports),
             holdout_hashes=_holdout_hashes,
-            young_explore_hashes=_young_hashes,
             prefilter_sample_hashes=_prefilter_sample_hashes,
             extra_lane_hashes=_lane_hashes,
         )

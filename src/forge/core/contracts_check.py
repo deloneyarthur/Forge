@@ -183,8 +183,9 @@ from crucible_contracts import (
 # ranker-unselected but prefilter-SELECTED (guards the ranker hazard only), while a true
 # grammar-honest estimate must be unselected by BOTH stages. A bool cannot name three arms.
 # The bool had zero emitted rows so nothing is lost. Forge EMITS this one (D333 cont.):
-# ranked->"ranked", holdout->"exploration_holdout", young_explore->None (biased, no clean
-# arm). Hash-excluded (verified) so idempotency/determinism untouched; adopt-before-emit.
+# ranked->"ranked", holdout->"exploration_holdout" (the never-enabled young_explore lane
+# was removed 2026-08-06). Hash-excluded (verified) so idempotency/determinism untouched;
+# adopt-before-emit.
 # 1.38.0 (2026-07-23, Crucible b07e42e): forward-compatible promoted-portfolio READER —
 # `load_promoted_portfolios_from_export` now tolerates additive fields on re-read instead of
 # strict-validating (the same read-side hardening as the 1.26.0 gated/failed loaders). NO

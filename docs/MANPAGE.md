@@ -218,16 +218,12 @@ consumed, no stamp — byte-identical (hard rule #6). Clamp [0.0, 0.5] (an exper
 control). The `generation_arm` field is free for the next generation experiment
 (`contracts_check.py` note). History: D341/D351.
 
-**Env-only knob — `FORGE_YOUNG_CELL_EXPLORE_SLOTS`** (D316, Theme 2d): extra seeded-random
-submission slots per batch reserved for YOUNG-cell members, tagged
-`selection_mode='young_explore'` — a THIRD lane, deliberately distinct from the uniform
-holdout (which is the ranker-vs-random estimand and the campaign-audit denominator, and must
-stay an unweighted draw). The floor guarantees young cells get submitted; this quota makes
-them accrue UNBIASED labels faster. Requires the young-cell floor ON (needs `mature_cells`);
-inert without it. Unset/0 → **byte-identical**; clamp [0, 8]; recommended 4. Slots REPLACE
-rank slots (total ≤ batch_size), feasibility-checked so a short young pool never under-fills
-the merit lane. Draw via `SeedHierarchy(seed).rng("young_cell_explore")`. Activation is an
-operator-gated deploy (env + daemon-reload + restart). Journal line: `young_explore: K of N …`.
+**`FORGE_YOUNG_CELL_EXPLORE_SLOTS` — REMOVED 2026-08-06 (D378; operator "deprecate E6").**
+The D316 young-cell explore lane was built flag-off and never enabled (the flag was never
+set on any unit; zero `young_explore` rows exist). D367 reaffirmed OFF — 87% of its budget
+would have funded the ve family being un-propped. The D307 young-cell FLOOR
+(`FORGE_YOUNG_CELL_FLOOR`, above) is a separate mechanism and stays live. Code in git
+history; a future biased-exploration lane starts from its own proposal.
 
 ```
 # One real batch, persisted:

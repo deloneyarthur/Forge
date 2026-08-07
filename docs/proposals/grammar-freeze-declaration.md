@@ -277,7 +277,8 @@ generation against `IC(cpcv, corr_to_book)`.
   not gate this declaration.
 - **`scripts/second_gate_contrast.py` pools across `measurement_basis`** — the D360 defect, in a
   committed instrument. Worth fixing before it is used to judge any future second gate.
-- **`young_explore` remains OFF** (D367): 87% of its budget would fund `volatility_event`, the
+- **`young_explore` REMOVED outright** (D367 kept it OFF; D378 deleted the never-enabled lane,
+  operator 2026-08-06): 87% of its budget would fund `volatility_event`, the
   family whose floor was just retired.
 
 ---

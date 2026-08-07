@@ -96,10 +96,8 @@ def _kwargs(**over: object) -> dict[str, object]:
 def test_flag_off_is_byte_identical_and_returns_an_empty_tail() -> None:
     """`tail_n=0` must leave the three existing lanes exactly as they were."""
     reports = _reports(20)
-    sel_a, hold_a, young_a, extra_a = rank_batch_with_exploration(
-        _ranker(), reports, n=10, **_kwargs()
-    )
-    sel_b, hold_b, young_b, extra_b = rank_batch_with_exploration(
+    sel_a, hold_a, extra_a = rank_batch_with_exploration(_ranker(), reports, n=10, **_kwargs())
+    sel_b, hold_b, extra_b = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=10,
@@ -112,7 +110,6 @@ def test_flag_off_is_byte_identical_and_returns_an_empty_tail() -> None:
         c.report.config.config_hash for c in sel_b
     ]
     assert hold_a == hold_b
-    assert young_a == young_b
 
 
 def test_tail_lane_is_filled_by_the_tail_scorer_not_the_ranker() -> None:
@@ -125,7 +122,7 @@ def test_tail_lane_is_filled_by_the_tail_scorer_not_the_ranker() -> None:
     def tail_scorer(cfg: StrategyConfig) -> float:
         return 1.0 if cfg.name in hot else 0.0
 
-    selected, _holdout, _young, extra = rank_batch_with_exploration(
+    selected, _holdout, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=10,
@@ -146,7 +143,7 @@ def test_tail_slots_come_out_of_the_merit_lane_not_the_batch() -> None:
     """The lane must not inflate the batch — total stays <= n, so throughput is
     unchanged and the comparison is like-for-like."""
     reports = _reports(30)
-    selected, holdout, young, extra = rank_batch_with_exploration(
+    selected, holdout, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=12,
@@ -155,7 +152,7 @@ def test_tail_slots_come_out_of_the_merit_lane_not_the_batch() -> None:
     )
     tail = extra["tail_lane"]
     assert len(tail) == 5
-    assert len(selected) + len(holdout) + len(young) + len(tail) <= 12
+    assert len(selected) + len(holdout) + len(tail) <= 12
     assert len(selected) == 7
 
 
@@ -164,7 +161,7 @@ def test_holdout_stays_uniform_over_configs_neither_arm_selected() -> None:
     the merit arm nor the tail arm took, or it stops being uniform over
     non-selected survivors."""
     reports = _reports(30)
-    selected, holdout, _young, extra = rank_batch_with_exploration(
+    selected, holdout, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=15,
@@ -183,7 +180,7 @@ def test_a_short_pool_never_under_fills_the_merit_lane() -> None:
     """If the tail scorer can only fill part of its quota the merit lane keeps the
     rest — a starved tail arm must not cost throughput."""
     reports = _reports(6)
-    selected, _holdout, _young, extra = rank_batch_with_exploration(
+    selected, _holdout, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=6,
@@ -197,7 +194,7 @@ def test_a_short_pool_never_under_fills_the_merit_lane() -> None:
 def test_no_scorer_means_no_tail_lane_even_with_slots_requested() -> None:
     """A missing artifact must degrade to the incumbent, never to an empty batch."""
     reports = _reports(20)
-    selected, _holdout, _young, extra = rank_batch_with_exploration(
+    selected, _holdout, extra = rank_batch_with_exploration(
         _ranker(), reports, n=10, extra_lanes=(), **_kwargs()
     )
     assert extra == {}
@@ -214,7 +211,7 @@ def test_two_objective_lanes_are_disjoint_and_each_uses_its_own_scorer() -> None
     ]
     mr_hot = {f"m{i:03d}" for i in range(10, 15)}
     tr_hot = {f"t{i:03d}" for i in range(10, 15)}
-    selected, _holdout, _young, extra = rank_batch_with_exploration(
+    selected, _holdout, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=16,
@@ -248,7 +245,7 @@ def test_lane_order_is_respected_when_two_lanes_want_the_same_config() -> None:
     def hot(c: StrategyConfig) -> float:
         return 1.0 if c.name in both else 0.0
 
-    _selected, _holdout, _young, extra = rank_batch_with_exploration(
+    _selected, _holdout, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=10,
@@ -279,7 +276,7 @@ def test_a_lane_without_a_filter_selects_the_wrong_population() -> None:
         # scorers are sigmoids, so this mirrors the real range.
         return 0.9 if c.name.startswith("m") else 0.1
 
-    _sel, _h, _y, unfiltered = rank_batch_with_exploration(
+    _sel, _h, unfiltered = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=12,
@@ -289,7 +286,7 @@ def test_a_lane_without_a_filter_selects_the_wrong_population() -> None:
     picked = {c.report.config.name for c in unfiltered["trend_lane"]}
     assert all(n.startswith("m") for n in picked), "unfiltered lane should grab MR"
 
-    _sel2, _h2, _y2, filtered = rank_batch_with_exploration(
+    _sel2, _h2, filtered = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=12,
@@ -312,7 +309,7 @@ def test_an_empty_eligible_pool_yields_an_empty_lane_not_a_crash() -> None:
     """If a batch enumerates no trend candidates the lane must go empty and the
     merit arm keeps the slots — never a crash, never a mis-population pick."""
     reports = _reports(10)  # all mean_reversion
-    selected, _h, _y, extra = rank_batch_with_exploration(
+    selected, _h, extra = rank_batch_with_exploration(
         _ranker(),
         reports,
         n=8,

@@ -92,11 +92,7 @@ def _tally_lanes(
     rows: Sequence[tuple[str, str, str]],
     auditable: Sequence[tuple[Campaign, Callable[[Mapping[str, Any]], bool]]],
 ) -> tuple[int, int, dict[str, dict[str, int]], dict[str, list[str]]]:
-    """One pass over window rows: lane totals + per-campaign member counts.
-
-    D316 (2d): 'young_explore' rows are neither merit-ranked nor an unweighted
-    draw — counting them in either lane would distort the shares this audit
-    exists to compare. They are skipped entirely."""
+    """One pass over window rows: lane totals + per-campaign member counts."""
     ranked_total = 0
     holdout_total = 0
     member_hashes: dict[str, list[str]] = {c.name: [] for c, _ in auditable}
@@ -104,8 +100,6 @@ def _tally_lanes(
         c.name: {"ranked": 0, "holdout": 0} for c, _ in auditable
     }
     for config_json, mode, config_hash in rows:
-        if mode == "young_explore":
-            continue
         lane = "holdout" if mode == "holdout" else "ranked"
         if lane == "holdout":
             holdout_total += 1

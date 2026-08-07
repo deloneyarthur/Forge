@@ -135,12 +135,6 @@ _SELECTION_ARM_BY_MODE: dict[str, str | None] = {
     # D335 two-arm campaign: configs the PREFILTER rejected, submitted anyway to
     # measure the population unselected by BOTH stages — the grammar-honest estimate.
     "prefilter_sample": "prefilter_sample",
-    # young_explore (D316 2d) is ranker-unselected but BIASED toward young cells, so it
-    # is neither `ranked` (not a merit pick) nor `exploration_holdout` (not uniform-random,
-    # which is the property that makes the holdout an unbiased grammar estimate). Mapping
-    # it to either contaminates that arm's meaning. It stays unset until Crucible names a
-    # fourth value; their export maps absent -> `unset`, never `ranked` (their 07-23 §3).
-    "young_explore": None,
 }
 
 
@@ -313,7 +307,6 @@ def submit_batch(
     survived_count: int | None = None,
     enumerated_by_hypothesis: Mapping[str, int] | None = None,
     holdout_hashes: frozenset[str] = frozenset(),
-    young_explore_hashes: frozenset[str] = frozenset(),
     prefilter_sample_hashes: frozenset[str] = frozenset(),
     extra_lane_hashes: Mapping[str, frozenset[str]] | None = None,
 ) -> BatchSubmissionResult:
@@ -347,20 +340,16 @@ def submit_batch(
     dropped_overlay = 0
 
     # D334: selection_rank for the `ranked` arm (Crucible 07-23 §3). The caller passes
-    # candidates as [*selected, *holdout, *young]; `selected` is the ranker's top-N in
+    # candidates as [*selected, *holdout, ...]; `selected` is the ranker's top-N in
     # RANK ORDER and is exactly the `ranked` arm, so a ranked config's 1-based position
     # among ranked configs IS its rank within the survivor pool (the selected are the
     # pool's top-N). This lets Crucible reproduce the per-config selected-vs-pool
-    # inflation directly. holdout/young are not rank-selected → rank stays None.
+    # inflation directly. holdout rows are not rank-selected → rank stays None.
     ranked_rank = 0
 
     for candidate in candidates:
         # P3.3 (B7): tag the exploration-holdout draw so evals can split biased-vs-unbiased
         # labels. Empty `holdout_hashes` (default / flag-OFF) → every row is 'ranked'.
-        # D316 (2d): the young-cell explore quota gets its OWN tag — it is neither
-        # merit-ranked nor an unweighted draw, so it must pollute neither lane
-        # (the holdout estimand and the campaign-audit denominator both depend
-        # on 'holdout' meaning uniform-random). Holdout wins on overlap.
         config_hash = candidate.report.config.config_hash
         selection_rank: int | None = None
         # D335: prefilter_sample carries NO pool_size — it was never drawn from the
@@ -372,8 +361,6 @@ def submit_batch(
             pool_size = None
         elif config_hash in holdout_hashes:
             selection_mode = "holdout"
-        elif config_hash in young_explore_hashes:
-            selection_mode = "young_explore"
         elif (_lane := _lane_of(config_hash, extra_lane_hashes)) is not None:
             # Prereg `8cfe95f4a6e9` — a concurrent objective arm (`tail_lane` on MR,
             # `trend_lane` on trend). Each DOES compete for ranked slots (its slots come out

@@ -709,31 +709,6 @@ def test_d097_stamp_tracks_batch_and_preserves_config_hash(tmp_path: Path) -> No
     assert json.loads(row[1])["grammar_version"] == "v4"
 
 
-def test_selection_mode_tags_young_explore(tmp_path: Path) -> None:
-    # D316 (2d): `young_explore_hashes` tags the young-cell quota with its OWN
-    # mode — never 'holdout' (the uniform-holdout estimand must stay clean) and
-    # never 'ranked'. Holdout wins if a hash somehow appears in both (it can't
-    # in production — the draws are disjoint — but the precedence is pinned).
-    forge_db = tmp_path / "forge.db"
-    inbox = tmp_path / "inbox"
-    a = _candidate("a", "dir_a")
-    b = _candidate("b", "dir_b")
-    c = _candidate("c", "dir_c")
-    with db_connection(forge_db) as conn:
-        submit_batch(
-            conn,
-            batch=_ctx(),
-            candidates=(a, b, c),
-            inbox_root=inbox,
-            holdout_hashes=frozenset({b.report.config.config_hash}),
-            young_explore_hashes=frozenset({c.report.config.config_hash}),
-        )
-        rows = dict(conn.execute("SELECT config_hash, selection_mode FROM submissions").fetchall())
-    assert rows[a.report.config.config_hash] == "ranked"
-    assert rows[b.report.config.config_hash] == "holdout"
-    assert rows[c.report.config.config_hash] == "young_explore"
-
-
 def test_emits_selection_arm_and_pool_size_on_inbox_config(tmp_path: Path) -> None:
     """D333/1.37.0: the inbox config carries `selection_arm` so Crucible can scope
     the freeze criterion to the honest arm, and `selection_pool_size` so it can
@@ -772,21 +747,6 @@ def test_selection_arm_absent_when_pool_size_unknown_is_still_marked(tmp_path: P
     payload = json.loads(next(inbox.glob("*.json")).read_text())
     assert payload["selection_arm"] == "ranked"
     assert payload["selection_pool_size"] is None
-
-
-def test_young_explore_does_not_map_to_a_crucible_arm(tmp_path: Path) -> None:
-    """young_explore (D316 2d) is ranker-unselected but BIASED toward young cells,
-    so it is neither `ranked` (not merit) nor `exploration_holdout` (not uniform).
-    Mapping it to either would contaminate that arm's meaning. It stays None until
-    Crucible names a fourth value; the export maps absent -> unset, never ranked."""
-    forge_db = tmp_path / "forge.db"
-    inbox = tmp_path / "inbox"
-    a = _candidate("a", "dir_a")
-    ye = frozenset({a.report.config.config_hash})
-    with db_connection(forge_db) as conn:
-        submit_batch(conn, batch=_ctx(), candidates=(a,), inbox_root=inbox, young_explore_hashes=ye)
-    payload = json.loads(next(inbox.glob("*.json")).read_text())
-    assert payload["selection_arm"] is None
 
 
 def test_selection_rank_is_1based_over_ranked_arm_only(tmp_path: Path) -> None:
