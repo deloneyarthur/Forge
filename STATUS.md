@@ -1,6 +1,11 @@
 # Forge — Status
 
-## 2026-08-06 — repo-simplification plan DRAFTED (operator ask: "too expansive, AI making mistakes") — `docs/proposals/repo-simplification-2026-08.md`, awaiting operator sequencing
+## 2026-08-06 — repo-simplification Steps 0–C EXECUTED (operator: "let's attack the plan") — 11 commits, zero behavior change; D–F stay operator-gated (D371)
+
+- Root `.md` 34 → 9; `docs/proposals/` 39 → 20; scripts 39 → 17; session ledgers 1.42 MB → ~450 KB (rotations to `_archive/`); DESIGN.md de-fictioned + §3.5 drift banner (commit `9afe042`, **operator review requested**); glossary → `architecture.md` §Terms; 22 spent scripts retired with MANPAGE ledger rows. Full detail: D371.
+- **Owed/flagged:** Q62 (QuantIQ six-stream ranker triage — filed to `freeze/relays/`, unanswered); contracts **1.43.0** shipped sibling-side mid-session → `test_expected_contract_version_matches_installed` fails until the operator-gated pin adoption + restart; STATUS-block-length discipline (plan §4.3) awaiting operator word.
+
+## 2026-08-06 (earlier) — repo-simplification plan DRAFTED (operator ask: "too expansive, AI making mistakes") — `docs/proposals/repo-simplification-2026-08.md`, awaiting operator sequencing
 
 - Five-track audit (root/docs/src/scripts/tests) → phased plan: Steps 0–C are docs/records hygiene (no restart, no behavior change), D–F operator-gated; Step F1 = execute `fable-audit/code-complete-retirement/REPORT.md` on freeze declaration.
 - Found in passing, needs triage: `PROMPT_QUANTIQ_new_training_signals_for_the_rankers_2026-08-03.md` is an **unhandled inbound relay** (untracked, zero references anywhere in Forge); `scripts/joint_frontier.py` untracked; 4 ACF relays in `_archive/` untracked with stale "NOT YET SENT" banners.

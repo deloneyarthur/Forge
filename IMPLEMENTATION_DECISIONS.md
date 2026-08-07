@@ -1998,3 +1998,54 @@ Operator: *"work closely with Crucible to create a grammar freeze plan … optim
 ## D370 — 2026-08-06 — our "zero promotes" is a MEASUREMENT SHADOW: 31 configs destroyed at Crucible's verdict stamp since 07-23
 
 **Spec section:** relay `7611258` → Crucible's reply, same day. **Our 23/9/14 reproduced EXACTLY on their ledger** (`promotion_decisions` + `runs`, not our mirror): 23 dual-gate clearers, all with the identical `reject` / `[deflated_sharpe, regime_coverage]` profile, 9 refit → 9 components. Latency reproduced too (their n=36,399 vs our 36,061 — snapshot drift). They also confirmed our §3 self-correction was right on their data: one additional dual-gate clearer sits just outside our trustworthy window, so discarding the pre-07-27 count was correct. **THE CORRECTION: our "14 never refit" is really 12 + 2.** Two were refit *fast* — children queued 3 minutes and 38 seconds after the stage-one decision — ran their full-history backtests, and **crashed at the verdict stamp**. A failed run gets no `promotion_decisions` row and never reaches any verdict-based export, so they were structurally invisible to us. 61% decomposes as **52% passed over + 9% destroyed at the finish line**. **THE FINDING THEIR VALIDATION UNCOVERED, and it is much larger than our relay:** §20 of 2026-07-22 made `deflated_sharpe` recorded-but-non-binding at the single-run verdict layer, but the `PromotionDecision` contract validator still enforced the pre-07-22 rule that a promote must carry **zero** failed gates — and §20 deliberately keeps the exempt DSR **recorded as failed**. So the first stage-two child good enough to promote after 07-22 crashed the stamp, and **every one since: 31 configs, 67 children, 12 now permanently blacklisted (`refit_attempts_exhausted`), 9 first crashing on 08-05/08-06 — accelerating with v55 quality.** **VERIFIED ON OUR SIDE:** we hold exactly **4 promote verdicts ever** (07-01, 07-02, 07-03, 07-18 — all pre-§20) and **ZERO since 2026-07-23**. Our last promote predates §20 by four days. **Every "0 promotes" reading in our records since 07-23 measures a crashing validator, not supply quality.** **WHAT THIS INVALIDATES AND WHAT IT DOES NOT:** freeze condition (C) is **unaffected** — both legs read stage-one cpcv distributions on the honest arm, and the crash is at the stage-two stamp. The record and joint-frontier tests are **unaffected** for the same reason. What *is* shadowed is any claim resting on recent promote counts, including part of the [[D361]]-adjacent dsj reading ("6,707 dsj components, zero reached a promoted book") — the dsj window opens ~07-08 so it is only partly affected, but the zero is no longer clean evidence. **IT STRENGTHENS THE FREEZE PREMISE RATHER THAN WEAKENING IT**, and Crucible said so explicitly: the binding constraint sits even further downstream of generation than D368 measured — our best supply is lost at refit triage **and** at the stamp. **ORDERING ANSWER: `ORDER BY pd.decided_at DESC` is an ARTIFACT, not a policy** — no design rationale exists anywhere in their scanner, and the limitation was noticed and hand-bypassed the day the lane shipped. The policy call goes to their operator with our relay as the trigger. Their measured payload for our intuition: among *reached* dual-gate clearers, **2 of 11 produced promote-grade children against a ~0.06% lane base rate (31 of 48,323) — ~280× enrichment.** Their stated cost is methodological and correct: quality-ordering conditions the stage-two cohort on stage-one metrics, so the version-delta yardstick — **the instrument that produced our v55 read** — acquires a dated policy boundary; a two-lane split (reserved quality sub-budget, remainder newest-first) would preserve a like-conditioned majority cohort. **ACTION: none from us.** Fix, requeue of all 31, and the ordering decision are theirs; the contracts bump reaches us through the normal channel and lands **before** any promote row can reach our readers. **WATCH:** the requeue will inject up to 31 promote verdicts as a burst — a basis boundary of exactly the class we split on elsewhere. Record the timestamp when it lands and split any series that spans it.
+
+## D371 — 2026-08-06 — repo-simplification Steps 0–C EXECUTED (operator: "let's attack the plan"): 11 commits of record/doc/scripts hygiene, zero daemon/config/behavior change
+
+**Spec:** `docs/proposals/repo-simplification-2026-08.md` (the plan; D368-adjacent audit basis).
+**What landed, by tranche (commits e56cff1 → 88c7df0):**
+- **Step 0** — strays: the stranded QuantIQ training-signals relay filed to `freeze/relays/` +
+  tracked as **Q62** (unhandled inbound, six streams, triage = ranker design work, still owed);
+  4 answered ACF relays committed with corrected banners (`joint_frontier.py` was committed by
+  the concurrent D368 session).
+- **A1/A2** — 20 answered/dead-channel relays + `RELAYS.md` → `_archive/` (D202/D241 criterion;
+  corr-to-book verified answered in both INDEX ledgers); `docs/tasks/crucible-handoff.md`
+  rewritten to the D362 `freeze/relays/` channel — the doc that was regenerating root clutter.
+  Root `.md`: 34 → 9 (only `PATHC_DEBIT_VERTICAL_SIZING` stays, operator-parked D152).
+- **A3** — ledger rotations (D242/D295 precedents): STATUS 2026-07 blocks (180) →
+  `_archive/STATUS_2026-07.md`; **D201–D300 (99 entries — D236 was never written, D-number
+  race, noted in the slice header)** → `_archive/IMPLEMENTATION_DECISIONS_D201-D300.md`;
+  31 resolved Qs → `_archive/OPEN_QUESTIONS_RESOLVED.md` (Q46 heading got its missing
+  RESOLVED marker, D364/D366, before rotating). Session read-path 1.42 MB → ~450 KB.
+- **A4/A6/A7** — `AUDIT.md`, `SECTOR_VOL_MECHANISM_RESEARCH.md`, `ALPHA_BUDGET_SCOPE.md`
+  (2 refs repointed), `STRATEGY_GENERATION_STATE.md` archived; **19 terminal proposals →
+  `_archive/PROPOSAL_*.md`** — 4 carried stale-in-reality STAGED headers corrected at archive
+  time (v43 rider SHIPPED D309; v50 IWM/SLB + rank_k SHIPPED D336, rank_k REVERTED D337;
+  corr-to-book EXECUTED); `docs/proposals/` 39 → 20 (12 code-cited + open/active). Root-file
+  taxonomy restored in `architecture.md`; `docs/proposals/` routing rows added to
+  CLAUDE.md/README.
+- **B** — truth repair: DESIGN.md as-built reconciliation (D201 pattern; fictional §11 tree,
+  §9.1 DDL, §10 config pastes removed in favor of owners; **§9.2 corrected — file exports,
+  never Crucible's DB**; §4.2 CSP/networkx fiction corrected; §3.6 "25 rules" → 21) + the
+  **§3.5 DRIFT BANNER (commit 9afe042, flagged for operator review** — rule text untouched
+  per hard rule #1; discloses the six drifted bodies with verified lineages, GRAMMAR.md wins
+  on conflict). GRAMMAR.md monster paragraphs → per-gate bullets (sync hook green).
+  MANPAGE env-knob essays compressed + 3 stale facts fixed (D287 pin EMPTY per D305; arm-B
+  REFUTED D351; ve floor RETIRED D367). INDICATOR_THRESHOLDS shed its shipped-plan +
+  struck-through sections. glossary.md merged into `architecture.md` §Terms; the two
+  unreadable module-map cells split into breakdowns. quality-gates.md stopped teaching the
+  pre-D351 broken hook; NEW_BOX_TRANSFER de-pinned from v22; empty docs/DECISIONS.md deleted.
+  Two doc-needle tests updated (Q10 archive-aware; §6.2 symbolic formula).
+- **C** — 22 one-off research scripts retired with MANPAGE ledger rows + a full scripts
+  inventory + the standing rule (*one-off scripts die with their D-entry*); the 137-line
+  version-changelog comment deleted from `test_v1_grammar.py`; mypy strict-implied flags
+  dropped; pytest floor 8 → 9; orphan `.pyc` purged.
+**Verification:** doc-needle + hook-script + grammar-sync + cli-help suites green (40/40);
+`tests/unit/test_scripts` + `tests/integration` green except
+`test_expected_contract_version_matches_installed` — **pre-existing**: contracts **1.43.0**
+shipped in the sibling repo mid-session; the 1.42.0 pin adoption is its own operator-gated
+tranche (D244/D245 restart sequencing), deliberately NOT smuggled in here (`uv.lock` kept at
+1.42.0; commits made under `UV_FROZEN=1`).
+**NOT done (by design):** Steps D (unit-file comment move), E (src dead code — `winner_prior.py`
+et al.), F (post-freeze retirement per `fable-audit/code-complete-retirement/REPORT.md`) —
+operator-gated. Q62 triage owed. Regrowth rule #3 (STATUS blocks ≤ ~10 lines, narrative in the
+D-entry) is a PROPOSAL awaiting the operator; this entry ironically demonstrates the need.
