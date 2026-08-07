@@ -3,8 +3,8 @@
 **Status:** Steps 0–C **EXECUTED 2026-08-06** (D371, commits `e56cff1`→`88c7df0`; §3.5 drift
 banner `9afe042` awaiting operator review). Step E tranches 1–4 **RESOLVED 2026-08-06**
 (operator "Let's do 1-4"): E1 winner_prior deleted (D372), E2 alpha-budget retired (D373),
-E3 D287 reservation removed (D374), E4 **declined** (D375 — waiting instrument, not dead
-code); restart deferred to the contracts-1.43.0 adoption window. Remaining: Step D (unit-file
+E3 D287 reservation removed (D376), E4 **declined** (D377 — waiting instrument, not dead
+code); restart deferred to the contracts-adoption restart window (the pin moved 1.42.0→1.44.0 mid-session, their D374; restart still pending). Remaining: Step D (unit-file
 comment move), E5–E7 decisions (arm-B plumbing / young_explore flip-or-remove / Q44 tables),
 Step F (post-freeze retirement), regrowth rule §4.3. This file archives when the remainder
 lands or is declined.

@@ -1,10 +1,10 @@
 # Forge — Status
 
-## 2026-08-06 — Step E tranches 1–4 RESOLVED (operator "Let's do 1-4"): winner_prior DELETED (D372), alpha-budget RETIRED (D373), D287 reservation REMOVED (D374), E4 DECLINED (D375 — it was a waiting instrument); D236 BACKFILLED verbatim from git history
+## 2026-08-06 — Step E tranches 1–4 RESOLVED (operator "Let's do 1-4"): winner_prior DELETED (D372), alpha-budget RETIRED (D373), D287 reservation REMOVED (D376), E4 DECLINED (D377 — it was a waiting instrument); D236 BACKFILLED verbatim from git history
 
 - E1–E3 remove ~900 src/test LOC + one CLI command; all behavior-identical (empty pin set / dead flag / zero refs); ruff + mypy --strict + ranking/cli/invariants suites green. `config_cell` moved home to `campaigns.py` beside its dict twin.
-- **E4 was the D361 error class caught pre-cut:** the "retired" paired-delta display is the instrument waiting on D284 hygiene-incumbent rows (accruing since 07-16) and `sequential_test.py` serves the live rewire clock — declined with D375; re-propose only after the hygiene-incumbent read.
-- **Restart DEFERRED by design:** deploy preflight NO-GOes on the contracts-1.43.0 pin mismatch (the gate working); E1–E3 are dead-code removals needing no urgency, so they ride the operator-gated 1.43.0 adoption restart. ⚠️ Until then the tree is ahead of the running daemon (normal short-window state; timers spawn fresh processes and are suite-verified consistent).
+- **E4 was the D361 error class caught pre-cut:** the "retired" paired-delta display is the instrument waiting on D284 hygiene-incumbent rows (accruing since 07-16) and `sequential_test.py` serves the live rewire clock — declined with D377; re-propose only after the hygiene-incumbent read.
+- **Restart DEFERRED by design:** the contracts pin moved 1.42.0→1.44.0 mid-session (concurrent session, their D374, pin-only); E1–E3 are dead-code removals needing no urgency, so they ride the pending 1.44.0 both-directions restart window. ⚠️ Until then the tree is ahead of the running daemon (normal short-window state; timers spawn fresh processes and are suite-verified consistent).
 
 ## 2026-08-06 (earlier) — repo-simplification Steps 0–C EXECUTED (operator: "let's attack the plan") — 11 commits, zero behavior change; D–F stay operator-gated (D371)
 
