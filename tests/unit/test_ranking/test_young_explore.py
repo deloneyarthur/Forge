@@ -76,46 +76,19 @@ _MATURE = frozenset({("rsi_2", "iv_rank")})
 
 
 def test_draws_only_young_cell_members() -> None:
-    picks = sample_young_cell_explore(
-        _pool(), 4, random.Random(7), mature_cells=_MATURE, pinned_cells=frozenset()
-    )
+    picks = sample_young_cell_explore(_pool(), 4, random.Random(7), mature_cells=_MATURE)
     names = sorted(c.report.config.name for c in picks)
     assert names == ["young1", "young2"]  # mature + bare never drawn
 
 
 def test_quota_zero_or_no_maturity_data_is_inert() -> None:
-    assert (
-        sample_young_cell_explore(
-            _pool(), 0, random.Random(7), mature_cells=_MATURE, pinned_cells=frozenset()
-        )
-        == []
-    )
-    assert (
-        sample_young_cell_explore(
-            _pool(), 4, random.Random(7), mature_cells=None, pinned_cells=frozenset()
-        )
-        == []
-    )
-
-
-def test_pinned_cells_excluded() -> None:
-    picks = sample_young_cell_explore(
-        _pool(),
-        4,
-        random.Random(7),
-        mature_cells=_MATURE,
-        pinned_cells=frozenset({("hurst", "vix_term_slope")}),
-    )
-    assert [c.report.config.name for c in picks] == ["young2"]
+    assert sample_young_cell_explore(_pool(), 0, random.Random(7), mature_cells=_MATURE) == []
+    assert sample_young_cell_explore(_pool(), 4, random.Random(7), mature_cells=None) == []
 
 
 def test_draw_is_seed_deterministic() -> None:
-    a = sample_young_cell_explore(
-        _pool(), 1, random.Random(42), mature_cells=_MATURE, pinned_cells=frozenset()
-    )
-    b = sample_young_cell_explore(
-        _pool(), 1, random.Random(42), mature_cells=_MATURE, pinned_cells=frozenset()
-    )
+    a = sample_young_cell_explore(_pool(), 1, random.Random(42), mature_cells=_MATURE)
+    b = sample_young_cell_explore(_pool(), 1, random.Random(42), mature_cells=_MATURE)
     assert [c.report.config.name for c in a] == [c.report.config.name for c in b]
 
 

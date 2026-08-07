@@ -4,12 +4,12 @@ WHY: the D287 lesson generalized. A (directional, regime) CELL can be starved
 at selection even when both of its arms are individually mature — the D136
 arm floor keys on ``(role, indicator_id)``, so vix_term_slope maturing within
 days of v27 left the resid x vix PAIR unprotected, and it took a hand pin
-(experiment_cells) plus a diagnosis session to fix. This module gives every
+(the retired D287 hand pin) plus a diagnosis session to fix. This module gives every
 cell younger than K honest-era verdicts automatic floor slots; the campaign
 registry's hand-pinned cells become the OVERRIDE (bigger slot counts for
 cells Crucible explicitly asked to read), not the only mechanism.
 
-A cell is the ``experiment_cells.config_cell`` key: (first directional
+A cell is the ``campaigns.config_cell`` key: (first directional
 indicator, first regime indicator). Maturity mirrors the arm floor exactly —
 ≥ K verdict rows in the honest era, ve ghost rows excluded (D290) — so
 "mature" keeps meaning "the learner has had a chance to see it".

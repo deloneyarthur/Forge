@@ -4,8 +4,8 @@ The discover -> concentrate -> farm loop as a first-class object. Two hard
 guarantees under test:
 
   1. **D287 continuity (byte-identical selection).** The derived
-     ``EXPERIMENT_CELLS`` / ``EXPERIMENT_CELL_SLOTS`` in
-     ``forge.ranking.experiment_cells`` must equal the hand-pinned D287
+     ``active_selection_cells`` / ``active_selection_slots`` must equal the
+     hand-pinned D287
      constants exactly — the registry is a refactor of the pin's HOME, never
      of its value. Ranking behavior must not move without its own D-entry.
   2. **Registry hygiene.** Campaigns are code, edited only with a D-entry
@@ -45,13 +45,12 @@ def test_d287_floor_retired_no_active_cells() -> None:
     when Crucible's 2026-07-20 housekeeping relay CLOSED the two-arm read
     (both chassis shortlists empty) — the campaign's pre-agreed `retire_on`
     condition — and the campaign flipped farming→retired. The derived floor
-    is now EMPTY (phase 0b reserves nothing); slots fall back to the D287
-    default. If this moves again, that requires its own D-entry.
+    is now EMPTY; slots fall back to the D287 default. (The diversifier's
+    hand-pin reservation phase itself was removed 2026-08-06 on the strength
+    of this emptiness; a future farming campaign re-wires from
+    ``active_selection_cells``.) If this moves again, that requires its own
+    D-entry.
     """
-    from forge.ranking.experiment_cells import EXPERIMENT_CELL_SLOTS, EXPERIMENT_CELLS
-
-    assert frozenset() == EXPERIMENT_CELLS
-    assert EXPERIMENT_CELL_SLOTS == DEFAULT_SELECTION_SLOTS
     assert frozenset() == active_selection_cells(CAMPAIGNS)
     assert active_selection_slots(CAMPAIGNS) == DEFAULT_SELECTION_SLOTS
 
@@ -138,12 +137,12 @@ def test_validate_rejects_slots_without_cell() -> None:
 
 
 # ---------------------------------------------------------------------------
-# config_cell_from_json — must mirror experiment_cells.config_cell exactly
+# config_cell_from_json — must mirror campaigns.config_cell exactly
 # ---------------------------------------------------------------------------
 
 
 def test_config_cell_from_json_mirrors_config_cell() -> None:
-    from forge.ranking.experiment_cells import config_cell
+    from forge.ranking.campaigns import config_cell
 
     config = minimal_strategy_config()
     as_json = config.model_dump(mode="json")

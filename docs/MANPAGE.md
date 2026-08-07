@@ -177,13 +177,13 @@ slots (the holdout REPLACES rank slots — total submitted stays ≤ batch_size,
 so evals can split biased-vs-unbiased. Consumed by `forge.cli.main._resolve_exploration_holdout_frac` →
 `rank_batch_with_holdout`. Activation is an operator-gated submission-mix change (deploy ritual + the D220 hold).
 
-**Experiment-cell selection floor (D287/D299)** — `forge.ranking.experiment_cells.EXPERIMENT_CELLS`
-DERIVES from farming campaigns in the registry (`forge.ranking.campaigns`) and reserves
-`EXPERIMENT_CELL_SLOTS` (4) ranked slots per pinned (directional, regime) cell via a diversifier
-reservation phase, so a learned ranker cannot starve a live experiment at selection (the
-D119/D136 principle). **The pin set is currently EMPTY** — the resid×vix campaign retired on
-Crucible's relay (D305) — so the reservation phase is a no-op until a future campaign pins a
-cell. Journal line when active: `experiment_cell_floor: {...}`. History: D287/D299/D305.
+**Experiment-cell selection floor (D287/D299) — REMOVED 2026-08-06 (D374).** The hand-pin
+reservation phase ran empty since the resid×vix campaign retired (D305), so the machinery
+(`experiment_cells.py`, diversifier phase 0b, the `experiment_cell_floor:` journal line) was
+deleted. The PRINCIPLE survives in two live mechanisms: the young-cell floor
+(`FORGE_YOUNG_CELL_FLOOR`, D307 — the D287 protection made automatic) and the campaign
+registry (`campaigns.active_selection_cells` — the interface a future farming campaign would
+wire a new floor from, with its own D-entry). History: D287/D299/D305/D374.
 
 **Env kill-switch — `FORGE_YOUNG_CELL_FLOOR`** (D307, Theme 2b): default `off` — must be exactly
 `on` to activate the YOUNG-cell exploration floor (diversifier phase 0c): any (directional,
@@ -548,7 +548,8 @@ The campaign registry — the discover→concentrate→farm loop as a first-clas
 `list` prints every registry record (`forge.ranking.campaigns.CAMPAIGNS`): lifecycle status,
 origin evidence, D-refs, the selection floor if any, the funnel read the campaign waits on, and
 its retire condition. The registry is code, edited only with a D-entry (the sampler-pin
-convention); the D287 experiment-cell floor DERIVES from it, pinned byte-identical by test.
+convention). The D287 selection floor that derived from it was removed 2026-08-06 (D374);
+`active_selection_cells` remains the wiring point for a future campaign floor.
 
 `audit` runs the region-carriage check per farming campaign over a `--days` window (default 7):
 ranked-lane member share vs holdout-lane member share. The holdout bypasses ranking, so its share

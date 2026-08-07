@@ -6,8 +6,9 @@ carriage, funnel read — and each instance was bespoke (a hand-pinned cell, a
 D-entry, a watch line in STATUS.md). This module names that loop's state so:
 
   * the selection floor DERIVES from the registry instead of a one-off pin
-    (``forge.ranking.experiment_cells`` re-exports the derived values; the
-    diversifier's phase 0b is untouched),
+    (the diversifier's hand-pin reservation phase was REMOVED 2026-08-06 with
+    the pin set empty since D305 — ``active_selection_cells`` remains the
+    interface a future farming campaign would wire a new floor from),
   * ``forge campaigns list`` shows what is farming and which decision read
     each campaign waits on, and
   * ``forge campaigns audit`` knows which membership signature to check for
@@ -26,7 +27,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from crucible_contracts import StrategyConfig
 
 CampaignStatus = Literal["candidate", "confirmed", "farming", "converted", "retired"]
 
@@ -71,12 +75,25 @@ class Campaign:
     retired_note: str | None = None
 
 
-def config_cell_from_json(config: Mapping[str, Any]) -> ExperimentCell | None:
-    """Dict-shaped mirror of ``experiment_cells.config_cell``.
+def config_cell(config: StrategyConfig) -> ExperimentCell | None:
+    """The (directional indicator, regime indicator) cell a config occupies.
 
-    Reads a submissions-row ``config_json`` payload; the equality with the
-    model-based extractor is pinned by test (test_campaigns).
-    """
+    None when either role is absent (bare-drop configs carry no regime gate;
+    relative_value carries no directional in the cell sense). Model-based
+    twin of ``config_cell_from_json`` below; keep them in lockstep."""
+    directional = next((s for s in config.signals if s.role == "directional"), None)
+    regime = next((s for s in config.signals if s.role == "regime_filter"), None)
+    if directional is None or regime is None:
+        return None
+    if not directional.indicators or not regime.indicators:
+        return None
+    return (directional.indicators[0], regime.indicators[0])
+
+
+def config_cell_from_json(config: Mapping[str, Any]) -> ExperimentCell | None:
+    """Dict-shaped mirror of ``config_cell`` (reads a submissions-row
+    ``config_json`` payload); the equality of the pair is pinned by test
+    (test_campaigns)."""
     directional: Mapping[str, Any] | None = None
     regime: Mapping[str, Any] | None = None
     for signal in config.get("signals", ()):
@@ -284,6 +301,7 @@ __all__ = [
     "active_selection_cells",
     "active_selection_slots",
     "campaign_member_fn",
+    "config_cell",
     "config_cell_from_json",
     "validate_registry",
 ]

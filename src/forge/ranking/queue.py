@@ -17,8 +17,8 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from forge.ranking.campaigns import config_cell
 from forge.ranking.diversifier import jaccard_signal_ids, select_top_n
-from forge.ranking.experiment_cells import config_cell
 from forge.ranking.prior_promotion import compute_prior_promotion_proximity
 from forge.ranking.types import RankedCandidate
 
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from forge.prefilters.types import PreFilterReport
     from forge.ranking.arm_floor import Arm
-    from forge.ranking.experiment_cells import ExperimentCell
+    from forge.ranking.campaigns import ExperimentCell
     from forge.ranking.scorer import Ranker
 
 
@@ -86,7 +86,6 @@ def rank_batch(
     mature_arms: AbstractSet[Arm] | None = None,
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
     gate_tail_ordering: bool = False,
-    experiment_cells: AbstractSet[ExperimentCell] | None = None,
     mature_cells: AbstractSet[ExperimentCell] | None = None,
 ) -> list[RankedCandidate]:
     """Score, diversify, and return up to `n` candidates.
@@ -144,7 +143,6 @@ def rank_batch(
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
-        experiment_cells=experiment_cells,
         mature_cells=mature_cells,
     )
 
@@ -199,7 +197,6 @@ def sample_young_cell_explore(
     rng: random.Random,
     *,
     mature_cells: AbstractSet[ExperimentCell] | None,
-    pinned_cells: AbstractSet[ExperimentCell],
 ) -> list[RankedCandidate]:
     """D316 (Theme 2d): seeded random draw of up to ``quota`` YOUNG-cell members
     from the rank-non-selected survivors.
@@ -210,7 +207,7 @@ def sample_young_cell_explore(
     uniform holdout stays a clean estimand — the ranker-vs-random A/B (prereg
     61837dd2) and the campaign-audit carriage denominator (D299) both depend on
     the holdout being an unweighted draw. Eligibility mirrors diversifier phase
-    0c: cell present, not mature, not hand-pinned. ``mature_cells is None``
+    0c: cell present, not mature. ``mature_cells is None``
     (floor flag off) or ``quota <= 0`` → inert, byte-identical. Same
     determinism contract as the holdout draw (sorted, seeded, rule #6/#8)."""
     if quota <= 0 or not pool or mature_cells is None:
@@ -218,9 +215,7 @@ def sample_young_cell_explore(
     young = [
         c
         for c in pool
-        if (cell := config_cell(c.report.config)) is not None
-        and cell not in mature_cells
-        and cell not in pinned_cells
+        if (cell := config_cell(c.report.config)) is not None and cell not in mature_cells
     ]
     if not young:
         return []
@@ -242,7 +237,6 @@ def rank_batch_with_holdout(
     mature_arms: AbstractSet[Arm] | None = None,
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
     gate_tail_ordering: bool = False,
-    experiment_cells: AbstractSet[ExperimentCell] | None = None,
     mature_cells: AbstractSet[ExperimentCell] | None = None,
 ) -> tuple[list[RankedCandidate], list[RankedCandidate]]:
     """P3.3 (B7) exploration holdout: rank-select the top ``n - holdout_n`` as usual, then draw
@@ -267,7 +261,6 @@ def rank_batch_with_holdout(
         mature_arms=mature_arms,
         verdict_scorer=verdict_scorer,
         gate_tail_ordering=gate_tail_ordering,
-        experiment_cells=experiment_cells,
         mature_cells=mature_cells,
     )
     return selected, holdout
@@ -289,7 +282,6 @@ def rank_batch_with_exploration(
     mature_arms: AbstractSet[Arm] | None = None,
     verdict_scorer: Callable[[StrategyConfig], float] | None = None,
     gate_tail_ordering: bool = False,
-    experiment_cells: AbstractSet[ExperimentCell] | None = None,
     mature_cells: AbstractSet[ExperimentCell] | None = None,
     extra_lanes: Sequence[ObjectiveLane] = (),
 ) -> tuple[
@@ -307,7 +299,7 @@ def rank_batch_with_exploration(
     short young pool never under-fills the merit lane). Draw order: merit →
     holdout (uniform, from ALL non-selected survivors — the estimand lane must
     never be conditioned on cell age) → young quota (from the remainder, young
-    cells only, pinned exempt). Both explore lanes REPLACE rank slots; total
+    cells only). Both explore lanes REPLACE rank slots; total
     stays ``<= n``. ``young_explore_n == 0`` or ``mature_cells is None`` (the
     D307 floor flag off) keeps the young lane empty and the holdout path
     byte-identical to the pre-D316 form.
@@ -376,14 +368,11 @@ def rank_batch_with_exploration(
     # Pre-draw the young quota's FEASIBLE size against the whole scored pool so
     # merit slots are only surrendered for draws that can actually happen. The
     # actual draw runs after selection/holdout over the true remainder.
-    pinned = experiment_cells or frozenset()
     if young_explore_n > 0 and mature_cells is not None:
         young_capacity = sum(
             1
             for c in scored
-            if (cell := config_cell(c.report.config)) is not None
-            and cell not in mature_cells
-            and cell not in pinned
+            if (cell := config_cell(c.report.config)) is not None and cell not in mature_cells
         )
         effective_young = min(young_explore_n, young_capacity)
     else:
@@ -395,7 +384,6 @@ def rank_batch_with_exploration(
         min_per_hypothesis=min_per_hypothesis,
         floor_exempt_hypotheses=floor_exempt_hypotheses,
         mature_arms=mature_arms,
-        experiment_cells=experiment_cells,
         mature_cells=mature_cells,
     )
     selected_hashes = {c.report.config.config_hash for c in selected}
@@ -409,7 +397,6 @@ def rank_batch_with_exploration(
             effective_young,
             young_rng,
             mature_cells=mature_cells,
-            pinned_cells=pinned,
         )
         if effective_young > 0 and young_rng is not None
         else []

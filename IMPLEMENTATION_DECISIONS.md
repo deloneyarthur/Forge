@@ -2096,3 +2096,39 @@ contract) — 419 green. Restart not required; rides the contracts-1.43.0 adopti
 ## D374 — 2026-08-06 — contracts 1.42.0 → **1.44.0** adopted (pin-only): the promote-stamp fix and the lane tag we asked for
 
 **Spec section:** §13.5 contracts pin; [[D370]]. Crucible shipped the D370 chain in the order they proposed, and the last gate was ours — our reader had to restart on ≥1.44.0 before any promote row could reach it. **1.43.0 (`284558a`) — THE STAMP FIX.** `PromotionDecision` now accepts `promote` iff the failed gates lie within the §20 recorded-not-binding set (`{'deflated_sharpe'}`); any **other** failed gate still raises, and the error now names the offenders. Verified additive-for-us by reading the diff rather than trusting the note: it is a **relaxation of a validator we only READ**, so strictly more rows parse and nothing we emit changes. This ends the D370 shadow — the pre-07-22 zero-failed-gates rule destroyed **67 stage-two would-be promotes** between 07-23 and 08-06, which is exactly why our ledger showed 4 promotes ever and **zero since 07-23**. **1.44.0 (`bcb8290`) — THE LANE TAG.** `RunResult.refit_selection: str | None = None`: `None` marks the unconditioned newest-first drain (the like-conditioned cohort marker), `'quality_margin'` the new quality sub-budget. This is our D370 §5 ask answered as a first-class field, and **they made it a FREE STRING rather than a Literal, citing the 1.24.0 vocabulary-growth lesson** — which is precisely the [[D261]]/[[D342]] hazard: `parse_forward_compatible` does **not** cover enum values, so a new Literal member would have hard-failed our registry reader on arrival. Optional with a `None` default, so pre-1.44 rows still validate. **THE TWO-LANE SPLIT IS LIVE ON THEIR SIDE:** quality sub-budget of `limit // 5` (8 of 40) ranked by margin over **both** promotion bars with a −0.3 floor set from the measured crashed-parent range; the remainder stays newest-first and **unstamped**, so the absence of the tag is the like-conditioned cohort marker — which preserves the version-delta yardstick that produced our v55 read, the methodological cost they correctly raised and we would have missed. **THE LANE ALREADY PROVED THE FINDING:** their 17:10 timer tick beat the hold drop-in by 43 seconds and ran one quality pass under the old runner code. Its 8 picks were **precisely the passed-over elite dual-clearers** our D368 relay identified; **7 gated as honest components immediately** and 1 computed promote and crashed at the old stamp — a **12.5% elite promote rate**, consistent with their 2-of-11 estimate and ~280× the 0.06% lane base rate. Damage bounded to one burned attempt, recovered by the requeue driver. **Deploy:** preflight **2,155 passed / 1 skipped**, stop → commit → restart, then ack by relay (they are monitoring the relay directory). **WATCH, carried from D370:** the requeue of the crash cohort will arrive as a **burst of promote verdicts** — a basis boundary of the same class as the tail-OFF unit change and the designation flip. Their requeue driver prints the exact queue-time bounds and they will relay them; record that timestamp and split any version-delta or learned-weight series that spans it.
+
+## D374 — 2026-08-06 — E3: the D287 experiment-cell hand-pin reservation REMOVED (provably a no-op since D305); `config_cell` moves home to the campaign registry
+
+**Spec section:** §6.3 diversifier. Classification: dead-machinery removal, **behavior-identical
+by construction** — `EXPERIMENT_CELLS` has derived `frozenset()` since the resid×vix campaign
+retired (D305), so phase 0b reserved nothing, the young-capacity pinned-exemption excluded
+nothing, and the `experiment_cell_floor:` journal line printed an empty dict.
+**Removed:** `ranking/experiment_cells.py` (the derive shim); `diversifier._reserve_experiment_cells`
++ phase 0b + the `experiment_cells`/`experiment_cell_slots` parameter threading
+(diversifier/queue ×3 signatures); `sample_young_cell_explore`'s `pinned_cells` exemption;
+`main.py`'s kwarg + journal block; the 6 D287 reservation tests + the pinned-skip/pinned-excluded
+tests (they test deleted machinery — unlike grammar retirement guards, there is no silent
+re-admission path for a deleted function).
+**Moved, not deleted:** `config_cell` (the model-based cell extractor) → `ranking/campaigns.py`,
+beside its dict-shaped twin `config_cell_from_json`; the mirror-equality test stays (both now in
+one module — the D305-noted duplication resolved). `campaigns.py`, `campaign_audit.py`,
+`cell_floor.py` and the young-cell floor are UNTOUCHED; `active_selection_cells` remains the
+wiring point if a future farming campaign needs a selection floor again (own D-entry).
+**Docs same-commit:** MANPAGE knob block + campaigns-list note; architecture ranking breakdown.
+**Verification:** ruff + `mypy --strict` clean; `test_ranking` + `test_cli` + `tests/invariants`
+green (505 + 601-suite runs; the 4 initial failures were the young-explore tests passing the
+removed kwarg — rewired). Restart not required; rides the contracts-1.43.0 adoption window.
+
+## D375 — 2026-08-06 — E4 DECLINED: the "retired tail-clock display plumbing" is a WAITING instrument, not dead code
+
+**The proposed cut** (repo-simplification Step E4 / audit item): `_TAIL_SPEARMAN_DELTA_CRITERION`
++ the paired-delta display path in `ranker_model_cmd.py`, flagged "RETIRED (D285), DISPLAY-only."
+**Why it survives review:** D285 retired the §8.6 STREAK and its SPRT flip gate because the
+paired incumbent column became self-referential after the gate-tail flip — but the same D285
+note (and `status_cmd.py`'s header) says the paired read resumes **once D284 hygiene-incumbent
+rows accrue**, and D284 recording went live 2026-07-16 (200/200 non-NULL from the first batch).
+Deleting the paired-delta path now would destroy the instrument D284 exists to feed, days
+before it becomes readable. `sequential_test.py` likewise serves the LIVE rewire clock
+(`status_cmd.rewire_flip_gate`), not only the retired tail streak. **This is the D361 class —
+a plausible cut whose axis check fails — caught before the cut this time.** Re-propose only
+after the hygiene-incumbent read is taken and judged.

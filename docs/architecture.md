@@ -61,10 +61,10 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
   D193; kill-switch `FORGE_QUALITY_RANKER`). Both fill only the prior term.
 - Learned-audit guards: `calibration.py` (Platt recalibration), `drift.py` (input-drift +
   model-adoption), `sequential_test.py` (SPRT flip/streak gate).
-- Campaigns + floors: `campaigns.py` (D299 registry — discover→concentrate→farm);
-  `experiment_cells.py` DERIVES the D287 selection-cell floor from farming campaigns (pin set
-  currently EMPTY, D305); `campaign_audit.py` (ranked-vs-holdout carriage detector);
-  `cell_floor.py` (young-cell floor, `FORGE_YOUNG_CELL_FLOOR`, D307).
+- Campaigns + floors: `campaigns.py` (D299 registry — discover→concentrate→farm; also owns the
+  `config_cell` extractor pair); `campaign_audit.py` (ranked-vs-holdout carriage detector);
+  `cell_floor.py` (young-cell floor, `FORGE_YOUNG_CELL_FLOOR`, D307). The D287 hand-pin
+  reservation machinery was removed 2026-08-06 (D374; pin set empty since D305).
 - Telemetry: `regime_supply.py` (D144 journal line; never reshapes a batch); `signal_key.py`
   (contracts re-export).
 

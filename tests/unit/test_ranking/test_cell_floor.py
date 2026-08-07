@@ -5,8 +5,8 @@ The D287 lesson generalized: a (directional, regime) CELL can be starved at
 selection even when both of its arms are individually mature (vix_term_slope
 matured within days of v27, so the D136 arm floor could not scope to the
 resid x vix PAIR — it took a hand pin). This floor makes any cell younger
-than K honest-era verdicts floor-eligible automatically; hand-pinned campaign
-cells (experiment_cells) become the override, not the mechanism.
+than K honest-era verdicts floor-eligible automatically. (The hand-pin
+override phase was removed 2026-08-06 — pin set empty since D305.)
 
 Flag-gated OFF in production (`FORGE_YOUNG_CELL_FLOOR`); `mature_cells=None`
 keeps every path byte-identical — the deploy window flips the env.
@@ -212,37 +212,6 @@ def test_mature_cells_get_no_reservation() -> None:
     selected = select_top_n(candidates, 2, mature_cells=mature)
     names = [c.report.config.name for c in selected]
     assert names == ["hi", "other"]  # pure merit — no floor fired
-
-
-def test_pinned_experiment_cells_skip_the_young_floor() -> None:
-    """A hand-pinned campaign cell is served by phase 0b at its OWN slot count;
-    phase 0c must not double-reserve it."""
-    pinned_cell = ("residual_momentum", "vix_term_slope")
-    candidates = [
-        _candidate(f"m{i}", directional="rsi_2", regime="iv_rank", composite_score=0.9 - i * 0.01)
-        for i in range(6)
-    ] + [
-        _candidate(
-            f"p{i}", directional="residual_momentum", regime="vix_term_slope", composite_score=0.0
-        )
-        for i in range(4)
-    ]
-    mature = frozenset({("rsi_2", "iv_rank")})
-    # Pinned via experiment_cells at 1 slot. If 0c failed to skip the pinned
-    # cell it would top the cell up to cell_floor_slots=2 (cap 3 leaves room);
-    # n=7 = 1 pinned + 6 merit, so the fill phase never reaches the pinned
-    # pool on its own.
-    selected = select_top_n(
-        candidates,
-        7,
-        mature_cells=mature,
-        experiment_cells=frozenset({pinned_cell}),
-        experiment_cell_slots=1,
-        cell_floor_slots=2,
-        cell_floor_batch_fraction=0.5,
-    )
-    pinned_members = [c for c in selected if c.report.config.name.startswith("p")]
-    assert len(pinned_members) == 1  # 0b's single slot; 0c skipped the pinned cell
 
 
 def test_cell_floor_cap_bounds_reservations() -> None:
