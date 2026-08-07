@@ -2059,3 +2059,17 @@ not a numbering race. Restored VERBATIM (entry + its 07-06 addendum) into
 blockquote; the slice header now reads 100 entries. Lesson for the D-number-race family: a
 ledger conflict resolved "theirs" can silently drop an entry — after any ledger-conflict
 merge, grep the merged file for the entry you just inserted.
+
+## D372 — 2026-08-06 — E1: `winner_prior.py` DELETED (the v50 winner-neighborhood prototype) — repo-simplification Step E, operator "Let's do 1-4"
+
+**Spec section:** none (never reached the spec). Classification: dead-code removal; no behavior
+change (nothing imported it — its gating flag `FORGE_WINNER_PRIOR` was never created).
+**Evidence of death:** single-commit history (`e298f67`, "PROTOTYPE — offline only"); prereg
+`916d79109b4d` resolved **refuted** ("WITHDRAWN-AS-MISCALIBRATED, not tested");
+`docs/proposals/v50-winner-neighborhood-priors.md` records the programme PARKED; its three
+driver scripts were already retired in Step C. **Removed:** `src/forge/ranking/winner_prior.py`
+(352 LOC) + `tests/unit/test_ranking/test_winner_prior.py`. The proposal doc stays (code-cited
+design record) and notes the instruments' retirement. Revert = `git revert`; re-parking the
+programme later starts from the proposal, not from dead code in the tree.
+**Verification:** `tests/unit/test_ranking` green post-delete; `forge.cli.main` imports clean.
+Restart NOT required (dead code); rides the pending contracts-1.43.0 adoption window.
