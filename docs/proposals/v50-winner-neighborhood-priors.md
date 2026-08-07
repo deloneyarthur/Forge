@@ -1,4 +1,5 @@
 # v50 Winner-Neighborhood Priors — a param-level generation prior seeded at honest gate-passers
+> **Instruments retired 2026-08-06** (repo-simplification Step C; recoverable from git history): `winner_prior_signal_probe.py`, `winner_prior_shadow.py`, `winner_prior_stage_one.py`, `target_sweep.py`. The programme itself remains PARKED; `src/forge/ranking/winner_prior.py` removal is a separate operator-gated tranche (Step E1).
 
 > **STATUS (2026-07-24): SCOPING / ready-to-prototype.** The one generation lever
 > that needs no Crucible data and reuses the live sampler weighting framework, so

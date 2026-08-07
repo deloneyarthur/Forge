@@ -747,8 +747,9 @@ _MAX_PREFILTER_SAMPLE_N = 350
 # ranker (threshold 0.0, admits 100% of stage two — their correction; it is not a gate), and
 # on the honest ARM it is ~ORTHOGONAL to the metric that does gate: sp(cpcv_p25, wf_p25) =
 # +0.031, versus +0.39 on the ranker-selected pool — a SELECTION ARTIFACT. Measured
-# consequence (scripts/target_sweep.py Run C: train on non-honest rows, rank the unseen
-# honest arm): ordering by wf_p25 lifts realized cpcv +0.009 (i.e. baseline), by cpcv +0.178.
+# consequence (target_sweep.py Run C — script retired 2026-08-06, git history: train on
+# non-honest rows, rank the unseen honest arm): ordering by wf_p25 lifts realized cpcv
+# +0.009 (i.e. baseline), by cpcv +0.178.
 # Endorsed by Crucible. The trainer publishes BOTH targets (daily_ranker_eval.sh), so
 # reverting is this one constant with no gap in either artifact.
 # SINGLE SOURCE OF TRUTH: the journal labels derive from this too. The first v50 batch logged
