@@ -1,10 +1,13 @@
 # Repo simplification — reduce surface, reduce context, protect production
 
-**Status:** Steps 0–C **EXECUTED 2026-08-06** (operator "let's attack the plan"; D371, commits
-`e56cff1`→`88c7df0`; §3.5 drift banner `9afe042` awaiting operator review). Steps D–F remain
-operator-gated: D = unit-file comment move, E = src dead-code tranches (E1 `winner_prior.py`
-is ready to go), F = post-freeze retirement. Regrowth rule §4.3 (STATUS block length) awaits
-the operator's word. This file archives when D–F land or are declined.
+**Status:** Steps 0–C **EXECUTED 2026-08-06** (D371, commits `e56cff1`→`88c7df0`; §3.5 drift
+banner `9afe042` awaiting operator review). Step E tranches 1–4 **RESOLVED 2026-08-06**
+(operator "Let's do 1-4"): E1 winner_prior deleted (D372), E2 alpha-budget retired (D373),
+E3 D287 reservation removed (D374), E4 **declined** (D375 — waiting instrument, not dead
+code); restart deferred to the contracts-1.43.0 adoption window. Remaining: Step D (unit-file
+comment move), E5–E7 decisions (arm-B plumbing / young_explore flip-or-remove / Q44 tables),
+Step F (post-freeze retirement), regrowth rule §4.3. This file archives when the remainder
+lands or is declined.
 **Trigger:** operator, 2026-08-06: *"AI is making a lot of mistakes, I think our repo is too
 expansive. Reduce and simplify as much as possible without affecting production; reduce the
 amount of context needed to understand the repo."*
