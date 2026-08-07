@@ -2049,3 +2049,13 @@ tranche (D244/D245 restart sequencing), deliberately NOT smuggled in here (`uv.l
 et al.), F (post-freeze retirement per `fable-audit/code-complete-retirement/REPORT.md`) —
 operator-gated. Q62 triage owed. Regrowth rule #3 (STATUS blocks ≤ ~10 lines, narrative in the
 D-entry) is a PROPOSAL awaiting the operator; this entry ironically demonstrates the need.
+
+**↳ 2026-08-06 (later) — D236 BACKFILLED (operator: "write the D that's free").** The
+rotation's "never written" conclusion was WRONG: D236 was written on the `v23-trend-grammar`
+branch (`ade3344`/`7813595`), reserved by D237's own note, and silently lost when the branch's
+second ledger-conflict re-merge (`2f2748f`) resolved to main's side — a merge-conflict loss,
+not a numbering race. Restored VERBATIM (entry + its 07-06 addendum) into
+`_archive/IMPLEMENTATION_DECISIONS_D201-D300.md` in chronological position with a provenance
+blockquote; the slice header now reads 100 entries. Lesson for the D-number-race family: a
+ledger conflict resolved "theirs" can silently drop an entry — after any ledger-conflict
+merge, grep the merged file for the entry you just inserted.
