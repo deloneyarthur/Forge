@@ -5,8 +5,8 @@ banner `9afe042` awaiting operator review). Step E tranches 1–4 **RESOLVED 202
 (operator "Let's do 1-4"): E1 winner_prior deleted (D372), E2 alpha-budget retired (D373),
 E3 D287 reservation removed (D376), E4 **declined** (D377 — waiting instrument, not dead
 code); restart deferred to the contracts-adoption restart window (the pin moved 1.42.0→1.44.0 mid-session, their D374; restart still pending). Remaining: Step D (unit-file
-comment move), E5–E7 decisions (arm-B plumbing / young_explore flip-or-remove / Q44 tables),
-Step F (post-freeze retirement), regrowth rule §4.3. This file archives when the remainder
+comment move), E5/E7 decisions (arm-B plumbing — verified unused by the freeze work; Q44
+tables; **E6 young_explore REMOVED, D379**), Step F (post-freeze retirement), regrowth rule §4.3. This file archives when the remainder
 lands or is declined.
 **Trigger:** operator, 2026-08-06: *"AI is making a lot of mistakes, I think our repo is too
 expansive. Reduce and simplify as much as possible without affecting production; reduce the
