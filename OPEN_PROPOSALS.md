@@ -1174,3 +1174,27 @@ decided_by: 'operator-directed decline, 2026-08-02 (D349) -- WRONG THREE WAYS, a
   the last 14 days despite three new books, against 60,372 `component`. So `promoted_count`
   stays 0 per batch and the guard holds. No code change needed.'
 decision_marker: null
+---
+proposal_id: 8d1caa75-1e49-4df0-813a-0a46719b4d0d
+status: PENDING
+proposed_at: '2026-08-07T05:47:53.706283+00:00'
+proposal_type: tighten
+target: prefilter_calibration
+rationale: 239 of all rejected candidates failed `deflated_sharpe` (100%); propose
+  tightening the pre-filter that catches this earlier.
+evidence:
+  trigger: gate_failure_concentration
+  target: deflated_sharpe
+  failure_count: 239
+  failure_rate: 1.0
+  sample_size: 239
+  confidence: 0.8042499999999999
+  counterfactual_rejection_rate: 1.0
+  counterfactual_promoted_count: 1
+  counterfactual_phase: 1_binary_safety_floor
+  counterfactual_note: 'phase-1 binary safety floor: rejection_rate is a worst-case
+    assumption (1.0 if any recent promotion, 0.0 otherwise), not a per-strategy measurement.
+    Implements draft Enhancement 8 phase 1.'
+proposal_yaml: |
+  # Proposed tightening — pre-filter for deflated_sharpe
+  # Triggered by failure_rate=1.00
