@@ -101,6 +101,51 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
 - Post-D105, the sampler is weighted — condition scans on the live weights (no more
   quasi-randomization).
 
+## Refit-lane cohorts (`verdicts.refit_selection`) — the skim trap
+
+From **2026-08-06 17:10 PDT** Crucible's stage-two scanner runs two lanes: a reserved quality
+sub-budget ranked by margin over both promotion bars, and the newest-first drain. The tag names
+which one queued the refit, so **the untagged cohort is TOP-DEPLETED from that moment onward,
+permanently** — the quality lane skims exactly the rows that used to sit at the top of it.
+
+Measured on our own rows (stage two, post-boundary):
+
+| cohort | n | medCPCV | promotes |
+|---|--:|--:|--:|
+| untagged (drain) | 1,887 | +0.5101 | 23 |
+| `quality_margin` | 24 | **+1.3374** | 4 |
+
+**The rule (Crucible's, adopted):**
+
+- **Within-era** (both cohorts post-boundary): filter to untagged. Like-conditioned, clean.
+- **Cross-boundary** (any pre-2026-08-06 cohort — which includes *every* v55-vs-vNext read):
+  use the **UNION of untagged + `quality_margin`** per version. The two lanes partition one
+  eligible population; the union is what stage two actually measured and the only thing
+  commensurable with pre-boundary rows. Untagged-only costs the newer version ~0.10 medCPCV
+  **by construction** — the size of a real version delta, in the direction that flatters a freeze.
+- **`promote_stamp_recovery` is excluded from BOTH**, always. It is a one-shot selected batch,
+  not a lane.
+
+**AND ONE THAT IS OURS ALONE — the recovery batch is invisible to the tag in our mirror.** Our
+23 recovery rows were ingested minutes *before* the `refit_selection` column shipped (D375) and the
+writer is `INSERT OR IGNORE`, so they carry **NULL, not `'promote_stamp_recovery'`**. A naive
+`refit_selection IS NULL` filter therefore *includes* them:
+
+```
+untagged as-is                  n=1,887  medCPCV +0.5101  promotes 23
+  of which recovery-window      n=   14  medCPCV +1.5777  promotes  8
+untagged MINUS recovery window  n=1,873  medCPCV +0.5081  promotes 15
+```
+
+0.7% of the rows, **35% of the promotes**. Median-based reads barely notice; **promote-rate reads
+inflate by 53%**. So on our side the exclusion must be done by time, not tag:
+
+```sql
+AND decided_at NOT BETWEEN '2026-08-07 00:32:40' AND '2026-08-07 00:33:15'
+```
+
+Rows from our next reconcile forward are correctly tagged; this applies only to that one batch.
+
 ## Benign signals — do not "fix" these
 
 - `blocked: prev batch N% gated` — the §7.3 limiter doing its job (Crucible backpressure).
