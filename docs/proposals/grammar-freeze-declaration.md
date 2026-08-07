@@ -1,7 +1,14 @@
 # Grammar freeze — DECLARATION (DRAFT, awaiting operator)
 
-**Status:** DRAFT. All three conditions of `grammar-freeze-criterion.md` are MET as of
-2026-08-06. Declaring the freeze is the operator's act, not this document's.
+**Status: ⚠️ DO NOT SIGN — (C) HAS BEEN FALSIFIED BY ITS OWN INSTRUMENT (2026-08-06).**
+All three conditions were MET when this was drafted. Within three days of (C)'s registered read the
+composition-standardised TCM broke out of its plateau by **+0.1532 — six times the 0.0242 bar it
+was judged against** — and `P(cpcv ≥ 1.0)` per window went from a 2–8 baseline to 29. Checked
+against the failure that voided the ORIGINAL (C): **not composition** — raw and standardised track
+within ±0.005 and the cell mix barely moves. The 08-03 read was correct on its data; the world
+changed after it. Prereg **`74dbbaee89c7`** now tests whether the new level persists (leg A) and
+whether the ceiling is still climbing (leg B), reading ~2026-08-10. **The freeze decision waits on
+that read.** Everything below stands as the record of what was true on 08-06, with §4 corrected.
 **Programme:** D328 → D367. **Grammar at declaration:** v55.
 **Relates to:** `docs/proposals/grammar-freeze-criterion.md` (the criterion this reads against),
 `IMPLEMENTATION_DECISIONS.md` D328–D367, `INDEX_forge_answered.md` (Crucible-side agreements).
@@ -81,13 +88,16 @@ measured promotion potential.
 
 This section is load-bearing. Every item is a measured limit, not a hedge.
 
-**(C) was read during a capacity squeeze that has since been fixed.** Stage two was covering
-**25% of eligible supply** at read time, against ~110% pre-flood. Crucible has since raised
-`scan_and_queue --limit` 20 → 40, roughly doubling the drain to ~5,760 refits/day. Both sides
-agreed in writing that (C) **must not be cited as exhaustion**. The condition is met exactly as
-specified, and the specification was honest — but the ceiling was measured under conditions that
-no longer apply, and *"the grammar stopped improving"* versus *"we could not measure a grammar
-improvement"* were genuinely entangled in that window.
+**~~(C) was read during a capacity squeeze~~ — THIS CAVEAT WAS WRONG AND IS WITHDRAWN (2026-08-06).**
+We wrote, and Crucible endorsed, that (C) was read at 25% eligible stage-two coverage and that
+*"the grammar stopped improving"* versus *"we could not measure a grammar improvement"* were
+entangled. **Neither side checked whether (C)'s basis touches stage two. It does not.** Both legs
+read **stage-one** cpcv distributions on the honest arm; the capacity raise, the two-lane refit
+split and the promote-stamp validator are all **stage two**. Measured: `P(cpcv|submitted)` on the
+honest arm runs 63.7 / 62.9 / 65.2 / 65.5 / 64.1 / **72.6 / 73.0 / 71.5** across 07-30→08-06 — the
+one step is at **08-04, our own ve-floor retirement**, not at 08-06 where their fixes landed. A
+caveat agreed in writing by both sides, unchecked by both, and withdrawn here rather than left
+standing.
 
 **Both (C) legs are arithmetically blind to a top-1%-only lift.** They sit at rank ~120-from-top
 in a 1,200-row window; promotion-grade events sit at rank ~0.4–5. `P(cpcv ≥ 1.0)` is carried as a
