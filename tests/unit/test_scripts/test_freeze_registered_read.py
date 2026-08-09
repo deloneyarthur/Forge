@@ -133,9 +133,27 @@ def test_persistence_constants_match_the_prereg_registry() -> None:
         row = rows[leg.prereg_id]
         text = row["claim"] + row["predicted"]
         assert f"{leg.threshold:.4f}" in text, f"{leg.prereg_id}: threshold not in its own record"
-        assert row["status"] == "registered", "reading a prereg that is already resolved"
     assert (_LEG_A.n_prior, _LEG_A.threshold, _LEG_A.agg) == (23, 0.7877, "min")
     assert (_LEG_B.n_prior, _LEG_B.threshold, _LEG_B.agg) == (23, 0.9409, "max")
+
+
+def test_the_single_read_rule_is_enforced_against_the_registry_not_memory(tmp_path) -> None:
+    """The guard must key on STATUS, not on a snapshot of it.
+
+    An earlier version of this test asserted the live registry still said 'registered' — which
+    was true when written and false the instant the read resolved it, i.e. a test that passes
+    only until the script is used for its purpose. What is durable is the SCRIPT's behaviour:
+    reading a prereg the registry has already resolved must abort.
+    """
+    reg = tmp_path / "preregistrations.jsonl"
+    reg.write_text(
+        '{"prereg_id": "aaaa11112222", "status": "registered"}\n'
+        '{"prereg_id": "bbbb33334444", "status": "confirmed"}\n',
+        encoding="utf-8",
+    )
+    assert frr._registry_status("aaaa11112222", path=reg) == "registered"
+    assert frr._registry_status("bbbb33334444", path=reg) == "confirmed"
+    assert frr._registry_status("cccc55556666", path=reg) is None, "unknown id must not read"
 
 
 def test_both_persistence_legs_read_windows_24_to_29_and_ignore_a_thirtieth(capsys) -> None:

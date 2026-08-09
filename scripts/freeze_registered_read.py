@@ -203,10 +203,12 @@ def _read(leg: RegisteredLeg, series: list[float]) -> bool:
     return True
 
 
-def _registry_status(prereg_id: str) -> str | None:
+_REGISTRY = Path(__file__).resolve().parent.parent / "config" / "preregistrations.jsonl"
+
+
+def _registry_status(prereg_id: str, path: Path = _REGISTRY) -> str | None:
     """A prereg that is already resolved must not be read a second time -- that is the
     'single read' rule enforced against the record rather than against memory."""
-    path = Path(__file__).resolve().parent.parent / "config" / "preregistrations.jsonl"
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
