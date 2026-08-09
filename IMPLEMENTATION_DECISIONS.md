@@ -2182,3 +2182,73 @@ post-commit; see STATUS.
 ## D383 — 2026-08-08 — QuantIQ's D491 verdict: FAIL, accepted without appeal; and our −0.043 should never have been their bar
 
 **Spec section:** cross-system; QuantIQ D491/D493; the 2026-08-05 equities close-out. **VERDICT ACCEPTED, no appeal.** The PTS package Forge proposed is **not adopted**, the live config is unchanged, and the event is closed under the one-event-then-stop clause we ourselves supplied. **Criterion iv is the correct kill and it fired on our own disclosure:** the k-grid reads −0.0035 / **+0.3722** / +0.0857 / −0.0498 across k1.5→k3.0, so the improvement exists only at the selected parameter. We had flagged the right-side cliff as "the strongest argument for YOUR walk-forward before adoption"; that sentence is why criterion iv existed, and criterion iv is what killed it. **THE REPLICATION IS THE PART WORTH KEEPING:** independent codebases, **excess 1.2243 vs our 1.1837 and maxDD −3.89% vs our −3.91%** at the same k, with the earnings-rule mechanism transporting cleanly (46 forced exits on their sim vs our 54, majority profitable both). That is about as strong as cross-implementation agreement gets. **THEIR ONE QUESTION — the provenance of our −0.043 tail-decorrelation number, which they imported as criterion iii's bar. ANSWERED AS FAR AS OUR RECORDS ALLOW, and no further.** Pinned from the shipped artifact (`FORGE_ARTIFACT_pts_replica_curve_2011pts_2026-08-05.json`): window **2018-01-03 → 2025-12-31, 2,010 overlap days**, full-sample corr 0.1647, own-base returns `r_opt_t`/`r_pts_t` combined into fixed dollar sleeves (S_OPT 18,000 / S_PTS 7,406.52 / NAV 25,406.52), conditioned on the **options book's own** worst-5% days. **TWO OF THEIR THREE CANDIDATE GAPS ARE ELIMINABLE WITHOUT DATA:** own-base vs NAV-base, and the $18k-vs-$19k sleeve, **both leave a correlation unchanged** — Pearson is invariant under positive linear scaling and the sleeve transform is exactly that. So the gap is not a units mismatch. **Live candidates, ranked:** (a) **a different options book** — the designation flipped `aa31532489613849` → `f52a05c8968bdc7a` on 2026-08-01, four days before we measured, and [[D357]] measured that exact class of substitution moving a book-referenced statistic by **−0.0458, 2.6× that leg's decision bar**, despite +0.9531 rank agreement; a tail-conditional correlation is far more fragile than a level. (b) conditioning on **blended-NAV** worst days rather than the options book's — which, unlike scaling, genuinely depends on the sleeve weights. **WE CANNOT RECOMPUTE IT and said so plainly:** Forge holds no options-book daily equity curves (our exports carry configs, weights and correlations, never curves), so the options series behind that number is an input no longer on disk. Reverse-engineering a plausible match and calling it provenance was the alternative and was declined. **THE MORE USEFUL FINDING IS OURS.** A single number from a close-out relay became a *threshold* in another system's pre-registered criteria, and neither side stated or checked the curve it was measured against. Their result exposes it: the **BASELINE reads +0.1994 and fails the bar too**, while the candidate *improves* the property to +0.1467 — a bar the incumbent cannot clear is not a bar. **This is the second instance in one day.** The first was ours with Crucible in the opposite direction: we wrote and they endorsed a caveat that freeze condition (C) was "read during a capacity squeeze", and neither side checked whether (C)'s basis touched stage two at all — withdrawn the same morning ([[D380]]). **Transferable, and proposed to QuantIQ as a standing row in the interface-model document:** the interface risk is not only "what does this FIELD mean" but **"what was this NUMBER measured against, and is it commensurable with the use you are about to put it to."** Nothing hinges on it for D491 — criterion iv fails independently.
+
+## D384 — Prereg `74dbbaee89c7` READ ONCE at registered n: the ceiling took a **one-time level shift and re-plateaued**. Leg A CONFIRMED, leg B REFUTED. The freeze survives — its evidence base does not.
+
+**Date:** 2026-08-09 · **Class:** measurement (registered read) · **Grammar:** v55, untouched
+
+### The read
+
+Taken at the registered count and only then: **29 complete n=1200 windows, n=34,839** honest-arm
+stage-one rows carrying a cpcv (`selection_mode='prefilter_sample'`, `measurement_basis IS
+DISTINCT FROM 'fullhist_refit'`). Reference book basis fingerprint `ae47a4749c9d` verified before
+reading; corr join 87.6%.
+
+```
+windows 24-29 standardised TCM   0.8759  0.8971  0.8889  0.8675  0.8918  0.8751
+
+LEG A  persistence    min 0.8675  vs registered 0.7877  = +0.0798   CONFIRMED
+LEG B  continued rise max 0.8971  vs registered 0.9409  = -0.0438   REFUTED
+```
+
+Per the registered decision rule, A-confirmed + B-refuted is **ONE-TIME LEVEL SHIFT**: the plateau
+moved from ~0.75 to ~0.88 (+0.13) and settled. The floor of the new regime clears the old ceiling
+by 3.0× the bar, and not one of the six windows reached even the pre-read peak of 0.9145 — so
+window 23 was the top of the excursion, not a waypoint on a climb.
+
+### Why the thresholds were literals
+
+Both comparison values were fixed at registration and used verbatim. Running the exploratory
+instrument today would still report "flat within the drift floor", because it refits `b` over a
+series that now contains the break and inflates `2·b_up` to 0.0965 — the D357/D358 defect in a new
+costume. The registered read computes none of its own constants; that is the entire reason it is a
+separate script from `freeze_tail_reading.py`.
+
+### What the two legs each buy
+
+- **Leg B refuting is what keeps a freeze coherent.** A still-climbing ceiling would have meant
+  demonstrable headroom and the freeze would be wrong on the merits. It is not climbing.
+- **Leg A confirming is what invalidates the declaration's evidence.** (C) certified flatness at a
+  level the stream has since left. The declaration is not wrong about *flatness*; it is stale about
+  *where*. Signing it now would freeze against a plateau that no longer exists.
+
+### Consequences
+
+1. `docs/proposals/grammar-freeze-declaration.md` header updated: **DO NOT SIGN AS WRITTEN**,
+   re-baseline required. The (C) block in §2 is now explicitly a record of the old level.
+2. **Re-baselining is the next measurement**, not a decision: a fresh (C) registered against the
+   post-break level with its drift floor refit on **post-break windows only**. We have six. The
+   prior fit degenerated to `b=0.0000` on 17 windows, which is "cannot resolve drift", so the
+   window budget for a non-degenerate refit is the open design question — not something to settle
+   by reusing the old 2·sd fallback without saying so.
+3. **Attribution is NOT decided by this read** and must not be inferred from it. v55 (08-03 02:27Z)
+   and the D216 ve-floor retirement (08-04 02:27Z) are one day apart and mutually confounded; the
+   ve-floor change is larger and more plausible but that is an argument, not a measurement.
+
+### Instrument change (TDD, red first)
+
+`scripts/freeze_registered_read.py` gained `PersistenceLeg` / `_read_persistence` rather than
+reusing `RegisteredLeg`. Three structural differences made sharing unsafe: both legs read the
+**same** six windows; leg A aggregates with **min** because it tests a floor; and **CONFIRMED here
+means the prediction held**, the opposite polarity from the (C) legs where clearing the bar means
+falsified. Reusing `_read` would have silently inverted leg A. Added `--read {c,persistence}` plus
+a registry-status guard that **aborts on any prereg not marked `registered`**, so the single-read
+rule is enforced against the record rather than against memory. 16 tests, ruff + format clean.
+
+### A note on the record
+
+The registry's outcome token is one of three and cannot express a two-leg split. It reads
+`confirmed` because leg A held; **leg B is REFUTED** and the evidence string says so in its first
+line. `confirmed` is the less dangerous of the two available tokens: a bare `refuted` would read as
+"the break was transient and the 08-03 reading stands", which is the registered meaning of a leg-A
+refutation and the precise opposite of what happened.

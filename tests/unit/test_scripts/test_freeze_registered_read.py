@@ -108,3 +108,77 @@ def test_the_falsifier_fires_above_the_bar_and_only_above_it(capsys) -> None:
         # Falling is never a falsification for either leg.
         frr._read(leg, _series(leg.last_new, leg.baseline - 10.0))
         assert "CONFIRMED" in capsys.readouterr().out
+
+
+# --- prereg 74dbbaee89c7 (post-break persistence) -------------------------------------------
+#
+# Structurally different from the (C) legs and the differences are the whole point:
+#   * both legs read the SAME six windows (24-29), not offset slices;
+#   * leg A aggregates with MIN, not MAX -- it asks whether the floor held, so one bad window
+#     refutes it no matter how good the other five are;
+#   * CONFIRMED means "the registered prediction held", not "the ceiling is flat". Reusing the
+#     (C) legs' FALSIFIED-above-bar wiring here would inverse the reading of leg A.
+
+
+_LEG_A, _LEG_B = frr._PERSISTENCE_LEGS
+
+
+def test_persistence_constants_match_the_prereg_registry() -> None:
+    rows = {
+        json.loads(line)["prereg_id"]: json.loads(line)
+        for line in (_ROOT / "config" / "preregistrations.jsonl").read_text().splitlines()
+        if line.strip()
+    }
+    for leg in frr._PERSISTENCE_LEGS:
+        row = rows[leg.prereg_id]
+        text = row["claim"] + row["predicted"]
+        assert f"{leg.threshold:.4f}" in text, f"{leg.prereg_id}: threshold not in its own record"
+        assert row["status"] == "registered", "reading a prereg that is already resolved"
+    assert (_LEG_A.n_prior, _LEG_A.threshold, _LEG_A.agg) == (23, 0.7877, "min")
+    assert (_LEG_B.n_prior, _LEG_B.threshold, _LEG_B.agg) == (23, 0.9409, "max")
+
+
+def test_both_persistence_legs_read_windows_24_to_29_and_ignore_a_thirtieth(capsys) -> None:
+    ser = [float(i) for i in range(1, 31)]
+    for leg in frr._PERSISTENCE_LEGS:
+        frr._read_persistence(leg, ser)
+        out = capsys.readouterr().out
+        assert "24.0000 25.0000 26.0000 27.0000 28.0000 29.0000" in out
+        assert "30.0000" not in out, "window 30 leaked into the registered slice"
+
+
+def test_leg_a_is_refuted_by_a_single_low_window(capsys) -> None:
+    """MIN, not MAX: the floor is what leg A tests, so one dip below it is decisive."""
+    ser = _series(29, 0.95)
+    ser[26] = 0.7877 - 1e-4  # window 27 alone
+    frr._read_persistence(_LEG_A, ser)
+    assert "REFUTED" in capsys.readouterr().out
+
+    ser[26] = 0.7877 + 1e-4
+    frr._read_persistence(_LEG_A, ser)
+    assert "CONFIRMED" in capsys.readouterr().out
+
+
+def test_leg_b_needs_one_window_above_its_threshold(capsys) -> None:
+    ser = _series(29, 0.90)
+    frr._read_persistence(_LEG_B, ser)
+    assert "REFUTED" in capsys.readouterr().out
+
+    ser[28] = 0.9409 + 1e-4
+    frr._read_persistence(_LEG_B, ser)
+    assert "CONFIRMED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("have", [0, 23, 28])
+def test_a_short_persistence_series_refuses(capsys, have: int) -> None:
+    assert frr._read_persistence(_LEG_A, _series(have, 0.95)) is False
+    out = capsys.readouterr().out
+    assert "NOT READABLE" in out
+    assert "CONFIRMED" not in out
+
+
+def test_a_nan_in_a_persistence_window_refuses(capsys) -> None:
+    ser = _series(29, 0.95)
+    ser[28] = math.nan
+    assert frr._read_persistence(_LEG_A, ser) is False
+    assert "NOT READABLE" in capsys.readouterr().out

@@ -24,13 +24,22 @@ seeing the data is the same defect as moving the bar. If fewer than the register
 accrued, this refuses to read at all rather than reporting a partial result -- an early read
 that happens to pass is indistinguishable from peeking-to-threshold.
 
-Usage: freeze_registered_read.py SNAPSHOT.db
+Prereg 74dbbaee89c7 (`--read persistence`) is the follow-on and is shaped differently: both its
+legs read the SAME six windows 24-29, leg A aggregates with `min` because it tests a floor, and
+CONFIRMED there means the registered prediction HELD -- the opposite polarity from the (C) legs.
+See `PersistenceLeg`.
+
+Reading a prereg whose registry status is no longer 'registered' aborts, so the single-read rule
+is enforced against the record rather than against anyone's memory of having read it.
+
+Usage: freeze_registered_read.py SNAPSHOT.db --read {c,persistence}
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -87,6 +96,87 @@ _LEGS = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class PersistenceLeg:
+    """Prereg 74dbbaee89c7. Shaped differently from the (C) legs, deliberately.
+
+    Both legs read the SAME six windows, and leg A aggregates with `min` because it tests a
+    FLOOR: the question is whether the post-break level held everywhere, so one window below
+    the threshold refutes it however good the other five are. And CONFIRMED here means the
+    registered prediction held -- the opposite polarity from the (C) legs, where clearing the
+    bar means the flat-ceiling claim was falsified. Sharing `_read` would silently invert leg A.
+    """
+
+    prereg_id: str
+    name: str
+    stat: str
+    n_prior: int
+    threshold: float
+    agg: str
+    tests: str
+    if_confirmed: str
+    if_refuted: str
+
+    @property
+    def first_new(self) -> int:
+        return self.n_prior + 1
+
+    @property
+    def last_new(self) -> int:
+        return self.n_prior + 6
+
+
+_PERSISTENCE_LEGS = (
+    PersistenceLeg(
+        prereg_id="74dbbaee89c7",
+        name="LEG A -- persistence (min of the six new windows)",
+        stat="tcm",
+        n_prior=23,
+        threshold=0.7877,
+        agg="min",
+        tests="did the break HOLD, or was it a transient excursion?",
+        if_confirmed="the break is a DURABLE level shift",
+        if_refuted="the break was TRANSIENT -- the 2026-08-03 flat reading stands",
+    ),
+    PersistenceLeg(
+        prereg_id="74dbbaee89c7",
+        name="LEG B -- continued rise (max of the same six windows)",
+        stat="tcm",
+        n_prior=23,
+        threshold=0.9409,
+        agg="max",
+        tests="is the ceiling STILL climbing, or did it step once and re-plateau?",
+        if_confirmed="the ceiling is STILL RISING -- the freeze is the wrong call",
+        if_refuted="the ceiling stepped ONCE and re-plateaued",
+    ),
+)
+
+
+def _read_persistence(leg: PersistenceLeg, series: list[float]) -> bool:
+    print(f"\n=== {leg.name} ===")
+    print(f"  prereg {leg.prereg_id}   windows {leg.first_new}-{leg.last_new}   {leg.tests}")
+    if len(series) < leg.last_new:
+        print(
+            f"  NOT READABLE -- {len(series)} complete windows, need {leg.last_new}. "
+            "Refusing a partial read."
+        )
+        return False
+    new = series[leg.first_new - 1 : leg.last_new]
+    if any(math.isnan(v) for v in new):
+        print("  NOT READABLE -- a registered window is NaN.")
+        return False
+    print("  NEW  6  : " + " ".join(f"{v:.4f}" for v in new))
+    stat = min(new) if leg.agg == "min" else max(new)
+    held = stat > leg.threshold
+    verdict = "CONFIRMED" if held else "REFUTED"
+    print(
+        f"  {leg.agg}(new) {stat:.4f}  vs threshold {leg.threshold:.4f}"
+        f"   =  {stat - leg.threshold:+.4f}"
+    )
+    print(f"  >>> {verdict} -- {leg.if_confirmed if held else leg.if_refuted}")
+    return True
+
+
 def _read(leg: RegisteredLeg, series: list[float]) -> bool:
     print(f"\n=== {leg.name} ===")
     print(f"  prereg {leg.prereg_id}   windows {leg.first_new}-{leg.last_new} vs baseline")
@@ -113,10 +203,38 @@ def _read(leg: RegisteredLeg, series: list[float]) -> bool:
     return True
 
 
+def _registry_status(prereg_id: str) -> str | None:
+    """A prereg that is already resolved must not be read a second time -- that is the
+    'single read' rule enforced against the record rather than against memory."""
+    path = Path(__file__).resolve().parent.parent / "config" / "preregistrations.jsonl"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("prereg_id") == prereg_id:
+            return str(row.get("status"))
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("snapshot")
+    ap.add_argument(
+        "--read",
+        required=True,
+        choices=("c", "persistence"),
+        help="which registered read to take: the (C) legs, or prereg 74dbbaee89c7",
+    )
     args = ap.parse_args()
+
+    legs: tuple[RegisteredLeg, ...] | tuple[PersistenceLeg, ...] = (
+        _LEGS if args.read == "c" else _PERSISTENCE_LEGS
+    )
+    for leg in legs:
+        status = _registry_status(leg.prereg_id)
+        if status != "registered":
+            print(f"ABORT -- prereg {leg.prereg_id} status is {status!r}, not 'registered'.")
+            return 1
 
     corr, basis_fp = _fx._load_corr()
     if basis_fp != _fx._REF_BASIS_FP:
@@ -134,8 +252,12 @@ def main() -> int:
     print(f"corr join: {joined} ({100 * joined / n:.1f}%)   reference basis fp: {basis_fp} OK")
 
     ok = True
-    for leg in _LEGS:
-        ok &= _read(leg, _fx._series(obs, ref, 1200, True, leg.stat))
+    for leg in legs:
+        series = _fx._series(obs, ref, 1200, True, leg.stat)
+        if isinstance(leg, PersistenceLeg):
+            ok &= _read_persistence(leg, series)
+        else:
+            ok &= _read(leg, series)
     return 0 if ok else 1
 
 

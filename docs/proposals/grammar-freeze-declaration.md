@@ -1,14 +1,28 @@
 # Grammar freeze — DECLARATION (DRAFT, awaiting operator)
 
-**Status: ⚠️ DO NOT SIGN — (C) HAS BEEN FALSIFIED BY ITS OWN INSTRUMENT (2026-08-06).**
-All three conditions were MET when this was drafted. Within three days of (C)'s registered read the
-composition-standardised TCM broke out of its plateau by **+0.1532 — six times the 0.0242 bar it
-was judged against** — and `P(cpcv ≥ 1.0)` per window went from a 2–8 baseline to 29. Checked
-against the failure that voided the ORIGINAL (C): **not composition** — raw and standardised track
-within ±0.005 and the cell mix barely moves. The 08-03 read was correct on its data; the world
-changed after it. Prereg **`74dbbaee89c7`** now tests whether the new level persists (leg A) and
-whether the ceiling is still climbing (leg B), reading ~2026-08-10. **The freeze decision waits on
-that read.** Everything below stands as the record of what was true on 08-06, with §4 corrected.
+**Status: ⚠️ DO NOT SIGN AS WRITTEN — (C) was falsified 2026-08-06 and the follow-on read has now
+RESOLVED (2026-08-09, D384): the ceiling took a ONE-TIME LEVEL SHIFT and re-plateaued.**
+All three conditions were MET when this was drafted, against a **~0.75 plateau that no longer
+exists**. Within three days of (C)'s registered read the composition-standardised TCM broke out by
+**+0.1532 — six times the 0.0242 bar it was judged against** — and this was checked against the
+failure that voided the ORIGINAL (C): **not composition**, raw and standardised track within
+±0.005. Prereg **`74dbbaee89c7`** then read once at its registered n (29 windows, n=34,839):
+
+```
+windows 24-29 standardised TCM   0.8759  0.8971  0.8889  0.8675  0.8918  0.8751
+LEG A  persistence   min 0.8675  vs 0.7877  = +0.0798   CONFIRMED  -- durable level shift
+LEG B  continued rise max 0.8971  vs 0.9409  = -0.0438   REFUTED    -- stepped once, re-plateaued
+```
+
+**What this means for the freeze: it is still available, but not on these numbers.** Leg B refuting
+is the result that keeps a freeze coherent — the grammar is not on a rising trajectory, so
+"stopped improving" is not contradicted. Leg A confirming is what invalidates the *evidence base*:
+(C) certified flatness at a level the stream has since left, so §2's (C) block measures a plateau
+that is two windows of history old. **Re-baselining is required before signature** — a fresh (C)
+registered against the post-break level, with its drift floor refit on post-break windows only.
+That refit needs post-break windows to fit on, and there are six.
+
+Everything below stands as the record of what was true on 08-06, with §4 corrected.
 **Programme:** D328 → D367. **Grammar at declaration:** v55.
 **Relates to:** `docs/proposals/grammar-freeze-criterion.md` (the criterion this reads against),
 `IMPLEMENTATION_DECISIONS.md` D328–D367, `INDEX_forge_answered.md` (Crucible-side agreements).
