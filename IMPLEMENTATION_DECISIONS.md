@@ -2329,3 +2329,76 @@ D384 §3 recorded the ve-floor retirement as "the larger and more plausible driv
 argument, not a measurement". The hedge was correct and the argument was wrong. It took one
 weighted-quantile read of our own instrument's source to see that the mechanism could not work —
 which was available before the paragraph was written, not after.
+
+## D386 — **The 08-03 boundary is Crucible's monthly tier-3 universe re-rank (13:00:07Z).** Cause ACCEPTED; their stated route REFUTED on our data — the step lives entirely in the cross-sectional arm, which draws no underlying. First-trading-day-of-month adopted as a standing basis boundary.
+
+**Date:** 2026-08-09 · **Class:** measurement + interface · **Follows:** D385 (the ask), D381 (the skim rule)
+
+### What they answered
+
+`crucible-universe-publisher` runs the §3.3.1 tier-3 re-rank **only on the first trading day of
+each month**. August's fired 2026-08-03: `tier3_refresh.start` 13:00:00Z, `tier3.floor_excluded
+n=86`, `tier3.refresh_written n=74` at 13:00:07Z — **27 minutes before our submission boundary**.
+They cleared every scoring-side input across it: rolling window moved Saturday not Monday, zero
+`src/` commits 08-02/08-03, CPCV folds/purge/embargo/p25 untouched, earnings-store rewrite 32h
+earlier with no step at its own timestamp. The 07-01 firing is the same job — our "July universe
+shrink", which retro-explains the v35→v36 boundary note.
+
+**Cause accepted.** Their diagnosis is right and we could not have found it from our side.
+
+### Their route does not reproduce
+
+They predicted post-boundary configs would draw from the new 74-name pool. Measured:
+
+```
+arm                                  n pre   n post   pre TCM   post TCM     delta
+XSECT  (ranks over the universe)     19,101  14,098    0.7494    0.8732    +0.1238
+NAMED  (one underlying)               1,252     388    0.4661    0.4521    -0.0140
+```
+
+**The step is entirely in the arm that draws no underlying.** Our named arm is ~100%
+`volatility_event` on index/ETF underlyings — static tier-1/2, which they correctly said tier-3
+churn does not touch; that is not a corollary, it is substantially our whole named population.
+
+Composition is dead at every level we can hold:
+
+- **Tier** (the one real sub-cell shift, pointing the wrong way): share 4.5% → 1.9%, tier-3's own
+  quality flat at +0.0026, and re-weighting pre-quality to the post mix buys **−0.0031**.
+- **Cell AND tier together:** +0.1251 / +0.1293 / +0.1062.
+- **Underlyings present in both eras only:** +0.1245.
+- `selector.universe` is absent from all 52,952 configs — the universe is not baked in at birth.
+
+### What our data forces
+
+The affected population is the one with **no underlying**, so the route cannot be which name a
+config drew. The remaining construction is **the universe a cross-sectional config is ranked
+over**, read at run time, independent of the price window. That would make their sentence *"the
+August snapshot sits outside every backtest window, so a config's SCORE cannot see it"* true of
+the price data and false of the ranking universe. **Asked as a question about their runner, not
+asserted as a claim about it.** It also explains why selection amplified the step (+0.2136 vs our
++0.1178): the selected stream is more cross-sectional than the honest arm.
+
+### Consequence for the marker — layer 1 is not enough
+
+They offered two layers: (1) fingerprint the snapshot our generator read, at config birth, no
+contract change; (2) a data-basis fingerprint stamped on stage-one verdicts, needing the 1.4x
+dance. **If the basis attaches at ranking time, birth is the wrong stamp** — a config generated
+pre-boundary and scored post-boundary would carry a fingerprint asserting a basis it was never
+measured under, i.e. confidently wrong, which is worse than absent. We escaped this month only
+because median queue lag is 0.37h and no stage-one row straddled 13:00Z; a 09-01 backlog does not
+repeat that luck. **Layer 2 requested.** Layer 1 will be built anyway — free, and it catches
+generation-side changes layer 2 would not — but it does not stand in for layer 2.
+
+### Adopted regardless of their answer
+
+**First trading day of the month is a standing basis boundary** — 2026-09-01, 10-01, monthly. The
+freeze instrument must refuse to pool across it, as leg 2 already refuses on a reference-book
+fingerprint mismatch. Design; not yet built.
+
+### Standing position on the freeze
+
+Unchanged and now confirmed by both sides: **(C) pooled two bases.** The pre-break reading, wholly
+inside one basis, is the one that speaks about the grammar. Re-baselining at ~0.88 would bake
+Crucible's liquidity floor into our grammar criterion and read as a decline when the pool churns
+back. Re-baseline stays HELD. `74dbbaee89c7`'s arithmetic is untouched; its level shift is durable
+*within the new basis* and is not evidence the grammar improved.
