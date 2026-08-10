@@ -65,12 +65,19 @@ from pathlib import Path
 
 from forge.persistence.db import db_connection
 
+# The 4th component of `enumeration_inputs_hash` is the universe fingerprint (D078). It is the
+# GENERATION BASIS tag: it changes when Crucible republishes the tier universe and our sampler's
+# cache picks it up. LEFT JOIN, not JOIN -- a row whose batch predates the hash must arrive as
+# NULL and be refused by the basis guard, never dropped, because silently dropping untagged rows
+# would shorten the series and move the window grid (D387).
 _QUERY = """
     SELECT s.config_hash,
            json_extract_string(s.config_json,'$.hypothesis'),
            json_extract_string(s.config_json,'$.dte_bucket'),
-           TRY_CAST(json_extract_string(v.gate_results,'$.cpcv_sharpe_p25.value') AS DOUBLE)
+           TRY_CAST(json_extract_string(v.gate_results,'$.cpcv_sharpe_p25.value') AS DOUBLE),
+           split_part(b.enumeration_inputs_hash, '|', 2)
     FROM submissions s JOIN verdicts v ON v.config_hash = s.config_hash
+    LEFT JOIN batch_summaries b ON b.forge_batch_id = s.forge_batch_id
     WHERE s.selection_mode = 'prefilter_sample'
       AND v.measurement_basis IS DISTINCT FROM 'fullhist_refit'
     ORDER BY s.submitted_at
@@ -253,6 +260,26 @@ def _decompose(series_by_width: dict[int, list[float]]) -> tuple[float, float, f
     )
 
 
+def window_bases(bases: list[str | None], width: int) -> list[frozenset[str]]:
+    """The distinct GENERATION BASES present in each n=width window.
+
+    A window is basis-clean when this is a single element. Two failure modes it must not
+    smooth over, both learned on 2026-08-03 (D387):
+
+    * A window that STRADDLES a basis change reports BOTH. It belongs to neither era and must
+      never be assigned to one by picking a side -- that is how a 1200-row grid boundary got
+      mistaken for a changepoint, 27 minutes from an unrelated publish, and reported to Crucible
+      as if it were measured.
+    * An UNTAGGED row (basis None -- predating the marker) contributes nothing, so an untagged
+      window reports the empty set. Empty is UNKNOWN, not clean; the caller must refuse on it
+      rather than read "no bases seen" as "one basis seen".
+    """
+    return [
+        frozenset(b for b in bases[i : i + width] if b)
+        for i in range(0, len(bases) - width + 1, width)
+    ]
+
+
 def _series(obs: list[Obs], ref: dict[str, float], width: int, std: bool, stat: str) -> list[float]:
     out = []
     for i in range(0, len(obs) - width + 1, width):
@@ -285,7 +312,8 @@ def main() -> int:
         raw = conn.execute(_QUERY).fetchall()
         censor = conn.execute(_CENSOR_QUERY).fetchall()
     corr, basis_fp = _load_corr()
-    obs: list[Obs] = [(f"{h}/{b}", v, corr.get(ch)) for ch, h, b, v in raw if v is not None]
+    obs: list[Obs] = [(f"{h}/{b}", v, corr.get(ch)) for ch, h, b, v, _u in raw if v is not None]
+    bases: list[str | None] = [u for _ch, _h, _b, v, u in raw if v is not None]
     joined = sum(1 for o in obs if o[2] is not None)
     n = len(obs)
     ref_counts = Counter(c for c, _, _ in obs)
@@ -320,6 +348,19 @@ def main() -> int:
                 f"{statistics.pstdev(s400):>9.4f}{statistics.pstdev(s):>10.4f}"
                 f"{b:>9.4f}{b_up:>9.4f}{2 * b_up:>9.4f}"
             )
+
+    wb = window_bases(bases, args.window)
+    eras = [sorted(s) for s in wb]
+    print("\n=== GENERATION BASIS per window (D387) ===")
+    print("  " + " ".join("?" if not e else ("*" if len(e) > 1 else e[0][:4]) for e in eras))
+    print("  * = window STRADDLES a basis change (belongs to neither era);  ? = untagged")
+    changes = [
+        i + 1 for i in range(1, len(eras)) if eras[i] and eras[i - 1] and eras[i] != eras[i - 1]
+    ]
+    print(
+        f"  distinct bases seen: {len({b for s in wb for b in s})}"
+        f"   basis changes at window(s): {changes or 'none'}"
+    )
 
     print(f"\n=== decision series: TCM top-10%, composition-standardised, window={args.window} ===")
     ser = _series(obs, ref, args.window, True, "tcm")

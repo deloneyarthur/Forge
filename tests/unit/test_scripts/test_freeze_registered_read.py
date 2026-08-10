@@ -200,3 +200,52 @@ def test_a_nan_in_a_persistence_window_refuses(capsys) -> None:
     ser[28] = math.nan
     assert frr._read_persistence(_LEG_A, ser) is False
     assert "NOT READABLE" in capsys.readouterr().out
+
+
+# --- basis-era guard (D387) -----------------------------------------------------------------
+#
+# The 2026-08-03 lesson: a window-grid boundary is not a changepoint, and a statistic read
+# across a generation-basis change compares two different generators. The instrument already
+# had the marker -- `enumeration_inputs_hash` carries a universe component -- and simply did
+# not consume it. These pin the consumption.
+
+
+def test_window_bases_reports_the_distinct_bases_per_window() -> None:
+    bases = ["A"] * 10 + ["B"] * 10
+    assert frr._fx.window_bases(bases, 5) == [
+        frozenset({"A"}),
+        frozenset({"A"}),
+        frozenset({"B"}),
+        frozenset({"B"}),
+    ]
+
+
+def test_a_window_straddling_a_basis_change_reports_BOTH() -> None:
+    """The straddling window is the one that must not pass silently -- it is not assignable
+    to either era, so it can never be 'the clean one' by picking a side."""
+    bases = ["A"] * 7 + ["B"] * 3
+    assert frr._fx.window_bases(bases, 5) == [frozenset({"A"}), frozenset({"A", "B"})]
+
+
+def test_missing_basis_tags_are_not_silently_treated_as_one_era() -> None:
+    """Rows predating the tag carry None. An untagged run must be UNKNOWN, not clean."""
+    assert frr._fx.window_bases([None, None, "A", "A"], 2) == [frozenset(), frozenset({"A"})]
+
+
+def test_the_registered_read_refuses_when_its_windows_span_a_basis_change(capsys) -> None:
+    wb = [frozenset({"A"})] * 26 + [frozenset({"A", "B"})] + [frozenset({"B"})] * 2
+    ok, msg = frr._basis_guard(wb, first=24, last=29)
+    assert ok is False
+    assert "2 generation bases" in msg
+
+
+def test_the_registered_read_passes_a_basis_clean_slice() -> None:
+    wb = [frozenset({"A"})] * 23 + [frozenset({"B"})] * 6
+    ok, msg = frr._basis_guard(wb, first=24, last=29)
+    assert ok is True, msg
+
+
+def test_an_untagged_slice_refuses_rather_than_assuming_clean() -> None:
+    ok, msg = frr._basis_guard([frozenset()] * 29, first=24, last=29)
+    assert ok is False
+    assert "untagged" in msg.lower()

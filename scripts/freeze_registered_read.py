@@ -206,6 +206,30 @@ def _read(leg: RegisteredLeg, series: list[float]) -> bool:
 _REGISTRY = Path(__file__).resolve().parent.parent / "config" / "preregistrations.jsonl"
 
 
+def _basis_guard(win_bases: list[frozenset[str]], first: int, last: int) -> tuple[bool, str]:
+    """Refuse a registered read whose windows span more than one generation basis.
+
+    The freeze programme's own scar (D387): (C) was read across the 2026-08-03 universe
+    re-rank, comparing two different generators as one series. The marker to prevent it
+    already existed -- `enumeration_inputs_hash` carries a universe component -- and the
+    instrument simply did not consume it. This is the consumption.
+
+    Untagged windows refuse too. "No basis recorded" is not evidence of a single basis, and
+    a guard that passes on absent data is worse than no guard: it certifies.
+    """
+    spans: set[str] = set()
+    for wb in win_bases[first - 1 : last]:
+        spans |= wb
+    if not spans:
+        return False, f"windows {first}-{last} are UNTAGGED -- basis unknown, refusing to read"
+    if len(spans) > 1:
+        return False, (
+            f"windows {first}-{last} span {len(spans)} generation bases "
+            f"({', '.join(sorted(spans))}) -- refusing to read across a basis change"
+        )
+    return True, f"basis-clean: {next(iter(spans))}"
+
+
 def _registry_status(prereg_id: str, path: Path = _REGISTRY) -> str | None:
     """A prereg that is already resolved must not be read a second time -- that is the
     'single read' rule enforced against the record rather than against memory."""
@@ -245,7 +269,8 @@ def main() -> int:
 
     with _fx.db_connection(Path(args.snapshot)) as conn:
         raw = conn.execute(_fx._QUERY).fetchall()
-    obs = [(f"{h}/{b}", v, corr.get(ch)) for ch, h, b, v in raw if v is not None]
+    obs = [(f"{h}/{b}", v, corr.get(ch)) for ch, h, b, v, _u in raw if v is not None]
+    bases = [u for _ch, _h, _b, v, u in raw if v is not None]
     n = len(obs)
     joined = sum(1 for o in obs if o[2] is not None)
     counts = _fx.Counter(c for c, _, _ in obs)
@@ -253,8 +278,15 @@ def main() -> int:
     print(f"honest arm, stage one, with cpcv: n={n}   complete windows: {n // 1200}")
     print(f"corr join: {joined} ({100 * joined / n:.1f}%)   reference basis fp: {basis_fp} OK")
 
+    win_bases = _fx.window_bases(bases, 1200)
     ok = True
     for leg in legs:
+        clean, msg = _basis_guard(win_bases, leg.first_new, leg.last_new)
+        if not clean:
+            print(f"\n=== {leg.name} ===\n  ABORT -- {msg}")
+            ok = False
+            continue
+        print(f"\n[basis guard] windows {leg.first_new}-{leg.last_new}: {msg}")
         series = _fx._series(obs, ref, 1200, True, leg.stat)
         if isinstance(leg, PersistenceLeg):
             ok &= _read_persistence(leg, series)

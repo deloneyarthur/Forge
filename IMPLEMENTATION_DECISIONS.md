@@ -2402,3 +2402,76 @@ inside one basis, is the one that speaks about the grammar. Re-baselining at ~0.
 Crucible's liquidity floor into our grammar criterion and read as a decline when the pool churns
 back. Re-baseline stays HELD. `74dbbaee89c7`'s arithmetic is untouched; its level shift is durable
 *within the new basis* and is not evidence the grammar improved.
+
+## D387 — **RETRACTION + the basis guard.** The 13:27Z boundary was a window-grid artifact; the true cut is 2026-08-03T17:15:54Z, our own cache lag. Crucible's generation-basis mechanism is CONFIRMED and our ranking-time correction is WITHDRAWN. Layer 1 already existed — we were not consuming it. Guard now built. Leg B of `74dbbaee89c7` is basis-clean; leg A is not.
+
+**Date:** 2026-08-10 · **Class:** measurement + instrument · **Retracts:** D386 §"what our data forces"
+
+### What we got wrong, and how
+
+We reported the boundary as `2026-08-03 13:27:42Z` and called it sharp. **That is where our
+1200-row window grid broke** — an index, not a changepoint. Crucible's publish at 13:00:07Z landed
+27 minutes earlier and we read the proximity as corroboration. At hourly resolution across
+08-02→08-04 there is no discontinuity there at all: medians run 0.11–0.35 on n=50–500/hour.
+
+Every elimination in D386 was computed against that wrong cut.
+
+### The true boundary, from a marker we already had
+
+```
+universe component of enumeration_inputs_hash    n       median     TCM     window
+877b1eddde9864eb                             12,153     0.1419   0.7384    07-23 -> 08-02 08:29
+877b1eddde9864eb                              9,472     0.1772   0.7634    08-02 08:54 -> 08-03 16:50
+e1adced727678c8f                             13,214     0.2745   0.8745    08-03 17:15 -> 08-09
+```
+
+`2026-08-03T17:15:54Z` — our `_load_universe_tiers_cached` lru_cache picking up their 13:00:07Z
+publish **4h15m late**. The clock disagreement was ours.
+
+### The test that decides the mechanism, and it decides for Crucible
+
+Within the OLD fingerprint, by day: 07-29 0.8117, 07-30 0.7178, 07-31 0.7155, 08-01 0.7409,
+08-02 0.7575, **08-03 0.7674**. Median queue lag is 0.37h, so 08-03 configs submitted up to 16:50
+were **scored after their publish, under their new universe** — and read at the OLD level. Had the
+route been the ranking universe at scoring time, as we argued, those would have risen.
+
+**Generation-basis confirmed. Our proposed amendment to their sentence is withdrawn.** What we no
+longer claim is *why* a cross-sectional config with no drawn underlying moves with a universe
+change; the timing is unambiguous, the mechanism is not ours to assert, and the instrument only
+needs the boundary.
+
+### Layer 1 already existed
+
+`universe_fingerprint()` (D078) — 16-hex digest of the resolved pool plus the tier-3 split, folded
+into `enumeration_inputs_hash` on every batch. It recorded the boundary faithfully on the day.
+**The gap was never instrumentation; the freeze instrument did not consume it.** Layer 2 relayed
+back as de-prioritised: generation-basis is covered by what we have, and only a scoring-basis
+change (the 07-19 cache-repair class) remains uncovered.
+
+### The guard (TDD, red first)
+
+`freeze_tail_reading.window_bases()` returns the distinct bases per window, with two deliberate
+behaviours: a **straddling** window reports BOTH (it belongs to neither era and must never be
+assigned to one by picking a side — that is exactly how a grid boundary became a changepoint), and
+an **untagged** window reports the empty set, which the guard refuses on. A guard that passes on
+absent data is worse than no guard: it certifies. `freeze_registered_read._basis_guard()` refuses
+any registered slice spanning more than one basis, before reading. The query LEFT JOINs
+`batch_summaries` so untagged rows arrive as NULL rather than being dropped — dropping them would
+shorten the series and move the grid. 37 tests, ruff clean.
+
+Live map: windows 1–18 `877b`, window 19 STRADDLES, windows 20–29 `e1ad`.
+
+### Consequence for `74dbbaee89c7`, which is the useful part
+
+- **Leg B is BASIS-CLEAN and STANDS.** Its threshold derives from window 23 (`e1ad`) and its six
+  windows 24–29 are all `e1ad`. Within a single generation basis, `max 0.8971 vs 0.9409` →
+  **the ceiling is not rising.** That reading survives everything in this entry.
+- **Leg A is CROSS-BASIS and must be discounted.** Its threshold 0.7877 derives from the old-basis
+  windows 1–17 while its six windows are new-basis. The +0.0798 margin measures the universe
+  change, not persistence. It should not be cited as evidence of a durable *grammar* level shift —
+  D384's arithmetic is correct and its interpretation narrows to "the new basis is internally
+  stable".
+
+So the coherent picture across D384–D387: **within a fixed generation basis the ceiling is flat,
+and the apparent break was a basis change.** That is the pre-break (C) reading, re-derived on the
+other side of the boundary — which is the strongest form of agreement available here.
