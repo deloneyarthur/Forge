@@ -32,7 +32,12 @@ See `PersistenceLeg`.
 Reading a prereg whose registry status is no longer 'registered' aborts, so the single-read rule
 is enforced against the record rather than against anyone's memory of having read it.
 
-Usage: freeze_registered_read.py SNAPSHOT.db --read {c,persistence}
+Prereg 3b0cbca7ae17 (`--read within-basis`) replicates (C) INSIDE one generation basis
+(D387): the series is filtered to the basis BEFORE it is gridded, so window numbers are
+basis-local and no window straddles the seam. Same leg shape and same rule as the
+originals -- the point of a replication is that the rule does not move.
+
+Usage: freeze_registered_read.py SNAPSHOT.db --read {c,persistence,within-basis}
 """
 
 from __future__ import annotations
@@ -92,6 +97,35 @@ _LEGS = (
         baseline=0.4411,
         bar=0.0173,
         falsifier="the GOOD supply has become MORE REDUNDANT over the window",
+    ),
+)
+
+
+# Prereg 3b0cbca7ae17 -- (C) replicated INSIDE one generation basis. Same SHAPE as the original
+# (C) legs (max-of-new vs a fixed baseline, FALSIFIED above the bar), so `RegisteredLeg` and
+# `_read` are reused deliberately: the point of a replication is that the rule does not move.
+# What differs is upstream -- the series is filtered to this basis BEFORE it is gridded, so the
+# window numbers are basis-local and there is no straddling window to reason about.
+_WITHIN_BASIS_FP = "e1adced727678c8f"
+
+_WITHIN_BASIS_LEGS = (
+    RegisteredLeg(
+        prereg_id="3b0cbca7ae17",
+        name="WITHIN-BASIS LEG 1 -- quality (standardised TCM, basis-local grid)",
+        stat="tcm",
+        n_prior=11,
+        baseline=0.9193,
+        bar=0.0536,
+        falsifier="the ceiling is STILL RISING inside a fixed basis -- the freeze is wrong",
+    ),
+    RegisteredLeg(
+        prereg_id="3b0cbca7ae17",
+        name="WITHIN-BASIS LEG 2 -- redundancy (standardised TCM-corr, basis-local grid)",
+        stat="tcm_corr",
+        n_prior=11,
+        baseline=0.4484,
+        bar=0.0135,
+        falsifier="the GOOD supply has become MORE REDUNDANT inside a fixed basis",
     ),
 )
 
@@ -217,6 +251,11 @@ def _basis_guard(win_bases: list[frozenset[str]], first: int, last: int) -> tupl
     Untagged windows refuse too. "No basis recorded" is not evidence of a single basis, and
     a guard that passes on absent data is worse than no guard: it certifies.
     """
+    if len(win_bases) < last:
+        return False, (
+            f"NOT READABLE -- {len(win_bases)} complete windows, need {last}. "
+            "Refusing a partial read (this is 'wait', not 'the marker is broken')."
+        )
     spans: set[str] = set()
     for wb in win_bases[first - 1 : last]:
         spans |= wb
@@ -248,14 +287,16 @@ def main() -> int:
     ap.add_argument(
         "--read",
         required=True,
-        choices=("c", "persistence"),
-        help="which registered read to take: the (C) legs, or prereg 74dbbaee89c7",
+        choices=("c", "persistence", "within-basis"),
+        help="which registered read to take: (C), 74dbbaee89c7, or 3b0cbca7ae17",
     )
     args = ap.parse_args()
 
-    legs: tuple[RegisteredLeg, ...] | tuple[PersistenceLeg, ...] = (
-        _LEGS if args.read == "c" else _PERSISTENCE_LEGS
-    )
+    legs: tuple[RegisteredLeg, ...] | tuple[PersistenceLeg, ...] = {
+        "c": _LEGS,
+        "persistence": _PERSISTENCE_LEGS,
+        "within-basis": _WITHIN_BASIS_LEGS,
+    }[args.read]
     for leg in legs:
         status = _registry_status(leg.prereg_id)
         if status != "registered":
@@ -278,6 +319,11 @@ def main() -> int:
     print(f"honest arm, stage one, with cpcv: n={n}   complete windows: {n // 1200}")
     print(f"corr join: {joined} ({100 * joined / n:.1f}%)   reference basis fp: {basis_fp} OK")
 
+    if args.read == "within-basis":
+        obs, bases = _fx.filter_to_basis(obs, bases, _WITHIN_BASIS_FP)
+        n = len(obs)
+        ref = {c: k / n for c, k in _fx.Counter(c for c, _, _ in obs).items()}
+        print(f"BASIS-SCOPED to {_WITHIN_BASIS_FP}: n={n}, {n // 1200} windows (grid is local)")
     win_bases = _fx.window_bases(bases, 1200)
     ok = True
     for leg in legs:

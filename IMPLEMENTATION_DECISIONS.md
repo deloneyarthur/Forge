@@ -2475,3 +2475,64 @@ Live map: windows 1–18 `877b`, window 19 STRADDLES, windows 20–29 `e1ad`.
 So the coherent picture across D384–D387: **within a fixed generation basis the ceiling is flat,
 and the apparent break was a basis change.** That is the pre-break (C) reading, re-derived on the
 other side of the boundary — which is the strongest form of agreement available here.
+
+## D388 — Within-basis (C) REGISTERED as `3b0cbca7ae17`. A replication, not a re-baseline: both original (C) legs were basis-clean and STAND. First non-degenerate drift fit in the programme.
+
+**Date:** 2026-08-10 · **Class:** measurement (prereg) · **Follows:** D387
+
+### Why replication, not re-baseline
+
+The basis map settles it: **global windows 1–18 are all `877b1eddde9864eb`.** Leg 1 read 11–16 and
+leg 2 read 12–17, so **neither original (C) read crossed the boundary.** They stand as measured.
+What was contaminated was the follow-on narrative and leg A of `74dbbaee89c7`. The open question
+is therefore whether (C) *still holds* now the generator draws a different universe — and a
+replication in a changed environment is stronger evidence than the original.
+
+### The registered numbers
+
+Basis `e1adced727678c8f`, from 2026-08-03T17:15:54Z to the 09-01 re-rank. Rows are filtered to the
+basis **first** and gridded **second**, so there is no straddling window to reason about. 11 prior
+windows, zero straddles, reference-mass coverage 0.996–1.000, corr join 100%.
+
+```
+leg 1 TCM       0.8467 0.8063 0.8471 0.8631 0.9193 0.8720 0.9018 0.8935 0.8701 0.8909 0.8857
+                max 0.9193   bar 0.0536 (2*b_up)              falsified above 0.9729
+leg 2 TCM-corr  0.4456 0.4358 0.4253 0.4414 0.4411 0.4427 0.4321 0.4484 0.4375 0.4474 0.4335
+                max 0.4484   bar 0.0135 (max(2*b_up, 2*sd))   falsified above 0.4619
+```
+
+**The drift fit does not degenerate — the first time in this programme.** `b=0.0235`,
+`b_up=0.0268` on the basis-local windows. Every prior attempt returned `b=0.0000` exactly and
+forced a `2*sd` fallback three separate times. Within a single basis the drift term is real.
+
+### The concession that is in the prereg because it cuts against us
+
+Leg 1's bar is **0.0536, which is 2.2× the original's 0.0242** — wider precisely *because* the fit
+now resolves drift instead of collapsing to zero. **A wider bar makes "flat" easier to confirm**,
+so a confirmation here is weaker per-unit than the original's and must not be reported as equally
+stringent. The RULE was held fixed rather than the number, which is the only defensible choice;
+the consequence belongs in the record rather than in a footnote found later.
+
+### Void condition, enforced by the instrument
+
+If the generation basis changes before 6 new windows accrue, the prereg is **VOID** and must be
+re-registered inside the new basis — `_basis_guard` refuses rather than reading across. Two things
+would do it: an early Crucible re-rank, and **a grammar bump, which is also a generation-basis
+change.** No grammar change ships during the measurement window.
+
+### Instrument
+
+`--read within-basis` reuses `RegisteredLeg`/`_read` deliberately: the point of a replication is
+that the rule does not move. What differs is upstream — `filter_to_basis` before gridding.
+`--basis` added to the exploratory instrument.
+
+Two bugs found and fixed while wiring it, both in the guards rather than the statistic:
+
+- **`ref` shares were divided by the pre-filter `n`.** A uniform scale on every weight CANCELS
+  inside `_tcm`'s ratio, so the statistic still read correctly while `coverage` and `max weight` —
+  the two guards that exist to make a thin window declare itself — silently reported the filter
+  fraction (0.391 instead of ~1.0). A bug that only breaks the alarms is the expensive kind.
+- **`_basis_guard` reported "UNTAGGED" for a slice past the end of the series.** "Wait three days"
+  and "investigate the marker" were wearing the same message. Now separated.
+
+42 tests, ruff clean.

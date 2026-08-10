@@ -1,5 +1,15 @@
 # Forge — Status
 
+## 2026-08-10 (later) — **WITHIN-BASIS (C) REGISTERED: `3b0cbca7ae17`.** A replication, not a re-baseline — both original (C) legs were basis-clean and STAND. First non-degenerate drift fit in the programme. Reads ~2026-08-13. (D388)
+
+- **REPLICATION, NOT REPAIR.** Global windows 1–18 are all `877b`; leg 1 read 11–16 and leg 2 read 12–17, so **neither original (C) read crossed the boundary**. They stand as measured. The question is whether (C) *still holds* now the generator draws a different universe — stronger evidence than the original, not a patch on it.
+- **REGISTERED NUMBERS** (basis `e1adced727678c8f`, filtered before gridding, 11 prior windows, zero straddles, coverage 0.996–1.000, corr join 100%): leg 1 max **0.9193**, bar **0.0536**, falsified above **0.9729**. Leg 2 max **0.4484**, bar **0.0135**, falsified above **0.4619**.
+- **THE DRIFT FIT DOES NOT DEGENERATE — first time ever here.** `b=0.0235`, `b_up=0.0268`. Every prior attempt returned `b=0.0000` exactly ("cannot resolve drift" wearing a decisive number) and forced a `2·sd` fallback three times. Within a single basis, drift is real and resolvable.
+- **⚠️ RECORDED BECAUSE IT CUTS AGAINST US:** leg 1's bar is **2.2× the original's 0.0242** — wider *because* the fit now resolves drift. **A wider bar makes "flat" easier to confirm**, so a confirmation here is weaker per-unit than the original's. The rule was held fixed rather than the number; the consequence is in the prereg, not a footnote.
+- **VOID CONDITION, instrument-enforced:** if the basis changes before 6 new windows accrue, the prereg is VOID and re-registers inside the new basis. Two triggers: an early Crucible re-rank, and **a grammar bump — also a generation-basis change. No grammar change ships during the window.**
+- **INSTRUMENT:** `--read within-basis` (reuses `RegisteredLeg`/`_read` — a replication must not move the rule; only `filter_to_basis` differs upstream) and `--basis` on the exploratory tool. **Two guard bugs found and fixed**: `ref` divided by the pre-filter `n` (cancels in `_tcm`'s ratio, so only the *alarms* broke — coverage read 0.391), and `_basis_guard` saying "UNTAGGED" when it meant "not enough windows yet".
+- **CLOCK:** 11 of 17 basis-local windows; 6,431 rows short at ~2,210/day → **~2026-08-13**, comfortably inside the basis (ends 09-01). Watcher armed.
+
 ## 2026-08-10 — **RETRACTION + THE BASIS GUARD. Our "13:27Z boundary" was a window-grid artifact; the true cut is 17:15:54Z, our own cache lag. Crucible was right — generation-basis. And within a fixed basis the ceiling is FLAT.** (D387)
 
 - **WHAT WE GOT WRONG.** `13:27:42Z` is where our 1200-row grid broke — an index, not a changepoint. Their 13:00:07Z publish sat 27 min earlier and we read the proximity as corroboration. At hourly resolution there is **no discontinuity there at all**. Every elimination in D386 was cut in the wrong place.

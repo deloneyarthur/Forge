@@ -249,3 +249,62 @@ def test_an_untagged_slice_refuses_rather_than_assuming_clean() -> None:
     ok, msg = frr._basis_guard([frozenset()] * 29, first=24, last=29)
     assert ok is False
     assert "untagged" in msg.lower()
+
+
+def test_filter_to_basis_keeps_only_matching_rows_and_stays_aligned() -> None:
+    """The obs list and the bases list are positionally paired; a filter that drops from one
+    and not the other silently mis-attributes every window after the first drop."""
+    obs = [("a/x", 1.0, None), ("a/x", 2.0, None), ("a/x", 3.0, None)]
+    bases = ["A", "B", "A"]
+    kept_obs, kept_bases = frr._fx.filter_to_basis(obs, bases, "A")
+    assert kept_obs == [("a/x", 1.0, None), ("a/x", 3.0, None)]
+    assert kept_bases == ["A", "A"]
+
+
+def test_filter_to_basis_drops_untagged_rows() -> None:
+    obs = [("a/x", 1.0, None), ("a/x", 2.0, None)]
+    assert frr._fx.filter_to_basis(obs, [None, "A"], "A")[0] == [("a/x", 2.0, None)]
+
+
+# --- prereg 3b0cbca7ae17 (within-basis (C) replication) --------------------------------------
+
+
+def test_within_basis_constants_match_the_prereg_registry() -> None:
+    rows = {
+        json.loads(line)["prereg_id"]: json.loads(line)
+        for line in (_ROOT / "config" / "preregistrations.jsonl").read_text().splitlines()
+        if line.strip()
+    }
+    for leg in frr._WITHIN_BASIS_LEGS:
+        text = rows[leg.prereg_id]["claim"] + rows[leg.prereg_id]["predicted"]
+        assert f"{leg.baseline:.4f}" in text, f"{leg.prereg_id}: baseline not in its own record"
+        assert f"{leg.bar:.4f}" in text, f"{leg.prereg_id}: bar not in its own record"
+    w1, w2 = frr._WITHIN_BASIS_LEGS
+    assert (w1.n_prior, w1.baseline, w1.bar) == (11, 0.9193, 0.0536)
+    assert (w2.n_prior, w2.baseline, w2.bar) == (11, 0.4484, 0.0135)
+    assert frr._WITHIN_BASIS_FP == "e1adced727678c8f"
+
+
+def test_within_basis_legs_read_windows_12_to_17_of_the_BASIS_LOCAL_grid(capsys) -> None:
+    """Both legs read the same six, because both were registered together off one 11-window
+    prior -- unlike the original (C) legs, whose slices are offset by one."""
+    ser = [float(i) for i in range(1, 19)]
+    for leg in frr._WITHIN_BASIS_LEGS:
+        frr._read(leg, ser)
+        out = capsys.readouterr().out
+        assert "12.0000 13.0000 14.0000 15.0000 16.0000 17.0000" in out
+        assert "18.0000" not in out, "window 18 leaked into the registered slice"
+
+
+def test_the_basis_guard_says_SHORT_not_untagged_when_the_windows_do_not_exist_yet() -> None:
+    """Two different refusals that must not wear the same message.
+
+    A slice past the end of the series produces an empty basis set, which reads identically to
+    "these windows carry no tag" unless the guard checks length first. The first means WAIT; the
+    second means INVESTIGATE THE MARKER. Conflating them sends a reader hunting a bug that is
+    actually three days of accrual.
+    """
+    ok, msg = frr._basis_guard([frozenset({"A"})] * 11, first=12, last=17)
+    assert ok is False
+    assert "11 complete windows, need 17" in msg
+    assert "untagged" not in msg.lower()

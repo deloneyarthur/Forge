@@ -260,6 +260,22 @@ def _decompose(series_by_width: dict[int, list[float]]) -> tuple[float, float, f
     )
 
 
+def filter_to_basis(
+    obs: list[Obs], bases: list[str | None], fp: str
+) -> tuple[list[Obs], list[str | None]]:
+    """Restrict the series to ONE generation basis, re-gridding inside it.
+
+    A within-basis read must window inside the basis, not slice a global grid: the global grid
+    puts a STRADDLING window at the seam that belongs to neither era. Filtering first and
+    windowing second removes the seam entirely rather than reasoning about it.
+
+    `obs` and `bases` are positionally paired, so they are filtered together -- dropping from
+    one alone would mis-attribute every window after the first drop.
+    """
+    pairs = [(o, b) for o, b in zip(obs, bases, strict=True) if b == fp]
+    return [o for o, _ in pairs], [b for _, b in pairs]
+
+
 def window_bases(bases: list[str | None], width: int) -> list[frozenset[str]]:
     """The distinct GENERATION BASES present in each n=width window.
 
@@ -294,10 +310,36 @@ def _series(obs: list[Obs], ref: dict[str, float], width: int, std: bool, stat: 
     return out
 
 
+def _print_basis_map(bases: list[str | None], width: int) -> None:
+    """Show which generation basis each window belongs to, before any statistic is read.
+
+    Printed FIRST and unconditionally: the 2026-08-03 failure (D387) was not a missing number,
+    it was a series that looked like one era and was two. A reader who sees `*` in this row
+    knows the decision series below straddles a seam without having to suspect it.
+    """
+    wb = window_bases(bases, width)
+    eras = [sorted(s) for s in wb]
+    print("\n=== GENERATION BASIS per window (D387) ===")
+    print("  " + " ".join("?" if not e else ("*" if len(e) > 1 else e[0][:4]) for e in eras))
+    print("  * = window STRADDLES a basis change (belongs to neither era);  ? = untagged")
+    changes = [
+        i + 1 for i in range(1, len(eras)) if eras[i] and eras[i - 1] and eras[i] != eras[i - 1]
+    ]
+    print(
+        f"  distinct bases seen: {len({b for s in wb for b in s})}"
+        f"   basis changes at window(s): {changes or 'none'}"
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("snapshot")
     ap.add_argument("--window", type=int, default=1200)
+    ap.add_argument(
+        "--basis",
+        default=None,
+        help="restrict to ONE generation basis (universe fingerprint) and re-grid inside it",
+    )
     # THE REGISTERED READ MUST NOT SET ITS OWN BAR. Left to itself this script re-fits a/b on
     # every run -- including the windows under judgement -- so the threshold moves with the data
     # it is meant to judge. That is peeking wearing a formula: leg 2's bar was 0.0173 at
@@ -314,6 +356,15 @@ def main() -> int:
     corr, basis_fp = _load_corr()
     obs: list[Obs] = [(f"{h}/{b}", v, corr.get(ch)) for ch, h, b, v, _u in raw if v is not None]
     bases: list[str | None] = [u for _ch, _h, _b, v, u in raw if v is not None]
+    if args.basis:
+        obs, bases = filter_to_basis(obs, bases, args.basis)
+        print(f"BASIS-SCOPED to {args.basis}: {len(obs)} rows, {len(obs) // args.window} windows")
+    # n is recomputed AFTER the filter, deliberately: `ref` shares must sum to 1 over the
+    # population actually being windowed. Dividing filtered counts by the unfiltered n scales
+    # every weight by the same constant, which CANCELS inside `_tcm`'s ratio -- so the statistic
+    # still looks right while `coverage` and `max weight`, the two guards that exist to make a
+    # thin window declare itself, silently report the filter fraction instead. A bug that only
+    # breaks the alarms is the expensive kind.
     joined = sum(1 for o in obs if o[2] is not None)
     n = len(obs)
     ref_counts = Counter(c for c, _, _ in obs)
@@ -349,18 +400,7 @@ def main() -> int:
                 f"{b:>9.4f}{b_up:>9.4f}{2 * b_up:>9.4f}"
             )
 
-    wb = window_bases(bases, args.window)
-    eras = [sorted(s) for s in wb]
-    print("\n=== GENERATION BASIS per window (D387) ===")
-    print("  " + " ".join("?" if not e else ("*" if len(e) > 1 else e[0][:4]) for e in eras))
-    print("  * = window STRADDLES a basis change (belongs to neither era);  ? = untagged")
-    changes = [
-        i + 1 for i in range(1, len(eras)) if eras[i] and eras[i - 1] and eras[i] != eras[i - 1]
-    ]
-    print(
-        f"  distinct bases seen: {len({b for s in wb for b in s})}"
-        f"   basis changes at window(s): {changes or 'none'}"
-    )
+    _print_basis_map(bases, args.window)
 
     print(f"\n=== decision series: TCM top-10%, composition-standardised, window={args.window} ===")
     ser = _series(obs, ref, args.window, True, "tcm")
