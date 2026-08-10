@@ -2231,7 +2231,9 @@ separate script from `freeze_tail_reading.py`.
    prior fit degenerated to `b=0.0000` on 17 windows, which is "cannot resolve drift", so the
    window budget for a non-degenerate refit is the open design question — not something to settle
    by reusing the old 2·sd fallback without saying so.
-3. **Attribution is NOT decided by this read** and must not be inferred from it. v55 (08-03 02:27Z)
+3. **Attribution is NOT decided by this read** and must not be inferred from it. **(SUPERSEDED
+   BY D385: the attribution guess below is REFUTED — the break is a global measurement-basis
+   step, not either of our changes.)** v55 (08-03 02:27Z)
    and the D216 ve-floor retirement (08-04 02:27Z) are one day apart and mutually confounded; the
    ve-floor change is larger and more plausible but that is an argument, not a measurement.
 
@@ -2252,3 +2254,78 @@ The registry's outcome token is one of three and cannot express a two-leg split.
 line. `confirmed` is the less dangerous of the two available tokens: a bare `refuted` would read as
 "the break was transient and the 08-03 reading stands", which is the registered meaning of a leg-A
 refutation and the precise opposite of what happened.
+
+## D385 — **The 08-03 break is NOT ours and is not generation.** A global cpcv step at 2026-08-03 13:27Z survives holding grammar version, cell and composition fixed. D384's attribution is REFUTED by our own data; freeze condition (C) has been comparing across two measurement bases.
+
+**Date:** 2026-08-09 · **Class:** measurement (diagnostic, registers nothing) · **Corrects:** D384 §3
+
+### What was measured
+
+Boundary `2026-08-03 13:27:42Z` in submission order (decision batch `13:50:30Z`), sharp — one
+window to the next.
+
+```
+                     n pre / post      median cpcv          p95
+selected stream    54,306 / 84,905   0.2613 -> 0.4749  +0.2136   +0.1829
+honest arm         20,353 / 14,486   0.1527 -> 0.2705  +0.1178   +0.1295
+
+v54 ONLY, within cell, shares flat to +/-1pp:
+  trend_continuation/swing_long   0.7780 -> 0.8464   +0.0684
+  trend_continuation/swing_mid    0.6363 -> 0.7452   +0.1089
+  mean_reversion/swing_mid        0.7608 -> 0.8530   +0.0923
+```
+
+Identical generation policy, identical composition, materially better scores. The step is larger
+on Crucible's selected stream than on our unselected sample, so it is not about our sampling.
+
+### Every candidate eliminated
+
+- **v55** — head-to-head against v54 *inside the same windows*: +0.0343 pooled, and **−0.0020 in
+  `mean_reversion/swing_mid`**, a cell v55 does not touch, which rose +0.13 anyway.
+- **The D216 ve-floor retirement** — lands 08-04, a day AFTER the break. It is also a
+  between-hypothesis share change, and `hypothesis` is a post-stratification dimension, so the
+  statistic is blind to it by construction; `_tcm` takes a **weighted** quantile and a **weighted**
+  mean, so the whole statistic is evaluated under a fixed reference mix. Confirmed empirically:
+  ve's own within-cell quality moved **+0.0066**.
+- **A re-gate wave** — 16,430 config_hashes carry two distinct stage-one cpcv values, which looked
+  decisive for about four minutes. The honest arm has **34,839 rows / 34,839 distinct configs**,
+  zero duplicates, and every re-measured pair is entirely pre-boundary (mean delta −0.0529 —
+  re-measurement made scores *worse*).
+- **More data** — `trade_count` fell 522.2 → 501.9.
+- **Our own `FORGE_PREFILTER_SAMPLE_N` change** — TCM is flat at ~0.75 across both the normal-rate
+  and elevated-rate stretches and steps after; rate and level do not track.
+
+### What we cannot test
+
+Whether the step keys on submission time or scoring time. Median queue lag is 0.37h and, excluding
+`fullhist_refit`, **no stage-one row submitted pre-boundary was decided post-boundary** — the
+discriminating cell is empty. Relayed to Crucible with the evidence and four ranked candidates; a
+rolling evaluation window is the most likely and needs no fix, only a name.
+
+### Why this matters more than the attribution
+
+**(C) has been read across a basis boundary.** Windows 1–17 sit in one measurement basis and
+18–29 in another. That is the defect class of D357/D358 in a third costume, and worse, it is the
+skim rule we adopted from Crucible in D381 — *do not pool across a re-measurement boundary* —
+violated by our own instrument within a week of adopting it.
+
+Consequences, none of which retract D384's arithmetic:
+
+1. **The pre-break (C) reading may still be the correct answer about the grammar.** Windows 1–17
+   are within one basis and were never contradicted by grammar evidence.
+2. **Re-baselining against ~0.88 is now the wrong move** — it would bake an environment level into
+   a grammar criterion and read as a decline when the environment moves back.
+3. **`74dbbaee89c7` measured what it said it measured.** Leg A's "durable level shift" is durable
+   *within the new basis*, six windows deep. It is not evidence the grammar improved, and D384
+   should not be cited as if it were.
+4. **The freeze criterion needs a basis-era guard** — (C) must read within a measurement era and
+   the instrument must REFUSE across a detected boundary, exactly as leg 2 already refuses on a
+   reference-book fingerprint mismatch. Asked Crucible for a machine-readable basis marker to key
+   it on. Design, not yet built.
+
+### On D384's attribution paragraph
+
+D384 §3 recorded the ve-floor retirement as "the larger and more plausible driver", hedged as "an
+argument, not a measurement". The hedge was correct and the argument was wrong. It took one
+weighted-quantile read of our own instrument's source to see that the mechanism could not work —
+which was available before the paragraph was written, not after.

@@ -1,5 +1,16 @@
 # Forge — Status
 
+## 2026-08-09 (later) — **THE BREAK IS NOT OURS.** A global cpcv step at 2026-08-03T13:27Z survives holding grammar version, cell and composition fixed. D384's attribution is refuted by our own data; (C) has been reading across two measurement bases. (D385)
+
+- **THE STEP IS GLOBAL AND LARGER ON THEIR SIDE.** Selected stream median 0.2613 → 0.4749 (**+0.2136**, n=54,306/84,905); our honest arm +0.1178. Not our sampling.
+- **IT SURVIVES HOLDING THE GRAMMAR FIXED.** v54 configs only, within cell, shares flat to ±1pp: trend/swing_long **+0.0684**, trend/swing_mid **+0.1089**, MR/swing_mid **+0.0923**. Same generation policy, same mix, better scores.
+- **EVERY CANDIDATE ELIMINATED.** v55 — head-to-head in the same windows is +0.0343 pooled and **−0.0020 in MR/swing_mid**, a cell it does not touch that rose +0.13 anyway. ve-floor — lands a day AFTER the break, and it is a between-hypothesis share change on a post-stratification dimension, so `_tcm`'s weighted quantile + weighted mean are blind to it by construction (ve's own within-cell quality: **+0.0066**). Re-gate wave — honest arm is **34,839 rows / 34,839 distinct configs**, zero duplicates, all re-measured pairs pre-boundary. Data volume — `trade_count` **fell**. SAMPLE_N — TCM flat at ~0.75 across both rate regimes, steps after.
+- **WE CANNOT TEST SUBMISSION-TIME vs SCORING-TIME.** Median queue lag 0.37h and, excluding refits, **no stage-one row submitted pre-boundary was decided post-boundary** — the discriminating cell is empty. **Relay SENT** with the evidence and four ranked candidates; a rolling evaluation window is the most likely and needs no fix, only a name.
+- **⚠️ (C) HAS BEEN POOLING TWO BASES.** Windows 1–17 in one, 18–29 in another. That is D357/D358 in a third costume — and it is the skim rule we adopted from Crucible in **D381** violated by our own instrument within a week of adopting it.
+- **WHAT THIS DOES NOT RETRACT:** `74dbbaee89c7`'s arithmetic. Leg A's level shift is durable *within the new basis*. It is **not** evidence the grammar improved and must not be cited as such.
+- **RE-BASELINE HELD** pending their answer — baking their environment into our grammar criterion would read as a decline when it moves back. The pre-break (C) reading, entirely inside one basis, may still be the right answer about the grammar.
+- **NEXT:** their reply, then a basis-era guard in the freeze instrument — a hard REFUSAL across a detected boundary, as leg 2 already does on the reference-book fingerprint. Asked them for a machine-readable basis marker to key it on.
+
 ## 2026-08-09 — **THE CEILING STEPPED ONCE AND RE-PLATEAUED.** Prereg `74dbbaee89c7` read once at its registered n: leg A CONFIRMED, leg B REFUTED. The freeze survives on the merits; its evidence base is stale. (D384)
 
 - **THE READ.** 29 complete n=1200 windows, n=34,839 honest-arm stage-one rows. Windows 24–29 standardised TCM: **0.8759 0.8971 0.8889 0.8675 0.8918 0.8751**. Leg A (persistence): **min 0.8675 vs 0.7877 = +0.0798 → CONFIRMED**. Leg B (continued rise): **max 0.8971 vs 0.9409 = −0.0438 → REFUTED**. Registered literals used; the bar was **not** refit on the judged data — the exploratory instrument still says "flat" today only because it fits `b` over the break itself.
