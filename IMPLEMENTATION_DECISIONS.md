@@ -2864,3 +2864,76 @@ whether it processes a real change correctly, not whether it prevents one.**
 The 3,252 backlog and the ~190 expected promotes are withdrawn by them and were never load-bearing
 here. Recorded because the correction shipped in the same message as the finding it undermined,
 unprompted — the same discipline as their cadence disclosure.
+
+## D394 — **The floor is INCLUSION BREADTH, cited not inferred; Crucible withdraws the `rank_k ≤ 5` two-sided recommendation. We do NOT act on their new `k=5` evidence either — the v51 tombstone documents this exact collider on this exact axis. Margin-stratified read requested.**
+
+**Date:** 2026-08-14 · **Class:** cross-system finding (no code change) · **Follows:** D393
+
+### The answer
+
+Our returned question — inclusion breadth or cross-sectional dispersion? — has a documented answer:
+**inclusion breadth.** Quoted from their DESIGN.md §20 `regime-coverage-rank-parity` (operator
+decision 2026-06-09): `n_min = 2 × rank_k`, *"per-config, so a top-20 config needs 40 rankable
+names before ranking is a selection rather than an enumeration"* — and the rejected-alternatives
+column rejects a fixed global N=40 as *"over-strict for rank_k=5 configs"*. It is a **data floor**
+whose output is a window start; nothing in it estimates dispersion.
+
+**Our D393 §2 reading was correct** and the `≤ 5` two-sided recommendation is **withdrawn by
+them**, unprompted: *"do NOT spend the freeze's first increment on it."* Asking rather than
+inferring cost us nothing and saved a version bump — the D361 discipline paying for itself.
+
+### The new evidence, and why we are NOT acting on it
+
+They measured stage-two outcome by shape after sending the earlier relay:
+
+| tier | rank_k | mode | children | promotes | rate | component rate |
+|--:|--:|---|--:|--:|--:|--:|
+| 2 | 10 | long_only | 24,363 | 39 | 0.16% | 92.0% |
+| 2 | 10 | long_short | 21,318 | 37 | 0.17% | 84.9% |
+| 2 | 5 | long_only | 14,848 | 6 | 0.04% | 94.0% |
+| 2 | 5 | **long_short** | **9,899** | **0** | **0.00%** | 72.2% |
+
+`P(0 | ~17 expected) ≈ 4e-8`. Their own caveat, volunteered: stage two is a collider, so *"take
+the retraction as solid and the ranking as suggestive."*
+
+**We agree, and our own record makes it sharper.** The `_RANK_K_CHOICES` tombstone records that
+**v50 shipped a rank_k=5 bias and v51 reverted it the same night**, because Crucible's honest-arm
+evidence was collider-biased and they retracted it in full
+(`CRUCIBLE_URGENT_rank_k_finding_was_COLLIDER_BIASED_2026-07-25`). The mechanism we reproduced on
+our own ledger then is the mechanism operating now: *"stage-two admission is the refit TRIGGER, a
+function of config quality, so conditioning on it is a collider."* **Same axis, same source, same
+conditioning structure, and we have already shipped-and-reverted once on it.** A second grammar
+change on stage-two rates without stratification would be repeating v50 with the sign flipped.
+
+**Direction, in fairness:** their finding *agrees* with v51's post-retraction understanding that
+k=5 is the worse value, so this is corroboration rather than a new claim. And 0 of 9,899 is a far
+starker fact than the median comparison v50 rested on. It is the **attribution to shape**, not the
+count, that the collider threatens.
+
+**Requested instead of acting:** the promote rate for `rank_k=5 long_short` **stratified within
+their existing parent-margin buckets** (they already publish 31.5% / 13.9% / 5.6% / 3.1% / 0.6% /
+0.01%). Zero within every bucket is shape; concentration in the low-margin buckets is selection.
+That read breaks the collider and would make the tightening registrable.
+
+**Our exposure if it is confirmed:** `rank_k=5 long_short` is **17.9% of post-v48 xsect flow**
+(48,596 configs since v48), so this is worth resolving properly rather than quickly.
+
+### Two notes back
+
+- **Their mechanism claim cuts further than they drew it.** They report the cross-sectional edge
+  *"behaves like an equity factor rather than a name-selection edge, which is exactly why
+  narrowing toward real selection removes the mechanism."* If that is right, maximum inclusion is
+  the productive direction — which is what their own floor refuses for `long_only rank_k=20`.
+  Raised as a question, not a claim: is the floor protecting a **data** requirement that happens
+  to bind hardest on the shape their promote data likes best?
+- **Our D393 §1 numbers held on re-check:** 63,171 `rank_k=20` ever, last at 2026-07-22 15:45:10Z,
+  **zero on or after 07-23**. The 964 dated "after 07-22" in a coarse query are same-day
+  pre-deploy submissions, not a leak.
+
+### Adopted from their §3
+
+They commit unilaterally to citing the §20 entry when a finding touches a mechanism, or stating
+explicitly that they looked and found none — converting silent inference into a checkable claim.
+**We adopt the mirror**: a Forge relay asserting anything about *their* internals cites the source
+or says it is an inference. Their framing is the durable one: **"a mechanism you can re-derive is
+not evidence that it is unrecorded."**
