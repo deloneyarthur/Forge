@@ -1,31 +1,44 @@
-# Grammar freeze — DECLARATION (DRAFT, awaiting operator)
+# Grammar freeze — DECLARATION (RE-FOUNDED, awaiting operator signature)
 
-**Status: ⚠️ DO NOT SIGN AS WRITTEN — (C) was falsified 2026-08-06 and the follow-on read has now
-RESOLVED (2026-08-09, D384): the ceiling took a ONE-TIME LEVEL SHIFT and re-plateaued.**
-All three conditions were MET when this was drafted, against a **~0.75 plateau that no longer
-exists**. Within three days of (C)'s registered read the composition-standardised TCM broke out by
-**+0.1532 — six times the 0.0242 bar it was judged against** — and this was checked against the
-failure that voided the ORIGINAL (C): **not composition**, raw and standardised track within
-±0.005. Prereg **`74dbbaee89c7`** then read once at its registered n (29 windows, n=34,839):
+**Status: ⚠️ NOT SIGNED. Ready for signature for the first time — the re-baselining this document
+demanded of itself has been done and read.** The 08-06 blocker was that (C) certified flatness at a
+~0.75 plateau the stream had since left by +0.1532. This draft's own remedy was "a fresh (C)
+registered against the post-break level, with its drift floor refit on post-break windows only."
+That is **`3b0cbca7ae17`**, registered 2026-08-10 (D388) and read once 2026-08-14 (D389):
 
 ```
-windows 24-29 standardised TCM   0.8759  0.8971  0.8889  0.8675  0.8918  0.8751
-LEG A  persistence   min 0.8675  vs 0.7877  = +0.0798   CONFIRMED  -- durable level shift
-LEG B  continued rise max 0.8971  vs 0.9409  = -0.0438   REFUTED    -- stepped once, re-plateaued
+LEG 1  quality      best-of-new 0.8971  vs baseline 0.9193  =  -0.0222   bar 0.0536   CONFIRMED
+LEG 2  redundancy   best-of-new 0.4392  vs baseline 0.4484  =  -0.0092   bar 0.0135   CONFIRMED
 ```
 
-**What this means for the freeze: it is still available, but not on these numbers.** Leg B refuting
-is the result that keeps a freeze coherent — the grammar is not on a rising trajectory, so
-"stopped improving" is not contradicted. Leg A confirming is what invalidates the *evidence base*:
-(C) certified flatness at a level the stream has since left, so §2's (C) block measures a plateau
-that is two windows of history old. **Re-baselining is required before signature** — a fresh (C)
-registered against the post-break level, with its drift floor refit on post-break windows only.
-That refit needs post-break windows to fit on, and there are six.
+**Both legs came in BELOW baseline, so neither confirmation leans on its bar** — and leg 1's
+−0.0222 would also have cleared the *original* (C)'s narrower 0.0242 bar, which is what makes the
+wider-bar caveat (§2C) survivable rather than fatal.
 
-Everything below stands as the record of what was true on 08-06, with §4 corrected.
-**Programme:** D328 → D367. **Grammar at declaration:** v55.
+**What changed in the interim, and it strengthens the claim rather than patching it.** The 08-03
+break was not a grammar effect at all: it was Crucible's monthly tier-3 universe re-rank arriving
+through our own 4h15m cache lag — a **generation-basis** change (D385→D387, our competing
+ranking-time explanation refuted on our own data and withdrawn). So the re-baselining became a
+**replication inside a single fixed basis** (`e1adced727678c8f`), which is stronger evidence than
+the original: the generator now draws from a *different universe* and (C) still holds. The original
+(C) legs were themselves basis-clean — windows 1–18 are all `877b1eddde9864eb` — and **they stand.**
+
+**⚠️ READ §4 AND §8 BEFORE SIGNING. THEY ARE NOT HEDGES AND THEY ARE NOT SETTLED BY D389.**
+(C) tests the **bulk tail** and says so itself. Two measurements point the other way and are
+recorded here rather than in a footnote: the **ranked lane is still setting running-maximum records
+at exactly the unbounded-search rate** (z=+0.13, trail climbing to +1.7397 on 08-03), and the
+**joint frontier is still advancing** (z=+3.60, p=0.003). Signing asserts "the bulk of the supply
+distribution has stopped improving and the search budget is better spent on the converting core" —
+it does **not** assert "no better strategy exists," and §8 Step 1 found the binding constraint on
+component production is **Crucible-side refit triage, not Forge generation.** That finding is the
+strongest practical argument *for* freezing, and it is not an argument that the ceiling is absolute.
+
+**Programme:** D328 → D389. **Grammar at declaration:** v55. **Preregistration registry: 31
+registered, 31 resolved, none open.**
 **Relates to:** `docs/proposals/grammar-freeze-criterion.md` (the criterion this reads against),
-`IMPLEMENTATION_DECISIONS.md` D328–D367, `INDEX_forge_answered.md` (Crucible-side agreements).
+`IMPLEMENTATION_DECISIONS.md` D328–D389, `INDEX_forge_answered.md` (Crucible-side agreements).
+
+Everything below stands as the record, with §2C re-founded and §7 refreshed.
 
 ---
 
@@ -69,18 +82,46 @@ Basis note: metric B was **re-based** at D331 and the pre-re-base series (2.80% 
 comparable — the census now requires an *honest* component before calling a cell converting, and
 adds an `unevaluated` class that is never a prune target.
 
-### (C) Supply ceiling — MET 2026-08-03, and read under conditions that have since changed
+### (C) Supply ceiling — MET, and RE-FOUNDED within a single generation basis 2026-08-14
 
-Both legs read **once**, at their registered window counts, against bars fixed in advance:
+**The reading that carries the condition (D389, prereg `3b0cbca7ae17`).** Basis-scoped to
+`e1adced727678c8f` — the universe basis created when our `_load_universe_tiers_cached` picked up
+Crucible's 2026-08-03T13:00:07Z tier-3 re-rank 4h15m late, at 17:15:54Z. Rows filtered to the basis
+**first** and gridded **second**, so no window straddles the seam (18 basis-local windows, zero
+straddles, coverage 0.996–1.000, corr join 84.2%, reference fingerprint `ae47a4749c9d` verified).
 
-| leg | prereg | windows | best-of-new | baseline | excess | bar | verdict |
-|---|---|---|--:|--:|--:|--:|---|
-| 1 — quality (standardised TCM) | `f507e5da0677` | 11–16 | 0.7589 | 0.7548 | **+0.0041** | 0.0242 | CONFIRMED |
-| 2 — redundancy (TCM-corr) | `13e4d2cece3f` | 12–17 | 0.4378 | 0.4411 | **−0.0033** | 0.0173 | CONFIRMED |
+| leg | windows | best-of-new | baseline | delta | bar | falsify above | verdict |
+|---|---|--:|--:|--:|--:|--:|---|
+| 1 — quality (standardised TCM) | 12–17 | 0.8971 | 0.9193 | **−0.0222** | 0.0536 | 0.9729 | **CONFIRMED** |
+| 2 — redundancy (standardised TCM-corr) | 12–17 | 0.4392 | 0.4484 | **−0.0092** | 0.0135 | 0.4619 | **CONFIRMED** |
 
-Both also clear a bar **re-derived on post-ramp data that is 3.3× tighter** (0.0074 / 0.0130), so
-the result is not an artifact of a loose threshold — the one direction that could not have been
-walked back (D358).
+Both falsifiers were one-sided **upward**, for opposite reasons: rising quality would mean the
+ceiling is still moving, rising correlation would mean the good supply has become more redundant.
+Both came in **below** baseline.
+
+**⚠️ THE ONE WAY THIS READ IS WEAKER THAN THE ORIGINAL, stated at registration rather than found
+later.** Leg 1's bar is 0.0536 — **2.2× the original's 0.0242** — because the drift fit finally
+*resolved* (`b=0.0235`, `b_up=0.0268`) instead of degenerating to `b=0.0000` as it had three times
+before, which forced a `2·sd` fallback. A wider bar makes "flat" easier to confirm, so this
+confirmation is **weaker per-unit** than the original's. The rule was held fixed rather than the
+number, which is the only defensible choice. **Mitigation, measured:** the observed −0.0222 clears
+the original's narrower bar too, so the verdict does not depend on the extra room.
+
+**Second self-check recorded.** The recomputed prior maxima had drifted to 0.9204 / 0.4485 against
+the registered literals 0.9193 / 0.4484 as post-stratification re-weighted history with the growing
+sample. The read used the **literals**, as the prereg required — marginally *harder*, not easier.
+
+**The original (C) STANDS as history, not as the live basis.** Read 2026-08-03 on preregs
+`f507e5da0677` (leg 1, windows 11–16, +0.0041 vs 0.0242) and `13e4d2cece3f` (leg 2, windows 12–17,
+−0.0033 vs 0.0173), both also clearing a 3.3×-tighter post-ramp re-derived bar (0.0074 / 0.0130,
+D358). **Both were basis-clean** — global windows 1–18 are all `877b1eddde9864eb`, so neither
+crossed the 08-03 boundary (D387/D388). What the break invalidated was the *level* they certified,
+not the reads themselves. This is why D389 is a **replication**, not a repair.
+
+**Not carried forward:** leg A of `74dbbaee89c7` (+0.0798 "durable level shift") is **discounted** —
+its 0.7877 threshold was old-basis while its windows were new-basis, so it measured the universe
+change, not persistence. Leg B (rise REFUTED, −0.0438) was basis-clean and stands; it is the result
+that keeps a freeze coherent, since the grammar is not on a rising trajectory.
 
 **§4 qualifies what (C) means. It should not be read without it.**
 
@@ -295,10 +336,18 @@ generation against `IC(cpcv, corr_to_book)`.
 
 ## 7. Open at declaration
 
-- **Prereg `6e81bfaa3907`** (adx regime-gate replication) — **not due**: n=1,021 against a
-  registered n≥1,500. Its observed ρ=−0.1004 *would* clear its MDE, which is precisely why it is
-  not being read early. ~1.5 days at the observed rate. **It is not a freeze condition** and does
-  not gate this declaration.
+- **No preregistration is open.** The registry stands at **31 registered, 31 resolved** (20
+  confirmed, 6 refuted, 5 insufficient). `6e81bfaa3907` (adx regime-gate
+  replication), listed here as "not due" at declaration time, **read CONFIRMED 2026-08-08** at
+  n=1,727 against its registered n≥1,500, with the collider check re-run as part of the read. It was
+  never a freeze condition and did not gate this declaration.
+- **⚠️ The registered read was OVERDUE and nothing fired it (D389).** `STATUS.md` described a
+  watcher as armed; there is **no systemd unit and no cron entry** for
+  `scripts/freeze_registered_read.py`, and the read tool prints its verdict without writing the
+  registry — the resolution had to be recorded by hand. The clock (7,490 in-basis rows against 7,200
+  required) had already passed when an operator check surfaced it. Since a prereg forbids extension,
+  a silently drifting read is a live failure mode. **Fix before the next registration: arm the
+  watcher and have the read tool resolve its own prereg, or delete the claim from `STATUS.md`.**
 - **`scripts/second_gate_contrast.py` pools across `measurement_basis`** — the D360 defect, in a
   committed instrument. Worth fixing before it is used to judge any future second gate.
 - **`young_explore` REMOVED outright** (D367 kept it OFF; D378 deleted the never-enabled lane,
