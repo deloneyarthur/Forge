@@ -1,0 +1,15 @@
+[Unit]
+Description=Trigger the Forge preregistration watcher (daily)
+Documentation=file://%h/proj/Forge/deploy/systemd/forge-prereg-watch.service
+
+[Timer]
+# Daily at 06:30, after the 05:00 ranker-eval. Read clocks move at ~2,200 rows/day, so a
+# day's granularity is far finer than any registered n; hourly would only add snapshot I/O.
+# Persistent=true so a run missed while the box was off fires on next boot — the same
+# property that makes Crucible's re-rank "on or after the 3rd" (D391).
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+Unit=forge-prereg-watch.service
+
+[Install]
+WantedBy=timers.target

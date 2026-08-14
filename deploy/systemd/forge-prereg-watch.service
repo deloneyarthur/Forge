@@ -1,0 +1,20 @@
+[Unit]
+Description=Forge preregistration watcher (a registered read must not come due silently)
+Documentation=file://%h/proj/Forge/scripts/freeze_read_watcher.py
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/proj/Forge
+# The snapshot script REUSES one younger than --max-age-min, so the daily run costs a
+# 7.5 GB copy at most once per day and nothing on a same-day re-run. It also refuses to
+# write to a tmpfs — /tmp on this box is RAM, and filling it takes the shell down (D-note
+# in live_db_snapshot.sh).
+ExecStart=/bin/bash -lc 'SNAP=$(scripts/live_db_snapshot.sh --max-age-min 720) && %h/.local/bin/uv run python scripts/freeze_read_watcher.py "$SNAP"'
+# Exit 1 = a read is DUE, exit 2 = an open prereg is UNWATCHABLE. BOTH must mark the unit
+# failed so they appear in `systemctl --user --state=failed`. This unit deliberately has NO
+# SuccessExitStatus: the whole point of D389 is that a watcher whose warning is swallowed is
+# indistinguishable from no watcher at all.
+TimeoutStartSec=20m
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forge-prereg-watch

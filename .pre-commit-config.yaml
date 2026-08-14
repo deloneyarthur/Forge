@@ -59,6 +59,20 @@ repos:
         pass_filenames: false
         files: ^(config/grammar\.yaml|config/grammar_archive/.*\.yaml)$
         always_run: false
+      - id: freeze-governance
+        name: signed-freeze governance guard
+        description: |
+          Once docs/proposals/grammar-freeze-declaration.md reads SIGNED, refuse a
+          content change to config/grammar.yaml unless an OPEN preregistration with a
+          stated required n exists (declaration §6 sequencing), or a §5 reopener is
+          exercised via FORGE_FREEZE_REOPENER=D### with that Decision Log entry staged
+          in the same commit. D390 signed the freeze and recorded that nothing enforced
+          it; D391/D389 is the same class — arm it or delete the claim.
+        entry: uv run python scripts/check_freeze_governance.py   # see the note above
+        language: system
+        pass_filenames: false
+        files: ^config/grammar\.yaml$
+        always_run: false
       - id: grammar-doc-sync
         name: grammar ↔ GRAMMAR.md sync
         description: |

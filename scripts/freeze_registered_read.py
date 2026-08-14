@@ -46,9 +46,11 @@ import argparse
 import importlib.util
 import json
 import math
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 _INSTRUMENT = Path(__file__).resolve().parent / "freeze_tail_reading.py"
 _spec = importlib.util.spec_from_file_location("freeze_tail_reading", _INSTRUMENT)
 assert _spec is not None
@@ -290,6 +292,15 @@ def main() -> int:
         choices=("c", "persistence", "within-basis"),
         help="which registered read to take: (C), 74dbbaee89c7, or 3b0cbca7ae17",
     )
+    ap.add_argument(
+        "--resolve",
+        action="store_true",
+        help=(
+            "write the outcome to the preregistration registry. Without this the read is "
+            "printed and NOT recorded -- which is how 3b0cbca7ae17's resolution came to be "
+            "entered by hand (D389). A read that is taken should be a read that is recorded."
+        ),
+    )
     args = ap.parse_args()
 
     legs: tuple[RegisteredLeg, ...] | tuple[PersistenceLeg, ...] = {
@@ -326,11 +337,13 @@ def main() -> int:
         print(f"BASIS-SCOPED to {_WITHIN_BASIS_FP}: n={n}, {n // 1200} windows (grid is local)")
     win_bases = _fx.window_bases(bases, 1200)
     ok = True
+    readable = True
     for leg in legs:
         clean, msg = _basis_guard(win_bases, leg.first_new, leg.last_new)
         if not clean:
             print(f"\n=== {leg.name} ===\n  ABORT -- {msg}")
             ok = False
+            readable = False
             continue
         print(f"\n[basis guard] windows {leg.first_new}-{leg.last_new}: {msg}")
         series = _fx._series(obs, ref, 1200, True, leg.stat)
@@ -338,7 +351,54 @@ def main() -> int:
             ok &= _read_persistence(leg, series)
         else:
             ok &= _read(leg, series)
+
+    if args.resolve:
+        _resolve(legs, ok, readable)
+    else:
+        print(
+            "\n[not recorded] --resolve was not passed, so the registry is UNCHANGED. "
+            "The read is only taken once; record it before the number is lost (D389)."
+        )
     return 0 if ok else 1
+
+
+def _resolve(
+    legs: tuple[RegisteredLeg, ...] | tuple[PersistenceLeg, ...],
+    ok: bool,
+    readable: bool,
+) -> None:
+    """Write the outcome to the registry, once, using the repo's own resolver.
+
+    A leg that could not be read is `insufficient`, NOT `refuted` -- "not enough data" has to
+    be a different outcome from a verdict, or an early read that happens to pass becomes
+    indistinguishable from peeking-to-threshold.
+    """
+    sys.path.insert(0, str(_REPO_ROOT / "src"))
+    from forge.core.clock import utc_now
+    from forge.feedback.preregistration import resolve_preregistration
+
+    outcome = "confirmed" if ok else ("refuted" if readable else "insufficient")
+    ids = sorted({leg.prereg_id for leg in legs})
+    for pid in ids:
+        try:
+            updated = resolve_preregistration(
+                _REPO_ROOT / "config" / "preregistrations.jsonl",
+                pid,
+                outcome=outcome,
+                evidence=(
+                    f"Auto-recorded by freeze_registered_read.py --resolve at "
+                    f"{utc_now().isoformat()}. See the run output and the D-entry for the "
+                    f"per-leg numbers; this line exists so the read cannot be taken and lost."
+                ),
+                resolved_at=utc_now().isoformat(),
+            )
+            print(f"[registry] {updated.prereg_id} -> {updated.status}")
+        except KeyError:
+            print(f"[registry] ABORT -- no preregistration {pid!r} to resolve", file=sys.stderr)
+        except ValueError as exc:
+            # Already resolved: the single-read guard upstream should have caught this, so
+            # say so loudly rather than treating a double-read as a no-op.
+            print(f"[registry] REFUSED for {pid}: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":

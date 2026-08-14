@@ -2720,3 +2720,67 @@ scheduled for the first trading day of September, 2026-09-01"; that clause is **
 is corrected here**. The registry entry is left as written, because a resolved preregistration is an
 immutable record and correcting it in place would be exactly the kind of after-the-fact edit the
 whole instrument exists to prevent. The correction lives here and in `STATUS.md`.
+
+## D392 — **Both D389/D390 gaps CLOSED: the signed freeze is now structurally enforced, and a registered read can no longer come due silently or be taken and lost.** Guard + watcher + `--resolve`, TDD, 16 new tests.
+
+**Date:** 2026-08-14 · **Class:** instrument (governance enforcement) · **Follows:** D389, D390, D391
+
+Both gaps were logged in D390's "not done here" rather than assumed away, and both are the same
+class: **a control that exists as a sentence rather than as a mechanism.** D389 found a watcher
+described as armed with no unit behind it; D390 signed a freeze that nothing read. Crucible hit the
+same class twice in one week and the agreed disposition — **arm it or delete the claim** — is what
+this implements.
+
+### Gap 1 — `scripts/check_freeze_governance.py` (pre-commit hook `freeze-governance`)
+
+Once the declaration's status line reads SIGNED, a **content** change to `config/grammar.yaml` is
+refused unless an **open preregistration with a stated required n** exists. That is the sequencing
+half of declaration §6 — prereg *before* the edit — and it is the half a machine can check.
+
+**Deliberately not enforced:** goldens re-pinned, emission proof, funnel attribution, STATUS block.
+Those are judgements about whether work was done *well*, not facts about whether it was *sequenced*
+correctly. A hook pretending to check them would give false assurance — the exact failure it exists
+to fix.
+
+**The reopener escape is shaped so it cannot be used silently.** §5 reopeners are first-class, so
+`FORGE_FREEZE_REOPENER=D###` overrides — but only when the same commit stages a `## D###` header in
+the Decision Log. An override that leaves no permanent record is a hole; one that must leave a
+D-entry is an escape hatch. Verified live against the real repo: refused a grammar edit with no
+prereg, and refused an override with no staged entry; `config/grammar.yaml` restored byte-clean.
+
+**Inertness properties, both tested:** the guard is inert before signature (a freeze must not be
+retroactive) and inert when no declaration file exists (a guard that crashes in a fresh checkout
+blocks every commit). A test asserts the *live* declaration still parses as signed, so the guard
+cannot go quietly inert if the document is retitled.
+
+### Gap 2 — `scripts/freeze_read_watcher.py` + timer, and `--resolve` on the read tool
+
+**The watcher** reports, per open prereg: DUE (exit 1), waiting with the remaining count (exit 0),
+or **UNWATCHABLE** (exit 2) when the registration carries no machine-readable clock
+(`watch: {n, basis_fp}`). That third case *is* the D389 defect — the failure was never a broken
+watcher, it was a claim no watcher could have checked. The unit deliberately carries **no
+`SuccessExitStatus`**, unlike `forge-healthcheck`, so both conditions mark it failed and surface in
+`systemctl --user --state=failed`: a watcher whose warning is swallowed is indistinguishable from
+no watcher.
+
+**It never computes the metric** — it counts rows and compares fingerprints. Deciding whether to
+page by peeking at the answer would BE the read. Counts are basis-scoped in SQL, so a foreign-basis
+backlog can never make a read look due (the D387/D391 failure shape), and that is asserted by test.
+
+`forge-prereg-watch.timer`: daily 06:30, `Persistent=true`, reusing a ≤12h snapshot so the 7.5 GB
+copy costs at most once a day. **Installed, enabled and smoke-run: `Result=success`,
+"no open preregistrations — nothing to watch."**
+
+**`--resolve`** on `freeze_registered_read.py` writes the outcome through the repo's own
+`resolve_preregistration`, so a read that is taken is a read that is recorded — `3b0cbca7ae17`'s
+resolution had to be entered by hand (D389). Without the flag the tool now prints
+`[not recorded] ... the registry is UNCHANGED`, so the silent case is at least a loud one. A leg
+that could not be read resolves `insufficient`, never `refuted`: "not enough data" must be a
+different outcome from a verdict, or an early read that happens to pass is indistinguishable from
+peeking-to-threshold.
+
+### Verification
+
+16 new tests (10 guard, 6 watcher), TDD red→green; 58 script tests and 184 unit+invariant tests
+pass; `ruff` clean; `mypy --strict` clean on 107 files. The single-read guard was re-confirmed live:
+re-running the within-basis read now aborts with `status is 'confirmed', not 'registered'`.
