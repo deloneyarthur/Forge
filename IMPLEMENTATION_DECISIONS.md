@@ -2784,3 +2784,83 @@ peeking-to-threshold.
 16 new tests (10 guard, 6 watcher), TDD red→green; 58 script tests and 184 unit+invariant tests
 pass; `ruff` clean; `mypy --strict` clean on 107 files. The single-read guard was re-confirmed live:
 re-running the within-basis read now aborts with `status is 'confirmed', not 'registered'`.
+
+## D393 — **Crucible's §8 Step 2 close-out: neither generation nor refit triage binds component production.** Their §5 `rank_k=20` residue is a re-derivation of their own 2026-07-22 root-cause, which we shipped as v48 the same day. One open question returned; one pushback registered.
+
+**Date:** 2026-08-14 · **Class:** cross-system finding (no code change) · **Follows:** D328/v48, D390, D392
+
+### What they answered
+
+Our 08-06 §8 Step 2 ask — *is newest-first refit ordering deliberate under the doubled capacity?*
+— was already answered by action. They shipped a quality sub-lane on 2026-08-06, the day after the
+relay: a reserved sub-budget goes to the best margin over both binding bars, floor-gated at −0.3.
+Measured over 44h: **quality lane 2.5% of volume → 6.30% promote rate; newest-first 97.5% → 0.03%.
+206×. 2.5% of the budget produced 84% of the promotes.** Our hypothesis was right and the effect
+is larger than we argued.
+
+**And more of that lane buys nothing.** They raised its share 20% → 80%, measured no effect, and
+reverted the same day: the lane finds 0–3 eligible candidates per pass, so the 8-slot budget was
+never binding. **"Refit our best 2,000" turned out to be already executed** — 1,736 of 3,256
+above-floor candidates ARE components, 1,460 more have children in flight, and the un-consumed
+above-floor supply is **three rows**.
+
+**Both candidate answers to "what binds component production" are now closed: not generation
+(our finding), not refit triage (theirs).**
+
+### Their §5 residue is our v48, three weeks late
+
+They report the un-convertible residue as 17 configs of one shape — tier-2 `rank_k=20`, at 100%
+chain coverage, refused by a `_rank_chain_floor` demanding `2 × rank_k` tier members (40) on a
+20-name tier. **That is verbatim the mechanism they root-caused for us on 2026-07-22**
+(`FORGE_coverage_gate_rootcause_reply`), and which we shipped the same day as grammar **v48**
+(`2160149`, under the D328 freeze programme): `_RANK_K_CHOICES (5,10,20) → (5,10)`.
+
+Verified against a live snapshot rather than asserted from the constant:
+
+| rank_k | tier | n | last submitted |
+|--:|--:|--:|---|
+| 20 | 2 (long_only) | 31,640 | **2026-07-22** |
+| 20 | 2 (long_short) | 31,527 | **2026-07-22** |
+| 20 | 3 | 4 | 2026-07-20 |
+| 10 / 5 | 2 | 493,408 | 2026-08-14 (current) |
+
+**63,171 `rank_k=20` configs ever; zero since 2026-07-22.** Their 17 are a closed cohort drawn
+from a frozen pool — it cannot grow, and no ordering or budget change on their side could ever
+have reached it. **No action required on our side.**
+
+*The recurrence itself is worth recording:* the same mechanism was derived twice, three weeks
+apart, from opposite ends — a coverage-label starve on ours, a refit residue on theirs — and the
+second derivation did not connect to the first. Same shape as our own D386 (a rule generalised
+from one cooperative observation, re-derived later without noticing it was settled). Neither side
+has a searchable shared record; naming mechanisms rather than symptoms is what made the two
+recognisable as one thing.
+
+### One pushback, registered rather than silently accepted
+
+They recommend `rank_k ≤ 5` two-sided for "genuinely selective" tier-2 configs, because
+`10 long + 10 short` covers the whole 20-name tier. **We think that conflates inclusion with
+selection, and only for the two-sided case.** `long_only` `rank_k=20` is genuinely degenerate —
+buy all 20 of 20, the ranker cannot affect the portfolio. But `long_short` `rank_k=10` includes
+every name while the **ranking still decides which side each is on**: that is standard
+dollar-neutral cross-sectional construction, where full-tier coverage is a feature and the alpha
+is the spread.
+
+**Returned as a question, not an assertion:** is the `2 × rank_k` floor protecting against
+*inclusion breadth* (two-sided full-tier is then fine) or against *cross-sectional dispersion
+being unmeasurable at n=20* (then `≤ 5` is right)? We decline to tune generation against a floor
+whose purpose we have inferred — that is precisely the D361 failure. If they confirm the
+dispersion reading, the bound is cheap.
+
+### The freeze's first live test
+
+Their finding landed hours after D390's signature, making it the first external ask to hit a
+frozen grammar. If the dispersion reading is confirmed, a `rank_k ≤ 5` two-sided bound is a
+prereg + version bump + D-entry, and it is a **tightening** — hard rule #4 permits it without the
+loosening path, and D392's hook will require the prereg first. **The honest test of the freeze is
+whether it processes a real change correctly, not whether it prevents one.**
+
+### Their two withdrawals
+
+The 3,252 backlog and the ~190 expected promotes are withdrawn by them and were never load-bearing
+here. Recorded because the correction shipped in the same message as the finding it undermined,
+unprompted — the same discipline as their cadence disclosure.
