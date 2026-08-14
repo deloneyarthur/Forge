@@ -2651,3 +2651,72 @@ declaration, and the pre-commit grammar version-bump scanner would still pass a 
 A structural guard (hook-level refusal absent a prereg, in the spirit of hard rule #4) is the
 obvious follow-up and is **not built**; it is an operator call, logged here so the gap is a known
 one rather than an assumed enforcement. The **watcher gap from D389 also remains open**.
+
+## D391 — **D386's standing basis boundary is WRONG and is CORRECTED: the re-rank fires on the 3rd (`OnCalendar=*-*-03`), not the first trading day.** August hid it — Aug 1 was a Saturday, so the two coincided. September diverges by two days. Crucible's export also went DAILY on 08-11; our fingerprint is unaffected, verified in code.
+
+**Date:** 2026-08-14 · **Class:** correction (measurement basis) · **Follows:** D386, D389, D390
+
+### The correction
+
+D386 adopted "first trading day of the month" as a standing basis boundary — 09-01, 10-01,
+monthly. **That rule is falsified.** Crucible's answer to our §4 schedule ask:
+
+```
+  timer          OnCalendar=*-*-03 06:00:00, Persistent=true
+  next run       2026-09-03 (Thu)          <- the FACT: when the basis can change
+  snapshot asof  2026-09-01 (Tue)          <- the LABEL: what the file says
+  August         Aug-01 Sat -> first trading day WAS Aug-03 -> label == fact, by accident
+```
+
+The snapshot is *labelled* with the first trading day because their ranker picks it inside the
+month window, but **it does not exist until the run.** We adopted the label as the boundary after
+observing a month in which the two happened to coincide — a single-observation generalisation that
+looked confirmed because the calendar cooperated.
+
+**Two consequences, both ours to carry:**
+
+1. **The boundary is the RUN, not the label.** Configs our generator emits on 09-01 and 09-02 still
+   draw the AUGUST universe, because the September snapshot does not yet exist. Any window cut on
+   "first trading day" puts those two days on the wrong side — the same class of error as D387's
+   window-grid artifact, and it would have been invisible again in a month where the dates aligned.
+2. **`Persistent=true` means the boundary can move LATER, never earlier.** A missed run fires on
+   next boot. The honest statement is **"on or after the 3rd"**, never "on the 3rd". Crucible will
+   treat a late catch-up as notifiable, since it has the same effect on a window as an off-cycle
+   re-rank.
+
+### The rule that replaces it
+
+**The resolved `enumeration_inputs_hash` universe component is the cut. Full stop.** The calendar is
+demoted from a rule to a rough expectation — useful for *planning* a read, never for *cutting* one.
+This is what D387's basis guard already enforces in code; D386's calendar heuristic was a parallel,
+weaker instrument that would have disagreed with it in September. **Nothing that cuts a window may
+key on a date.**
+
+### The daily-publish change, and why we are clean
+
+Crucible began publishing `universe_tickers_*.json` **daily at 06:05 from 2026-08-11** (a heartbeat
+so QuantIQ's chain producer can distinguish "unchanged" from "publisher stopped"; their staleness
+budget went 45d → 5d on it). They flagged the risk that a consumer keying on **file identity or
+mtime** would read a daily basis change that is not one.
+
+**Verified in code: we do not.** `_load_underlyings()` resolves the pool through
+`_load_universe_tiers_cached()` and returns a **sorted ticker union**; `universe_fingerprint()`
+(D078) hashes that *content* plus the tier-3 split. Byte-identical daily republishes therefore
+produce an identical fingerprint. The two mtime-ordered globs in the tree read **different files** —
+`registry_snapshot_*.json` (`registry_loader`) and `chain_inception_floors_*.json`
+(`chain_inception`) — neither is the universe export. **No change required.**
+
+Worth stating rather than assuming: this is the *content-fingerprint-over-calendar* principle
+paying off twice in one relay — it is why the daily cadence is a non-event for us, and it is the
+same reason the calendar boundary above had to go.
+
+### Effect on the signed freeze (D390): none, and the window it validated is unchanged
+
+`3b0cbca7ae17` read inside basis `e1adced727678c8f` on windows 12–17, all basis-clean, with zero
+rows on any other basis since the cohort cut. The correction moves the *end* of that basis from
+09-01 to on-or-after 09-03 — **later, i.e. more headroom, not less** — so the read sat even further
+inside its era than recorded. The prereg's own text says the basis "ends at their next re-rank,
+scheduled for the first trading day of September, 2026-09-01"; that clause is **factually wrong and
+is corrected here**. The registry entry is left as written, because a resolved preregistration is an
+immutable record and correcting it in place would be exactly the kind of after-the-fact edit the
+whole instrument exists to prevent. The correction lives here and in `STATUS.md`.
