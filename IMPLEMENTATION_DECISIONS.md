@@ -2536,3 +2536,56 @@ Two bugs found and fixed while wiring it, both in the guards rather than the sta
   and "investigate the marker" were wearing the same message. Now separated.
 
 42 tests, ruff clean.
+
+## D389 — **Within-basis (C) READ and CONFIRMED on both legs.** `3b0cbca7ae17` resolved; the freeze programme has zero open preregistrations. Quality and redundancy both moved DOWN inside a single generation basis, not merely flat.
+
+**Date:** 2026-08-14 · **Class:** measurement (registered read) · **Follows:** D388
+
+### The read
+
+Taken once, at the registered trigger, against a real-disk snapshot. Basis-scoped to
+`e1adced727678c8f`: n=22,273, 18 basis-local windows, grid built **after** filtering so no
+window straddles the seam. Basis guard reported windows 12–17 basis-clean. Corr join 84.2%;
+reference book fingerprint `ae47a4749c9d` verified before leg 2 read.
+
+| leg | new-6 best | registered baseline | delta | bar | falsify above | verdict |
+|---|--:|--:|--:|--:|--:|---|
+| 1 — quality (std TCM) | 0.8971 | 0.9193 | **−0.0222** | 0.0536 | 0.9729 | **CONFIRMED** |
+| 2 — redundancy (std TCM-corr) | 0.4392 | 0.4484 | **−0.0092** | 0.0135 | 0.4619 | **CONFIRMED** |
+
+New-6 quality: 0.8971 0.8887 0.8440 0.8478 0.8881 0.8501.
+New-6 redundancy: 0.4372 0.4354 0.4349 0.4231 0.4282 0.4392.
+
+**Both deltas are negative.** The prereg only required "not up by more than the bar"; the
+measurement came in below baseline on both legs, so neither confirmation leans on its bar.
+
+### Three things recorded against ourselves
+
+1. **The literals did their job, and the drift was real.** Recomputed prior maxima came out at
+   0.9204 / 0.4485 against the registered literals 0.9193 / 0.4484 — post-stratification
+   re-weighted history as the sample grew, exactly the float the prereg fixed literals to
+   prevent. The read used the literals. That choice made the test marginally **harder**, not
+   easier, which is the only direction in which such a choice is defensible.
+2. **This confirmation is weaker per-unit than the original (C).** Leg 1's bar is 0.0536,
+   2.2× the original's 0.0242, because the drift fit resolved (`b_up=0.0268`) instead of
+   degenerating to zero. A wider bar makes "flat" easier to confirm. Carried from D388's
+   registration rather than discovered afterwards — and the observed −0.0222 would also have
+   cleared the original's narrower bar, which is the fact that makes the caveat survivable.
+3. **The read was overdue and nothing fired it.** STATUS.md described a watcher as armed;
+   there is no systemd unit and no cron entry for `freeze_registered_read.py`. The clock
+   (7,490 in-basis rows vs the 7,200 required) had already been reached when an operator
+   check surfaced it. The prereg forbids extension, so a silently-drifting read is a real
+   failure mode. **Action: either install the watcher or delete the claim from STATUS.md —
+   an unarmed watcher described as armed is worse than no watcher.**
+
+### What this authorises, and what it does not
+
+(C) **replicates inside a single generation basis** — the strongest form of the claim available,
+since the generator now draws from a different universe than when (C) was first measured. Per
+D388's `action_if_confirmed`, the freeze **declaration** may now be re-founded on within-basis
+evidence. That is a document change and **requires the operator's signature; it is not taken here.**
+
+It does **not** re-open the original (C), which stands on its own basis-clean windows. It does
+not settle whether a cross-sectional config with no drawn underlying should move with a universe
+re-rank at all — still open with Crucible. The void condition never fired: zero rows on any other
+basis since the cohort cut, and no grammar bump shipped during the window.

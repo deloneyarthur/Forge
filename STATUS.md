@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-08-14 — **WITHIN-BASIS (C) READ: BOTH LEGS CONFIRMED, both DOWN. `3b0cbca7ae17` resolved — the freeze programme now has ZERO open preregistrations.** (D389)
+
+- **LEG 1 quality:** best-of-new **0.8971** vs baseline 0.9193 = **−0.0222** against bar 0.0536 (falsify above 0.9729) → **CONFIRMED**. **LEG 2 redundancy:** best-of-new **0.4392** vs 0.4484 = **−0.0092** against bar 0.0135 (falsify above 0.4619) → **CONFIRMED**.
+- **Both deltas NEGATIVE.** The prereg only asked for "not up by more than the bar"; both legs came in *below* baseline, so neither confirmation rests on its bar — and leg 1's −0.0222 would have cleared the original (C)'s narrower 0.0242 bar too. That is what makes D388's own "this bar is 2.2× wider" caveat survivable rather than fatal.
+- **Instrument clean:** basis-scoped to `e1adced727678c8f` (n=22,273, 18 basis-local windows, grid built after filtering → zero straddles); basis guard reports windows 12–17 basis-clean; corr join 84.2%; reference fp `ae47a4749c9d` verified. **Void condition never fired** — zero rows on any other basis since the cut, no grammar bump shipped in the window.
+- **⚠️ RECORDED AGAINST US — the read was OVERDUE and nothing fired it.** STATUS described a watcher as armed; there is **no systemd unit and no cron entry** for `freeze_registered_read.py`. The clock (7,490 in-basis rows vs 7,200 required) had already passed when an operator check surfaced it. The prereg forbids extension, so a silent drift here is a live failure mode. **Fix or delete the claim — an unarmed watcher described as armed is worse than none.**
+- **⚠️ The registered literals mattered.** Recomputed priors had drifted to 0.9204/0.4485 vs the registered 0.9193/0.4484 as post-stratification re-weighted history. The read used the literals, which made the test marginally *harder*.
+- **WHAT IT AUTHORISES:** (C) replicates inside a single generation basis — stronger than the original, because the generator now draws a different universe. The freeze **declaration** may be re-founded on within-basis evidence. **That is a document change and needs the operator's signature. Not taken.** Crucible relay owed.
+
 ## 2026-08-10 (later) — **WITHIN-BASIS (C) REGISTERED: `3b0cbca7ae17`.** A replication, not a re-baseline — both original (C) legs were basis-clean and STAND. First non-degenerate drift fit in the programme. Reads ~2026-08-13. (D388)
 
 - **REPLICATION, NOT REPAIR.** Global windows 1–18 are all `877b`; leg 1 read 11–16 and leg 2 read 12–17, so **neither original (C) read crossed the boundary**. They stand as measured. The question is whether (C) *still holds* now the generator draws a different universe — stronger evidence than the original, not a patch on it.
