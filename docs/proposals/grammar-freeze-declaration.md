@@ -1,7 +1,34 @@
-# Grammar freeze — DECLARATION (RE-FOUNDED, awaiting operator signature)
+# Grammar freeze — DECLARATION (**SIGNED 2026-08-14**)
 
-**Status: ⚠️ NOT SIGNED. Ready for signature for the first time — the re-baselining this document
-demanded of itself has been done and read.** The 08-06 blocker was that (C) certified flatness at a
+**Status: ✅ SIGNED — operator, 2026-08-14, on the re-founded evidence below.** The grammar is
+frozen at **v55**. `grammar_version` stops bumping, `enumeration_inputs_hash` stabilizes, and the
+search/throughput budget is committed to the converting core. New alpha work is Crucible-side
+(assembly, gating), not Forge-side generation. **§6 governance is in force from this date**, and the
+§5 reopeners are live and operator-gated.
+
+**WHAT THE SIGNATURE ASSERTS — and it is the narrower of the two available claims.** That the
+**bulk of the supply distribution has stopped improving** and the budget is better spent on the
+converting core. It does **NOT** assert that no better strategy exists, that the grammar cannot be
+improved, or that a ceiling has been proven. Two measurements point the other way and were read
+before signing (§4, §8): the ranked lane is still setting running-maximum records at exactly the
+unbounded-search rate, and the joint frontier is still advancing (z=+3.60, p=0.003).
+
+**THE STRONGEST OBJECTION, ON THE RECORD AT SIGNATURE.** §4: *"the window spans mostly prunes, not
+expansion — absence of movement is weak evidence about what expansion could do."* That objection is
+**not answered by this evidence and is not claimed to be.** It is the reason §5's reopeners are
+first-class rather than adversarial: reopener (2) (a new registry family with a net-long-vega
+mechanism argument) and reopener (3) (a Path-C structural decision) are precisely the untested
+expansion cases, and either reopens a version bump on the operator's signature alone.
+
+**WHY SIGN NOW RATHER THAN MEASURE MORE.** §8 Step 1: **14 of 23 configs clearing both binding gates
+were never refit**, with a stage-one profile identical to the 9 that were, and refit latency p99=2h
+proving they were passed over rather than queued. The binding constraint on component production is
+**refit triage on Crucible's side, not generation on ours.** No amount of additional grammar search
+addresses that, which is what makes committing the budget the correct move on measured grounds
+rather than on exhaustion.
+
+**Prior status, retained for the record:** ⚠️ NOT SIGNED — ready for signature for the first time;
+the re-baselining this document demanded of itself has been done and read. The 08-06 blocker was that (C) certified flatness at a
 ~0.75 plateau the stream had since left by +0.1532. This draft's own remedy was "a fresh (C)
 registered against the post-break level, with its drift floor refit on post-break windows only."
 That is **`3b0cbca7ae17`**, registered 2026-08-10 (D388) and read once 2026-08-14 (D389):

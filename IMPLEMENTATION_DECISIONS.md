@@ -2589,3 +2589,65 @@ It does **not** re-open the original (C), which stands on its own basis-clean wi
 not settle whether a cross-sectional config with no drawn underlying should move with a universe
 re-rank at all — still open with Crucible. The void condition never fired: zero rows on any other
 basis since the cohort cut, and no grammar bump shipped during the window.
+
+## D390 — **GRAMMAR FREEZE SIGNED.** Operator signature 2026-08-14; grammar frozen at v55; §6 governance in force. Signed on the narrow claim (bulk supply has stopped improving) with the expansion objection explicitly unanswered and carried by the §5 reopeners.
+
+**Date:** 2026-08-14 · **Class:** operator decision (freeze declaration) · **Follows:** D389
+
+### The decision
+
+`docs/proposals/grammar-freeze-declaration.md` moves from RE-FOUNDED/awaiting-signature to
+**SIGNED**. Programme D328 → D390. All three conditions were met on registered reads:
+
+| condition | evidence | status |
+|---|---|---|
+| (A) coverage | census `dead_unprotected` empty — 0 dead cells, 0 dead flow of 148,322 | MET 2026-08-06 |
+| (B) multiplicity efficiency | metric B 0.00%, **18** consecutive runs ≤1.00% against a bar of 7 | MET |
+| (C) supply ceiling | `3b0cbca7ae17` within-basis, both legs **below** baseline (−0.0222 / −0.0092) | MET, re-founded 2026-08-14 (D389) |
+
+### What the signature asserts — deliberately the narrower claim
+
+**Asserted:** the bulk of the supply distribution has stopped improving, and the search/throughput
+budget is better spent on the converting core than on further generation-side search.
+
+**NOT asserted:** that no better strategy exists, that the grammar cannot be improved, or that a
+ceiling has been proven. Both counter-measurements were read before signing and are named in the
+signed header: the ranked lane is still setting running-maximum records at exactly the
+unbounded-search rate (z=+0.13; trail 1.4738 → +1.7397), and the joint frontier is still advancing
+(z=+3.60, p=0.003).
+
+### The strongest objection, unanswered on purpose
+
+§4: **"the window spans mostly prunes, not expansion — absence of movement is weak evidence about
+what expansion could do."** This is not answered by the evidence and the declaration does not claim
+it is. It is why §5's reopeners are first-class: reopener (2) (new registry family with a
+net-long-vega mechanism argument) and reopener (3) (Path-C structural decision) are exactly the
+untested expansion cases, each reopening a version bump on the operator's signature alone.
+Related unanswered limits, all retained in §4: (C) is arithmetically blind to a top-1%-only lift
+(rank ~120-from-top vs promotion-grade rank ~0.4–5), and the honest arm does not exist before v49,
+so v43 and v47 — the programme's two headline prunes — cannot be validated on that basis at all.
+
+### Why sign now rather than measure more
+
+§8 Step 1 is the load-bearing practical finding: **14 of 23 configs clearing both binding gates were
+never refit**, stage-one profile identical to the 9 that were, refit latency p99 = 2h proving they
+were passed over rather than queued. The binding constraint on component production is **Crucible-side
+refit triage, not Forge-side generation.** Additional grammar search cannot address it. That makes
+committing the budget a measured decision rather than an admission of exhaustion.
+
+### In force from this date (§6)
+
+Any post-freeze grammar change is a full increment: **prereg before the edit with required n stated
+at registration** (D363/D364), version bump + archive + Decision Log (hard rule #10), goldens
+re-pinned, emission proof, funnel attribution, STATUS block. Standing Crucible obligations carry
+forward (`INDEX_forge_answered.md`): report eligible-vs-drain drift in either direction —
+**under-supply is now the failure mode that costs components** — flag honest-arm rate changes that
+move a registered basis, and never tune generation against `IC(cpcv, corr_to_book)`.
+
+### Not done here
+
+The freeze is **procedural, not code-enforced** — no script, config or service reads the
+declaration, and the pre-commit grammar version-bump scanner would still pass a post-freeze bump.
+A structural guard (hook-level refusal absent a prereg, in the spirit of hard rule #4) is the
+obvious follow-up and is **not built**; it is an operator call, logged here so the gap is a known
+one rather than an assumed enforcement. The **watcher gap from D389 also remains open**.

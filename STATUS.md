@@ -1,5 +1,14 @@
 # Forge — Status
 
+## 2026-08-14 (later) — **THE GRAMMAR FREEZE IS SIGNED.** Operator, 2026-08-14. Frozen at **v55**; §6 governance in force; §5 reopeners live. Programme D328 → D390. (D390)
+
+- **ALL THREE CONDITIONS MET on registered reads:** (A) coverage — `dead_unprotected` empty, 0 of 148,322 flow · (B) multiplicity efficiency — metric B 0.00%, 18 consecutive runs vs a bar of 7 · (C) supply ceiling — **re-founded within-basis** on `3b0cbca7ae17`, both legs BELOW baseline (−0.0222 quality / −0.0092 redundancy, D389).
+- **WHAT WAS SIGNED — the narrower of two available claims.** That the **bulk of supply has stopped improving** and the budget belongs on the converting core. **NOT** that a ceiling was proven or that the grammar cannot be improved. Both counter-measurements were read first and are named in the signed header: the ranked lane still sets running-max records at the **unbounded-search rate** (z=+0.13, trail to +1.7397) and the **joint frontier is still advancing** (z=+3.60, p=0.003).
+- **⚠️ THE STRONGEST OBJECTION IS UNANSWERED AND SAYS SO.** §4: *the window spans mostly prunes, not expansion — absence of movement is weak evidence about what expansion could do.* Not answered, not claimed to be. It is why §5 reopeners (2) new net-long-vega registry family and (3) Path-C are first-class: they ARE the untested expansion cases, each reopening a bump on the operator's signature alone.
+- **WHY NOW, on measured grounds rather than exhaustion (§8 Step 1):** 14 of 23 configs clearing both binding gates were **never refit** — identical stage-one profile to the 9 that were, refit latency p99=2h proving they were passed over. **The binding constraint is Crucible-side refit triage, not our generation.** More grammar search cannot touch it.
+- **IN FORCE NOW:** every grammar change is a full increment — **prereg before the edit with required n at registration**, version bump + archive + D-entry, goldens re-pinned, emission proof, funnel attribution, STATUS block.
+- **⚠️ TWO KNOWN GAPS, both logged not assumed:** the freeze is **procedural, not code-enforced** (nothing reads the declaration; the pre-commit version-bump scanner would still pass a post-freeze bump — a hook-level guard is the obvious follow-up and is NOT built), and the **D389 read-watcher is still unarmed**.
+
 ## 2026-08-14 — **WITHIN-BASIS (C) READ: BOTH LEGS CONFIRMED, both DOWN. `3b0cbca7ae17` resolved — the freeze programme now has ZERO open preregistrations.** (D389)
 
 - **LEG 1 quality:** best-of-new **0.8971** vs baseline 0.9193 = **−0.0222** against bar 0.0536 (falsify above 0.9729) → **CONFIRMED**. **LEG 2 redundancy:** best-of-new **0.4392** vs 0.4484 = **−0.0092** against bar 0.0135 (falsify above 0.4619) → **CONFIRMED**.
