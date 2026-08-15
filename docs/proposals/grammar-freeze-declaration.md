@@ -368,13 +368,13 @@ generation against `IC(cpcv, corr_to_book)`.
   replication), listed here as "not due" at declaration time, **read CONFIRMED 2026-08-08** at
   n=1,727 against its registered n≥1,500, with the collider check re-run as part of the read. It was
   never a freeze condition and did not gate this declaration.
-- **⚠️ The registered read was OVERDUE and nothing fired it (D389).** `STATUS.md` described a
-  watcher as armed; there is **no systemd unit and no cron entry** for
-  `scripts/freeze_registered_read.py`, and the read tool prints its verdict without writing the
-  registry — the resolution had to be recorded by hand. The clock (7,490 in-basis rows against 7,200
-  required) had already passed when an operator check surfaced it. Since a prereg forbids extension,
-  a silently drifting read is a live failure mode. **Fix before the next registration: arm the
-  watcher and have the read tool resolve its own prereg, or delete the claim from `STATUS.md`.**
+- **✅ CLOSED 2026-08-14 (D392) — the overdue-read gap (D389).** The defect as found: `STATUS.md`
+  described a watcher as armed with no systemd unit and no cron entry behind it, and the read tool
+  printed its verdict without writing the registry, so `3b0cbca7ae17`'s resolution had to be entered
+  by hand after its clock (7,490 rows against 7,200 required) had already passed.
+  **Fixed:** `forge-prereg-watch.timer` armed daily (reports DUE / waiting / **UNWATCHABLE**, with
+  no `SuccessExitStatus` so every condition surfaces), and `freeze_registered_read.py --resolve`
+  writes the outcome through the repo's own resolver. 16 tests, TDD.
 - **`scripts/second_gate_contrast.py` pools across `measurement_basis`** — the D360 defect, in a
   committed instrument. Worth fixing before it is used to judge any future second gate.
 - **`young_explore` REMOVED outright** (D367 kept it OFF; D378 deleted the never-enabled lane,
@@ -395,15 +395,33 @@ were never refit**, with an identical stage-one profile to the 9 that were, and 
 p99 = 2h proving they were passed over rather than queued. **The binding constraint on component
 production is refit triage, not generation.**
 
-**Step 2 — the highest-value item is now a Crucible-side question, and it is already asked.**
-Relayed 2026-08-06: is newest-first refit ordering deliberate under the doubled capacity? Stage one
-has already computed cpcv and WF before the scanner chooses. Nothing is needed from Forge either
-way, and if the ordering changes it is worth more than any grammar work on this board — we would
-rather they refit our best 2,000 than a recency-sampled 2,000.
+**Step 2 — ✅ ANSWERED AND CLOSED 2026-08-14 (D393).** The ask (relayed 2026-08-06): is
+newest-first refit ordering deliberate under the doubled capacity? **It was an artifact, and
+Crucible fixed it on 2026-08-06 — the day after the relay, before answering in words.** A quality
+sub-lane now reserves budget for the best margin over both binding bars. Measured over 44h:
+**2.5% of volume → 84% of the promotes (6.30% vs 0.03%, a 206× ratio).**
 
-**Step 3 — re-read (C) under the restored capacity.** (C) was read at 25% eligible stage-two
-coverage; Crucible has since doubled the drain (`--limit` 20 → 40). A fresh prereg with required-n
-stated at registration would remove the largest caveat in this document. Independent of Steps 1–2.
+**And the lane is finished rather than under-funded.** They raised its share 20% → 80%, measured
+no effect, and reverted the same day — it finds 0–3 eligible candidates per pass. *"Refit our best
+2,000"* was already executed: 1,736 above-floor rows are components, 1,460 more have children, and
+un-consumed above-floor supply is **three rows**.
+
+**Consequence for this document: both candidate answers to "what binds component production" are
+now closed — not generation (Step 1's finding), and not refit triage (Step 2's).**
+
+**Step 3 — ~~re-read (C) under the restored capacity~~ STRUCK 2026-08-14. Its premise is
+withdrawn earlier in this same document.** It read: *"(C) was read at 25% eligible stage-two
+coverage; Crucible has since doubled the drain."* **§4's first entry withdrew that caveat as
+wrong** — both (C) legs read **stage-one** cpcv distributions on the honest arm, and the capacity
+raise is entirely stage-two, so drain coverage never touched (C)'s basis. A step written to remove
+"the largest caveat in this document" survived the caveat's own retraction by three days and was
+never re-checked against it.
+
+Recorded rather than deleted, because a struck step and an absent one carry different information:
+this one shows the document disagreeing with itself for eight days while signed-adjacent. Separately
+and for a different reason, (C) **has** been re-read — `3b0cbca7ae17`, within-basis, both legs
+confirmed (D389) — which is the replication Crucible's generation-basis finding made necessary, not
+the capacity re-read proposed here.
 
 **Step 4 — probe the untested surface — DEPRIORITISED, and the reason is Step 1.** Adding grammar
 surface while 61% of what already clears both binding gates never reaches stage two is solving the
