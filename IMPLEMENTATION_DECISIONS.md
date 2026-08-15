@@ -2937,3 +2937,42 @@ explicitly that they looked and found none — converting silent inference into 
 **We adopt the mirror**: a Forge relay asserting anything about *their* internals cites the source
 or says it is an inference. Their framing is the durable one: **"a mechanism you can re-derive is
 not evidence that it is unrecorded."**
+
+## D395 — **`second_gate_contrast.py` no longer pools across `measurement_basis`** (the D360 defect, the last item open in the freeze declaration §7). Conclusion unchanged; numbers sharpened.
+
+**Date:** 2026-08-14 · **Class:** instrument fix · **Follows:** D392, D394
+
+**The defect.** The tool's query filtered `selection_mode` and `hypothesis` and never
+`measurement_basis`, so a config carrying both a stage-one verdict and a later `fullhist_refit`
+verdict landed **twice, on two different bases, in the same cell**. That is not double-counting
+noise: stage-one and full-history `decision` answer different questions, and the refit population
+is *selected* — it is what a scanner chose to refit. The denominator became a mixture whose
+composition varies per cell, which silently breaks the tool's own stated premise that its three
+arms "share the SAME base and differ only in what occupies the optional second slot."
+
+**The fix.** Query extracted to a module constant with
+`AND v.measurement_basis IS DISTINCT FROM 'fullhist_refit'`, plus a testable `fetch_rows()`.
+`IS DISTINCT FROM` rather than `!=` so a **NULL basis is KEPT** — NULL is stage one, and `!=`
+would drop it, shrinking the honest arm just as quietly as the pooling inflated it. Same
+convention as `freeze_tail_reading._QUERY`, deliberately: two instruments disagreeing about what
+the honest population is would be worse than either being wrong alone. The output header now
+states the basis, so a pasted table cannot be misread later.
+
+**Three tests** (TDD red→green): `fullhist_refit` rows excluded, NULL-basis rows kept, and the
+query still carries the clause — the last one so a future edit cannot silently drop it.
+
+**⚠️ THE CONCLUSION DOES NOT CHANGE, and that is worth stating rather than implying otherwise.**
+Re-run on the live snapshot, stage-one only:
+
+```
+  hurst ALONE (slot unused)   n=8622   13.7%   (baseline)
+  hurst + days_since_jump     n=4768   29.8%   z +22.59
+  hurst + vix_term_slope      n= 884    8.1%   z  -4.63
+```
+
+D339's finding stands in full: **double-gating is not generically harmful** (the veto arm is
++22.59), and the problem is **specific to `vix_term_slope`** (8.1% against a 13.7% baseline, and
+3.7× worse than the veto arm — against 3.2× on the pooled numbers). The defect moved the
+magnitudes slightly and inverted nothing.
+
+Closes the last open item in the freeze declaration §7.

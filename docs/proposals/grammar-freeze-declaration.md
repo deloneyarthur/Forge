@@ -375,8 +375,13 @@ generation against `IC(cpcv, corr_to_book)`.
   **Fixed:** `forge-prereg-watch.timer` armed daily (reports DUE / waiting / **UNWATCHABLE**, with
   no `SuccessExitStatus` so every condition surfaces), and `freeze_registered_read.py --resolve`
   writes the outcome through the repo's own resolver. 16 tests, TDD.
-- **`scripts/second_gate_contrast.py` pools across `measurement_basis`** — the D360 defect, in a
-  committed instrument. Worth fixing before it is used to judge any future second gate.
+- **✅ CLOSED 2026-08-14 (D395) — `scripts/second_gate_contrast.py` pooled across
+  `measurement_basis`** (the D360 defect, in a committed instrument). Fixed with the
+  `IS DISTINCT FROM 'fullhist_refit'` filter matching `freeze_tail_reading`, query extracted for
+  testability, 3 tests. **D339's conclusion is unchanged** — double-gating is not generically
+  harmful (veto arm z +22.59) and the problem is `vix_term_slope`-specific (8.1% vs a 13.7%
+  baseline, 3.7× worse than the veto arm against 3.2× pooled). The defect moved magnitudes and
+  inverted nothing.
 - **`young_explore` REMOVED outright** (D367 kept it OFF; D378 deleted the never-enabled lane,
   operator 2026-08-06): 87% of its budget would fund `volatility_event`, the
   family whose floor was just retired.

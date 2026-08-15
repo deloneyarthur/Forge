@@ -61,23 +61,42 @@ def _gate_structure(cfg: dict[str, object]) -> str | None:
     return _BASELINE if len(gates) == 1 else f"hurst + {gates[1]}"
 
 
+# STAGE ONE ONLY (D360, fixed 2026-08-14). The basis clause is load-bearing, not hygiene: a
+# config carries a stage-one verdict AND, if someone refit it, a `fullhist_refit` verdict. Without
+# this filter both rows land in the same cell, so the component RATE this tool reports becomes a
+# mixture of two different questions over a denominator whose composition varies per cell -- and
+# the refit population is *selected*, being the configs a scanner chose. That silently breaks the
+# contrast's own premise that the three arms "share the SAME base and differ only in what occupies
+# the optional second slot".
+#
+# `IS DISTINCT FROM` rather than `!=` so a NULL basis is KEPT: NULL is stage one, and `!=` would
+# drop it, shrinking the honest arm just as quietly as the pooling did. Same convention as
+# `freeze_tail_reading._QUERY`, deliberately -- two instruments disagreeing about what the honest
+# population is would be worse than either being wrong alone.
+_QUERY = """
+    SELECT v.grammar_version, s.config_json, v.decision,
+           TRY_CAST(
+               json_extract_string(v.gate_results, '$.cpcv_sharpe_p25.value') AS DOUBLE
+           )
+    FROM submissions s
+    JOIN verdicts v ON v.config_hash = s.config_hash
+    WHERE s.selection_mode IN ('holdout', 'prefilter_sample')
+      AND json_extract_string(s.config_json, '$.hypothesis') = 'trend_continuation'
+      AND v.measurement_basis IS DISTINCT FROM 'fullhist_refit'
+"""
+
+
+def fetch_rows(conn: object) -> list[tuple]:
+    """The tool's population: unbiased arms, xsect trend, STAGE ONE only."""
+    return conn.execute(_QUERY).fetchall()  # type: ignore[attr-defined,no-any-return]
+
+
 def main() -> int:
     snap = Path(sys.argv[1])
     min_version = int(sys.argv[2]) if len(sys.argv) > 2 else 49
 
     with db_connection(snap) as conn:
-        rows = conn.execute(
-            """
-            SELECT v.grammar_version, s.config_json, v.decision,
-                   TRY_CAST(
-                       json_extract_string(v.gate_results, '$.cpcv_sharpe_p25.value') AS DOUBLE
-                   )
-            FROM submissions s
-            JOIN verdicts v ON v.config_hash = s.config_hash
-            WHERE s.selection_mode IN ('holdout', 'prefilter_sample')
-              AND json_extract_string(s.config_json, '$.hypothesis') = 'trend_continuation'
-            """
-        ).fetchall()
+        rows = fetch_rows(conn)
 
     tally: dict[str, list[float]] = defaultdict(lambda: [0, 0, 0, 0.0])
     for version, cfg_json, decision, cpcv in rows:
@@ -106,7 +125,10 @@ def main() -> int:
         return 1
     base_p = base[1] / base[0]
 
-    print(f"UNBIASED ARMS ONLY, xsect TREND, hurst PRIMARY, grammar >= v{min_version}\n")
+    print(
+        f"UNBIASED ARMS ONLY, xsect TREND, hurst PRIMARY, grammar >= v{min_version}, "
+        f"STAGE ONE (fullhist_refit excluded)\n"
+    )
     header = f"{'second-slot occupant':<34}{'n':>6}{'comp':>6}{'comp%':>8}"
     print(header + f"{'strong':>7}{'mean_cpcv':>11}{'z vs baseline':>14}")
     print("-" * 86)
