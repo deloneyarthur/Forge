@@ -3064,3 +3064,64 @@ their fillability→trade-count mechanism **dead** (corr +0.006), `dte_max=92` w
 walk-forward routed to Crucible with in-grid values and our residual table as motivating evidence.
 The residual is **narrowed, not answered** — not the grid, not trade count, `84` at z=+2.33 inside
 the 78–85 plateau.
+
+## D397 — **The `dte_max` plateau SURVIVES stratification (mix channel excluded); Crucible's `rank_k=5 long_short` zero does NOT survive theirs. We register nothing.** Two findings tested against the same lesson in one afternoon; one died, one lived.
+
+**Date:** 2026-08-16 · **Class:** cross-system diagnostic (no code change) · **Follows:** D394, D396
+
+### The challenge, and it was a fair one
+
+QuantIQ, cc'd on Crucible's stratified read, held the walk-forward and asked: D396's plateau is a
+**pooled** component-rate readout, and Crucible had just shown component rate tracks the parent
+population rather than the thing it names. Was the `dte_max` sweep stratified, or pooled? It was
+pooled.
+
+### The test: the plateau survives
+
+The stage-one analogue of parent-margin is the honest arm's own composition — `holdout` (prefilter
+survivors) vs `prefilter_sample` (prefilter rejects) — since a mix varying with `dte_max` would
+move pooled component rate mechanically.
+
+```
+  holdout share by dte_max        : 1.6% .. 3.0%  (spread 1.4pp, no trend)
+  WITHIN prefilter_sample  n=37,751  rate 29.5%  max|z| 4.47
+     mean z: edges 76-77 -2.81 | plateau 78-85 +2.00 | edges 86-90 -2.07
+  WITHIN holdout           n=910     rate 11.5%  max|z| 1.59   (no power: ~7 comps/bucket)
+```
+
+**Intact inside the dominant arm on its own. The mix channel is excluded.**
+
+**Structural note, offered as a limit on our own claim rather than a rebuttal:** their collider was
+**stage-two admission** — the refit trigger, an explicit function of quality, with the outcome
+measured downstream. Ours is a stage-one outcome on an arm drawn **at random from prefilter
+rejects**; there is no admission step between sampling and measurement, which is what the honest
+arm exists to guarantee. That makes their specific collider structurally unlikely here — but it
+does not make the residual real.
+
+**Three channels now excluded — grid, trade count, arm mix — and the shape is still unexplained.**
+Stronger than D396 could say; weaker than "the residual is a finding". The low edge at `dte_max=76`
+remains partly mechanical (it forces a narrow window), but **width does not explain the high edge**:
+86–90 are the widest available and are also depressed, so a monotone width story does not fit.
+
+### Crucible's k=5 zero does NOT survive — tightening NOT registered
+
+Their stratified read, run at our request, killed their own finding:
+
+```
+  expected on 10_LS within-bucket rates : 2.06
+  observed                              : 0
+  P(0 | 2.06)                           : 0.127    NOT SIGNIFICANT
+```
+
+Zero children in the `>= 0.0` bucket where every other shape promotes at 18–33%, and **99.2% in
+`< -0.5`** where nothing promotes. **Not a worse shape — a differently-sampled one.** `rank_k=5
+long_short` keeps its 17.9% of post-v48 xsect flow, and **D394's decision to decline was the v51
+tombstone doing its job, not foresight** — the pooled 0-of-9,899 (P ≈ 4e-8) was the starker-looking
+number and the wrong one.
+
+### Net
+
+Two findings, same lesson, same afternoon: theirs died under stratification, ours lived. **Neither
+side knew which in advance, which is the only reason the test was worth running.** Walk-forward
+unblocked from our side at `dte_max ∈ {80,84,88}`, `dte_min ∈ {68,72,75}`. Nothing registered,
+grammar frozen, zero open preregistrations.
