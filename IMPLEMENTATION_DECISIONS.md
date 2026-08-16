@@ -2976,3 +2976,67 @@ D339's finding stands in full: **double-gating is not generically harmful** (the
 magnitudes slightly and inverted nothing.
 
 Closes the last open item in the freeze declaration §7.
+
+## D396 — **QuantIQ's DTE-lattice ask, answered: our grid is unbiased (240/240 pairs, uniform) and the trade-count channel their thesis needs is ABSENT (corr +0.006). But there is unexplained cpcv structure across `dte_max` that we report rather than explain away.** Diagnostic only; no change proposed against the frozen grammar.
+
+**Date:** 2026-08-16 · **Class:** cross-system diagnostic (no code change) · **Follows:** D390, D395
+
+**The ask** (`FORGE_DTE_LATTICE_RELAY.md`, QuantIQ D504): book `7f2a697ec6c1b119`'s weekly trend
+leg selects 72–84 trading-day DTE; for the 2026-08-17 rebalance only 1 of 184 underlyings lists a
+contract in that window, because it falls between the Nov-20 and Dec-18 monthlies. Verified by
+them against IBKR — a real lattice wall, not a data gap. Their question: **is 72–84 an edge or an
+expiry-lattice alias?** Their §4 sub-question is the one that is ours: *is the search grid itself
+lattice-aligned?*
+
+### §4 answered: no grid-side bias
+
+`swing_long`'s §3.5 P2 window is **(60, 90) trading days**; the sampler draws
+`dte_min = randint(60, 75)`, `dte_max = randint(76, 90)` — **uniform over integers**, no coarse
+grid. On 155,136 emitted `swing_long` trend configs: **240 of 240 pairs emitted**, per-pair counts
+mean 646 / min 527 / max 787 against 646 expected, and the pinned **(72,84) drew 603 = 0.39%,
+below the mean.** Whatever selected that pair selected it downstream of generation.
+
+**Unit check run and clean:** we suspected a calendar-vs-trading-day mismatch (the symptom fits
+one). `crucible_contracts.SelectorSpec` states it outright — trading-day DTEs, converted at the
+Crucible boundary. Their reading is correct.
+
+### The mechanism their thesis needs is measurably absent
+
+Fillability would reach outcomes via **trade count → the min-trade gate**. On the honest arm,
+stage one, n=38,661: mean trades rise **smoothly and monotonically** with `dte_max` (492.8 at 76 →
+745.7 at 90 — mechanical, since `dte_max=76` forces a narrow window), the min-trade gate passes
+**98.4–99.3% at every value**, and **corr(mean trades, component rate) = +0.006**. A 33.9% serve
+rate still yields 500–750 trades over 8 years, so unfillable name-days thin the sample without
+starving the gate.
+
+### ⚠️ What we could NOT explain, recorded rather than dropped
+
+Component rate and mean cpcv show the same shape across `dte_max`, unexplained by trade count:
+
+```
+  dte_max   76    77    78    79    80    81    82    83    84    85    86    87    88    89    90
+  comp%   25.3  27.9  30.1  31.6  30.1  32.8  31.2  30.1  31.1  29.4  26.1  27.6  26.9  27.4  28.2
+  z      -4.24 -1.31 +1.23 +2.86 +1.11 +4.13 +2.39 +1.24 +2.33 +0.39 -3.32 -1.66 -2.37 -1.86 -0.93
+```
+
+A plateau at 78–85 with depressed edges; `76` (−4.24) and `81` (+4.13) clear Bonferroni at 15.
+**The pinned `dte_max=84` sits inside the elevated plateau (+2.33)** — exactly the configuration
+their question was built to detect. **Not attributed**: the trade-count channel is ruled out, and
+the shape could be economic, a different artifact, or the narrow-window edge effect at 76
+contaminating the low end. **Their instinct was right even though the mechanism they proposed is
+not the one operating**, and a negative result on the proposed mechanism is not a licence to drop
+the residual.
+
+### Routed, not taken
+
+The walk-forward (`dte_max ∈ {80,84,88,92}`, D493-style retention) is a **stage-two instrument and
+therefore Crucible's**. Two notes passed on: **`dte_max=92` is outside our grammar** (P2 caps
+`swing_long` at 90, so it has never been emitted and cannot be without a §6 increment against the
+frozen grammar); `{80,84,88}` and `dte_min ∈ {68,72,76}` are all in-grid.
+
+### Incidental: D493 closes our equity-package open item
+
+Their cross-ref records **the k=2.0 chandelier failing its knife-edge criterion (neighbours
+retained <50%)**. We disclosed that sensitivity when we sent the package (k=3.0 scored 0.7459
+against k=2.0's 1.1837) precisely because we could not test it; **their added acceptance criterion
+is what caught it**, and it never reached production. Criterion adopted into our standards (D391).
