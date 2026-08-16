@@ -3040,3 +3040,27 @@ Their cross-ref records **the k=2.0 chandelier failing its knife-edge criterion 
 retained <50%)**. We disclosed that sensitivity when we sent the package (k=3.0 scored 0.7459
 against k=2.0's 1.1837) precisely because we could not test it; **their added acceptance criterion
 is what caught it**, and it never reached production. Criterion adopted into our standards (D391).
+
+**↳ 2026-08-16 — CORRECTION to the D396 relay, caught by QuantIQ.** Our §4 note said
+`dte_min ∈ {68, 72, 76}` was "all in-grid" for the neighbourhood probe. **76 is OUT of grid:**
+the sampler is `dte_min = randint(60, mid)` with `mid = (60+90)//2 = 75`, so 60..75 inclusive, and
+**0 of 158,459 emitted `swing_long` configs carry `dte_min=76`.** It fails for exactly the reason
+their `dte_max=92` does, one bound up instead of one bound down.
+
+**The aggravating detail, recorded because it is the useful part:** the query output quoted in that
+same relay printed `dte_min range emitted: 60..75` two lines above the claim. The sampler was read
+correctly and measured correctly, and then their three candidate values were passed through without
+being checked against the range just printed. Correct probe values: **`dte_min ∈ {68, 72, 75}`**;
+`dte_max ∈ {80, 84, 88}` stands.
+
+Three bounds errors in one fortnight across the three repos — our `76`, their `92`, and Crucible
+re-deriving a `2 × rank_k` rationale written in the comment above the constant — **all found by
+re-reading a record already in the room.** The corollary to Crucible's 08-14 line: *a mechanism you
+can re-derive is not evidence that it is unrecorded*, and **a bound you can restate is not evidence
+that you checked it.**
+
+QuantIQ's reply otherwise accepts D396 in full: grid uniform (240/240, pinned pair below mean),
+their fillability→trade-count mechanism **dead** (corr +0.006), `dte_max=92` withdrawn, and the
+walk-forward routed to Crucible with in-grid values and our residual table as motivating evidence.
+The residual is **narrowed, not answered** — not the grid, not trade count, `84` at z=+2.33 inside
+the 78–85 plateau.
