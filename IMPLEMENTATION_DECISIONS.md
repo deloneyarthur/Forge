@@ -3125,3 +3125,68 @@ Two findings, same lesson, same afternoon: theirs died under stratification, our
 side knew which in advance, which is the only reason the test was worth running.** Walk-forward
 unblocked from our side at `dte_max ∈ {80,84,88}`, `dte_min ∈ {68,72,75}`. Nothing registered,
 grammar frozen, zero open preregistrations.
+
+## D398 — **DTE walk-forward verdict: PLATEAU — the pin is robust, 33.9% is a capacity fact. Two corrections back: our table is stage ONE (settled by construction), and `dte_max=88` is NOT our grid edge. Our population independently argues against `(72,88)`.**
+
+**Date:** 2026-08-16 · **Class:** cross-system finding (no code change) · **Follows:** D396, D397
+
+### Their verdict
+
+All 9 cells ran. **Neighbour median 0.8875× certified, 8 of 8 above 0.25×, zero unmeasurable, zero
+zero-trade folds → PLATEAU** on the rule fixed before any result. QuantIQ's question answered in
+the form asked: **the `swing_long` leg's 33.9% served-name-day fraction is a capacity fact, not a
+defect**, and a low forward trade count on that leg is the shape working as certified.
+
+**They honoured both registered clauses at real cost.** `(72,88)` scored **1.7943 against the pin's
+1.4057 — 1.28×** — and NO-PROMOTION plus NO-WIDENING bound for the first time with something behind
+them. No adoption, no proposal, no increment sought. Geometry: `dte_min` is the live axis and the
+pin's 72 is best of three; `dte_max` is flat-to-rising.
+
+**Their §5 independently reproduces our `corr = +0.006` at component level** — trades rise
+monotonically as the window widens (2,540 → 5,781) while Sharpe peaks at `dte_min=72` in every
+`dte_max` column. Same conclusion, different instrument, different level. They also self-corrected
+an interim read (that widening buys trades while Sharpe falls) that six of nine cells supported and
+the full grid refuted, before anyone could quote it.
+
+### Correction 1 — our table is stage ONE, settled by construction
+
+Their §4 caveat characterised D396's plateau as a **stage-two** component rate whose admission step
+is the refit trigger. It is not. QuantIQ adjudicated by arithmetic; we settled it at query level:
+
+```
+  WHERE s.selection_mode IN ('holdout','prefilter_sample')
+    AND v.measurement_basis IS DISTINCT FROM 'fullhist_refit'
+  n = 38,661   prefilter_sample 37,751   holdout 910   fullhist_refit rows: 0
+```
+
+**The basis filter is in the WHERE clause**, so stage-two rows cannot be present — the count is 0
+because it is excluded, not by luck. `prefilter_sample` is random-from-prefilter-rejects, so there
+is no admission step between sampling and outcome. **Their registered clause is untouched** (it
+never depended on the claim), and the stratification they asked for was run anyway (D397) and the
+plateau survived.
+
+### Correction 2 — `dte_max=88` is not our grid edge, and it is ours to correct
+
+Their §4: *"88 is the grid edge (P2 caps at 90), so we cannot see whether it is a peak or a slope."*
+The two clauses disagree. **P2 caps at 90; 88 was the edge of their PROBE, not of our grammar:**
+
+```
+  dte_max=88: 10,089 emitted   dte_max=89: 10,265   dte_max=90: 11,530
+```
+
+The peak-or-slope question is answerable inside the frozen grammar with no widening and no
+increment — which changes the epistemic situation but not their decision, and the decision is
+theirs. **Fourth bounds slip this fortnight across three repos** — our `dte_min=76`, QuantIQ's
+`dte_max=92`, their `2 × rank_k` rationale, this — every one found by re-reading a record already
+in the room.
+
+### What we added: our population argues against `(72,88)`
+
+They declined `(72,88)` on registered principle at a 28% cost. **Our sweep independently supports
+the call.** Across the whole `swing_long` trend population (honest arm, stage one), `dte_max`
+**86–90 is the depressed region** (z −3.32 / −1.66 / −2.37 / −1.86 / −0.93) while 78–85 is
+elevated. `(72,88)` sits inside the depressed band. Different objects — one certified window versus
+a population — so not a refutation of their cell, but the opposite of corroboration, and it should
+ride alongside the 1.28× if anyone ever revisits it through the normal gates.
+
+**Nothing asked, nothing proposed, no increment sought. Grammar frozen, zero open preregistrations.**
