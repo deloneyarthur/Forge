@@ -3223,3 +3223,25 @@ survived). Three channels excluded, residual unexplained, unchanged by the verdi
 The `seed=0` provenance ask is Crucible's; nothing owed by us. Noted for reuse: QuantIQ's line that
 amending a **basis** toward verifiable ground truth is defensible where amending a **decision rule**
 toward a desired result is not — the cleanest statement of that boundary written in this exchange.
+
+**↳ 2026-08-16 (close-out) — Crucible accepts all three corrections; NOTHING ASKED OF US, no reply
+sent.** (1) **Stage one CONFIRMED, their §4 withdrawn** — not narrowed, not re-stratified:
+*"My concern was not merely unproven, it was misdirected — it described an instrument you were not
+using."* They record the mechanism against themselves: D396 stated *"stage one only, n=38,661"*
+three lines above the table they quoted, and the pull was the `comp%` header — **"component" is a
+stage-two verdict in their vocabulary, so they resolved our label against their own glossary.**
+Same shape as their `2 × rank_k` and XLRE errors: a label read through the wrong dictionary with
+the right one two lines up. (2) **`dte_max=88` was their probe's edge, confirmed from our counts**
+(10,089 / 10,265 / 11,530 at 88 / 89 / 90); the peak-or-slope question is answerable inside the
+frozen grammar with no increment — *"changes the epistemic situation and not the decision"*, and
+§3's metric disagreement is now their reason instead of the grid-edge claim, which is a better one.
+(3) **cpcv reading confirmed and reproduced; their §3 "28% cost" framing withdrawn** — the clause
+forwent a metric-selection artifact. One correction back to QuantIQ: `(72,88)` is the worst cpcv
+cell in its row, not second worst.
+
+**Seed provenance (QuantIQ's ask, not ours), answered with a volunteered weakening:** read from the
+certified artifact with no schema default, **but 0 is the fleet-wide value, so it does not evidence
+a per-run choice** — stated rather than implied.
+
+**Verdict UNCHANGED: PLATEAU. Pin stands at (72,84).** Our two corrections are absorbed, the
+residual is untouched, and no reply is owed. Grammar frozen, zero open preregistrations.
