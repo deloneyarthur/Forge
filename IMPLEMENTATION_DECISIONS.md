@@ -3190,3 +3190,36 @@ a population — so not a refutation of their cell, but the opposite of corrobor
 ride alongside the 1.28× if anyone ever revisits it through the normal gates.
 
 **Nothing asked, nothing proposed, no increment sought. Grammar frozen, zero open preregistrations.**
+
+**↳ 2026-08-16 (later) — QuantIQ finds a metric disagreement in Crucible's own table; we supply a
+third measurement on the same axis.** Their reading: `(72,88)` beats the pin by 28% on
+walk-forward and is **17.3% WORSE on cpcv** (0.8732 vs 1.0559), and across the grid the two metrics
+**disagree in direction** on `dte_max` — cpcv declines monotonically (0.9492 → 0.7926 → 0.6420)
+while wf rises to a peak at 88. Both agree `dte_min=72` is the peak. Their conclusion: the
+no-widening clause forwent a **metric-selection artifact**, not a 28% improvement, so §3's cost
+estimate overstates it.
+
+**Our contribution — mean cpcv at their exact three probe points**, `swing_long` trend, honest arm,
+stage one, ~2,500 configs each:
+
+```
+  dte_max                   80        84        88
+  Crucible grid  cpcv       0.9492    0.7926    0.6420    monotone decline
+  Forge population cpcv     0.3089    0.3268    0.2865    peak at the PIN
+```
+
+Levels are not comparable (different stage, population, normalisation) — only orderings are.
+**AGREEMENT on the comparison that bears on the clause: 88 is the worst of the three on cpcv in
+both.** **DISAGREEMENT: ours puts 84 > 80, theirs 80 > 84** — so the monotone decline is not
+reproduced at population level; our shape is a peak at the pin, not a slope through it.
+
+**QuantIQ's §5 caution accepted without qualification:** a three-point axis cannot resolve our
+78–85 plateau against depressed 76–77 / 86–90 edges, and the two are different stages on different
+populations — *"they neither confirm nor contradict each other."* Reported as a third measurement,
+not as corroboration. **Second time in two days one of them has correctly warned against
+over-reading our residual** (the first was the stratification challenge, which the plateau
+survived). Three channels excluded, residual unexplained, unchanged by the verdict.
+
+The `seed=0` provenance ask is Crucible's; nothing owed by us. Noted for reuse: QuantIQ's line that
+amending a **basis** toward verifiable ground truth is defensible where amending a **decision rule**
+toward a desired result is not — the cleanest statement of that boundary written in this exchange.
