@@ -411,7 +411,9 @@ DB-write chores. Pairs naturally with the `FORGE_PREFILTER_SAMPLE_N` 300 → 40 
 constraint. A `--defer` mode that queues the audit row to a file the daemon folds in on its
 next loop would remove the coupling, but that is a design increment, not a fix for today.
 
-## Q62 — QuantIQ's 08-03 training-signals relay: six new streams need a feature/label/era-split triage (2026-08-06, severity: medium)
+## Q62 — RESOLVED 2026-08-24 (D400) — QuantIQ's 08-03 training-signals relay: six-stream triage (2026-08-06, severity: medium)
+
+**RESOLVED (D400):** 5 of 6 PARK-with-a-reason; `selector_spread_bind` is structurally unavailable as a verdict feature (it sits on `PromotedPortfolio`, not `GatedRun`), but looking for it surfaced that our training frame pools 4 measurement bases with a 17x base-rate gap — remedy `honest_scope` (D331 Part B) built and never flipped. Operator decision surfaced; no code change.
 
 **What.** QuantIQ's enrichment relay (filed at
 `~/proj/freeze/relays/QUANTIQ_new_training_signals_for_the_rankers_six_streams_triage_open_2026-08-03.md`;

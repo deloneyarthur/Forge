@@ -3297,3 +3297,74 @@ daily re-read reported only if the trend changes. **No ask, nothing blocking on 
 sweep of `systemctl --state=failed`, not from any monitor. Both sides have now been bitten by the
 same class twice in a fortnight — D389's unarmed watcher, and this. **The health-monitor coverage
 gap (runner shards only) is worth treating as a standing hazard rather than a footnote.**
+
+## D400 — **Q62 CLOSED: the six-stream triage.** Five of six are PARK-with-a-reason; the sixth (`selector_spread_bind`) is structurally unavailable as a verdict feature **but its hazard class is live and larger on a different axis — our training frame pools four measurement bases with a 17× base-rate gap, and the remedy (`honest_scope`, D331 Part B) has been built and never flipped.** Operator decision surfaced; no code change made.
+
+**Date:** 2026-08-24 · **Class:** ranker design triage · **Follows:** D331, D132/F1 · **Closes:** Q62 (open since 2026-08-06)
+
+### The triage
+
+QuantIQ's ask (2026-08-03): which of six live streams earn features / labels / era splits in the
+two rankers. Our answer, against `ranking/features.py` + `ranking/dataset.py`:
+
+| # | stream | verdict | reason |
+|---|---|---|---|
+| 1 | `live_arrival_spread_pct` | **PARK** | our estimand is `P(component)` — a *backtest gate* outcome. Live fill data cannot predict a backtest gate. Their own framing agrees ("if your rankers ever grow fillability/cost features"). |
+| 2 | `selector_spread_bind` | **see below** | structurally unavailable as a verdict feature; hazard class live elsewhere |
+| 3 | `deployment_sizer_modes` | **NO CHANGE** | we do carry `feats["sizer=<mode>"]`, but it describes the **certified config at gate time**, which is the correct object for `P(component)`. The overlay is what *trades*, not what *gates* — it would matter only if we trained on deployment outcomes, i.e. stream 4. |
+| 4 | designation WIN/LOSS | **PARK on N** | 147 `promote` rows in the entire clean-era frame; designations are a handful. Cannot support supervision. Retained as a monitoring signal. |
+| 5 | live fill/abandon | **PARK on N** | first negative fill labels, small N by their own account. Same gate as 4. |
+| 6 | wings-quote staleness | **ADOPTED as a constraint** | recorded as a precondition on any future spread feature: supplement-provenance quotes older than one session are unusable; `cboe_forward/eod` is the fresh source. |
+
+### Stream 2, and what looking for it found
+
+**`selector_spread_bind` cannot be a per-row verdict feature.** At our pinned contracts
+**1.44.0** it lives on `PromotedPortfolio` (alongside `deployment_sizer_modes`), not on
+`GatedRun`/`RunResult`, so it never reaches the `verdicts` rows `build_dataset` trains on. That is
+a structural fact about where the field sits, not a judgement about its value.
+
+**But the hazard they named is live, on a bigger axis.** Measured on the clean-era frame:
+
+```
+  measurement_basis    rows       positive-decision rate
+  standard_window      386,246     5.0%
+  (null)               333,742     9.6%
+  fullhist_refit       148,333    86.2%      <- 17.1% of the frame, 17x the screen rate
+  selection_pbo             18     0.0%
+```
+
+`build_dataset`'s SQL selects no `measurement_basis` and applies no filter on it. **Stage-one
+screen verdicts and stage-two refit verdicts are pooled with no basis feature and no era split**,
+and the two answer different questions — which is precisely the "different measurement bases …
+the gate-pass label means something different on each side" hazard QuantIQ raised for spread-bind.
+
+**This is already known and already solved — and the solution has never been turned on.** D331
+Part B added `build_dataset(honest_scope=...)`, whose docstring states the problem in more detail
+than we could reconstruct: the screen lane *structurally cannot* produce an honest-coverage
+component, so **91.0% of the frame is labelled NEGATIVE regardless of quality**, and the same
+`config_hash` appears in both lanes with **opposite labels** (26 of 363 paired configs). Scoping
+keeps the same 19,759 positives on 35,674 rows — prevalence 4.988% → 55.4%, an **11× lift**.
+
+**Verified OFF in production:** not in `forge.service`'s `Environment`, not in
+`scripts/daily_ranker_eval.sh` or `forge-ranker-eval.service`, and absent from the live daemon's
+`/proc/<pid>/environ`. The flag has never been flipped.
+
+### Why this is an operator decision and not a fix we shipped
+
+Two reasons, both in the code's own words. The docstring specifies the flip ritual — *"Flipped
+later by editing the service unit, never by a code default — the D108 pattern"* — and it declares
+an **estimand shift**: `honest_scope=True` estimates `P(component | honestly evaluated)` rather
+than `P(component | emitted)`. That is a different quantity, argued for on the grounds that it
+excludes our own prefilter and lane plumbing from the target. **Changing what the production
+ranker is estimating is not a defect fix.**
+
+**And there is no fire.** Today's checkpoint: **58/3 consecutive PASS streak**, fresh
+n=5,379 delta **+1.150**, cumulative +0.843. The model works despite the pooling; this is an
+improvement opportunity with a measured 11× prevalence lift available, not an outage.
+
+**Surfaced for the operator: flip `FORGE_HONEST_SCOPE` in the trainer unit, or leave it.** Not
+taken here.
+
+### Closes Q62
+
+Answer relayed to QuantIQ. Nothing they sent blocks on us, and nothing we found blocks on them.
