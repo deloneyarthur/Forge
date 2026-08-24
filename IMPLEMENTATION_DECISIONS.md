@@ -3245,3 +3245,55 @@ a per-run choice** — stated rather than implied.
 
 **Verdict UNCHANGED: PLATEAU. Pin stands at (72,84).** Our two corrections are absorbed, the
 residual is untouched, and no reply is owed. Grammar frozen, zero open preregistrations.
+
+## D399 — **ALERT RELAYED: Crucible's stage-two refit scan is OOM-failing since 2026-08-22; we measure −18% to −30% throughput from our own ledger.** Found during a routine sweep; unalerted by either side's monitors. No change made — their service.
+
+**Date:** 2026-08-24 · **Class:** cross-system alert (no code change) · **Follows:** D393, D398
+
+### The failure
+
+`crucible-fullhist-refit.service` (stage-two refit scan) exits 1 with:
+
+```
+  RuntimeError: DB writer rejected request:
+  Out of Memory Error: failed to pin block of size 256.0 KiB (27.9 GiB/27.9 GiB used)
+```
+
+**Intermittent, not stopped** — 2026-08-24: 65 runs finished, 28 failed; a success at 13:51 sat
+nine minutes before a failure at 14:00. Degrading rather than down, which is the shape least
+likely to be noticed. Onset sharp: **zero systemd failures 08-19/20/21, then 11 / 31 / 28 on
+08-22 / 23 / 24.**
+
+### The measured impact, from our ledger
+
+Stage-two verdicts (`measurement_basis='fullhist_refit'`) per UTC day, live snapshot 08-24T22:2xZ:
+
+```
+  08-14..08-21   flat baseline ~5,760 refits/day, ~4,950 components
+  08-22          5,560 / 4,857     <- failures begin
+  08-23          4,720 / 4,088     <- FULL day: -18% refits, -17% components
+  08-24          3,800 / 3,336     <- 94% of the UTC day, ~-30% run-rate
+```
+
+**08-23 is the clean full-day comparison at −18%; the trend is worsening, not settling.**
+
+### Why it was relayed rather than filed
+
+- **Believed unalerted.** Our standing note on their fleet: the health monitor checks runner
+  shards; writers, watchers and publishers are not covered. This is a writer-side OOM.
+- **It bears on a conclusion both sides signed off ten days ago.** Their §8 Step 2 close-out
+  (D393) — *"refit triage is not the lever; un-consumed above-floor supply is three rows"* — was
+  measured ~08-14 with the scan completing 5,760/day. **Not a claim that the finding was wrong:
+  a claim that it was measured on a rig that has since lost a fifth to a third of its
+  throughput**, and "we have consumed your best supply" is exactly the kind of statement that
+  stops being true quietly when the consumer slows down. Whether it needs re-reading is theirs.
+- **Their service; untouched.** No config changed, nothing restarted, no fix proposed — the
+  DuckDB guidance in their own log is better informed by their workload than by us.
+
+Offered: the per-day series at any granularity as an independent check on their counters, and a
+daily re-read reported only if the trend changes. **No ask, nothing blocking on us.**
+
+**Recorded about the discovery itself:** this surfaced during a routine "anything left to do"
+sweep of `systemctl --state=failed`, not from any monitor. Both sides have now been bitten by the
+same class twice in a fortnight — D389's unarmed watcher, and this. **The health-monitor coverage
+gap (runner shards only) is worth treating as a standing hazard rather than a footnote.**
