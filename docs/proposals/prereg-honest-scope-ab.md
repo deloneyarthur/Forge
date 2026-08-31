@@ -1,4 +1,18 @@
-# PREREGISTRATION (DRAFT — awaiting operator signature): `honest_scope` A/B for the verdict model
+# PREREGISTRATION — **WITHDRAWN 2026-08-31, NEVER REGISTERED** (see D402)
+
+> **⚠️ WITHDRAWN. Do not register.** Its premise is false. `honest_scope` was **not** an untried
+> remedy: it went live 2026-07-22 and was reverted 2026-07-25 (`6b662ac`, Q59) because the scoping
+> is **measured harmful out of sample** — robustness OOS rank-IC **0.0321 (drop) vs 0.3962
+> (no-drop), 12×**; F3 OOS AUC **0.5910 vs 0.6936**. The drop is quality-correlated (9 of 81
+> coefficients sign-flip) and deletes whole strata (`rank_k=20`: 55,820 rows → zero), so the model
+> could not learn the k=20 cliff at any encoding.
+>
+> This document predicted the direction that was already refuted, on the strength of an **11×
+> prevalence lift** — which is exactly the frame-statistic-for-ranking-quality substitution its own
+> §1 warns against. Kept rather than deleted: a withdrawn proposal and an absent one carry
+> different information.
+
+# (WITHDRAWN) preregistration: `honest_scope` A/B for the verdict model
 
 **Status: ⚠️ NOT REGISTERED.** Draft for operator review. Nothing has been flipped, trained or
 evaluated under this. Registering it means running `forge prereg register` with the claim below,

@@ -3425,3 +3425,63 @@ a human asking rather than by instrumentation** (after D389's unarmed watcher an
 OOM). The relay asks Crucible the one question we actually want answered: whether the 08-24 alert
 reached them — because if it did not, the durable defect is the monitoring gap on both sides, not
 the memory limit.
+
+## D402 — **RETRACTION of D400's `honest_scope` claim. It was NOT "built and never flipped": it went live 2026-07-22 and was reverted 2026-07-25 (`6b662ac`, Q59) because the scoping is measured HARMFUL out of sample — robustness OOS rank-IC 0.0321 vs 0.3962 (12×), F3 OOS AUC 0.5910 vs 0.6936. The prereg draft is WITHDRAWN. Correction relay owed to QuantIQ.**
+
+**Date:** 2026-08-31 · **Class:** retraction · **Follows:** D400, D401
+
+### What D400 claimed, and what is true
+
+D400 stated `honest_scope` was *"built, documented, never flipped"* and framed an **11× prevalence
+lift** as an available improvement, surfacing a flip decision to the operator. **All of that is
+wrong.** The actual history:
+
+```
+  2026-07-22 23:26 PDT   FORGE_HONEST_LABEL_SCOPE=on   -> live (D331 Part B; created the v49 boundary)
+  2026-07-25             FORGE_HONEST_LABEL_SCOPE=off  -> reverted (6b662ac, Q59 fix)
+```
+
+The revert was **measured and out-of-sample validated**, temporal split, fit-past/judge-future,
+judged on the *unconditioned* population — the rule both repos adopted after the rank_k retraction:
+
+```
+  robustness  OOS rank-IC   0.0321 (drop) -> 0.3962 (no-drop)     12x
+  F3          OOS AUC       0.5910 (drop) -> 0.6936 (no-drop + one-hot)
+```
+
+Mechanism, in the commit's own words: **the drop is quality-correlated, so it biases every
+correlated coefficient (9 of 81 sign-flip), and it deletes whole strata** — `rank_k=20` is 55,820
+rows unconditioned and **zero** under the drop, so the model could not learn the k=20 cliff at any
+encoding. Both live models were near coin-flip OOS under the scoping, found two independent ways
+on two different targets.
+
+### How the error was made
+
+The environ was grepped for `HONEST_SCOPE`. **The variable is `FORGE_HONEST_LABEL_SCOPE`** — the
+substring does not match, so a flag that is *explicitly* set (`=off`, line 33 of
+`forge-ranker-eval.service`, committed and installed identically) read as absent. From "absent" it
+was inferred "never flipped", and the whole D400 finding was built on that inference. The revert's
+reasoning was in `IMPLEMENTATION_DECISIONS.md` and in the commit message the entire time.
+
+**This is the failure class we relayed to Crucible on 2026-08-14 and it is now ours:** *a mechanism
+you can re-derive is not evidence that it is unrecorded* — and its corollary, *a bound you can
+restate is not evidence that you checked it.* Fifth instance across the three repos this month,
+first one of ours in this class.
+
+**Compounding it: the 11× prevalence lift is precisely the trap Q59 names.** Prevalence rose while
+OOS performance fell 12×. D400's own prereg draft warned against substituting a frame statistic for
+ranking quality — citing v50's rank_k bias, the k=5 zero and the champion-improvement wall — and
+then did exactly that.
+
+### Actions
+
+- **`docs/proposals/prereg-honest-scope-ab.md` WITHDRAWN.** Its premise (untried remedy) is false
+  and its predicted direction is the one already refuted OOS. Retained on disk with a withdrawal
+  header rather than deleted, because a withdrawn proposal and an absent one carry different
+  information.
+- **Correction relay owed to QuantIQ** — the Q62 triage relay carried the same false claim.
+- **D400's triage of the six streams is UNAFFECTED.** Five parks and the `selector_spread_bind`
+  location finding stand on their own evidence; only the honest_scope section is retracted.
+- **D401's stale-F3 observation stands and is unrelated** — F3 loads once at daemon start
+  (up since 08-16, 82 artifacts on disk). That the 08-16 artifact postdates the Q59 fix means the
+  live model *has* the correct conditioning; whether a 15-day pin is intended remains open.
