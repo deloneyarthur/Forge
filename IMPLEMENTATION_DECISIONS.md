@@ -3368,3 +3368,60 @@ taken here.
 ### Closes Q62
 
 Answer relayed to QuantIQ. Nothing they sent blocks on us, and nothing we found blocks on them.
+
+## D401 — **Second OOM alert: the Crucible DB-writer exhaustion has doubled in seven days, spread to three services, and cost ~15,242 refits. Plus a second finding: F3 has been scoring with a 15-day-old model.** No code change; both are surfaced, not fixed.
+
+**Date:** 2026-08-31 · **Class:** cross-system alert + live observation · **Follows:** D399
+
+### The degradation, measured
+
+D399 (08-24) reported the stage-two refit scan OOM-failing at ~30% with −18% to −30% throughput.
+Seven days on, unanswered:
+
+```
+  failure rate   08-22   7%  ->  08-24  22%  ->  08-28  45%  ->  08-30  54%
+  throughput     08-22  -3%  ->  08-24 -29%  ->  08-28 -42%  ->  08-30 -53%
+```
+
+**Monotone, not a spike.** On 08-30 the scan failed more often than it succeeded (79 vs 65).
+**Cumulative 08-22 → 08-30 against the 5,760/day baseline: ~15,242 refits and ~12,420 components
+not produced.**
+
+**No longer refit-specific.** On 2026-08-31 two further units began failing with the *same* DuckDB
+memory guidance: `crucible-generation-census` (06:01) and `crucible-dashboard-feed-publisher`
+(07:00). The latter is the structural yield-map / WF-percentile / corr-to-book / refutations feed
+**that both QuantIQ and Forge consume** — if it stays down, both sides read a stale dashboard
+without being told. Three consumers now hit the writer's 27.9 GiB ceiling; the cause is inside
+Crucible's wall and we propose nothing.
+
+**Bearing on D393:** their Step 2 close-out (*"refit triage is not the lever; un-consumed
+above-floor supply is three rows"*) was measured ~08-14 on a healthy rig. Nine days averaging −29%
+and ending at −53% is enough that it is worth re-reading before anyone leans on it. Not a claim it
+was wrong.
+
+### The second finding: F3 is running a stale model
+
+`forge.service` has been up since **2026-08-16**. `load_latest_model` is called **once at loop
+start** (`main.py:2377`), and there are now **82 `verdict_model_v1_*.json` artifacts on disk**, the
+newest written today at 05:02. **The live scorer has therefore been using the 08-16 artifact for
+fifteen days** while the trainer wrote fifteen newer ones.
+
+**This refines D400's correction.** The trainer header's claim that it *"cannot change what Forge
+submits"* is true **in practice — but by inertia, not by design.** There is no gate; the artifact
+would be picked up on the next restart. Two consequences:
+
+1. **The live model drifts stale with nothing watching it.** Whether load-once-at-start is the
+   intended operator gate (a defensible reading of the D108 pattern) or an oversight is an open
+   question, and it is not documented either way.
+2. **The `honest_scope` A/B (prereg draft, `docs/proposals/prereg-honest-scope-ab.md`) is less
+   urgent than framed** — a flip's effect is deferred to the next restart. The separate-directory
+   design stays correct regardless.
+
+### Recorded about the discovery
+
+Both the OOM escalation and the stale-F3 observation surfaced from a routine *"everything running
+smoothly?"* sweep, not from any monitor. **Third instance this month of a real condition found by
+a human asking rather than by instrumentation** (after D389's unarmed watcher and D399's original
+OOM). The relay asks Crucible the one question we actually want answered: whether the 08-24 alert
+reached them — because if it did not, the durable defect is the monitoring gap on both sides, not
+the memory limit.
