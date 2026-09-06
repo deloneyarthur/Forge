@@ -3635,3 +3635,78 @@ plan around: register inside the window and read before it ages out, or ask agai
 
 Reply relay sent (window named, §1–§3 verified with our numbers, calendar expectation retired).
 No code change, no grammar change, no restart. Grammar frozen at v55, zero open preregs.
+
+## D405 — **Crucible's basis-change notice, relayed BEFORE landing under D404's rule: CBOE panel open interest now folds onto every canonical chain row by OCC symbol at the runner restart. LANDED 2026-09-06T07:32:41Z — read from systemd here before their timestamp relay arrived. Their AAPL/MU numbers replicate EXACTLY on our own join of the two parquet trees. Three chain-basis dates now stand: 07-17 (volume alias), 08-12 (canonical OI NULL), 09-06T07:32:41Z (panel fold).**
+
+**Date:** 2026-09-06 · **Class:** relay processed, measurement-basis date recorded · **Follows:** D404 (08-12 date + watch), D386 (Layer-2 request)
+
+### What they shipped (§20 `panel-oi-fold-into-canonical`, operator decision 2026-09-06)
+
+- A parallel tree `cboe_forward/oi_fold/underlying=*/asof_date=*/oi.parquet` (`occ_symbol`,
+  `open_interest`) built nightly from the CBOE EOD panel; both chain loaders left-join it by
+  `occ_symbol` and take the panel's value where it has the contract. Never adds rows, never
+  creates coverage, no-op where the partition is absent; canonical files untouched; rollback is
+  a code revert.
+- **Bars 08-12 → today:** NULL → real OI; every IBKR-captured near-ATM strike selectable again;
+  IBKR rows carry NBBO mids so the spread gate passes them. Their expectation: traded share back
+  toward the pre-08-12 89–93% from 55–63% — to be measured after landing, not asserted.
+- **Bars 07-17 → 08-11:** the volume alias is replaced by real OI where the panel carries the
+  contract (OI ≥ 100 / volume < 100 becomes eligible; the converse stops being eligible).
+- **Bars before 07-17:** no panel, no change; the designated book's certified window (ends
+  06-12) untouched. No contracts change, no export shape change, no grammar input. Tier 3 still
+  reads the raw partitions (a separate, relayed decision if it moves).
+
+### Verified here, on the shared disk
+
+- **Fold tree:** 6,796 partitions (exact match), 11,675,278 rows (their 11.7M), asof
+  **2026-07-17 → 2026-09-04** (they wrote "→ 09-05"; no 09-05 partition exists yet), **39 MB on
+  disk** (they wrote 77 MB — likely the uncompressed figure). Backfill mtimes 07:16:35–07:16:50Z,
+  consistent with their token roll at 07:16:51Z; the token itself was not located from our side.
+- **Mechanism replicated on our own join** (canonical `chain_snapshots` LEFT JOIN `oi_fold` on
+  `occ_symbol`, panel value first, then their fill floor `volume ≥ 10 AND OI ≥ 100` on the
+  |delta| 0.25–0.60 band):
+
+  | 2026-09-02 | rows | matched | NULL after fold | in-band | pass | theirs |
+  |---|---|---|---|---|---|---|
+  | AAPL | 255 | 255 | 0 | 86 | **78** | 78 of 86 |
+  | MU | 566 | 566 | 0 | 340 | **169** | 169 of 340 |
+
+- **Volume alias confirmed:** 2026-07-20 (34,281 rows) and 2026-08-05 (45,804 rows) —
+  `open_interest == volume` on 100% of rows, zero NULL.
+- **Landing instant:** `crucible-runner@1.service` Stopped/Started at **2026-09-06 00:32:41 PDT =
+  07:32:41Z**; the new process (pid 1449463) bound contracts 1.47.0 at 07:32:42.311Z. **One
+  instant for both lanes:** stage-two refits execute inside the same shard (`runner_start …
+  source: fullhist_refit` in its journal) and `crucible-refit-watcher` only queues rows from
+  QuantIQ's refit inbox — no asymmetric split of the D245 class. Their one-line timestamp relay
+  had not arrived when this was written; the instant above is the systemd record, offered to
+  them for confirmation.
+
+### Our exposed cohorts (snapshot 2026-09-06T05:40Z, pre-landing)
+
+| era | stage one | stage two | other |
+|---|---|---|---|
+| volume alias 07-17 → 08-11 | 250,092 | 77,329 | 50,223 untagged |
+| canonical OI NULL 08-12 → 09-06T07:32Z | 320,790 | 125,158 | 25 `selection_pbo` |
+
+Every verdict in both eras was priced with an affected forward edge; the affected span inside a
+run window is ≤36 sessions today (~2.9% of a 5-yr stage-one window, ~1.6% of fullhist), which is
+why D404's weekly `min_oos_trade_count` medians (521 → 518) show nothing. Direction from here:
+post-landing verdicts should carry MORE trades than the NULL-OI era at the forward edge, so a
+rise at the 09-06 boundary is basis, not supply. **D404's watch now brackets three dates.**
+
+### Consequence, and the gap this makes visible for the third time
+
+- **Nothing to act on.** No prefilter, ranker feature or grammar input reads OI, spreads or fills;
+  labels stay comparable within an era. The 05:00 F3/tail retrain pools eras by construction —
+  a slowly growing basis drift at the forward edge, recorded, not corrected.
+- **Recoverable only by timestamp, again.** A verdict's chain basis is `decided_at` against a
+  relayed instant; nothing on the row stamps it. That is D386's Layer-2 request (data-basis
+  fingerprint on stage-one verdicts), still open, now with three eras to key on. Restated in
+  the reply as a reminder, not a blocking ask.
+- Docs: the three eras added to `docs/tasks/investigate-live.md` (eras section).
+
+### Disposition
+
+Ack relay sent: the landing instant as read here, the exact replication, the two small
+discrepancies (partition range, on-disk size). No code, no grammar, no restart. **v55 frozen,
+zero open preregistrations.**

@@ -98,6 +98,20 @@ Join export rows to `submissions` on `config_hash`. The export is a rolling **to
   HELD THROUGH EARNINGS, every single-name config. Post-boundary protection is PARTIAL, not
   binary: filing-date anchors are late for ~32.5% of events (their §20 probe) — do not read
   the era flip as full earnings-risk exclusion.
+- **Chain open-interest eras (D404/D405, three dates, all forward-edge only):** bars before
+  **2026-07-17** are untouched by any of them. **07-17 → 08-11:** canonical `open_interest` was a
+  volume alias (`== volume` on every row), so the min-OI fill floor was a volume floor.
+  **08-12 → 2026-09-06T07:32:41Z:** canonical OI NULL on every row (`ibkr_tick101` real-or-NULL);
+  Crucible's selector skipped every IBKR near-ATM strike, every entry came from a CBOE supplement
+  row, and the spread gate bound hard (`spread_too_wide` 4–8% → 32–44% of signals). **From
+  2026-09-06T07:32:41Z** (runner restart; stage one and stage two share the shard): CBOE panel OI
+  folds onto canonical rows by OCC symbol — near-ATM selectable again, and the 07-17 → 08-11
+  alias is replaced by real OI where the panel has the contract. A verdict's era is its
+  `decided_at` against these instants — nothing on the row stamps it (the D386 Layer-2 gap).
+  Exposure is the span of affected bars inside the run window: ≤36 sessions today (~2.9% of a
+  5-yr stage-one window, ~1.6% of fullhist), growing a session per session. Watch the weekly
+  median of `gate_results['min_oos_trade_count'].value`: a move at an era boundary is basis, not
+  supply.
 - Post-D105, the sampler is weighted — condition scans on the live weights (no more
   quasi-randomization).
 
