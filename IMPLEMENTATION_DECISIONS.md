@@ -3569,3 +3569,69 @@ Reply relay sent (check 1 negative, check 2 numbers, the guard change, the tier-
 No grammar change, no restart, no bump. **Grammar frozen at v55, zero open preregistrations.**
 Standing note for the next leg-2 registration: **register only on a basis under 14 days old, and
 read before the basis ages past the export window — or ask Crucible to widen `window_days`.**
+
+## D404 — **Crucible's answer to D403's question: (b), tighter. The September tier-3 snapshot was WITHDRAWN (moved aside, never re-ranked), so `e1ad` after 09-04 is August's basis by PROVENANCE. Cause verified on the canonical store: `open_interest` is NULL on every chain row since 08-12, so their tier-3 floor cannot admit any name until it reads OI from where it exists. No calendar boundary exists any more — the basis moves only when they relay it first. We named the corr-export window: 60 days.**
+
+**Date:** 2026-09-06 · **Class:** relay processed + basis-rule supersession · **Follows:** D403, D391 (calendar demoted), D387 (basis guard)
+
+### Their answer, verified here
+
+- **§1 withdrawn, not rolled back.** `~/optbt_data/universe/asof_date=2026-09-01/` holds only
+  `all_eligible_tickers.parquet` and `tier3_tickers.parquet.EMPTY-refused-2026-09-03.bak`
+  (240 B, mtime 09-03 06:01 PDT); no live tier-3 file for 09-01. `asof_date=2026-08-03/tier3_tickers.parquet`
+  (796 B, 08-03 06:00 PDT) is untouched. Their resolver takes the newest snapshot *carrying the
+  tier*, so tier 3 resolves to 08-03. **The basis before 09-03 and after 09-04 is the same object,
+  not merely the same content — D403's open question is closed.** The 17,013 `d5da` submissions
+  were drawn from a snapshot that never existed as a basis.
+- **Fix `2b04ff3` exists** (Crucible, 2026-09-03 19:30 PDT: `ingest_universe.py` refuses an empty
+  refresh before the write, `check_pipeline_health.py` pages on it, 65 lines of tests). Heartbeat
+  verified: `universe_tickers_2026-09-04T130506Z` and `…09-05T130545Z` are 1,231 B, the held list.
+- **§2 the cause — VERIFIED on the canonical chain store**, `~/optbt_data/chain_snapshots/underlying=*/asof_date=<session>/data.parquet`:
+
+  | session | files | rows | `open_interest` non-null |
+  |---|---|---|---|
+  | 2026-08-11 | 184 | 47,332 | 596 (1.3%) |
+  | 2026-08-12 | 31 | 9,448 | **0** |
+  | 2026-08-13 | 99 | 30,557 | **0** |
+  | 2026-09-02 | 98 | 30,513 | **0** |
+
+  Their floor (`open_interest >= 100` on the canonical partitions) has been unsatisfiable on
+  every session since 08-12 — the `ibkr_tick101` real-or-NULL producer change they asked
+  QuantIQ for. Their own 09-03 record blamed the session denominator; that mechanism exists but
+  did not fire. The 10-03 timer will **refuse** (post-`2b04ff3`) unless the floor's input changes
+  first, which is a §20 decision on their side, proposed not shipped.
+- **§2 commitment, adopted as our rule:** the tier-3 basis moves only by (i) a guarded refresh that
+  admits ≥1 name or (ii) a relayed manual re-run, **relayed with asof + timestamp BEFORE it
+  lands.** Consequence for us: **D391's "on or after the 3rd" is no longer even a planning
+  expectation.** There is no calendar. The `enumeration_inputs_hash` universe component remains
+  the cut (D391 rule unchanged); the *expectation* of when it moves is now "when the relay says".
+- **§3 a measurement-basis fact, dated 08-12:** their selector skips rows with OI None, so every
+  IBKR-captured near-ATM contract has been unselectable since 08-12 and every entry on a
+  post-08-12 bar comes from a CBOE supplement row with a real bid/ask — the spread gate binds
+  (`spread_too_wide` 4–8% → 32–44% of signals by week; traded 91% → 55–63%). 295,804 forge runs
+  decided since 08-12 have windows crossing it, ~3 weeks of an 8.7-year window today, growing a
+  session per session. **Not visible on our ledger yet, as expected at ~1% window exposure:**
+  weekly median `min_oos_trade_count.value` on stage-one verdicts 521 / 532 / 538 / 535 / 518
+  (weeks of 08-03 → 08-31), cpcv_p25 0.43 / 0.42 / 0.48 / 0.44 / 0.40. **Standing watch, no
+  instrument:** re-check these monthly; a downtrend from here is this basis change before it is
+  supply. Both freeze reads (D384 08-09, D389 08-14) had ≤2 sessions of exposure — unaffected.
+  No Forge mechanism reads spreads or OI; prefilters key on activations, not fills.
+- **§5 `tier_3_asof` export field:** additive contracts field, operator-gated on their side; we
+  adopt through the usual both-directions restart (D244/D245) when it ships. Until then §2's
+  commitment is the provenance. Acknowledged, nothing to do.
+
+### §4 — we named the window: **60 days**
+
+Their measured cost: 14 d = 262,336 runs / 88 MB (today); 30 d = 547,750 / ~185 MB; 45 d =
+758,820 / ~255 MB; 60 d = 776,445 / ~260 MB. Ours, measured: `_load_corr()` peaks at **376 MB
+RSS in 0.7 s on the 88 MB file** → ~1.1 GB on a 60-day file, in a one-shot script on a 123 GB
+box. **60 because it is the smallest offered size that keeps a within-basis leg-2 read available
+for a basis's whole life:** a basis lives at least a month, a read must reach back to the basis
+start, and `Persistent=true` (and now a held basis) only makes it longer. 45 d covers the arm
+start today and stops covering it tomorrow. The residual — a basis older than 60 d — is ours to
+plan around: register inside the window and read before it ages out, or ask again.
+
+### Disposition
+
+Reply relay sent (window named, §1–§3 verified with our numbers, calendar expectation retired).
+No code change, no grammar change, no restart. Grammar frozen at v55, zero open preregs.
