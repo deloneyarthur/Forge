@@ -450,8 +450,24 @@ def _leg2(
 ) -> None:
     """Leg 2 of freeze condition (C): has the GOOD supply become more redundant?"""
     print("\n=== LEG 2 (redundancy): TCM-corr, composition-standardised ===")
+    # The population floor cannot see a thin NEWEST window, and the newest window is the only one
+    # this leg judges. Since 2026-09-06 Crucible cuts `corr_to_book` from a nightly snapshot, so the
+    # freshest 7-31 hours of decisions have no correlation row yet; a 60%-joined series can carry a
+    # 30%-joined (or 0%-joined, hence NaN) newest window. Dropping the NaN would silently make the
+    # PRIOR window "newest" and print a verdict about it. Refuse instead: a guard that passes on
+    # absent data certifies (D387).
+    n_win = len(obs) // width
+    newest = obs[(n_win - 1) * width : n_win * width] if n_win else []
+    newest_join = sum(1 for o in newest if o[2] is not None) / width if newest else 0.0
     if joined < 0.5 * n:
         print("  UNAVAILABLE -- corr_to_book join below 50%; the leg does not run.")
+    elif newest_join < 0.5:
+        print(
+            f"  UNAVAILABLE -- newest window joined {100 * newest_join:.1f}% (< 50%); the leg does"
+            " not read it.\n      The export trails decisions by up to a day (snapshot-cut since"
+            " 2026-09-06): re-run after\n      the next export rather than judging the prior window"
+            " as if it were the newest."
+        )
     else:
         rser = _series(obs, ref, width, True, "tcm_corr")
         print("  " + " ".join(f"{v:.4f}" for v in rser))

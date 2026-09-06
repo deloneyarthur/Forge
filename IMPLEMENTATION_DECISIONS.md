@@ -3485,3 +3485,87 @@ then did exactly that.
 - **D401's stale-F3 observation stands and is unrelated** — F3 loads once at daemon start
   (up since 08-16, 82 artifacts on disk). That the 08-16 artifact postdates the Q59 fix means the
   live model *has* the correct conditioning; whether a 15-day pin is intended remains open.
+
+## D403 — **Crucible's `corr_to_book` basis notice (2026-09-05): pin INTACT, NO registered read in the frozen window, nothing adopted. But their "the guard covers it" holds only because the POPULATION floor is now structurally tripped — leg 2 has been dark on any basis older than 14 days all along — and the newest-window gap it does NOT cover is closed. Plus the finding the relay omits: their 09-03 re-rank published an EMPTY tier 3 for 13.5h and we drew 17,013 submissions from a 24-name universe.**
+
+**Date:** 2026-09-06 · **Class:** relay processed + instrument tightening · **Follows:** D357 (pin), D389 (last leg-2 read), D391 (basis boundary), D392 (watcher)
+
+### What they flagged (three changes, none re-basing `frozen_b36f49a4`)
+
+1. New label `7f2a697ec6c1b119` (their designated champion since 08-06) on rows decided from
+   2026-09-06T05:24:15Z, forward-only, no backfill.
+2. The export was **frozen 08-31 07:02Z → 09-06 05:25Z**: the 14-day scan crossed their writer's
+   result-row cap and a `-`-prefixed ExecStart kept the unit green. Nothing paged.
+3. From 09-06 the export is cut from their **nightly snapshot** (~11:00Z), so the newest file trails
+   decisions by 7–31 hours. Additive `data_basis` block.
+
+They asked three checks. Answered below, each verified on our own data.
+
+### Verified, not assumed
+
+- **The gap is real.** Daily files through `corr_to_book_2026-08-30T140305Z.json`, then nothing
+  until `corr_to_book_2026-09-06T052533Z.json` (mtime 2026-09-06T05:25:38Z, 88.6 MB).
+- **The pin is intact by OUR function.** `_basis_fp` over `frozen_b36f49a4` = `ae47a4749c9d` on both
+  files. `_load_corr()` on the new file: 204,915 hashes, fp OK. The additive changes are inert to
+  the loader (it reads one book by name): fifth `books` entry (fp `09cfe2ad7e55`, minted
+  2026-09-06T05:24:11Z from the stored manifest, 6 legs, tail leg on, vt 0.15, 2,122 sessions),
+  `data_basis` = `{snapshot: runs-20260905T110045Z.duckdb, snapshot_age_hours: 18.32,
+  window_cut_utc: 2026-08-23 05:25:33}`. **Zero of 262,336 rows carry the new key yet** — the
+  snapshot predates the mint, exactly as their lag note predicts.
+- **Check 1 — NO registered read in the window.** `config/preregistrations.jsonl`: 31 entries, all
+  resolved (20 confirmed / 5 insufficient / 6 refuted), newest `resolved_at`
+  2026-08-14T06:14:10Z (`3b0cbca7ae17`, D389); no `created_at`/`cohort_cut`/`resolved_at` falls in
+  08-31T07:02Z → 09-06T05:25Z. `forge-prereg-watch.service` logged **"no open preregistrations —
+  nothing to watch"** on every day 08-31 through 09-05. Nothing to mark.
+- **Check 2 — quantified on the 09-06 snapshot** (honest arm with cpcv n=76,914; 64 windows @1200):
+
+  | export read by mtime | population join | newest 8 windows | leg 2 |
+  |---|---|---|---|
+  | `2026-08-30T140305Z` (the frozen one) | **26.4%** | all 0% (NaN) | UNAVAILABLE |
+  | `2026-09-06T052533Z` (first snapshot cut) | **31.2%** | 57–63 at 100%, **window 64 at 30.3%** | UNAVAILABLE |
+  | within basis `e1ad` only | 38.1% → 41.3% | — | UNAVAILABLE |
+
+  So any read in the window WOULD have been refused — by the population floor, on a cause the
+  relay does not name: **their export is a 14-day rolling window** (`window_days: 14`, cut
+  08-23) while the honest arm dates from 07-23 (D335); 43 of 64 windows are NaN under the NEW
+  file too. **Leg 2 is readable only on a generation basis younger than ~14 days.** D389's 84.2%
+  join was that case (basis born 08-03, read 08-14). Not new today; newly stated.
+- **The case the population floor does NOT cover — closed.** Window 64 is 30.3% joined and the
+  old `_leg2` read it as a full window (0.4337). Worse, a 0%-joined newest window returns NaN,
+  which the code dropped, so "newest" silently became the prior window and the verdict was about
+  a window nobody asked about. `_leg2` now **refuses when the newest window is under 50% joined**
+  (TDD: 4 tests in `tests/unit/test_scripts/test_freeze_newest_window_join.py`, red → green;
+  65 script tests pass; ruff clean). `docs/proposals/grammar-freeze-criterion.md` updated. A
+  tightening of a freeze instrument; no grammar, no restart, no version.
+- **Check 3 — NOT adopted.** D357 stands: the pin does not chase the designation. The champion
+  book's basis fp `09cfe2ad7e55` is recorded here so that any future adoption is a deliberate
+  re-pin at a stated boundary, never a drift.
+
+### The finding the relay omits: the 09-03 monthly re-rank published an EMPTY tier 3
+
+- `crucible-universe-publisher` 2026-09-03 13:01Z: `tier3.floor_excluded n=160`,
+  **`tier3.refresh_written n=0`** → `universe_tickers_2026-09-03T130107Z.json` and
+  `...T130559Z.json` with `"tier_3": []` (406 bytes against the usual 1,231). August's run had
+  excluded 86 and written 74 (D386).
+- An **off-cycle republish at 2026-09-04T02:30:35Z** restored 74 tier-3 names — by content the
+  August list (fingerprint back to `e1adced727678c8f`). The 09-04 and 09-05 06:05Z dailies match.
+- **Our side:** the daemon came up fresh after the 09-03 11:08 PDT boot, read the newest file, and
+  drew generation basis **`d5da4c3c1469e330` from 09-03 18:35Z to 09-04 23:38Z: 17,013
+  submissions from a 24-name universe** (tier 1 + tier 2 only), then back to `e1ad`. The fix was
+  on disk ~21h before we drew from it — D387's cache-lag class. The basis guard isolates the
+  excursion correctly (windows 62–63 report `d5da,e1ad`; no straddle is attributed to a side).
+- **Not relayed by Crucible** — nothing in their 09-03/09-04 handoffs mentions it, and D391's
+  undertaking explicitly covers off-cycle re-ranks. Asked in the reply: was the 02:30Z file the
+  re-rank's true output (September = August by content) or a rollback of August's list pending a
+  re-run? The answer decides whether `e1ad`-after-09-04 is the same basis as `e1ad`-before.
+- **Effect:** freeze — none (zero open preregs, nothing registered on `d5da`). Generation — no
+  tier-3 single-name emission for ~29h; xsect ranks the tier-2 pool regardless (D296). Context:
+  the box rebooted 09-02, 09-03 and 09-04 (operator activity, incl. the 09-02 OOM), which is why
+  the 09-03 pickup was a fresh-process read rather than the cache lag.
+
+### Disposition
+
+Reply relay sent (check 1 negative, check 2 numbers, the guard change, the tier-3 question).
+No grammar change, no restart, no bump. **Grammar frozen at v55, zero open preregistrations.**
+Standing note for the next leg-2 registration: **register only on a basis under 14 days old, and
+read before the basis ages past the export window — or ask Crucible to widen `window_days`.**

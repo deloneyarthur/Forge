@@ -432,6 +432,13 @@ export on disk), and **refuses to run leg 2 on any mismatch** — same principle
 50%-join refusal. A re-mint can move the level either way, so an unnoticed one could manufacture
 a false PASS.
 
+**The newest window must itself be joined.** Since 2026-09-06 Crucible cuts `corr_to_book` from a
+nightly snapshot, so the newest export trails decisions by 7–31 hours and the freshest configs carry
+no correlation row yet. The population-level floor cannot see that — a 60%-joined series can hold a
+30%-joined newest window, and a 0%-joined one reads as NaN, which the old code dropped so that the
+*prior* window was silently judged as newest. Leg 2 now also **refuses when the newest window is
+under 50% joined** (D403); re-run after the next export.
+
 **The registered read must not set its own bar.** Left alone the instrument re-fits `a`/`b` on
 every run — *including the windows under judgement* — so the threshold moves with the data it
 judges. That is peeking wearing a formula: leg 2's bar read 0.0173 at registration and 0.0210
