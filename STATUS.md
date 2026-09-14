@@ -3,6 +3,7 @@
 ## 2026-09-14 (later) — **Crucible recorded the instant; one gap they found is FIXED: the absent-forge-stream fallback no longer runs the aged-out flush (an absent window is as blind as a truncated one). The `ranked` boundary is split by campaign identity — `submitted_hashes` in live run records is now a contract field.** (D415)
 
 - Nothing blocks the 09-15T07:00Z cutover. Watch item: one unreproduced test failure on the first scoped run, three clean re-runs after.
+- **Tonight's sequence (operator-confirmed via the Crucible session, 09-14):** 14:20 PT Crucible's maintenance unit STOPS `forge.service` (left enabled, NO restart — our ask: no casual restart of the refactored tree 3 h before its retirement) and runs its measure window (≤ 6 h, latest end ~20:50 PT); 22:45/22:49/22:53 PT their cutover-guard writes `CRUCIBLE_maintenance_window_NOT_healthy*` only if all three checks fail; 00:00 PT our cutover script refuses on that file (`e37cf7d`) or proceeds (disable daemon, flip to `live`, first live run). Hourly healthcheck CRITs from 15:00 PT are EXPECTED. The daemon's last submission is ~21:20Z, widening the gap around the relayed 07:00Z `ranked` boundary.
 
 ## 2026-09-14 (later) — **Batch 5 PREP done: nine helpers the campaign borrowed from doomed modules moved to permanent homes (pure refactor `b4803cc`, old names still bound), tripwire invariant added, removal checklist written (plan §13, groups G0–G7). Suite 2,252 green; live dry-run plan identical. Daemon untouched; cutover armed for 09-15T07:00Z.** (D414)
 
