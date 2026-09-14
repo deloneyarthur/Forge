@@ -2205,3 +2205,37 @@ tail ages out ~09-29; campaign verdicts are the newest rows so each Sunday still
 the aged-out flush stays off while truncated); a truncated file after ~09-29 is ours to relay. The
 morning digest's Forge section goes quiet. Batch 5 (remove the daemon era) follows the first live
 Sunday.
+
+## D414 — 2026-09-14 — Batch 5 PREP: the campaign path no longer borrows from the daemon era — nine helpers moved to permanent homes (pure refactor, `b4803cc`), a tripwire invariant pins it, and the removal checklist is written (plan §13)
+
+**Why now.** The cutover is armed (D413, 2026-09-15T07:00:00Z) and Batch 5 deletes the daemon era
+after it fires. An AST dependency map over `src/forge` showed the campaign path importing five helpers
+from `cli/main.py` and one-off constants from `ranking/diversifier`, `ranking/campaigns`,
+`feedback/rejection_weights`, `feedback/yield_audit` — all slated for deletion. Moving them first
+makes every Batch 5 cut import-safe by construction, and it could be done before the instant because it
+changes no behaviour (the daemon keeps running the loaded code; a reboot would start the refactored
+code, which the full suite covers).
+
+**Moves (old name stays bound at the old path until Batch 5):** `_build_feature_cache` →
+`prefilters/factory.build_feature_cache`; `_load_prior_structural_fingerprints` →
+`persistence/fingerprints`; `_load_trade_rate_priors` → `feedback/trade_rate_priors.load_trade_rate_priors`;
+`_ensure_grammar_version_recorded_silently` → `grammar/version_audit`; `_QUALITY_LANE_TARGET` →
+`ranking/model.QUALITY_LANE_TARGET`; `diversifier._signal_keys` / `jaccard_signal_ids` /
+`prior_promotion._signal_keys` → `ranking/signal_key.signal_keys` + `jaccard_signal_keys` (one home);
+`CLEAN_ERA_LABEL_CUT` / `VE_GHOST_LABEL_CUT` → `feedback/eras.py`; `CONVERTING_DECISIONS` →
+`persistence/verdicts`; `ExperimentCell` / `config_cell` / `config_cell_from_json` →
+**`campaign/cell_key.py`** (a leaf: putting them in `cells.py` made `forge.ranking` circular). 16 files
+modified, 5 new. `tests/invariants/test_batch5_prep_seams.py` (11): the campaign package and
+`cli/campaign_cmd.py` import nothing from the five doomed modules (AST), 14 old-name identity
+assertions, and the `_build_feature_cache` patch seam still reaches the daemon's call site.
+
+**Verified.** ruff / mypy --strict (119 files) clean; full suite **2,252 passed / 1 skipped / 3 xfailed
+in 216 s**; a live `--dry-run` after the refactor (`2026-W38-20260914T063701Z`) reproduced the prior
+record's plan exactly (seed 1150675089, 20,000 enumerated, no trigger) and now reconciles from the forge
+stream (10,000 rows, truncated, flush skipped). Daemon untouched; cutover timer armed.
+
+**Checklist.** Plan §13: seven removal groups G0–G7 in order (fold the last two timers into the run →
+the loop + its CLI → daemon-era ranking → daemon-era feedback → rate limiter / write-only logger /
+unused predicate types → config leftovers → REL-4/5/12 → scripts + docs), each with its test fallout
+and verification; the survivors the map forces us to keep are listed (`RankedCandidate`, `shadow.py`,
+`trade_rate_priors`, the consumer). Batches remaining after the cutover: 5, 6, 7.

@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-14 (later) — **Batch 5 PREP done: nine helpers the campaign borrowed from doomed modules moved to permanent homes (pure refactor `b4803cc`, old names still bound), tripwire invariant added, removal checklist written (plan §13, groups G0–G7). Suite 2,252 green; live dry-run plan identical. Daemon untouched; cutover armed for 09-15T07:00Z.** (D414)
+
+- Batches remaining after the cutover: 5 (remove the daemon era), 6 (consolidate), 7 (regrowth rules).
+
 ## 2026-09-14 (later) — **CUTOVER SCHEDULED: 2026-09-15T07:00:00Z (operator: "as soon as possible"; Crucible's 24 h notice honoured). `scripts/cutover_campaign.sh` + `forge-cutover.{service,timer}` written and syntax-checked; NOT armed, NOT committed, relay NOT delivered — the harness refused those as a production deploy, so they are the operator's two commands (D413).** (D413)
 
 - At the instant: daemon stopped + DISABLED, healthcheck timer off, campaign unit flipped to `live`, first live run immediately, then Sundays. ranker-eval / prereg-watch / backup keep running until Batch 5.

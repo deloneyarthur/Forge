@@ -751,3 +751,41 @@ Weekly cadence (Sunday 03:00 UTC); cap 400/run; T1 threshold 0.25× first-record
 T4 staleness 90 d and near-floor 1.2; T5 share 10% (min 20); Jaccard duplicate threshold 0.85; dead-cell
 rule as `yield_audit` (≥ 1,000 decided, 0 converting, or < 0.25× baseline). All recorded per run so a
 later reader knows which defaults produced which plan.
+
+---
+
+## 13. Batch 5 — removal checklist (prepared 2026-09-14, executes after the cutover fires)
+
+**Ground truth used:** an AST dependency map over `src/forge` (2026-09-14): the campaign path imports
+five helpers from `cli/main.py` and one-off constants from four doomed modules; every other survivor
+dependency is already in a module that stays. The Batch 5 PREP commit moves those into permanent homes
+and adds `tests/invariants/test_batch5_prep_seams.py` (the campaign imports nothing from the doomed
+modules) so every deletion below is import-safe by construction.
+
+**Survivors the map forces us to KEEP (corrections to §12.4):** `ranking/types.py` keeps
+`RankedCandidate` (submitter, `search_multiplicity`, the campaign); `ranking/shadow.py` stays
+(retraining data); `ranking/{features,dataset,model,signal_key}.py`; `feedback/{consumer,
+preregistration,trade_rate_priors,eras}.py`; `persistence/*`; `submission/{submitter,batch,
+search_multiplicity}.py`; `prefilters/*` minus `activation_smoke`; `enumeration/*` incl.
+`_demo_registry` (fixtures); `grammar/*` minus the three unused predicate types.
+
+**Order (one D-entry per group; full suite + `forge campaign --dry-run` plan-identity after each;
+the `ranked`/campaign timer untouched; no daemon exists to restart):**
+
+| # | Group | Removes | Notes / verification |
+|---|---|---|---|
+| G0 | fold the last two timers into the run | `scripts/daily_ranker_eval.sh` + `forge-ranker-eval.{service,timer}` (train verdict + robustness cpcv + tail ×2 move INTO `campaign/run.py` step 0.5, from `forge.db` directly — no snapshot, no 20–34 GB peak; keep newest N artifacts per family = REL-12); `scripts/freeze_read_watcher.py` + `forge-prereg-watch.{service,timer}` (the DUE judge moves into the campaign boot check: an open prereg past its clock = boot FAIL); `forge-backup.timer` re-timed Sunday 04:00 UTC (after the run); `forge-cutover.{service,timer}`, `scripts/{cutover_campaign,arm_cutover}.sh` (done their job) | Verify: `systemctl --user list-timers` = `forge-campaign` + `forge-backup` only; a hand `forge campaign --dry-run` shows the 4 trained artifacts + the prereg check line |
+| G1 | the daemon loop + its CLI | `cli/main.py` shrinks to the Typer app + `check`/`version`/`enumerate`/`prefilter` (the loop, `cmd_run`, the 9 weight loaders, 8 env resolvers, formatters, `_run_one_iteration` go); `cli/{feedback,healthcheck,status,grammar,yield_audit,campaigns,ranker_model}_cmd.py`; `deploy/systemd/{forge,forge-healthcheck}.{service,timer}`; `scripts/deploy_preflight.sh` keeps but loses the daemon steps | Tests: the 24 `main`-importing files re-target `app`; `test_run_loop`, `test_cli_run`, `test_healthcheck`, `test_status`, `test_grammar_cmd`, `test_feedback_cmd`, `test_ranker_model_cmd`, `test_generation_arm_flag`, `test_cell_floor_flag`, `test_config_threading` (resolvers), `test_enumeration_inputs_reach_the_battery` (re-target to `campaign/run.py`), `test_sigterm_handler` + `test_export_outage_signal` (REL-1 moot → delete; REL-4 re-targets the campaign, see G6) |
+| G2 | ranking, daemon era | `queue.py`, `diversifier.py`, `arm_floor.py`, `cell_floor.py`, `scorer.py`, `config.py`, `prior_promotion.py`, `calibration.py`, `drift.py`, `sequential_test.py`, `evaluation.py`, `campaign_audit.py`, `campaigns.py` (registry; `config_cell` lives in `campaign/cells.py` after prep), `regime_supply.py`; `config/ranker.yaml`; `ranking/types.py` trimmed to `RankedCandidate` | Tests: `test_queue`, `test_diversifier`, `test_arm_floor`, `test_cell_floor`, `test_scorer`, `test_config`, `test_types` (partial), `test_prior_promotion`, `test_calibration`, `test_drift`, `test_sequential_test`, `test_evaluation`, `test_campaign_audit`, `test_campaigns`, `test_regime_supply`, `test_tail_lane`, `test_shadow` (keep), `test_learned_ranker_invariants` (re-target) |
+| G3 | feedback, daemon era | `analyzer.py`, `proposer.py`, `proposal_writer.py`, `trade_concentration.py`, `stuck_state.py`, `promoted_patterns.py`, `book_usable_weights.py`, `rejection_weights.py` (1,170 LOC — the era cuts moved to `eras.py`), `yield_audit.py` (`CONVERTING_DECISIONS` moved to `persistence/verdicts.py`), `types.py` trimmed to what `consumer` uses; `OPEN_PROPOSALS.md` stays as a STATIC machine-parsed file | CLAUDE.md hard rule #4 reworded ("grammar changes require a preregistration + operator signature — pre-commit `freeze-governance`"); `test_phase5_invariants.py` HR#4 structure tests re-cut; `test_phase6_invariants.py:147-152` (`grammar_cmd` needle) removed |
+| G4 | submission / prefilters / grammar | `submission/rate_limiter.py` (+ `__init__` export; `test_rate_limiter*`, `test_inflight_depth_invariants`, `test_stall_guard_invariants`); `submission/pre_filter_logger.py` + the `record_prefilter_rejections` call in `submitter.py` (Q44: 45.7 M write-only rows stop; DDL stays); `prefilters/activation_smoke.py`; the three unused predicate types (`grammar/models.py`, `predicates.py`, `test_predicates_requires_forbids`, `test_predicates_compatibility`) | Goldens + `test_batch_reproducibility` prove the population unchanged; `load_grammar` parses v55 and the archive check passes |
+| G5 | config surface | `_RUN_DEFAULT_*` + the daemon's `--no-config` (gone with G1); `prefilter.yaml` `auto_tune:` key + `AutoTuneCalibration` + `write_calibration_yaml`; `forge.yaml` `crucible.db_path` + `consumer._fetch_crucible_runs`'s direct-DuckDB fallback (the campaign reads the forge stream; fixtures inject runs); unit env stanza already gone with `forge.service` | `test_config_threading` rewrite; `campaign_config` tests stay |
+| G6 | reliability fixes still relevant | REL-4: `submitter.py` writes the inbox file AFTER the DB commit (or records the hash first) + a SIGTERM handler on the campaign oneshot; `test_sigterm_handler` re-targeted and un-xfailed. REL-5: `sampler.py:511-581` universe fallback → fail loud (a sampler-module edit that touches no draw path; goldens prove it). REL-12: done in G0. REL-1/REL-2 tests deleted with their subjects | Suite: 0 xfails remaining |
+| G7 | scripts + docs + records | Scripts: retire `search_multiplicity_census.py` (§8.4), `freeze_tail_reading.py` + `freeze_registered_read.py` + their 3 test files (§8.7, archive), `tail_verified_alignment.py`, `production_by_group.py`, `promoted_leg_recall.py`, `threshold_resolution_value.py`, `ceiling_record_test.py`, `joint_frontier.py`, `second_gate_contrast.py` (+test) — MANPAGE retirement-ledger rows. Docs: `architecture.md` rewritten to §12.4's table; MANPAGE to the ~9 commands; HOW-TO = Monday check, `status`, cold start, reopener ritual; CLAUDE.md pitfalls about the limiter/daemon dropped; `tests/README.md`; `deploy/NEW_BOX_TRANSFER.md` + `setup_new_box.sh` to two timers; `docs/tasks/deploy.md` → "the campaign unit" ritual; D-entry per group; STATUS ≤ 800 chars each | `test_cli_help`, `test_phase6_invariants` doc needles; `_archive/` sweep in the same commits (sweep-on-land) |
+
+**Expected end state (re-estimate after prep):** `src/` ≈ 17k LOC / ~80 files; tests ≈ 30k lines;
+scripts 6 (`backup_forge_db.sh`, `live_db_snapshot.sh`, `campaign_run.sh`, `deploy_preflight.sh`,
+`check_grammar_version_bump.py`, `check_grammar_doc_sync.py`, `check_freeze_governance.py` = 7);
+CLI = `campaign` (+`status`), `check`, `version`, `enumerate`, `prefilter`, `prereg` (3); timers 2;
+env flags 0 (the mode line is the unit's, not an env knob of the code); config files `forge.yaml`,
+`grammar.yaml` + archive, `preregistrations.jsonl`, `auto_tightened_thresholds.yaml`.
