@@ -1,5 +1,10 @@
 # Forge — Status
 
+## 2026-09-14 — **Crucible answered the campaign-mode relay same day: cutover is BLOCKED on a forge-scoped 14-day gated stream (their option 2, operator-confirmed — the existing export reaches ~24 h, measured); T1 = designation flips only (contributions are frozen at assembly); weekday Sunday 03:00 UTC; `promoted_strategies` retirement ACKed (our read has been `[]` since 07-06); champion re-based to `7f2a697ec6c1b119` @ 08-06 (`designation_history` had never been published).** (D409)
+
+- Reply delivered (freeze `5ab347a`). Nothing on the wire changes; daemon unchanged. Waiting on: their stream (loader-first), weekday confirmation. Owed by us: run-record schema before the first live run; cutover instant ≥ 24 h ahead.
+- Next: Batch 3 — build `forge campaign` beside the daemon (plan §12.6).
+
 ## 2026-09-13 (later) — **Batch 2 DONE: coverage first. Three known bugs pinned as strict xfails (SIGTERM tear REL-4, unlogged export-outage swallows REL-1/REL-2), model-reload-per-iteration and the snapshot script pinned, 3 perf tests marked `slow`, v44 conditioner tests + the Q51 flake deleted (Q51 CLOSED). Suite 2,148 passed / 1 skipped / 3 xfailed in 214 s.** (D408)
 
 - `scripts/deploy_preflight.sh` → **GO** after the commit (tree clean, suite 2,148 passed / 1 skipped / 3 xfailed in 219 s). Batches 0–2 complete; nothing restarted. Next: Batch 3 = build `forge campaign` beside the daemon (plan §12.6), gated on Crucible's six answers (relay `480fe72`).

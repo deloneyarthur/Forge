@@ -579,11 +579,16 @@ strategies that are duplicative of the champion or that cannot threaten it is wa
 
 - Both promotions came through directed cells, not the broad sweep; Crucible's un-consumed
   above-floor supply is 3; their quality lane finds 0–3 eligible per pass (D393). The sweep is spent.
-- The champion is machine-readable today: `designation_history*.json` names the book QuantIQ trades
-  (`f52a05c8968bdc7a`, designated 2026-08-01; 3 legs: trend `momentum_252×hurst×days_since_jump`,
-  MR `rsi_14×market_realized_vol×ivol`, MR `rsi×market_realized_vol×ivol`). Eleven promoted books
+- The champion is machine-readable: `designation_history*.json` names the book QuantIQ trades —
+  **`7f2a697ec6c1b119`, designated 2026-08-06, 6 legs (4 trend, 2 MR)**. (The 2026-08-02 file that
+  named `f52a05c8` was a hand-run one-off; Crucible's 09-13 answer republished it and armed a daily
+  07:00 PT publisher — nothing in Forge code had read the old file.) Eleven promoted books
   (08-04 → 08-08) span ~11 distinct (directional, regime) cells. `component_contributions*.json`
-  carries per-leg `marginal_sharpe` + `correlation_to_incumbent` (18 rows today). All three are
+  carries per-leg `marginal_sharpe` + `correlation_to_incumbent` (18 rows; 6 filed under the
+  designated book) but is **FROZEN at assembly** (recomputed from stored ledgers only) and a config in
+  several books carries the last-iterated book's score — filter on `portfolio_id == designated`, treat
+  other-book legs as unknown. No live or paper per-leg performance is published, none planned
+  (paper P&L is QuantIQ's). All three are
   readable through blessed contracts helpers (`load_promoted_portfolios_from_export`,
   `load_component_contributions_from_export`); nothing in `src/` reads the last two yet. The census
   script already derives "protected cells" from the book (`search_multiplicity_census.py:130-152`).
@@ -623,6 +628,15 @@ Run steps, all deterministic given the export watermarks recorded in the run rec
 1. **Reconcile**: consume gated/failed exports for prior campaign submissions (existing consumer,
    aged-out flush); write verdict rows; update the derived campaign table (status per cell:
    discover → farming → converted / retired — a table in `forge.db`, no longer code).
+   **Blocking fact (Crucible 09-13 §4.1, measured here 09-14):** `gated_runs_*.json` is the newest
+   10,000 decisions across ALL sources — one file spans ~14 h and the 60 retained files reach ~24 h
+   (Crucible refits alone decide ~5k/day). A weekly boot reconcile sees none of last week's verdicts.
+   Resolution = a **forge-scoped, 14-day gated stream** (`source='forge'`) beside the existing one,
+   loader-first in contracts then emission (Crucible's option 2) — the weekly run must boot cold after
+   any outage and still see two full weeks; a poller (their option 1) is a second moving part whose
+   failure is a silent label gap. `failed_runs` already looks back 14 days (their `5b3aa42`, live,
+   verified `lookback_days: 14`). Until the stream ships the daemon reconciles per iteration, so the
+   dry-run weeks are unaffected; cutover waits on it.
 2. **Read the book**: designated champion + all promoted portfolios → PROTECTED cells (5-tuple key:
    hypothesis, dte_bucket, axis, directional, regime) + per-leg `marginal_sharpe` /
    `correlation_to_incumbent` + the designation stamp.
@@ -630,8 +644,8 @@ Run steps, all deterministic given the export watermarks recorded in the run rec
 
 | Trigger | Fires when | Campaign | Default budget |
 |---|---|---|---|
-| T1 leg health | a champion leg's `marginal_sharpe` in the newest contributions export falls below a fraction of its first recorded value, or the designated `portfolio_id` flips | REPLACEMENT: that leg's cell + neighbours (same hypothesis; adjacent dte bucket; sibling directional ids in the same family) | 200 |
-| T2 refutation retraction | an effect present in the previous `refutations` export is absent from the newest (freeze reopener 1, machine-detectable) | RELEASE: the released cell | 100 |
+| T1 leg health | the designated `portfolio_id` flips in `designation_history` (daily 07:00 PT). **Not** `marginal_sharpe` decay — the contributions export is frozen at assembly (Crucible 09-13 §1); a live per-leg signal would have to come from QuantIQ (Route D, none planned) | REPLACEMENT: the legs the new book dropped → their cells + neighbours (same hypothesis; adjacent dte bucket; sibling directional ids) | 200 |
+| T2 refutation retraction | an effect present in the previous `refutations` file is absent from a NEW file (content-diff; the export publishes on content change only — hash-deduped, checked daily 07:00 PT — so never key on file age) | RELEASE: the released cell | 100 |
 | T3 registry change | a new indicator **id** within an existing grammar family appears in the registry snapshot | EXPLORE: cells containing it | 100 |
 | T3' new family | a new indicator **family** appears | no campaign; journal "reopener 2 candidate" (a family needs a grammar bump + prereg) | 0 |
 | T4 basis refresh | a non-protected, non-dead cell whose newest verdict is > 90 d old and whose best historical `cpcv_p25` ≥ 1.2 (near the 1.5 floor); the chain basis moved three times since 07-17 (D404/D405) so old evidence goes stale | REFRESH: ≤ 2 such cells per run | 50 each |
@@ -650,8 +664,15 @@ Run steps, all deterministic given the export watermarks recorded in the run rec
    disappears). Submit ≤ budget; stamp `selection_mode = campaign:<trigger>:<cell>`; `search_n_trials`
    stamp unchanged.
 5. **Report**: one journal block + `~/forge_data/campaigns/<run_id>.json` (triggers evaluated with
-   their inputs, cells chosen, n submitted, export watermarks) — replayable; a per-run funnel export
-   for Crucible's `--compare` ritual (needed only if a reopener ever bumps the grammar).
+   their inputs, cells chosen, n submitted, export watermarks) — replayable; **publish its schema to
+   Crucible** (their morning digest will read it once it exists). Keep `forge_funnel.json` in its
+   aggregate `per_grammar_version` shape (their loader raises `ForgeFunnelError` on any other shape;
+   an absent file degrades) — the run updates the same aggregate, per-run detail lives in the run
+   record. `selection_arm` stays `ranked` (their §3): the relayed cutover instant is the boundary
+   between ranker-selected and campaign-sampled `ranked` rows — no contracts change.
+   **Weekday: Sunday 03:00 UTC** (Saturday 20:00 PT) — their Monday 06:00 PT generation census reads
+   cohorts ≥ 14 days old, so a Sunday cohort is 15 days old at the first census that can include it
+   and its stage-one verdicts (1–3 days) are long done; proposed to Crucible for confirmation.
 
 What automation can and cannot judge, stated plainly: Forge stops sending what cannot matter
 (duplicates of the book, dead cells, cells with no trigger). It does **not** claim to know which
@@ -669,13 +690,13 @@ campaign is a supply of candidates, not a verdict.
 | `scripts/` | `backup_forge_db.sh`, `deploy_preflight.sh`, the 3 hooks, `live_db_snapshot.sh` (reads during a run) | everything else (§4c) |
 | Config | `forge.yaml` (+ `campaign:` section), `grammar.yaml` + archive, `preregistrations.jsonl`, `auto_tightened_thresholds.yaml` (fingerprint) | `ranker.yaml`, `prefilter.yaml` `auto_tune:`, the unit env stanza |
 | Docs | DESIGN (shrunk, + "final state" banner), GRAMMAR (~200), MANPAGE (~250), HOW-TO (campaign + cold start), architecture (rewritten to this table), `tasks/{deploy,quality-gates,crucible-handoff,grammar-change (reopener ritual)}` | `feedback-change.md`, `investigate-live.md` (merge the eras table into HOW-TO), INDICATOR_THRESHOLDS, all terminal proposals |
-| External interfaces | Crucible inbox (`submit_candidate`), gated/failed/registry/universe/refutations/promoted/designation/contributions exports (read), per-run funnel export (write), `OPEN_PROPOSALS.md` as a static file | journal-line regex contract with `crucible-morning-digest`; `streak.jsonl`/`rewire_streak_wfp25.jsonl` for QuantIQ (replaced by the run record) |
+| External interfaces | Crucible inbox (`submit_candidate`), gated (forge-scoped 14-day stream once it ships) / failed / registry / universe / refutations / `promoted_portfolios` / `designation_history` / `component_contributions` / `chain_inception_floors` / `earnings_covered_symbols` exports (read), `forge_funnel.json` aggregate (write, shape kept), run records `~/forge_data/campaigns/*.json` (write, schema published), `OPEN_PROPOSALS.md` as a static file | `promoted_strategies` (RETIRING on Crucible's side, 09-13 — the prior-promotion-proximity read at `main.py:1549` has returned `[]` since 07-06, verified: 0 rows in 90 d; drop the read + `prior_promotion.py` in Batch 5); journal-line regex contract with `crucible-morning-digest` (goes silent gracefully); `streak.jsonl`/`rewire_streak_wfp25.jsonl` for QuantIQ (replaced by the run record) |
 
 Size estimate: `src/` ≈ 17k LOC / ~85 files (from 28.5k / 107); tests ≈ 30k lines; CLI ≈ 9
 commands; timers 2; scripts 6. Hard rules #1–#10 all still hold; #4's wording changes to "grammar
 changes require a preregistration + operator signature (pre-commit `freeze-governance`)".
 
-### 12.5 Cross-system notice (before cutover, via `freeze/relays/`)
+### 12.5 Cross-system notice (before cutover, via `freeze/relays/`) — SENT 2026-09-13 (`480fe72`); ANSWERED same day (Crucible `5b3aa42`): §1 contributions frozen → T1 = designation flips; §2 no live drift; §3 stamp `ranked` + relay the cutover instant; §4 no timer assumes a daily stream, but **§4.1 blocks cutover** (gated window ~24 h — forge-scoped 14-day stream requested); §4.2 `failed_runs` 14-day lookback live; §5 `promoted_strategies` retiring (ACK), `designation_history` was never published (fixed, daily), `refutations` content-change only; §6 digest goes quiet, keep the funnel shape. Reply relay 2026-09-14.
 
 To Crucible: (1) Forge volume goes from ~11k/day to ≤ 400/week, bursty, starting <date>; keep the
 inbox watcher + gated/failed/registry/universe publishers (all cheap); (2) `selection_mode` gains

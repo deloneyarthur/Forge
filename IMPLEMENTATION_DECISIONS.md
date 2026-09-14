@@ -2001,3 +2001,50 @@ daily-eval-script tests: moot under the final state.
 
 **Verification.** Full suite green (above); `scripts/deploy_preflight.sh` GO on a clean tree after
 the Batch 2 commit (run at the end of this session; result in STATUS).
+
+## D409 — 2026-09-14 — Crucible's six answers on campaign mode processed: T1 becomes designation-flip-only, cutover is BLOCKED on a forge-scoped 14-day gated stream (option 2, operator-confirmed), weekday Sunday 03:00 UTC, `promoted_strategies` retirement ACKed, the champion re-based to `7f2a697ec6c1b119`
+
+**Inbound.** `freeze/relays/CRUCIBLE_weekly_campaign_six_answers_…_2026-09-13.md` (their `5b3aa42`),
+answering our `FORGE_final_state_is_weekly_CAMPAIGN_mode…_2026-09-13` (D406/D408 session). Every
+premise re-read on our disk before replying (crucible-handoff rule); reply delivered as
+`FORGE_weekly_campaign_answers_ACCEPTED_option_2…_2026-09-14.md` (freeze `5ab347a`).
+
+**Verified, and what each changes in plan §12:**
+1. `component_contributions` is FROZEN at assembly (recomputed from stored ledgers only; a config in
+   several books carries the last-iterated book's score). Verified: 18 rows, 6 filed under the
+   designated book, values match their table exactly. **T1 = designation flips only**; `marginal_sharpe`
+   decay struck from the trigger table; the campaign filters on `portfolio_id == designated`.
+2. No live/paper per-leg performance is published, none planned (paper P&L is QuantIQ's). On record;
+   Route D stays a QuantIQ ask.
+3. `selection_arm` stays `ranked`; the relayed cutover instant is the `ranked`-arm boundary — no
+   contracts change (the 1.39.0 precedent).
+4. No Crucible timer assumes a daily stream. **§4.1 BLOCKING:** `gated_runs_*.json` is the newest
+   decisions across ALL sources — **measured here 2026-09-14T03:11Z: 10,000 rows spanning ~14 h; 60
+   retained files reach ~24 h** (their relay said 1,000 rows / 84 min / ~10 h — off by 10× on rows,
+   conclusion unchanged: an order of magnitude short of a week). **Operator picked option 2** — Crucible
+   adds a forge-scoped, 14-day gated stream, loader-first in contracts; Forge adopts pin-only and wires
+   the campaign reconcile to it in Batch 3; **cutover waits on it**. Rejected option 1 (a Forge poller):
+   a second moving part whose failure mode is a silent label gap. `failed_runs` now looks back 14 days
+   (their `5b3aa42`; verified `lookback_days: 14`, 339 rows).
+5. `promoted_strategies` is RETIRING on their side: our prior-promotion-proximity read
+   (`cli/main.py:1549`) has received `[]` since C1 (07-06) — verified 0 rows in 90 days across 60
+   snapshots. **ACKed**; the read + `ranking/prior_promotion.py` leave in Batch 5 (the F3-off fallback
+   was already a zero prior). `designation_history` had NEVER been published: the 08-02 file naming
+   `f52a05c8` was a hand-run one-off; the champion has been **`7f2a697ec6c1b119` since 2026-08-06**
+   (6 legs: 4 trend, 2 MR). Republished 09-14T02:51Z, now daily 07:00 PT with a 30 h health check.
+   Nothing in Forge code read the old file (grep: zero readers); only plan §12.1 text was wrong —
+   corrected. `refutations` publishes on content change only (five files, all 07-31): T2 keys on a new
+   file with different content, never on file age.
+6. Their morning digest goes silent at cutover without erroring; it will read
+   `~/forge_data/campaigns/<run_id>.json` once we publish the schema. `forge_funnel.json` must keep
+   its aggregate `per_grammar_version` shape (a different shape raises `ForgeFunnelError`; an absent
+   file degrades) — the weekly run updates the same aggregate; per-run detail lives in the run record.
+
+**Weekday (operator-confirmed): Sunday 03:00 UTC** (Saturday 20:00 PT). Their Monday 06:00 PT census
+reads cohorts ≥ 14 days old, so a Sunday cohort is 15 days old at the first census that can include it
+and its stage-one verdicts are long done. Proposed to Crucible for confirmation.
+
+**Open, both sides.** Theirs: the 14-day forge-scoped stream; weekday confirmation. Ours: publish the
+run-record schema before the first live run; relay the cutover instant ≥ 24 h ahead; drop the
+`promoted_strategies` read (Batch 5). **Nothing changes on the wire yet** — the daemon runs unchanged.
+Next: Batch 3 (build `forge campaign` beside the daemon, plan §12.6).
