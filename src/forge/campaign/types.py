@@ -61,10 +61,12 @@ class CampaignConfig:
     """Candidates kept per campaign before the battery and gate, as a multiple of its budget."""
     registry_max_age_days: int = 7
     inbox_backlog_ceiling: int = 2_000
-    min_hypothesis_fraction: float = 0.02
-    """D037 stratification floor passed to the enumerator; the production value mirrors
-    `enumeration.iterator._PRODUCTION_MIN_HYPOTHESIS_FRACTION` (pinned by invariant test).
-    Sparse fixture registries need 0.0, exactly as the goldens use."""
+    min_hypothesis_fraction: float = 0.0
+    """D037 per-hypothesis floor passed to the enumerator. 0.0 on purpose: the floor is a
+    submission-mix guarantee for the daemon's 200-config batches, and under a cold-start draw
+    it stops the enumerator early (the first live dry-run yielded 800 of 20,000 after 2M
+    attempts). The campaign selects by CELL from a large unstratified sample of the same
+    population, exactly as the goldens enumerate it (hard rule #6). Pinned by invariant."""
 
 
 @dataclass(frozen=True, slots=True)

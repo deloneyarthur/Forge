@@ -224,10 +224,13 @@ def test_every_campaign_lane_is_stamped_ranked() -> None:
         assert _selection_arm_for(f"campaign:{trigger}") == "ranked"
 
 
-def test_default_stratification_floor_is_the_production_one() -> None:
-    """`CampaignConfig.min_hypothesis_fraction` mirrors the loop's D037 floor so the weekly
-    run draws the same stratified population the daemon did; a drift here would be a silent
-    enumeration-policy change."""
+def test_default_stratification_floor_is_off_for_the_campaign() -> None:
+    """The weekly run draws the UNSTRATIFIED population (0.0), the same sequence the goldens
+    pin, because it selects by cell afterwards; the daemon's D037 floor (0.02) is a
+    submission-mix guarantee for 200-config batches and, under a cold-start draw, capped the
+    first live dry-run at 800 of 20,000 configs. A drift to a non-zero value here would
+    silently shrink the sample every trigger reads."""
     from forge.enumeration.iterator import _PRODUCTION_MIN_HYPOTHESIS_FRACTION
 
-    assert CampaignConfig().min_hypothesis_fraction == _PRODUCTION_MIN_HYPOTHESIS_FRACTION
+    assert CampaignConfig().min_hypothesis_fraction == 0.0
+    assert _PRODUCTION_MIN_HYPOTHESIS_FRACTION > 0.0  # the daemon keeps its floor
