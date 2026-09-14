@@ -1,0 +1,19 @@
+# forge-campaign.service — the weekly, zero-input challenger run (plan 2026-09 §12; D406/D409).
+# NOT INSTALLED until the Route C cutover (§12.6 Batch 4); the cutover instant is relayed to
+# Crucible first. No SuccessExitStatus on purpose: a failed boot check, a contracts drift, or a
+# missing export must leave the unit FAILED — that is the operator's only page.
+[Unit]
+Description=Forge weekly campaign run (challengers for the designated book; no operator input)
+Documentation=file://%h/proj/Forge/docs/MANPAGE.md
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/proj/Forge
+ExecStart=%h/.local/bin/uv run forge campaign
+TimeoutStartSec=3h
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forge-campaign
+NoNewPrivileges=true
+PrivateTmp=true

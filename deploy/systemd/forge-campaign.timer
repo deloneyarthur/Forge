@@ -1,0 +1,14 @@
+# Sunday 03:00 UTC (Saturday 20:00 PT): a Sunday cohort is 15 days old at the first Crucible
+# generation census (Monday 06:00 PT, cohorts >= 14 d) that can include it, and its stage-one
+# verdicts are long done. Operator-confirmed 2026-09-14 (D409); proposed to Crucible.
+[Unit]
+Description=Trigger the Forge weekly campaign run (Sunday 03:00 UTC)
+Documentation=file://%h/proj/Forge/deploy/systemd/forge-campaign.service
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 UTC
+Persistent=true
+Unit=forge-campaign.service
+
+[Install]
+WantedBy=timers.target

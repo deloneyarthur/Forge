@@ -14,10 +14,15 @@ and the CLI commands take `--data-root` as their own option. The unused
 
 from __future__ import annotations
 
+import dataclasses
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from forge.campaign.types import CampaignConfig
 
 
 def _expand(p: Path | str) -> Path:
@@ -71,11 +76,30 @@ class ForgeConfig(BaseModel):
     crucible: CrucibleConfig
     enumeration: EnumerationConfig
     submission: SubmissionConfig
+    campaign: Mapping[str, Any] = Field(default_factory=dict)
+    """Overrides for `forge.campaign.types.CampaignConfig` (plan §12.7). Kept as a raw
+    mapping so the dataclass stays the single home of every default; validated by
+    `campaign_config()` below (unknown keys fail loud)."""
 
     @field_validator("db_path", mode="after")
     @classmethod
     def _expand_paths(cls, v: Path) -> Path:
         return _expand(v)
+
+
+def campaign_config(cfg: ForgeConfig | None) -> CampaignConfig:
+    """Resolve the weekly-run knobs: yaml `campaign:` keys over the dataclass defaults.
+
+    A key the dataclass does not know fails loud rather than silently steering
+    nothing (the D185 anti-inertness lesson); ``cfg=None`` (``--no-config``)
+    yields the pure defaults so the run needs no input."""
+    section: Mapping[str, Any] = cfg.campaign if cfg is not None else {}
+    known = {f.name for f in dataclasses.fields(CampaignConfig)}
+    unknown = sorted(set(section) - known)
+    if unknown:
+        msg = f"forge.yaml campaign: unknown key(s) {unknown}; known: {sorted(known)}"
+        raise ValueError(msg)
+    return dataclasses.replace(CampaignConfig(), **dict(section))
 
 
 def load_forge_config(path: Path) -> ForgeConfig:
@@ -88,9 +112,11 @@ def load_forge_config(path: Path) -> ForgeConfig:
 
 
 __all__ = [
+    "CampaignConfig",
     "CrucibleConfig",
     "EnumerationConfig",
     "ForgeConfig",
     "SubmissionConfig",
+    "campaign_config",
     "load_forge_config",
 ]
