@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-14 (later) — **Crucible recorded the instant; one gap they found is FIXED: the absent-forge-stream fallback no longer runs the aged-out flush (an absent window is as blind as a truncated one). The `ranked` boundary is split by campaign identity — `submitted_hashes` in live run records is now a contract field.** (D415)
+
+- Nothing blocks the 09-15T07:00Z cutover. Watch item: one unreproduced test failure on the first scoped run, three clean re-runs after.
+
 ## 2026-09-14 (later) — **Batch 5 PREP done: nine helpers the campaign borrowed from doomed modules moved to permanent homes (pure refactor `b4803cc`, old names still bound), tripwire invariant added, removal checklist written (plan §13, groups G0–G7). Suite 2,252 green; live dry-run plan identical. Daemon untouched; cutover armed for 09-15T07:00Z.** (D414)
 
 - Batches remaining after the cutover: 5 (remove the daemon era), 6 (consolidate), 7 (regrowth rules).

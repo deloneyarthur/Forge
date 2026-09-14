@@ -236,8 +236,12 @@ def test_reconcile_reads_the_forge_stream_and_records_truncation(
 
 
 def test_reconcile_falls_back_when_the_forge_stream_is_absent(tmp_path: Path) -> None:
+    """An ABSENT forge stream is at least as blind as a truncated one (Crucible 09-14 §3): the
+    fallback reconciles from the ~24 h all-source export, whose floating watermark would stamp
+    the whole previous run aged-out, so the flush must be off on this path too."""
     env = _env(tmp_path)
     record = _run(env, dry_run=True)
     assert record.status == "ok"
     assert "forge_gated_runs" not in record.watermarks
-    assert any(n.startswith("forge_gated_runs: absent") for n in record.notes)
+    note = next(n for n in record.notes if n.startswith("forge_gated_runs: absent"))
+    assert "aged-out flush skipped" in note

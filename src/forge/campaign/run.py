@@ -577,9 +577,20 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
         forge_stream = load_forge_gated_runs_from_export(exports_dir)
         with db_connection(forge_db_path) as conn:
             if forge_stream is None:
-                notes.append("forge_gated_runs: absent; reconciled from the all-source export")
-                echo("reconcile: forge_gated_runs stream ABSENT; all-source export used")
-                feedback = reconcile_all_pending(conn, crucible_db, exports_dir=exports_dir)
+                # Absent is at least as blind as truncated (Crucible 09-14 §3): the all-source
+                # export spans ~24 h and its floating watermark (max decided_at - 5 d) would
+                # stamp the whole previous run aged-out. Reconcile what is visible; never flush.
+                notes.append(
+                    "forge_gated_runs: absent; reconciled from the all-source export, "
+                    "aged-out flush skipped"
+                )
+                echo(
+                    "reconcile: forge_gated_runs stream ABSENT; all-source export used, "
+                    "aged-out flush skipped"
+                )
+                feedback = reconcile_all_pending(
+                    conn, crucible_db, exports_dir=exports_dir, flush_aged_out=False
+                )
             else:
                 newest_forge = _newest(exports_dir, _EXPORT_GLOBS["forge_gated_runs"])
                 n_rows = len(forge_stream.gated_runs)

@@ -2239,3 +2239,30 @@ the loop + its CLI → daemon-era ranking → daemon-era feedback → rate limit
 unused predicate types → config leftovers → REL-4/5/12 → scripts + docs), each with its test fallout
 and verification; the survivors the map forces us to keep are listed (`RankedCandidate`, `shadow.py`,
 `trade_rate_priors`, the consumer). Batches remaining after the cutover: 5, 6, 7.
+
+## D415 — 2026-09-14 — Crucible recorded the cutover instant and found one gap: the absent-forge-stream fallback still ran the aged-out flush — fixed (flush off on that path too); the `ranked` boundary is split by campaign identity (`submitted_hashes`), not by `decided_at`
+
+**Inbound.** `CRUCIBLE_cutover_instant_recorded_the_ranked_boundary_is_by_campaign_identity_not_decided_at_and_your_absent_stream_fallback_still_runs_the_aged_out_flush_2026-09-14.md`
+(their §20 `forge-campaign-cutover-ranked-boundary`). Nothing blocks the instant.
+
+**§1 — boundary by identity.** A `decided_at` split misfiles two groups under the campaign: the daemon's
+queue tail (281 forge runs queued at one 09-14 read, decided after 07:00Z) and `fullhist_refit`
+children (inherit the parent's `selection_arm`, decided days later). Their rule: a `source='forge'` row
+is campaign-sampled iff its `config_hash` is in `submitted_hashes` of a live (`dry_run: false`)
+`campaign_run/v1` record; a refit child takes its `refit_of` parent's origin. **`submitted_hashes` is
+therefore a contract field** — it stays in every live record; `CUTOVER.json` is a marker without
+hashes (the first live run writes its own record with them). Recorded in the INDEX as an obligation.
+
+**§3 — the gap, fixed (test first).** `campaign/run.py`'s absent-stream branch called
+`reconcile_all_pending` with the default `flush_aged_out=True`: the all-source export spans ~24 h and
+`_flush_aged_out_submissions`'s floating watermark (`max(decided_at) - 5 d`) would have stamped the
+whole previous run aged-out — the silent label gap option 2 exists to avoid. Now
+`flush_aged_out=False` on that path as well; the note and journal line say "aged-out flush skipped".
+An absent window is at least as blind as a truncated one. Reachability is narrow (their publisher keeps
+6 files and their health check warns at 1 h stale), which is exactly why it had to be right in code.
+Test: `test_reconcile_falls_back_when_the_forge_stream_is_absent` asserts the note; 85 campaign +
+invariant tests green (one unreproduced failure on the first scoped run, three clean re-runs after —
+watch item, not a blocker).
+
+**§2** their "truncated: false after cutover" wording withdrawn; ~09-29 stands. **§4** they will relay
+if daemon-shaped `source='forge'` rows keep arriving after 07:00Z.
