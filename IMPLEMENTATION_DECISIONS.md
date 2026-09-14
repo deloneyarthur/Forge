@@ -2048,3 +2048,55 @@ and its stage-one verdicts are long done. Proposed to Crucible for confirmation.
 run-record schema before the first live run; relay the cutover instant ≥ 24 h ahead; drop the
 `promoted_strategies` read (Batch 5). **Nothing changes on the wire yet** — the daemon runs unchanged.
 Next: Batch 3 (build `forge campaign` beside the daemon, plan §12.6).
+
+## D410 — 2026-09-14 — Batch 3 BUILT: `forge campaign` exists beside the daemon — the weekly, zero-input challenger run; first two live dry-runs are clean and quiet; the dry-run weeks start
+
+**What shipped (8 commits `96b8ab5` → `2211d47`, TDD, every commit green under ruff / mypy --strict /
+scoped pytest; full suite after the build 2,228 passed / 1 skipped / 3 xfailed in 211 s).**
+`src/forge/campaign/`: `types.py` (the contract: `CellKey` = the census 5-tuple, `Book`, `CampaignSpec`,
+`TriggerInputs/Outcome`, `GateDecision`, `RunRecord`, `CampaignConfig` with the plan §12.7 defaults),
+`cells.py` (cell keys, the promoted book via contracts loaders + `designation_history`, verdict-ledger
+cell stats under the clean-era + ve-ghost cuts, dead-cell rule from `yield_audit`), `triggers.py`
+(T1–T5 as pure functions + weekly-cap allocation), `gate.py` (structural challenger gate:
+protected cell / duplicate of a leg by signal-key Jaccard ≥ 0.85 / dead cell), `report.py` (lossless
+`campaign_run/v1` codec, `status`), `run.py` (boot checks → reconcile → book + stats → identity →
+unstratified enumeration → triggers → rejection-sample to cells → battery → gate → in-cell F3 ×
+tail_norm rank → submit → funnel aggregate → record). `cli/campaign_cmd.py` registered as
+`forge campaign` (`--dry-run`, `--budget`, path flags; exit 0 ok/no_trigger, 2 boot_failed, 1 error)
+and `forge campaign status`. `config/forge_config.py` gains a `campaign:` section resolved onto the
+dataclass (unknown keys fail loud). `submitter.py`: one additive map — any `campaign:*` lane stamps
+`selection_arm="ranked"` (Crucible 09-13 §3; never an unadmitted Literal, D342). Units
+`deploy/systemd/forge-campaign.{service,timer}` (Sunday 03:00 UTC) written, **NOT installed**.
+Docs: MANPAGE `### forge campaign` (record schema, exit codes), architecture map row, HOW-TO "Weekly
+campaign run". Tests: 56 (part A) + 17 (part B) + 12 invariants incl. the population-unchanged
+subsequence proof (hard rule #6) and "no `selection_arm` but `ranked`".
+
+**Design facts fixed by this build.** The run enumerates the UNCHANGED v55 population with no learned
+weight maps (the cold-start sequence the goldens pin) and selects by cell afterwards; the seed is
+`blake2b(grammar_version|registry_hash|ISO week)` so the same week on the same inputs reproduces the
+plan. `min_hypothesis_fraction` is **0.0** for the campaign (`2211d47`): the D037 floor is a
+submission-mix guarantee for the daemon's batches and under a cold-start draw it capped the first live
+dry-run at 800 of 20,000 configs after 2M attempts. Ranking never falls back to the Jaccard prior
+(`promoted_strategies` is retiring, D409): no artifact → score 0.0, recorded. `refutation_ids` = the
+BOUND-and-active entry ids (an unbound entry routes nothing, so its retraction is not a generation
+event); the refutations baseline is a content hash. Reconcile reuses `reconcile_all_pending` against
+today's export — the forge-scoped 14-day stream (D409 §4.1) slots in there when Crucible ships it.
+
+**First two live dry-runs (snapshot DB, `--budget 40`, records in `~/forge_data/campaigns/`).**
+`2026-W38-20260914T042757Z`: boot 8/8 ok (contracts 1.47.0, v55, registry 72 ids 0 d old, universe 24,
+gated/failed exports, inbox backlog 0, 0 open preregs); designated `7f2a697ec6c1b119`; first run → T1–T3
+recorded baselines (book cells 4, refutation ids 3, registry ids 72); T4 none; T5 none; 800 enumerated
+(the cap above). `2026-W38-20260914T043217Z` (after the fix): 20,000 enumerated in 44 s; T1–T3 "unchanged"
+against the first record; T4 "no stale near-floor cell outside the book"; T5 "no dark cell in this run's
+sample" — **the daemon's sweep already covers every cell a 20k sample reaches, so the weekly run does
+nothing until a trigger fires. That is the design, observed.** Exit 0 both times; nothing submitted.
+
+**Not done, on purpose.** No end-to-end T1–T4 run test (their pure logic has 23 tests; a two-run
+designation-flip fixture is the dry-run weeks' first addition). The units stay uninstalled; cutover
+waits on Crucible's stream and the relayed instant (D409). `run.py::_run_battery` duplicates
+`_run_battery_for_seed`'s context build — Batch 6 consolidation. `enumerated_by_hypothesis` is counted
+over the whole sample.
+
+**Next.** Dry-run weekly by hand (`forge campaign --dry-run --forge-db "$(scripts/live_db_snapshot.sh)"`)
+for two weeks, comparing the plan against what the daemon submits; relay the record schema (done in this
+session); then Batch 4 cutover per plan §12.6 once the stream is live.

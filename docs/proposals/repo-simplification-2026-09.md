@@ -712,7 +712,7 @@ reads `~/forge_data/campaigns/*.json`; `OPEN_PROPOSALS.md` stays parseable and s
 - **Batch 0, 1, 2** — as written in §10. Batch 2 shrinks to the gap tests that still matter:
   SIGTERM mid-submit (REL-4), explicit export-outage logging (REL-1/2), snapshot + preflight
   subprocess tests; the hot-grammar, model-reload and daily-eval tests are moot.
-- **Batch 3 — build `forge campaign` beside the daemon (TDD, no daemon change).** `campaign/`
+- **Batch 3 — BUILT 2026-09-14 (D410; `96b8ab5`→`2211d47`); dry-run weeks in progress.** Originally: build `forge campaign` beside the daemon (TDD, no daemon change). `campaign/`
   package: `cells.py` (protected / dead / dark from exports + `forge.db`), `triggers.py` (T1–T5,
   pure functions of export contents), `gate.py` (challenger gate), `run.py` (steps 0–5),
   `report.py`. Run records + `status`. Two hand-run `--dry-run` weeks: compare its chosen cells with

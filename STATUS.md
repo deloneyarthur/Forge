@@ -1,5 +1,10 @@
 # Forge — Status
 
+## 2026-09-14 (later) — **Batch 3 BUILT: `forge campaign` lives beside the daemon (8 commits, suite 2,228 green). Two live dry-runs clean: boot 8/8, designated `7f2a697e`, baselines recorded, then "no trigger" on 20,000 enumerated in 44 s — the sweep already covers every reachable cell, so the weekly run stays quiet until a trigger fires. Nothing submitted, nothing installed, daemon unchanged.** (D410)
+
+- Fix landed mid-build: the campaign enumerates UNSTRATIFIED (`min_hypothesis_fraction=0.0`, `2211d47`) — the daemon's D037 floor capped the first dry-run at 800/20,000.
+- Dry-run weeks start now: `forge campaign --dry-run --forge-db "$(scripts/live_db_snapshot.sh)"` weekly; records in `~/forge_data/campaigns/`. Cutover (Batch 4) waits on Crucible's 14-day forge-scoped stream + the relayed instant (D409). Record schema relayed to Crucible.
+
 ## 2026-09-14 — **Crucible answered the campaign-mode relay same day: cutover is BLOCKED on a forge-scoped 14-day gated stream (their option 2, operator-confirmed — the existing export reaches ~24 h, measured); T1 = designation flips only (contributions are frozen at assembly); weekday Sunday 03:00 UTC; `promoted_strategies` retirement ACKed (our read has been `[]` since 07-06); champion re-based to `7f2a697ec6c1b119` @ 08-06 (`designation_history` had never been published).** (D409)
 
 - Reply delivered (freeze `5ab347a`). Nothing on the wire changes; daemon unchanged. Waiting on: their stream (loader-first), weekday confirmation. Owed by us: run-record schema before the first live run; cutover instant ≥ 24 h ahead.
