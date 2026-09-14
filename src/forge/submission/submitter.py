@@ -137,6 +137,22 @@ _SELECTION_ARM_BY_MODE: dict[str, str | None] = {
     "prefilter_sample": "prefilter_sample",
 }
 
+_CAMPAIGN_MODE_PREFIX = "campaign:"
+
+
+def _selection_arm_for(selection_mode: str) -> str | None:
+    """Crucible-facing `selection_arm` for one of our `selection_mode` tags.
+
+    Campaign lanes (`campaign:<trigger>`, plan 2026-09 §12) stamp ``"ranked"``: Crucible
+    asked for it (their 09-13 §3 — the relayed cutover instant is the boundary between
+    ranker-selected and campaign-sampled ranked rows), and the 1.37.0 Literal admits
+    nothing else we could honestly claim. Never None for a campaign row, never a value the
+    Literal does not admit (the D342 inbox-rejection class).
+    """
+    if selection_mode.startswith(_CAMPAIGN_MODE_PREFIX):
+        return "ranked"
+    return _SELECTION_ARM_BY_MODE.get(selection_mode)
+
 
 def _submit_one(
     db: duckdb.DuckDBPyConnection,
@@ -188,7 +204,7 @@ def _submit_one(
     config = config.model_copy(
         update={
             "grammar_version": batch.grammar_version,
-            "selection_arm": _SELECTION_ARM_BY_MODE.get(selection_mode),
+            "selection_arm": _selection_arm_for(selection_mode),
             "selection_pool_size": selection_pool_size,
             "selection_rank": selection_rank,
         }
