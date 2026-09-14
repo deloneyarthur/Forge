@@ -82,6 +82,10 @@ journalctl --user -u forge-ranker-eval.service -n 20 --no-pager
 
 # Last nightly backup fresh? (forge-backup timer, 04:00)
 ls -lt ~/forge_data/backups/forge_db_*.duckdb | head -1
+
+# Registered read due / unwatchable? (forge-prereg-watch timer, 06:30; a failed unit = a
+# registered read came due silently or cannot be watched — D389/D392)
+journalctl --user -u forge-prereg-watch.service -n 5 --no-pager
 ```
 
 The `forge-ranker-eval` timer trains + evaluates the shadow verdict model each morning and records
@@ -208,6 +212,10 @@ Any change that deploys on restart (config edits, new ranges, code) should clear
 Review any **loosening** proposals (these need operator sign-off) in `OPEN_PROPOSALS.md`.
 
 ### Changing the grammar
+
+The grammar is FROZEN at v55 (D390). Step 0: `forge prereg register` with a required n; the
+`freeze-governance` pre-commit hook refuses a `grammar.yaml` content change without an open
+prereg (`FORGE_FREEZE_REOPENER=D###` for a §5 reopener, with that D-entry staged).
 
 The grammar (`config/grammar.yaml`) is operator-owned. Auto-tightenings apply
 themselves; loosenings never do. To approve a refinement proposal:

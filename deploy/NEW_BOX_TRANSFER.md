@@ -108,7 +108,7 @@ and enables the timers (the daemon itself starts only with `--start`, after Cruc
 Confirm the full set:
 
 ```bash
-systemctl --user list-timers 'forge-*'    # all three timers scheduled
+systemctl --user list-timers 'forge-*'    # all four timers scheduled
 systemctl --user is-enabled forge.service
 ```
 
@@ -120,6 +120,7 @@ The full unit set after bring-up:
 | `forge-ranker-eval.timer` | 05:00 daily | train + eval the learned verdict / wf_p25 model; publish to `~/forge_data/models/` | F3 / D193 |
 | `forge-backup.timer` | 04:00 daily | DR backup of `forge.db` + `models/` | D195 |
 | `forge-healthcheck.timer` | hourly | `forge healthcheck` — detect an alive-but-unproductive daemon (CRITICAL surfaces in `--state=failed`) | D197 |
+| `forge-prereg-watch.timer` | 06:30 daily | `scripts/freeze_read_watcher.py` — a registered read must not come due silently (DUE / UNWATCHABLE fail the unit) | D392 |
 
 (`forge-eod-check.timer`, a 21:00 headless-Claude EOD report created 06-10, was RETIRED D253 —
 alerting superseded by the hourly healthcheck; its prompt had fossilized on a v17 baseline.)
@@ -137,8 +138,8 @@ first run — no manual step needed:
 All scripts the timers invoke ride the tree and are committed executable; verify before enabling:
 
 ```bash
-ls -l ~/proj/Forge/scripts/{daily_ranker_eval.sh,backup_forge_db.sh,deploy_preflight.sh}
-# all three should be -rwxr-xr-x; chmod +x any that lost the bit in transit
+ls -l ~/proj/Forge/scripts/{daily_ranker_eval.sh,backup_forge_db.sh,deploy_preflight.sh,live_db_snapshot.sh}
+# all four should be -rwxr-xr-x; chmod +x any that lost the bit in transit
 ```
 
 (`deploy_preflight.sh` (D199) is the read-only pre-deploy GO/NO-GO gate used by the deploy
@@ -197,7 +198,7 @@ set one on the new box if the host has only one disk.
 - [ ] `du -h ~/forge_data/forge.db` ≈ matches the old box (state came across)
 - [ ] `systemctl --user is-enabled forge.service` → enabled; linger on
 - [ ] `systemctl --user list-timers 'forge-*'` → `forge-ranker-eval`, `forge-backup`,
-      `forge-healthcheck` all three scheduled (king arm absent — D190; eod-check retired — D253)
+      `forge-healthcheck`, `forge-prereg-watch` all four scheduled (king arm absent — D190; eod-check retired — D253)
 - [ ] `ls ~/proj/Forge/scripts/*.sh` → backup/ranker-eval/preflight scripts present + executable
 - [ ] Crucible up + `~/optbt_data/exports/` populated → start Forge
 - [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version` matching `config/grammar.yaml`) without

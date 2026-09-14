@@ -2,8 +2,7 @@
 
 Source: Crucible `FORGE_tier_unpin_and_promote_2026-07-20.md` (their D291 reply;
 contracts 1.32.0 shipped their side, fold held until our adoption confirm).
-Triage: D292. Status: **staged, awaiting operator go** (grammar bump + contracts
-pin bump + restart — one deploy window covers all of it).
+Triage: D292. Status: **DEPLOYED 2026-07-20 (D293) → corrected v42 same day (D294).**
 
 ## What their reply established (all verified, D292)
 

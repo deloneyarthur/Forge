@@ -4,7 +4,7 @@
 #
 # Assumes the chosen migration profile: same user + same paths
 # (user owns ~/proj/Forge and ~/proj/crucible_contracts), forge.db brought
-# over; grammar.yaml is committed (v22), so a clone/copy carries it.
+# over; grammar.yaml is committed (the version in config/grammar.yaml), so a clone/copy carries it.
 #
 # What it does, in order:
 #   1. (optional) pull the bundle off the flash drive into ~/proj + ~/forge_data
@@ -144,7 +144,7 @@ done
 loginctl enable-linger "$USER" 2>/dev/null || warn "enable-linger failed (need: loginctl enable-linger $USER)"
 if systemctl --user daemon-reload 2>/dev/null; then
   # Timers run independently of Crucible — enable + start them now.
-  for t in forge-ranker-eval forge-backup forge-healthcheck; do
+  for t in forge-ranker-eval forge-backup forge-healthcheck forge-prereg-watch; do
     systemctl --user enable --now "$t.timer" 2>/dev/null || warn "could not enable $t.timer"
   done
   systemctl --user enable forge.service 2>/dev/null || warn "could not enable forge.service"
@@ -157,7 +157,7 @@ if systemctl --user daemon-reload 2>/dev/null; then
 else
   warn "systemctl --user unavailable in this shell (no user D-Bus session)."
   warn "After a real login: systemctl --user daemon-reload && systemctl --user enable --now \\"
-  warn "  forge.service forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer"
+  warn "  forge.service forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer forge-prereg-watch.timer"
 fi
 
 # --- 9. smoke test -------------------------------------------------------------

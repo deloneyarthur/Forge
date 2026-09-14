@@ -7,13 +7,13 @@ Operator reviews at every phase boundary.
 
 ---
 
-> **Rotation (2026-08-06, Step A3):** resolved/closed entries (31, Q7→Q61 era) live
+> **Rotation (2026-08-06, Step A3):** resolved/closed entries (36, Q7→Q62 era; +Q23/Q34/Q40/Q49/Q62 swept 2026-09-13, Batch 1) live
 > verbatim in `_archive/OPEN_QUESTIONS_RESOLVED.md`. This file holds OPEN questions
 > only; move an entry to the archive in the same commit that resolves it.
 
 ---
 
-## 2026-05-13 — Q9 — §8.4 trigger (c) cross-batch param-no-promotion — DEFERRED to Phase 7+
+## 2026-05-13 — Q9 — §8.4 trigger (c) cross-batch param-no-promotion — DEFERRED to Phase 7+ — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
 
 **Question:** §8.4's third trigger example ("0 promotions in 200+ submissions with parameter X above threshold T") requires a multi-batch rolling window. Phase 5 shipped current-batch-only — the trigger only fires on batches that themselves contain 200+ submissions. The spec example reads as a cross-batch aggregate over recent history.
 
@@ -27,7 +27,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-## 2026-05-14 — Q14 — Threshold semantics + stub-indicator implications
+## 2026-05-14 — Q14 — Threshold semantics + stub-indicator implications — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
 
 **Question:** Real Crucible feature cache (commit `b447597`) revealed two coupled issues:
 
@@ -101,20 +101,6 @@ Operator reviews at every phase boundary.
 
 **Tag:** `prefetch-perf`, `feature-cache`, `writer-contention`, `throughput`, `relates-to-D080`
 
-## 2026-05-29 — Q23 — enumerator reads `universe_tickers.json` directly — hard-rule-#2 deviation pending a contracts helper — **MEDIUM SEVERITY**
-
-**Question:** `sampler._load_underlyings` (D078) reads `~/optbt_data/exports/universe_tickers.json` via raw `json.loads(path.read_text())`. That file is NOT on the `crucible_contracts.EXPORT_LAYOUT` surface (verified: `EXPORT_LAYOUT.files == ('registry_snapshot_*.json', 'gated_runs_*.json', 'promoted_strategies_*.json', 'promoted/')`), so this is an inter-system data dependency that bypasses `crucible_contracts` — a hard-rule-#2 deviation. The contrast is explicit: `registry_loader` reads the contract-listed `registry_snapshot_*.json` through `RegistrySnapshot.model_validate_json` (the blessed pattern). Surfaced by the 2026-05-29 audit (H-5).
-
-**What I did instead (D087):** did NOT revert D078 (its dynamic-universe value is real — the operator-requested ticker expansion). Per the audit's sanctioned interim, kept the dynamic read but made the deviation observable (`_logger.warning("universe_uncontracted_read", hard_rule="2", open_question="Q23")`, once per process) and surfaced the contracts gap via `Crucible/docs/handoffs/PROMPT_CRUCIBLE_UNIVERSE_CONTRACTS.md`. The proper fix is a `crucible_contracts.load_universe_tickers_from_export` helper (or a `tier_tickers` field on `RegistrySnapshot`) — the Q19/`universe_min_asof` precedent — after which Forge routes the read through contracts and the warning is removed.
-
-**Severity:** **medium** — every produced candidate's underlying is chosen via this uncontracted read (hot path), but there is no correctness break and the fallback to the D033 hardcoded list is safe. It is a contract-surface purity violation + a determinism input (now folded into the batch identity by D085), not a data bug.
-
-**Tag:** `hard-rule-2`, `contracts-gap`, `universe`, `D078`, `relates-to-H5`, `relates-to-D085`
-
-**RESOLVED 2026-05-29 (D093):** contracts **1.13.0** shipped `load_universe_tickers_from_export` + added `universe_tickers*.json` to `EXPORT_LAYOUT.files` (commit `45f2ea0`). Forge's `_load_underlyings` now routes through that blessed helper (`_UNIVERSE_EXPORT_DIR` + glob), `FORGE_EXPECTED_CONTRACT_VERSION` bumped to `1.13.0`, and the `universe_uncontracted_read` warning is removed — the read is on the contracts surface, so the hard-rule-#2 deviation is closed. The M-13 drift logging is preserved via the helper's `QueryError` (malformed export → `universe_export_unreadable` warning + fallback). `universe_fingerprint()` (D085) is retained (Option A keeps Forge's separate identity fold; only the unbuilt Option B `RegistrySnapshot.tier_tickers` would let it ride `registry_hash` and retire). **CLOSED.**
-
----
-
 ## 2026-05-29 — Q24 — Non-pairs template "hidden param contract" audit REFUTED; residual risk is the un-contracted pairs entry-key schema — **LOW SEVERITY (latent)**
 
 **Hypothesis investigated:** the generator improvement plan (`FORGE_GENERATOR_IMPROVEMENT_PLAN.md:56`) flagged that `trend_rider` / `regime_mean_revert` / `cross_sectional_rank` "likely have analogous hidden [entry-param] contracts that Forge can't satisfy" — the same trap D068/D072 fixed for `pairs_convergence` — potentially silently zero-trading whole hypotheses (a candidate explanation for the ~60% zero-trade rate).
@@ -141,7 +127,7 @@ Operator reviews at every phase boundary.
 
 **Tag:** `funnel`, `exports`, `relates-to-D104`, `relates-to-D096`, `low`
 
-## 2026-06-07 — Q29 — Deferred D105 mechanisms: (a) threshold-DRAW adaptation for the 75-83% zero-trade composables; (b) general parameter-band bounds-learning — **(a) PARTIALLY RESOLVED 2026-06-09 (D113): prefilter-tightening arm refuted by measurement; sampler-side arm deprioritized**
+## 2026-06-07 — Q29 — Deferred D105 mechanisms: (a) threshold-DRAW adaptation for the 75-83% zero-trade composables; (b) general parameter-band bounds-learning — **(a) PARTIALLY RESOLVED 2026-06-09 (D113): prefilter-tightening arm refuted by measurement; sampler-side arm deprioritized** — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
 
 **Update 2026-06-09 (D113):** the prefilter-tightening half of (a) was investigated counterfactually against the new `verdicts` table ⋈ `pre_filter_logs` join (10,130 rows) and REFUTED — every candidate knob (raise `min_pass_probability`, a new bucket-P(zero) cut, finer +underlying cells) either kills most of the component frontier (the [0.15,0.25) posterior bands hold 115/140 empirical-mode components alongside the ~60% zero-trade waste — the fat-tail pass-through D105 noted, now quantified) or captures ≤14% of v9-era waste. Decisive: the v12-cohort waste rate is already 1% zero-trade / 10% sub-10-trade vs v9's 40%/49% — the allocation re-aim + H1 rank + D112 fixed this at the sampler. The sampler-side threshold-draw mechanism stays deferred; re-open if a ≥500-decided post-v13 cohort shows sub-10-trade share >~25% (one query against `verdicts`, recipe in D113). Original entry below.
 
@@ -151,76 +137,7 @@ Operator reviews at every phase boundary.
 
 **Tag:** `feedback`, `prefilters`, `thresholds`, `relates-to-D105`, `relates-to-D076`, `relates-to-D099`, `deferred`
 
-## 2026-06-09 — Q34 — R1's iv_rank gate direction vs the published single-name premium evidence: the rule's own "Why" argues both sides, and the literature's validated conditioner is the IV−RV *spread*, not the IV-rank *level* — **MEDIUM**
-
-**Update (2026-06-09, operator walkthrough):** local verdicts readout RUN (single-name MR×iv_rank, n=2,376 verdict-joined, v9-dominated; /tmp snapshot; value eras split at the D124 cost-floor cut): **inconclusive** — component rate 1.5%/1.6%/0.9% across threshold terciles (25 vs 7 components low+mid vs high, Fisher-fragile); zero-slippage-era conditional CPCV medians decline monotonically toward high thresholds (0.29→0.23→0.18, but on only 34–62 tradable rows); components-vs-rejects threshold medians barely separate (28.9 vs 30.4); the gate does not modulate tradability (tc>0 share flat across bands; 53% of cohort never trades; CPCV NULL on 94%). Gamma-flip control unreadable (n=59). Note: only the `{threshold, op}` param form exists in emission — zero percentile-form iv_rank rows. **Both asks queued in `PROMPT_CRUCIBLE_INDICATOR_GAPS.md` §1–§2 (operator: pass when convenient)**: MR template net-premium sign per DTE bucket + `iv_minus_rv`. Rule discussion waits on the answer.
-
-**Question:** R1 (GRAMMAR.md §R1) gates mean_reversion on `iv_rank` with `threshold ≤ 50, op "<"` — fire only when IV-rank is LOW. But the rule's own rationale text is internally two-sided: it opens "mean-reversion strategies make money by **selling rich premium** that mean-reverts" and "selling premium when IV is already low … is selling lottery tickets — there's no premium to capture," then concludes the gate forces firing "only when IV is **cheap**." Those argue opposite gate directions. Which direction the evidence supports depends on a fact Forge does not control: whether Crucible's MR position templates are net SHORT premium (credit spreads — then the documented edge wants IV **rich**) or net LONG premium (debit structures betting on underlying reversion — then cheap-IV entry is right).
-
-**What the literature says (deep-research session, this date; sources verified):**
-- Goyal & Saretto (JFE 2009): sorting single names on log(12-month realized vol / ATM IV) predicts option returns — long premium where IV is *cheap vs the name's own realized*, short where *rich*; long-short straddle deciles earned 21.9%/mo gross, ~4.1%/mo at quoted-spread costs (costs, not decay, are the binding constraint). The conditioner is the **IV-vs-own-realized spread**, not the IV level/percentile alone.
-- Israelov & Nielsen (JPM 2015, "Still Not Cheap"): absolute IV level is explicitly NOT a valid timing signal — low IV typically accompanies even lower realized; the implied-minus-subsequent-realized spread is what prices.
-- Bakshi & Kapadia (JoD 2003): single-name VRP is thin (~1.5%/yr vs ~3.3% index) and conditions on **market** vol level, not firm vol — short-premium MR earns more when market RV is high.
-- Carr & Wu (RFS 2009): raw single-name variance premia insignificant for 32/35 names — unconditioned single-name premium selling has little documented edge; conditioning is everything.
-
-**Why this is a Q-entry, not a fix:** R1 is operator-owned (§3.5, hard rule #1); any pool/direction change is a rule edit, and admitting a new conditioner is a loosening (OPEN_PROPOSALS path). R1's own "Evidence to relax" line already anticipates exactly this: "custom realized-vs-implied ratio."
-
-**Asks:** (1) confirm with Crucible what the MR position templates' net premium sign actually is per DTE bucket (determines which side of the iv_rank gate the evidence supports); (2) contracts/indicator gap candidate for the next round-trip: an `iv_minus_rv`-class spread indicator (ATM IV minus trailing realized, per-name) — the single best-validated single-name premium conditioner in the literature; Crucible already computes both inputs (iv_rank needs ATM IV history; realized_vol ships).
-
-**What I did instead:** logged; no grammar/code change. MR single-name emission continues under R1 as written.
-
-**Update (2026-06-10): RESOLVED — R1 stands as written.** Crucible's `FORGE_indicator_gaps_response.md` §1: every MR template is **net DEBIT at entry, every DTE bucket** — structural, not empirical (long-only by type: `Direction={LONG_CALL,LONG_PUT,FLAT}`, `qty>=0`, spreads banned; the DTE bucket never flips premium direction). Per the cited literature, net-LONG premium wants IV cheap → `iv_rank < threshold` is the evidence-supported side. NO rule edit. The local readout (n=2,376) is RETIRED with prejudice — their §2 found single-name chain gates were SPY-decoupled (every non-SPY iv_rank gate evaluated SPY's chain at the name's spot, finite garbage), so the readout was thresholding noise. The IV−RV spread conditioner shipped as `iv_minus_rv` (Q36 update); gate direction for the net-debit book: `iv_minus_rv < threshold`. Any R1-sibling discussion re-opens only on post-fix evidence (iv_rank v4 era — D126 boundary watch).
-
-**Tag:** `grammar`, `R1-tension`, `literature-priors`, `contracts-gap`, `operator-action`, `relates-to-Q33`, `resolved`
-
----
-
-## 2026-06-13 — Q40 — `relative_value` is structurally weak, not a defect: 0 components in 2,383 honest-era decided, because long-options-only can't express market-neutral relative value — **LOW–MEDIUM, grammar-adjacent (operator-gated)**
-
-**Symptom (Phase 2 defect-hunt, 06-13 snapshot):** rv is 0-for across the honest era
-(0 / 2,383 decided). It has flow and trades (98% non-zero `trade_count`), so it dies at
-Crucible's gate, not upstream. Per-gate PASS-rate among rv rejects vs the component bar
-(which requires ~100% on each): `regime_coverage` 1.4%, `deflated_sharpe` 3.3%,
-`sharpe_baseline` 8.5%, `regime_stress_p25_return` 15.4%, `profit_factor` 44%,
-`min_oos_trade_count` 46% — i.e. rv fails 5–6 required gates simultaneously, deeply. Not a
-single-plumbing-gate (defect) signature.
-
-**Root cause:** rv is ALWAYS expressed as `directional: pairs_zscore` + a regime_filter.
-`pairs_zscore` identifies a relative mispricing between two names, but the grammar can only
-BUY options (no shorting the rich leg, spreads banned). So the expression takes directional
-long-options risk and pays premium/theta while waiting for reversion — it never captures the
-market-neutral RV edge. Hence broadly weak risk-adjusted returns + narrow `regime_coverage`
-(pairs divergences are rare and regime-clustered). This is a STRUCTURAL limit of options-only
-(hard rule 7), not fixable in Forge without spread structures (currently banned).
-
-**Cost:** rv is ~2,383 / ~12k honest-era decided ≈ **18% of Crucible's scarce decision
-capacity for 0 components.** Already weight-buried (rv hypothesis weight 0.050, lowest), so
-the feedback loop is correctly de-emphasizing it — but the family-agnostic prefilter still
-emits it at ~7–15% of the stream.
-
-**Question:** keep emitting a known-0% family at ~15% share, or de-emphasize it (prefilter
-calibration is auto-tighten-eligible per hard rule 4; a grammar-level de-scope is
-operator-gated) to reclaim capacity for diversifying families that serve the portfolio
-CPCV-p25 / worst-quartile bar (the real promotion constraint, see
-`FORGE_portfolio_promotion_wiring_status.md`)? Mean_reversion (1.55%) and event_momentum
-(0%, signal-sparse on `sue`) are weaker-but-not-dead neighbors to decide alongside.
-
-**RESOLVED 2026-06-14 (Sunday review) → de-emphasize, via [[D145]].** Operator chose "exempt rv
-only." The review corrected the mechanism in this question: rv's ~7.5%/batch share is NOT
-prefilter emission — its learned weight is already crushed (0.050) — it is the **D103
-per-hypothesis submission floor** (`queue._PRODUCTION_MIN_SUBMIT_PER_HYPOTHESIS=15`), the floor
-originally built to *protect* rv as the orthogonal sleeve. D145 exempts `relative_value` from
-that floor (`_PRODUCTION_FLOOR_EXEMPT_HYPOTHESES`), reclaiming ~6%/batch for the merit-ranked
-pool while rv still competes on merit. Ranking-stage only (enumeration byte-identity intact, no
-grammar bump). `em` kept on the floor (data-sparse, not structural). The grammar de-scope half
-(spreads / bear-paying expressivity) stays operator-gated and is now folded into
-`_archive/PROPOSAL_worst-quartile-complement-supply.md` + the OverlaySpec relay to Crucible.
-
-**Tag:** `grammar-adjacent`, `phase-2-defect-hunt`, `relates-to-Q39`, `options-only-limit`, `operator-gated`, `RESOLVED-D145`
-
----
-
-## 2026-06-15 — Q41 — Strategy generation UNDER-COVERS the live volatility/options indicator inventory: ~9 live, mostly threshold-ready measures have no enumeration path — **LOW (breadth-only; long-premium is IC-bound so EV is low), enum/grammar lane, operator-gated**
+## 2026-06-15 — Q41 — Strategy generation UNDER-COVERS the live volatility/options indicator inventory: ~9 live, mostly threshold-ready measures have no enumeration path — **LOW (breadth-only; long-premium is IC-bound so EV is low), enum/grammar lane, operator-gated** — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
 
 **Question (for the enum/grammar lane + operator):** D152 holds the long-premium conditioner *taxonomy* is complete (52 indicators; Crucible's 22-source sweep). A hypothesis-layer exploration this session (code-verified against the live registry + `grammar/custom_predicates.py` C2/R-rule pools + `enumeration/search_space.py` + `enumeration/indicator_thresholds.py`) found that Forge's *generator* nonetheless leaves ~9 live measures with **no enumeration path** — a generation-COVERAGE gap distinct from taxonomy completeness. Should any be wired (regime gate / directional)?
 
@@ -253,7 +170,7 @@ Absence of a code reader does not prove absence of a consumer: ad-hoc DB forensi
 
 ---
 
-## 2026-07-10 — Q45 — Nine never-sampled registry indicators (dark supply): no standing triage loop — **MEDIUM**
+## 2026-07-10 — Q45 — Nine never-sampled registry indicators (dark supply): no standing triage loop — **MEDIUM** — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
 
 **Question:** Crucible's resid_vix handoff (FORGE_resid_vix_generation_request_2026-07-11) audited
 nine registered indicators with zero Forge submissions ever: `residual_momentum`, `linreg_slope`,
@@ -280,7 +197,7 @@ auto-activation.
 
 ---
 
-## 2026-07-12 — Q47 — Trend lane lookback mix: `rolling_sharpe` (63d) warms up ~9 months earlier than `momentum_252` — **LOW, watch item, no action until Crucible's carry note**
+## 2026-07-12 — Q47 — Trend lane lookback mix: `rolling_sharpe` (63d) warms up ~9 months earlier than `momentum_252` — **LOW, watch item, no action until Crucible's carry note** — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
 
 **Question:** Crucible's absolute-vol handoff (`FORGE_mr_absolute_vol_gate_request_2026-07-12`,
 secondary observation, "no action required yet") reports that `rolling_sharpe`-ranked trend configs
@@ -322,40 +239,6 @@ gate-pass-rate compare pre/post 06-24 vs pre/post fix would separate the noise f
 
 **Severity:** high-visibility incident, medium likely impact — prefilter precision only; the gate
 is the authority and its evidence is clean.
-
-## 2026-07-13 — Q49 — `rv_rank` (and `iv_rank`) are min-max RANGE-POSITIONS, not percentile ranks, despite kernel docstrings + Forge docs saying "percentile" — **MEDIUM (semantic drift; no behavior bug in calibrated gates; future intent-mapping hazard)**
-
-Surfaced by Crucible's capitulation stress-test follow-up (`FORGE_capitulation_v31_followup_2026-07-13` §3),
-**independently verified in `crucible_engine_core/features/realized_vol/rv_rank.py`**: the kernel computes
-`(cur − rolling_min)/(rolling_max − rolling_min) × 100` — a min-max range-position — while its own docstring
-says "trailing percentile rank." The docstring also states it shares semantics with `iv_history.iv_rank`, so
-**`iv_rank` has the same drift**. Consequences, split carefully:
-
-- **NOT affected:** every empirically-calibrated threshold (champion MR `rv_rank < 62`, trend's rv_rank cost
-  gate, R1's iv_rank ≤ 50, the v28/v29 absolute gates — different ids entirely). These were tuned in KERNEL
-  units through the funnel; behavior and evidence are self-consistent regardless of the label.
-- **Affected:** any threshold mapped from a PERCENTILE INTENT (v31's `[50,80]` was mapped from the handoff's
-  "intended `>= 60th pct`" framing — index drop-day median lands ~50 in kernel units, not the ~88 a percentile
-  reading implied), and any future cross-system threshold translation that trusts the "percentile" name.
-  Note Crucible's own gate SWEEP (§2) ran in kernel units on clean data, so its verdict (gate hurts the clean
-  index arm at every level 50–70, helps single names) already prices v31's band correctly — the LEVEL
-  miscalibration is moot for v31's fate; the lesson is for the NEXT mapping.
-- **Action queued:** relabel Forge-side references ("percentile" → "range-position" for rv_rank/iv_rank in
-  `indicator_thresholds.py` comments, `custom_predicates.py` R1/R2 comments, `docs/GRAMMAR.md`) — piggybacked
-  on the next grammar bump (added to `grammar-change.md`'s pending list; docs-only, no emission change).
-  Kernel docstring fix is Crucible's (flagged in the relay-back). `use_percentile` mode
-  (`snap.indicator_percentile`, a real trailing-window rank) is SEPARATE machinery — unaffected, but the
-  name collision is part of the hazard.
-
-- **RESOLVED both sides 2026-07-15:** Forge relabel shipped as the v32/D272 ride-along
-  (`indicator_thresholds.py` spec sites + `docs/GRAMMAR.md`); Crucible relabeled BOTH kernel docstrings
-  (shim + engine-core, formula spelled out; docstring-only, no compute change / no cache re-key —
-  `FORGE_earnings_manifest_published_2026-07-13.md` §Q49) and their capitulation RV-gate probe
-  independently corroborated (index drop-day median ~50, not 88). Residual teeth: v31 capitulation's
-  [50,80] band was mapped on the percentile reading and is now measured co-fire-strangling (69/69 dead)
-  → the gate-drop is item 3 of `docs/proposals/v33-generation-health.md`. CLOSED as a question; the
-  lesson (reconcile metric definition before mapping cross-system thresholds) stands in
-  `grammar-change.md`'s pending list.
 
 ## 2026-07-15 — Q51 — `test_held_out_platt_reduces_ece_vs_raw` flaky in full-suite runs (DuckDB scan-order-dependent even/odd Platt split) — **LOW (test flake; diagnostic lane only)**
 
@@ -410,28 +293,3 @@ DB-write chores. Pairs naturally with the `FORGE_PREFILTER_SAMPLE_N` 300 → 40 
 **Worth considering later, not now.** Every other operator DB-write command has the same
 constraint. A `--defer` mode that queues the audit row to a file the daemon folds in on its
 next loop would remove the coupling, but that is a design increment, not a fix for today.
-
-## Q62 — RESOLVED 2026-08-24 (D400) — QuantIQ's 08-03 training-signals relay: six-stream triage (2026-08-06, severity: medium)
-
-**RESOLVED (D400):** 5 of 6 PARK-with-a-reason; `selector_spread_bind` is structurally unavailable as a verdict feature (it sits on `PromotedPortfolio`, not `GatedRun`), but looking for it surfaced that our training frame pools 4 measurement bases with a 17x base-rate gap — remedy `honest_scope` (D331 Part B) built and never flipped. Operator decision surfaced; no code change.
-
-**What.** QuantIQ's enrichment relay (filed at
-`~/proj/freeze/relays/QUANTIQ_new_training_signals_for_the_rankers_six_streams_triage_open_2026-08-03.md`;
-it sat untracked and unreferenced at Forge root for 3 days — found during the repo-simplification
-audit) lists six streams the rankers do not train on: (1) wire-accurate execution ground truth
-(`live_arrival_spread_pct` in `spread_feedback/`, live 08-04); (2) `selector_spread_bind`
-(contracts 1.41.0) — a measurement-basis flag; pooling verdict training across the pre/post-bind
-boundary without it as a feature or era split changes what the gate-pass label means; (3)
-`deployment_sizer_modes` (contracts 1.42.0) — the overlay, not the certified config, is what
-trades; (4) designation WIN/LOSS as a label source (sharper than promotion PASS/FAIL); (5) live
-fill/abandon labels (first negative fill labels, small N); (6) wings-quote staleness caveat for
-any future spread feature.
-
-**The ask (theirs, our call):** which of these earn features / labels / era splits in the two
-rankers. Nothing blocks on their side. Item (2) is the time-sensitive one — it is a D337/D338
-collider-class hazard for verdict training the day the first `true`-era campaigns appear in our
-labels; the others accumulate value passively.
-
-**Next action.** A dedicated triage pass over `ranking/features.py` + `dataset.py` against the
-six streams, answered via `freeze/relays/`. Not done during the simplification sweep — it is
-ranker design work, not hygiene.

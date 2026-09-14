@@ -14,7 +14,7 @@ uv venv
 uv pip install -e ".[dev]"
 forge check    # validates crucible_contracts compat + DB schema
 forge --help
-pytest
+uv run pytest
 ```
 
 In production Forge runs as a systemd user service:

@@ -13,8 +13,8 @@ something isn't in it, ask before inventing. Quote § numbers when justifying de
 
 `forge.service` (systemd user unit) runs the daemon from THIS directory via editable install.
 
-- Build risky or grammar-gated changes in a worktree (`git worktree add ../Forge-build`), never
-  in this tree while the service runs. Keep this tree `git status`-clean: a reboot auto-starts
+- Grammar bumps build in a worktree (`git worktree add ../Forge-build`); other work in this
+  tree, short dirty windows. Keep this tree `git status`-clean: a reboot auto-starts
   the service onto whatever the tree contains, committed or not (D104).
 - Deploys follow `docs/tasks/deploy.md`: stop service → full uncontended suite → commit →
   restart → verify journal. Never restart the service casually.
@@ -25,7 +25,7 @@ Python 3.12 · uv · Typer · Pydantic v2 · Polars · DuckDB · structlog · py
 
 ```bash
 uv venv && uv pip install -e ".[dev]"     # setup (contracts dep: ../crucible_contracts, editable)
-uv run pytest                             # full suite ~1,850; scope: uv run pytest tests/unit/test_grammar
+uv run pytest                             # full suite (count: STATUS.md); scope: uv run pytest tests/unit/test_grammar
 uv run ruff check src tests scripts       # lint (strict select-set in pyproject.toml)
 uv run ruff format <changed files only>   # tree is NOT format-clean — never format tree-wide
 uv run mypy --strict src                  # zero violations required
@@ -35,8 +35,7 @@ uv run forge --help                       # CLI reference: docs/MANPAGE.md
 ## Hard rules — cannot be relaxed
 
 1. **The 21 v1 grammar rules in §3.5 are operator-owned.** Implement as written. If a rule looks
-   wrong, log to `OPEN_QUESTIONS.md` — never silently change. (§3.6 says "25"; literal count is
-   21 per operator confirmation, D001.)
+   wrong, log to `OPEN_QUESTIONS.md` — never silently change.
 2. **No imports from Crucible internals.** All inter-system access via `crucible_contracts`.
    A missing model is a contracts gap to surface, not to work around.
 3. **Never propose grammar relaxations that lower Crucible's promotion gate.** Grammar can
@@ -85,20 +84,20 @@ command; type hints on every public signature; docstrings say WHY, not what; no 
 ## Pitfalls (recurring, verified)
 
 - Live `~/forge_data/forge.db` holds an intermittent RW lock — even read-only opens fail.
-  `cp` to /tmp and query the copy (`docs/tasks/investigate-live.md`).
+  Use `scripts/live_db_snapshot.sh` (never /tmp — a 62 GB tmpfs; `docs/tasks/investigate-live.md`).
 - Timestamps before 2026-06-07 are PDT (old box); after, UTC. Convert before joining.
 - Crucible's gated export is a rolling top-10k window with pre-v5 re-gate pollution; split
   cohorts by `grammar_version` and time-cut v9 at 2026-06-06T06:48:49Z (D104).
-- ~10 test files monkeypatch `forge.cli.main` internals — its structure is deliberate
-  (D065/D105/D106); don't refactor it casually.
+- Two dozen test files import `forge.cli.main` (22 only import `app`) — its structure is
+  deliberate (D065/D105/D106); don't refactor it casually.
 - "blocked: prev batch N% gated" = the §7.3 limiter working; `crucible-ingest-daily` "failed"
   is benign (rfr-only). Don't "fix" either.
 
 ## Operator gates — when to stop and ask
 
-Grammar bumps, loosenings, deploys/restarts, and §3.5 rule edits are operator-gated. Phases 0–6
-are complete (`PHASE_N_HANDOFF.md`); work proceeds as operator-gated increments — each gets a
-D-entry in `IMPLEMENTATION_DECISIONS.md` plus a `STATUS.md` update.
+Grammar bumps, loosenings, deploys/restarts, and §3.5 rule edits are operator-gated. Grammar
+FROZEN at v55 (D390): any change needs an open prereg first (pre-commit `freeze-governance`;
+§5 reopeners only). Each increment gets a D-entry plus a `STATUS.md` update.
 
 Stop immediately if: DESIGN.md self-contradicts; a hard-to-reverse structural choice looms
 (predicate types, filter ordering, DB schema); `crucible_contracts` lacks a needed model/field;
@@ -121,13 +120,13 @@ a doc may state where a value lives, never the value.
 
 | Need | Read |
 |---|---|
-| Spec / intent | `docs/DESIGN.md` (§3 grammar, §5 prefilters, §12 phases, §13 invariants) |
+| Spec / intent | `docs/DESIGN.md` (§3 grammar, §5 prefilters, §13 invariants) |
 | Live state, recent decisions | `STATUS.md` (top block), `IMPLEMENTATION_DECISIONS.md` (D###) |
 | As-built map, data flow, change taxonomy, root-file taxonomy | `docs/architecture.md` |
 | CLI commands / flags / scripts / services / DB tables | `docs/MANPAGE.md` |
 | Operating the pipeline (start/stop/recover) | `docs/HOW-TO.md` |
 | Grammar rules narrative (sync-enforced with grammar.yaml) | `docs/GRAMMAR.md` |
-| Changing grammar / enumeration policy | `docs/tasks/grammar-change.md` |
+| Changing grammar / enumeration policy (frozen — prereg first) | `docs/tasks/grammar-change.md` |
 | Deploying to the live service | `docs/tasks/deploy.md` |
 | Feedback / learned-weight changes | `docs/tasks/feedback-change.md` |
 | Debugging live behavior, DB/export queries | `docs/tasks/investigate-live.md` |
@@ -135,7 +134,7 @@ a doc may state where a value lives, never the value.
 | Crucible / contracts coordination (relays: `~/proj/freeze/relays/`) | `docs/tasks/crucible-handoff.md` |
 | Active proposals / freeze programme | `docs/proposals/` (terminal ones: `_archive/PROPOSAL_*.md`) |
 | Domain terms | `docs/architecture.md` §Terms |
-| Indicator value distributions | `docs/INDICATOR_THRESHOLDS.md` |
+| Indicator thresholds | `src/forge/enumeration/indicator_thresholds.py` |
 | New machine / migration | `deploy/NEW_BOX_TRANSFER.md` |
 
 Build slowly. Test ruthlessly. Trust the grammar — it is the heart of Forge.

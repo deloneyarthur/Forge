@@ -276,3 +276,5 @@ desk.
 
 Suggested first bite (one sitting, all reversible): Step 0 + A1 + A2 + A3 + the three
 fix-in-place items from B4.
+
+> **SUPERSEDED 2026-09-13** by `docs/proposals/repo-simplification-2026-09.md` (Steps D, E5, E7, F and the §4 regrowth rules are carried forward there; final state = Route C automated, its §12). Archived with the 2026-09 Batch 1 sweep (D407).

@@ -123,23 +123,18 @@ shipped YAML value, with the `--no-config` fallback in parentheses.
 | `--require-real-cache` | flag | off | Skip the iteration (no submit) when Crucible's real feature cache is unavailable, instead of silently degrading to the synthetic cache. Production safety; on the service. |
 | `--max-iterations` | int | unbounded | Cap loop iterations (testing). |
 | `--poll-interval-seconds` | int | `60` (`600`) | Sleep between loop iterations. |
-| `--consume-feedback` | flag | off | Run feedback chain (consumer/analyzer/proposer/auto-tune) after submit. |
+| `--consume-feedback` | flag | off | Run feedback chain (consumer/analyzer/proposer) after submit. |
 | `--cross-sectional-rank / --no-cross-sectional-rank` | flag | on | H1 (v12) breadth lever: emit `cross_sectional` combiners for the breadth-starved directional archetypes (trend/mean_reversion) at a ~1/3 exploration share, defeating the 100-trade floor. ON by default (the point of v12); `--no-cross-sectional-rank` is the kill switch (revert to confluence). |
 | `--cohort-yield` | flag | off | §3 yield-map refresh (D182): make the cohort draw (cross_sectional vs confluence) yield-driven by the learned (hypothesis, directional, dte_bucket, cohort) component-rate instead of the fixed share. On the service. Off is byte-identical to the H1 draw. |
 | `--regime-gate-yield` | flag | off | §2 yield-map refresh (D183): make the regime-gate draw yield-driven — compose the learned (hypothesis, directional, dte_bucket, regime_gate) rate onto the D150/uniform base, down-weighting sink gates (gamma_flip) and favouring minting ones. `relative_value` excluded (D119). On the service. Off is byte-identical. |
 | `--quality-rank` | flag | off | T1 quality lane (tail-aware ranking, §8.6, D193): BLEND the wf_p25 robustness prediction into the §6.2 prior — `prior := P(component) × tail_norm`. Needs an F3 P(component) base + a `target_wf_p25` robustness model. Env kill-switch `FORGE_QUALITY_RANKER`. On the service. Off is byte-identical (F3 prior unchanged). |
 | `--open-proposals` | path | `OPEN_PROPOSALS.md` | Where loosening proposals are written. |
-| `--prefilter-yaml` | path | `config/prefilter.yaml` | Prefilter calibration (auto-tune target). |
+| `--prefilter-yaml` | path | `config/prefilter.yaml` | Prefilter calibration keys (the auto-tune writer is retired, D206/D298). |
 | `--config` | path | `config/forge.yaml` | YAML defaults file. |
 | `--no-config` | flag | off | Ignore YAML; use hardcoded defaults + CLI flags only. |
 
-**Env-only knob — `FORGE_ORTHOGONAL_FAMILY_FLOOR`** (D216; **RETIRED from the unit at D367** —
-the ve floor's founding evidence was retracted; the knob stays functional as a one-line revert):
-comma-separated `family=floor` pairs lifting named hypothesis families to a minimum
-**max-normalized** sampling weight (NOT a delivered share — judge on the journal's `floor
-ACTIVE` line). Only ever raises (`max` semantics); unset → byte-identical (hard rule 6).
-Consumed by `forge.cli.main._orthogonal_family_floors` →
-`rejection_weights.apply_orthogonal_family_floor`. History: D216/D367.
+**Env-only knob — `FORGE_ORTHOGONAL_FAMILY_FLOOR`** — RETIRED D367 (founding evidence retracted);
+unset → byte-identical. History: D216/D367.
 
 **`search_n_trials` stamping (D310, automatic, self-gated)**: every submitted config is stamped with its
 per-slot cumulative search multiplicity (slot = hypothesis × dte_bucket × xsect-vs-named, counted from
@@ -177,13 +172,8 @@ slots (the holdout REPLACES rank slots — total submitted stays ≤ batch_size,
 so evals can split biased-vs-unbiased. Consumed by `forge.cli.main._resolve_exploration_holdout_frac` →
 `rank_batch_with_holdout`. Activation is an operator-gated submission-mix change (deploy ritual + the D220 hold).
 
-**Experiment-cell selection floor (D287/D299) — REMOVED 2026-08-06 (D376).** The hand-pin
-reservation phase ran empty since the resid×vix campaign retired (D305), so the machinery
-(`experiment_cells.py`, diversifier phase 0b, the `experiment_cell_floor:` journal line) was
-deleted. The PRINCIPLE survives in two live mechanisms: the young-cell floor
-(`FORGE_YOUNG_CELL_FLOOR`, D307 — the D287 protection made automatic) and the campaign
-registry (`campaigns.active_selection_cells` — the interface a future farming campaign would
-wire a new floor from, with its own D-entry). History: D287/D299/D305/D376.
+**Experiment-cell selection floor (D287/D299) — REMOVED 2026-08-06 (D376);** the young-cell
+floor (`FORGE_YOUNG_CELL_FLOOR`, below) is the live successor. History: D287/D299/D305/D376.
 
 **Env kill-switch — `FORGE_YOUNG_CELL_FLOOR`** (D307, Theme 2b): default `off` — must be exactly
 `on` to activate the YOUNG-cell exploration floor (diversifier phase 0c): any (directional,
@@ -218,12 +208,8 @@ consumed, no stamp — byte-identical (hard rule #6). Clamp [0.0, 0.5] (an exper
 control). The `generation_arm` field is free for the next generation experiment
 (`contracts_check.py` note). History: D341/D351.
 
-**`FORGE_YOUNG_CELL_EXPLORE_SLOTS` — REMOVED 2026-08-06 (D378; operator "deprecate E6").**
-The D316 young-cell explore lane was built flag-off and never enabled (the flag was never
-set on any unit; zero `young_explore` rows exist). D367 reaffirmed OFF — 87% of its budget
-would have funded the ve family being un-propped. The D307 young-cell FLOOR
-(`FORGE_YOUNG_CELL_FLOOR`, above) is a separate mechanism and stays live. Code in git
-history; a future biased-exploration lane starts from its own proposal.
+**`FORGE_YOUNG_CELL_EXPLORE_SLOTS` — REMOVED 2026-08-06 (D378);** the lane was never enabled.
+Code in git history.
 
 ```
 # One real batch, persisted:
@@ -253,7 +239,7 @@ asks `check_rate_limit` whether to submit; it can block for two independent reas
 ### forge feedback
 
 Manual single-batch feedback: read Crucible's gated runs, analyze, propose grammar
-refinements. Auto-tune always runs. (Daemon equivalent: `forge run --consume-feedback`.)
+refinements. (Daemon equivalent: `forge run --consume-feedback`.)
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -743,7 +729,7 @@ history. `scripts/` holds only wired, ritual, and in-flight instruments.
 
 | Class | Scripts |
 |---|---|
-| WIRED — machinery executes them | `daily_ranker_eval.sh` (05:00 timer), `backup_forge_db.sh` (04:00 timer), `search_multiplicity_census.py` (invoked by the daily eval), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` (pre-commit), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom) |
+| WIRED — machinery executes them | `daily_ranker_eval.sh` (05:00 timer), `backup_forge_db.sh` (04:00 timer), `search_multiplicity_census.py` (invoked by the daily eval), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` + `check_freeze_governance.py` (pre-commit), `freeze_read_watcher.py` (06:30 `forge-prereg-watch` timer), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom) |
 | RITUAL / standing monitor | `tail_verified_alignment.py` (D155 verified-coverage alignment monitor; run against a `live_db_snapshot.sh` snapshot), `production_by_group.py` (per-arm/per-category production reads) |
 | IN-FLIGHT freeze/ceiling instruments | `freeze_tail_reading.py` (+ its importer `freeze_registered_read.py` — spent once its prereg-pinned tests retire with the declaration), `ceiling_record_test.py`, `joint_frontier.py` (D368), `second_gate_contrast.py` (carries the D360 measurement_basis pooling defect — repair queued in the freeze declaration), `threshold_resolution_value.py` (D353), `promoted_leg_recall.py` |
 
@@ -763,7 +749,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 |---|---|
 | `forge.yaml` | Forge DB path, Crucible wiring, enumeration cap, batch size, rate-limit threshold, stall-guard window (`submission.stall_after_seconds`, D137), in-flight-depth cap (`submission.max_inflight`, D196; 0=off). (`data_root`/`log_root`/`feedback.*` cadence keys retired D247 — never read; feedback runs every iteration via `--consume-feedback`.) |
 | `grammar.yaml` | The 21 grammar rules (S/C/R/X families). Operator-owned; version-bumped + archived on change. |
-| `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation, auto-tune bounds). |
+| `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation) + calibration keys (the auto-tune writer is retired, D206/D298). |
 | `ranker.yaml` | Composite-score weights + diversification method. |
 | `auto_tightened_thresholds.yaml` | RETIRED-EMPTY (`tightenings: []`, D206, permanent per D298). Retained because its fingerprint feeds `enumeration_inputs_hash` — deleting it changes the determinism identity. |
 | `grammar_archive/v{N}.yaml` | Frozen copies of each prior grammar version. |
@@ -807,7 +793,7 @@ The Crucible rows below are the **Forge-relevant subset**, not Crucible's full u
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict, hygiene-judged once populated D284) + `rewire_streak_wfp25.jsonl` (gate-tail lane; the §8.6 tail clock retired D285), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict, hygiene-judged once populated D284) + `rewire_streak_wfp25.jsonl` (gate-tail lane; the §8.6 tail clock retired D285), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197), `forge-prereg-watch` (06:30, `scripts/freeze_read_watcher.py` — DUE / waiting / UNWATCHABLE on open preregistrations; any non-OK marks the unit failed; D392). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

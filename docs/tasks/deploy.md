@@ -6,8 +6,8 @@ deployed ungated code (D104). Hence:
 
 ## Standing rules
 
-- **Build in a worktree** while the service runs: `git worktree add ../Forge-build <branch>`.
-  The live tree stays `git status`-clean except mid-deploy.
+- **Grammar bumps build in a worktree** (`git worktree add ../Forge-build <branch>`); other work
+  stays in this tree with short dirty windows. The live tree stays `git status`-clean except mid-deploy.
 - Never edit `config/grammar.yaml` in the live tree while the service runs — the loop re-reads it
   hot and stamps submissions with the new version before the code exists
   (`grammar_versions.changed_at` = stamp-flip time, never deploy time).
@@ -29,7 +29,7 @@ systemctl --user start forge.service
 ```
 
 If you changed the unit file (a flag/env activation like `--quality-rank` or
-`FORGE_ORTHOGONAL_FAMILY_FLOOR`), `daemon-reload` is mandatory before `start` — systemd
+`FORGE_YOUNG_CELL_FLOOR`), `daemon-reload` is mandatory before `start` — systemd
 warns "unit file changed on disk" and otherwise starts the stale unit (the flag looks set
 in the file but is absent from the process env). Confirm it took in Verify below.
 

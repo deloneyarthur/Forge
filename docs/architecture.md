@@ -13,7 +13,7 @@ its file exports, through `crucible_contracts` helpers).
 flowchart LR
     subgraph Forge["forge.service (this repo)"]
         E[enumerate] --> P[prefilter] --> R[rank + diversify] --> S[submit]
-        F["feedback: consume → analyze → propose → auto-tune"] -. steers .-> E
+        F["feedback: consume → analyze → propose"] -. steers .-> E
     end
     S -- "inbox/*.json (atomic)" --> C["Crucible: watch → backtest → gate"]
     C -- "exports/gated_runs_*.json" --> F
@@ -48,7 +48,7 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
 | `config/` | `forge_config.py` — precedence: CLI flag > `config/forge.yaml` > hardcoded (`--no-config`) | §10 | `test_config/` |
 | `cli/` | `main.py` (`forge` entry point + run loop), `grammar_cmd.py` (`grammar` sub-app), `feedback_cmd.py`, `ranker_model_cmd.py` (`ranker-model` sub-app: dataset/train/eval + the wf_p25 robustness variants, D132/D191), `healthcheck_cmd.py` (`forge healthcheck` — alive-AND-productive read, D197), `status_cmd.py` (`forge status` — learning-signal clocks, D198), `prereg_cmd.py` (`forge prereg` — preregistered prune ledger, D208), `campaigns_cmd.py` (`forge campaigns` — campaign-registry list + region-carriage audit, D299), `yield_audit_cmd.py` (`forge yield-audit` — dead-cell detector printout, D302) | — | `test_cli/` |
 
-**`ranking/` breakdown** (the most fragmented package — 23 files):
+**`ranking/` breakdown** (the most fragmented package — 21 files):
 - Scoring + selection: composite scorer (weights in `config/ranker.yaml`); `queue.py`
   batch-ranking orchestrator (`rank_batch` composes the §6 components); `prior_promotion.py`
   Jaccard prior (the pre-F3 fallback); greedy `diversifier.py` (`min_per_hypothesis` floor,
@@ -74,7 +74,7 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
   `OPEN_PROPOSALS.md` + `grammar_proposals`; wires `trade_concentration.py`, D047) /
   `promoted_patterns.py` / `stuck_state.py`.
 - Learned weights: `rejection_weights.py` (the D094→D108 lineage), `trade_rate_priors.py`
-  (expected-trades prior + cold-start), `auto_tune.py` (tighten-only calibration).
+  (expected-trades prior + cold-start). (`auto_tune.py` was retired — D325; git history has it.)
 - Honesty ledgers: `preregistration.py` (behind `forge prereg`, D208; the D207 alpha-budget
   sibling retired 2026-08-06, question answered); `yield_audit.py` (D302 dead-cell detector,
   writes nothing).
@@ -112,13 +112,15 @@ Determinism identity: `(grammar_version, registry_hash, seed)` → same enumerat
   F3 streak → `~/forge_data/ranker_eval/streak.jsonl` and the wf_p25 robustness streak; deterministic,
   telemetry-only); `forge-backup` (04:00, `scripts/backup_forge_db.sh` — nightly DR copy of `forge.db`
   + `models/`, D195); `forge-healthcheck` (hourly, `forge healthcheck` — alerts on the alive-but-stuck
-  daemon states systemd can't see, D197). (`forge-eod-check`, a 21:00 headless EOD read, was
-  retired D253 — superseded by the hourly healthcheck.)
+  daemon states systemd can't see, D197); `forge-prereg-watch` (06:30, `scripts/freeze_read_watcher.py`
+  — a registered read must not come due silently, D392). (`forge-eod-check`, a 21:00 headless EOD
+  read, was retired D253 — superseded by the hourly healthcheck.)
 - Forge state: `~/forge_data/forge.db` (DuckDB; live RW lock — snapshot before reading, see
   `docs/tasks/investigate-live.md`). Inter-system paths: table in `docs/HOW-TO.md`.
 - `scripts/` is operational glue around the daemon, not part of the import graph: pre-commit
-  enforcers (`check_grammar_version_bump.py`, `check_grammar_doc_sync.py` — see §13.2 below),
-  the timer entrypoints (`daily_ranker_eval.sh`, `backup_forge_db.sh`), the read-only pre-deploy
+  enforcers (`check_grammar_version_bump.py`, `check_grammar_doc_sync.py` — see §13.2 below;
+  `check_freeze_governance.py` — the signed-freeze guard, D392), the timer entrypoints
+  (`daily_ranker_eval.sh`, `backup_forge_db.sh`, `freeze_read_watcher.py`), the read-only pre-deploy
   GO/NO-GO gate (`deploy_preflight.sh` — codifies the D104 ritual's pre-checks: dirty tree, stale
   contracts pin, inert feature wiring; D199), plus one-off analysis/probe + migration scripts.
 
@@ -147,7 +149,6 @@ so every root file should match a row below.
 | `IMPLEMENTATION_DECISIONS.md` | Append-only decision ledger ("D###"), currently D301+; D001–D300 in `_archive/IMPLEMENTATION_DECISIONS_*` slices |
 | `OPEN_QUESTIONS.md` | **OPEN** questions only (Q##, severity); resolved entries sweep to `_archive/OPEN_QUESTIONS_RESOLVED.md` in the resolving commit |
 | `OPEN_PROPOSALS.md` | Grammar loosening proposals awaiting operator sign-off (hard rule #4). Machine-consumed (`forge-proposals/v1`); never rotated (D298) |
-| `GRAMMAR_REVIEW_AND_EXPANSION.md`, `LEARNED_SYSTEMS_AND_GENERATION_REVIEW.md` | **Live roadmap/reference reviews** — deliberately kept in root; re-verdict due at the freeze declaration (expansion roadmaps and a frozen grammar are in tension) |
 | `PROMPT_CRUCIBLE_PATHC_DEBIT_VERTICAL_SIZING.md` | The one operator-**parked** relay (D152, Path C). The root-relay channel itself is RETIRED — relays live in `~/proj/freeze/relays/` + the two INDEX ledgers (D362, `docs/tasks/crucible-handoff.md`); never create new `PROMPT_*` files at root |
 | `_archive/` | Completed/landed records, swept from root/docs once their D-entry lands (D202/D241 criterion): relay pairs, phase handoffs, finished planning artifacts, terminal proposals (`PROPOSAL_*.md`), point-in-time reviews (`AUDIT.md`, `STRATEGY_GENERATION_STATE.md`), and the ledger-rotation slices |
 

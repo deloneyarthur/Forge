@@ -9,5 +9,6 @@ Scope: ownership warnings only. File-by-file semantics: `docs/MANPAGE.md` (CONFI
 - `grammar_archive/` — frozen history; never edit existing files.
 - `auto_tightened_thresholds.yaml` — retired-empty (D206, permanent per D298; the proposer
   script lives in git history); the loader's fingerprint still reads it — don't hand-edit.
-- `prefilter.yaml` — operator + auto-tune (tighten-only writes from the daemon).
+- `prefilter.yaml` — operator-owned; the daemon never writes it (the auto-tune writer is
+  retired, D206/D298).
 - `forge.yaml`, `ranker.yaml` — operator-owned; CLI flags override YAML.

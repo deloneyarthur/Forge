@@ -7,7 +7,7 @@ so Crucible's predicate evaluated `params.get("threshold") is None` and
 returned False on every bar — zero activations across every config.
 
 This module supplies a per-indicator threshold table grounded in real SPY-data
-distributions (see `docs/INDICATOR_THRESHOLDS.md`, audit 2026-05-14). Each
+distributions (see `_archive/INDICATOR_THRESHOLDS.md`, audit 2026-05-14). Each
 indicator gets:
 
   * `directional_range`: sampling range for directional signals (extreme/contrarian)
@@ -303,7 +303,7 @@ _INDICATOR_THRESHOLD_TABLE: dict[str, IndicatorThresholdSpec] = {
     # standardized, so these are sigmas, not native units). Directional-only —
     # the post-event TIMING is the days_since_earnings regime gate below.
     # NB: provisional calibration (operator-reviewable, like every table entry);
-    # no live SUE distribution audit yet — see docs/INDICATOR_THRESHOLDS.md.
+    # no live SUE distribution audit yet — see _archive/INDICATOR_THRESHOLDS.md.
     "sue": IndicatorThresholdSpec(
         directional_range=(1.0, 2.0),
         regime_range=None,

@@ -39,7 +39,7 @@ Generates YAML strategy configurations that Crucible can backtest. Each config d
 
 - Backtest strategies (Crucible's job)
 - Compute Sharpe, drawdown, or any strategy metric (Crucible's job)
-- Generate new indicator implementations or signal logic (out of v1 scope; see §11.5)
+- Generate new indicator implementations or signal logic (out of v1 scope; see `docs/architecture.md`)
 - Use LLMs as autonomous agents in the production generation loop
 - Operate on equity strategies (Crucible is long-options only; equity stays in QuantIQ)
 - Make operational decisions (lifecycle, capital allocation, kill switches — QuantIQ's job)
@@ -502,6 +502,8 @@ Failed reports are logged to Forge's DB but not forwarded to the ranker.
 
 Pre-filter thresholds (e.g., the 30-activation minimum, 80% overlap threshold) are configurable in `config/prefilter.yaml`. Initial values are conservative; they tune based on Crucible's hit rate.
 
+> RETIRED (D206/D298) — recorded for history:
+
 **Auto-tune rule**: if Crucible's promotion rate from Forge-submitted candidates drops below 0.5% for 2 consecutive batches, pre-filters loosen by 10%. If promotion rate climbs above 5%, pre-filters tighten by 10%. Maximum auto-adjustment is 30% in either direction; further changes require operator approval.
 
 ---
@@ -640,6 +642,9 @@ Saved to `forge.db` in tables `batch_summaries`, `gate_failures`, `promoted_patt
 
 ### 8.4 Grammar refinement: auto-tightening
 
+> INTENT, superseded as-built: tightenings never auto-edit grammar.yaml; post-freeze every edit
+> needs a preregistration (D390/D392).
+
 When evidence is strong enough, Forge automatically tightens the grammar. Examples:
 
 **Trigger**: 95%+ of rejected candidates failed gate X.
@@ -663,8 +668,6 @@ Forge can propose loosening but cannot apply it. Examples of proposals:
 
 Proposals appear in:
 - `OPEN_PROPOSALS.md` (timestamped, awaiting operator review)
-- Forge's dashboard surface area
-- Slack notification if configured
 
 The operator approves, rejects, or modifies. Approved changes get applied to `grammar.yaml` with operator initials in the decision log.
 
@@ -705,7 +708,7 @@ not an optimization.
 
 ### 9.3 What Forge writes to Crucible
 
-Only YAML files in `{crucible_data_root}/inbox/`. Never direct DB writes.
+Only JSON files (D006) in `{crucible_data_root}/inbox/`. Never direct DB writes.
 
 ---
 
@@ -765,7 +768,7 @@ Five phases. Estimated 6-10 weeks at part-time (~4 hrs/day), 4-6 weeks full-time
 - All 6 predicate types (cardinality, requires, forbids, compatibility, numerical_range, custom_python)
 - Rule loader with version archive
 - Validator: given a StrategyConfig and a grammar, returns valid/invalid + reasons
-- v1 grammar (25 rules) written to `config/grammar.yaml`
+- v1 grammar (21 rules) written to `config/grammar.yaml`
 - `GRAMMAR.md` narrative documentation
 
 **Deliverable**: any StrategyConfig can be validated against the v1 grammar in < 10ms. Property test: 1000 random valid configs all pass validation; 1000 random invalid configs all fail.

@@ -1,3 +1,14 @@
+# forge.service — the Forge daemon (Forge -> Crucible -> QuantIQ). Live unit: symlinked from
+# ~/.config/systemd/user/. Edit only via docs/tasks/deploy.md (daemon-reload REQUIRED after any
+# change, else the old unit starts). Directive rationale = one ⚠️ line each below; the history
+# behind every value lives in its D-entry (this file stopped being a second decision ledger on
+# 2026-09-13, repo-simplification Batch 1 / D407). Retired knobs, for the record:
+#   FORGE_ORTHOGONAL_FAMILY_FLOOR — D216 Layer-2 ve floor, RETIRED D367 (evidence retracted; restore
+#   with `Environment=FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20` + restart if the freeze
+#   leg-2 TCM-corr rises >0.0173 above 0.4457, prereg d4b1efd26bb3).
+# Final state (plan §12): this unit is retired at the Route C cutover in favour of a weekly
+# forge-campaign.timer.
+
 [Unit]
 Description=Forge candidate strategy generator (Forge -> Crucible -> QuantIQ pipeline)
 Documentation=file:///home/aj/proj/Forge/docs/DESIGN.md
@@ -7,232 +18,22 @@ Wants=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/aj/proj/Forge
-# --require-real-cache: skip the iteration if Crucible's writer/feature cache
-# is unavailable rather than silently degrading to the synthetic cache and
-# submitting a noise-filtered batch (2026-05-28 RCA / D080).
-# --cohort-yield / --regime-gate-yield: §3/§2 of Crucible's 2026-06-17 yield-map
-# refresh (D182/D183) — yield-drive the cohort + regime-gate draws. Default-off
-# in code; ENABLED here. Remove either flag to revert that axis to a
-# byte-identical draw (the A/B kill switch; hard rule #6).
-# --quality-rank: the wf_p25 quality lane (D193) — BLEND the predicted WF-floor
-# robustness into the §6.2 prior (prior := P(component) x tail_norm). Default-off in
-# code; ENABLED here. Needs F3's P(component) base (the blend multiplies it) + a
-# target_wf_p25 model in ~/forge_data/models (the daily timer publishes it). Env
-# kill-switch FORGE_QUALITY_RANKER=off; remove the flag to revert byte-identical.
-# FORGE_ORTHOGONAL_FAMILY_FLOOR (D216 Layer-2): floor single-name volatility_event's
-# learned hypothesis weight to 0.20 (max semantics — starves nothing), lifting its
-# sampling share ~2.9%->~10.7% so assembly has more of the PBO-orthogonal family
-# (Crucible-validated 2026-06-29: PC1 load 0.10, mixed book CSCV PBO 0.107). A/B
-# feedback knob; empty/unset => byte-identical (hard rule 6). REVERT = delete this
-# line + restart. Pre-registered (D208) + alpha-budget-charged (D207); confirm §8.4.
-# RETIRED 2026-08-03 (D367, operator "recommendation is good"). The floor's founding evidence was
-# RETRACTED: Crucible's 07-19 ve close-out re-derived 23/25 stored-cpcv ve components as GHOSTS and
-# the clean-cache mixed-book PBO came back 0.40 — "real-but-MARGINAL, no solo promotion case". It
-# was then held open for the v39 exit repair, and THE REPAIR DID NOT WORK: ve reads 2-10% conversion
-# with median cpcv +0.20..+0.33 through v21 (the ghost era, i.e. the retracted evidence), then 0-1%
-# with median -0.23..-0.53 from v22 onward and STAYS there — v39 0.40%/-0.439, v54 0.10%/-0.413,
-# indistinguishable from pre-repair v38. The assembly axis was checked too, because per D361 a solo
-# statistic cannot condemn a family (that was our swing_long error the same week): ZERO ve legs in
-# 7 promoted books / 20 legs, ZERO ve rows in the 12 component_contributions. swing_long is
-# bad-solo/7-of-7; ve is bad-solo/0-of-7, and that contrast is the argument.
-# UN-PROPPING, NOT PRUNING: the floor was a max-normalized weight delivering ~10-12%; removing it
-# returns ve to its learned weight plus the D067 5% exploration floor, so the family stays samplable
-# and the per-cell question (each ve cell carries only 3-24 honest verdicts) stays open.
-# REVERT = re-add the line below + restart. Prereg d4b1efd26bb3 — falsifier is the freeze leg-2
-# TCM-corr (D216's real concern was HOMOGENEITY, not conversion; predicting a conversion rise would
-# be predicting arithmetic). Restore the floor if TCM-corr rises >0.0173 above 0.4457.
-# Environment=FORGE_ORTHOGONAL_FAMILY_FLOOR=volatility_event=0.20
-# FORGE_QUALITY_RANK_MODE=gate-tail (D252, prereg 9063b405): the P1.1 hard-gate form of the
-# quality lane — P(component) GATES eligibility at FORGE_REWIRE_P_FLOOR and the wf_p25 tail
-# ORDERS the survivors (the §6.2 composite is bypassed), matching the shadow A/B (Δ +0.180
-# CI [+0.060,+0.309]; flip gate MET, fresh-PASS streak 6/3 at flip time). Default 'blend' in
-# code = the D193 blend above; this env selects the re-wire. Requires --quality-rank (the lane
-# must be ON). REVERT = delete these two lines + daemon-reload + restart (byte-identical to blend).
+# gate-tail (D252): P(component) gates at FORGE_REWIRE_P_FLOOR, wf_p25 tail orders (composite bypassed). Needs --quality-rank. ⚠️ REVERT = delete these two lines + daemon-reload + restart (byte-identical to blend).
 Environment=FORGE_QUALITY_RANK_MODE=gate-tail
 Environment=FORGE_REWIRE_P_FLOOR=0.02
-# FORGE_EXPLORATION_HOLDOUT_FRAC (D256, prereg 61837dd2): reserve ~5% of each batch as a
-# SEEDED RANDOM draw from the prefilter-survivors the ranker did NOT pick — it REPLACES rank
-# slots (total submitted unchanged), tagging those rows selection_mode='holdout'. Breaks the
-# censored feedback loop: the F3/wf_p25/estimand models otherwise only ever get labels for
-# configs they already scored high (esp. under gate-tail), so they can't learn where they're
-# wrong. The unbiased labels also stand up a ranker-vs-random A/B (ranked vs holdout
-# component-rate). Clamped to [0, 0.10]; empty/unset => byte-identical (hard rule 6). REVERT =
-# delete this line + daemon-reload + restart.
+# D256: ~5% of each batch = seeded random draw from unranked survivors (selection_mode='holdout'), clamp [0, 0.10]. ⚠️ unset = byte-identical; REVERT = delete + daemon-reload + restart.
 Environment=FORGE_EXPLORATION_HOLDOUT_FRAC=0.05
-# D335 prefilter-sample two-arm campaign — ACTIVATED 2026-07-23, TIME-BOX ~2026-08-13
-# (2-3wk per Crucible's condition; operator removes this line to end it). Submits N
-# uniform-random prefilter-REJECTED configs/batch tagged selection_arm='prefilter_sample'
-# — the ONLY population unselected by both prefilter and ranker, the grammar-honest
-# estimate the freeze criterion reads. On forge.service (the DAEMON/submit path), NOT the
-# trainer unit. RAMPED to N=300 for ONE OVERNIGHT WINDOW (2026-07-24 ~18:45 PDT, operator:
-# "ramp to 300 so we have something in the morning, then down to 40"), to accrue v50's own
-# honest cohort beside the v49 baseline (n=302). ⚠️ REVERT TO 40 IN THE MORNING — at N=300
-# the batch is 200+300=500 against the 600 in-flight cap, so backpressure throttles the whole
-# stream and RANKED PRODUCTION DROPS ~70%. That price is deliberate overnight and wrong by day.
-# Target: ~12h at ~30-35/hr = ~360-420 honest configs, enough to resolve prereg b13b0f893a11
-# (the k=5-vs-k=10 trend gap) — note the v50 bias itself makes k=10 only 25% of trend draws,
-# so the arm that VALIDATES the change is the scarce one and sets the n requirement.
-# Steady-state target is N=40 (Crucible's power target, ~11% ranked cost, batch 240 well
-# under the cap). MEASURE-AND-ADJUST: the N->accrual mapping is coupled through backpressure.
-#
-# 2026-07-26 — BACK TO STEADY-STATE N=40. The N=300 window did its job and the honest
-# threshold has CONVERGED: the arm went n=302 -> 937 and the median moved 0.351 -> 0.3521,
-# with 0.00% clearing the 1.5 gate both times and a max-ever of 1.3125. A 3.1x sample
-# changed the answer by 0.001, so more n cannot move it — only a different GENERATION
-# SURFACE can. Holding 300 past that point bought no information and cost ~60% of ranked
-# production (measured: 600 honest / 380 ranked / 20 holdout per 1,000 submissions).
-# Raise it again only for a NEW question that needs honest-arm n, not to refine this one.
-#
-# 2026-07-31 — RAMPED TO 150, TIME-BOXED TO THE TIER-1 A/B (D341). A NEW question needing
-# honest-arm n, which is the only condition this knob may be raised under. The stream is
-# gating-rate limited (backpressure blocked at depth 778 vs cap 600), so total configs/day is
-# roughly fixed at ~4,318 and raising N shifts the MIX rather than the volume: honest takes
-# N/(200+N). That model reproduces the recorded N=300 window exactly (600 honest / 400 ranked
-# per 1,000), so it is calibrated, not assumed.
-#   N=40  -> 718 honest/day  -> the A/B resolves in ~6.3 days, ranked 3,600/day
-#   N=150 -> 1,851/day       -> ~2.6 days,                     ranked 2,466/day (-31%)
-#   N=300 -> 2,591/day       -> ~1.9 days,                     ranked 1,727/day (-52%)
-# 150 is the knee. Going to 300 buys only 0.7 further days while doubling the ranked cost and
-# pushing the trend-lane prereg gate from ~14.5h to ~21h.
-# COST ACCEPTED: the trend-lane prereg (593/700 merit-trend rows) slips ~10h -> ~14.5h. Trading
-# 4.5 hours on a nearly-finished prereg for 3.7 days on the A/B.
-# ⚠️ REVERT TO 40 THE MOMENT THE A/B RESOLVES. The last ramp's lesson stands: holding it past
-# its question costs ranked production and buys no information.
-# REVERTED TO 40, 2026-08-02 (D351): the A/B resolved (prereg `4e369b779ca9` REFUTED, D350) and
-# the ramp's question is answered, so the -31% ranked cost now buys nothing. The obligation was
-# honoured in the same window the experiment closed — that is the whole point of writing it here.
-#
-# RE-RAMPED TO 150, 2026-08-02 (D355, operator "we can increase sample-n to 150 again"). The
-# ~31% ranked cost is real and is being paid deliberately for a different question than last
-# time: the honest arm is now the FREEZE clock (prereg `f507e5da0677`), and at 40 the six
-# n=1200 windows take ~10 days against ~4 at 150.
-# TIMED DELIBERATELY: the switch lands at 23 of 7,200 post-cut rows (0.3%), so the post-cut
-# cohort is homogeneous at the new rate instead of a 40/150 blend. Switching later would have
-# mixed two rates inside the six windows being compared.
-# TWO THINGS THIS CHANGES, AND THE SECOND IS THE DANGEROUS DIRECTION:
-#   (1) The draw is unchanged — a uniform sample of prefilter REJECTS — so the measured
-#       distribution should not move; only the calendar time per window shrinks (~1.7d -> ~0.65d).
-#   (2) BECAUSE each window now spans less calendar time, its TRUE between-window drift is
-#       SMALLER than the `b` the bar was fitted on. Keeping the old (wider) bar therefore makes
-#       "flat" easier to declare — the direction that risks freezing a grammar still improving.
-#       Prereg caveat 4 already mandates re-deriving the a/b fit on post-change data BEFORE the
-#       read is treated as final; this ramp makes that mandatory rather than tidy.
-# ⚠️ REVERT TO 40 once prereg `f507e5da0677` is read. Same standing obligation as last time.
-#
-# REVERTED TO 40, 2026-08-03 (D359, operator "yes move forward"). BOTH freeze legs are read and
-# resolved `confirmed` — `f507e5da0677` (+0.0041 vs bar 0.0242) and `13e4d2cece3f` (-0.0033 vs
-# 0.0173) — so the clock this ramp existed to run has stopped. Second consecutive ramp returned
-# in the same window its question closed; that is the standing obligation working, not luck.
-# WHAT THE RAMP BOUGHT: the reads landed ~08-03 instead of ~08-09. It also made the a/b
-# re-derivation caveat unsatisfiable (the ramp landed AT leg 1's cut, so post-ramp data IS the
-# judged data) — resolved by reading on the registered bar and publishing the tightened one as a
-# sensitivity (D358). If a future ramp is proposed for a clocked prereg, land it BEFORE the cut
-# or accept that the caveat cannot be honoured.
+# D335: N uniform-random prefilter-REJECTS/batch (selection_arm='prefilter_sample'), the honest arm. Steady state 40 (ramp history: D335/D351/D355/D359). ⚠️ A ramp is time-boxed to ONE question and reverts to 40 when it resolves — at N=300 ranked production drops ~70%.
 Environment=FORGE_PREFILTER_SAMPLE_N=40
-# FORGE_YOUNG_CELL_FLOOR=on (D312; built flag-off at D307): the young-CELL exploration
-# floor — diversifier phase 0c reserves <=2 slots/batch for any (directional, regime)
-# cell with <25 honest-era verdicts (ghost-cut applied; hand-pinned campaign cells
-# exempt; cap 10% of batch). The D287 protection made automatic: a novel pair cannot
-# be starved at selection even when both its arms are individually mature. Must be
-# exactly "on"; anything else = byte-identical (hard rule 6). REVERT = delete these
-# two lines + daemon-reload + restart. Journal line when active: `cell_floor: ...`.
+# D312 (built D307): diversifier reserves <=2 slots/batch per young (directional, regime) cell, cap 10%. Must be exactly "on". ⚠️ REVERT = delete + daemon-reload + restart.
 Environment=FORGE_YOUNG_CELL_FLOOR=on
-# FORGE_TAIL_LANE_SLOTS (prereg 8cfe95f4a6e9, 2026-07-27): the TAIL ARM. 95 of the ~190
-# ranked slots ordered by P(top-800 by sharpe_baseline) from the `train-tail` artifact,
-# instead of the merit lane's E[cpcv]. Tagged selection_mode='tail_lane'.
-#
-# WHY: promotion is a tail event (4 in ~428k) but every learned component we run is
-# average-shaped, and on stage-one cells spearman(cell mean, cell std) = -0.148 while
-# spearman(cell P(>=1.0), cell std) = +0.500 -- the mean carries no information about tail
-# production. Offline, at the corrected 0.9439 book floor over 8 splits with per-window
-# disjoint counts: 280 strong components per 4,520 selected against the incumbent's 113
-# (2.48x), 4/4 windows; on the MR slice 175 vs 66 (2.65x). Robust 8/8 across estimator and
-# lambda where wf_p10 collapses past n=400.
-#
-# CONCURRENT, NOT A SWITCH. Crucible's k5_share fix read at +5.09 sigma *because* it was an
-# arm split, and their instrument carries a drift floor (bootstrap SEs understate
-# across-window variation 1.3-2.1x and do NOT shrink with n), so a before/after read across
-# time is unreadable at any sample size. The remaining ~95 merit slots are the CONTROL, in
-# the same batches. Slots come OUT of the merit lane: batch size and throughput unchanged.
-#
-# SIZE: 95, the operator's call. Crucible's original "cap at ~30" rested on a saturation
-# number they retracted by ~20x (they measured rho on overlapping days; the section 8.7
-# screen zero-fills the union) -- corrected, the MR/swing_mid family supplies ~62
-# independent streams at k=170, and a real 5-leg book from it gated at
-# mean_pairwise_correlation 0.0023 against a 0.70 threshold.
-#
-# UNSET/0 = byte-identical. No artifact -> lane inert, degrades to the incumbent. Revert is
-# a one-line unset + restart; nothing enumerated or persisted depends on it.
+# prereg 8cfe95f4a6e9 (2026-07-27): tail arm, 95 slots ordered by the train-tail artifact (selection_mode='tail_lane'); the merit lane is the concurrent control. ⚠️ unset/0 = byte-identical; no artifact = inert.
 Environment=FORGE_TAIL_LANE_SLOTS=95
-# FORGE_TREND_LANE_SLOTS (prereg 8cfe95f4a6e9, trend leg; 2026-07-30): the SECOND objective
-# arm. 40 slots ordered by P(top-200 by wf_sharpe_p10), restricted to trend_continuation
-# candidates.
-#
-# WHY A SECOND TARGET AND NOT MORE MR SLOTS: the objective is REGIONAL. On the trend slice,
-# absolute strong components over disjoint windows: incumbent 44, wf_p10 top-200 59 (+34%),
-# and sharpe_baseline -- the MR lane's winner, confirmed live at 5.67x -- 41, WORSE than the
-# incumbent. The metric we rejected for MR is the trend winner.
-#
-# WHY 40 RAISES TREND SUPPLY RATHER THAN CUTTING IT: merit goes 95 -> 55 slots at ~45% trend
-# (~25 trend configs), plus 40 slots that are 100% trend by construction = ~65 vs ~43 today.
-# The MR lane alone had taken whole-batch trend from 52.9% to 36.2%; this reverses that while
-# leaving a 55-slot merit control alive for both arms' reads.
-#
-# THE CANDIDATE FILTER IS LOAD-BEARING (b17ce39). wf_p10 scores MR configs highly too, so an
-# unfiltered trend lane would select MR -- competing with the MR lane and failing to reproduce
-# its own +34%. The lane selects only from the population it was fitted and judged on; the
-# journal prints `population=trend_continuation only` so a mis-scope is visible in the log.
-#
-# Sized small on purpose: the trend tail is thin (988 configs >= the 0.9439 book floor and
-# only 2 >= 1.5 in 132,425 trend rows) and wf_p10 has a cliff (59 strong at top-200, 40 at
-# top-800, 13 at top-1600), so n_pos is PINNED at 200. This is a supply-diversity leg against
-# the single-trend-spine dependency in all four promoted books, NOT a gate-clearer play.
-#
-# UNSET/0 = byte-identical. No artifact -> lane inert. Revert is a one-line unset + restart.
+# prereg 8cfe95f4a6e9 (trend leg, 2026-07-30): 40 slots from trend_continuation only (the candidate filter is load-bearing, b17ce39). ⚠️ unset/0 = byte-identical.
 Environment=FORGE_TREND_LANE_SLOTS=40
-# FORGE_GENERATION_ARM_B_SHARE (Tier 1, D341) — the GENERATION-side concurrent A/B, the
-# counterpart to the tail/trend ranked lanes. Both regime-gate weight maps draw inside EVERY
-# batch, and each config carries the contracts 1.39.0 `generation_arm` tag.
-#
-# WHY CONCURRENT: a weighting change read across TIME confounds the change with the
-# measurement window, and Crucible's drift floor puts version-over-version deltas below
-# ~0.15-0.20 beyond resolution at ANY n (the noise is BETWEEN windows and does not shrink with
-# sample size). The ranked lanes read at z=+6.27 precisely because they were arm splits; a
-# before/after read of the same effect would have been unusable.
-#
-# WHAT THE ARMS DIFFER BY: only which map steers `_pick_regime`. The incumbent
-# (--regime-gate-yield) scores a gate by COMPONENT rate on ranker-selected runs; arm B scores
-# it by BOOK-USABLE rate (cpcv >= 0.9439) on the HONEST arm, the one population unselected by
-# both prefilter and ranker and therefore not collider-conditioned. On live data the two
-# disagree ~9x across gates (vol_regime 2.87 -> vix_term_slope 0.31).
-#
-# CANNOT change the hypothesis mix: this map only chooses the regime gate WITHIN an
-# already-drawn (hypothesis, directional, bucket), so it cannot starve MR or the D216-floored
-# volatility_event. Those live on `hypothesis_weights`, a different axis.
-#
-# SIZE: 0.5 is the clamp maximum and the power-optimal split. Honest-arm accrual is ~765/day
-# stage one, so a 50/50 split gives ~382/day/arm and a +0.05 move in p90 resolves in ~6 days;
-# at 0.25 the treatment arm halves and the same read takes ~13. Drop to 0.25 if a smaller
-# treated fraction is wanted for the first window.
-#
-# UNSET/0/malformed = byte-identical (no arm coin, no rng consumed, no tag). REVERT = delete
-# this line + daemon-reload + restart. Journal line when live: `generation_arm_ab: ACTIVE`.
-# 2026-08-01 RE-ENABLED at 0.5. Disabled 07-31 after a ~6h self-inflicted outage: we stamped
-# "baseline"/"book_usable" against 1.39.0's two-value Literal, `model_copy` accepted it without
-# validating, and 350 configs were rejected at Crucible's inbox (D342). Contracts 1.40.0 WIDENS
-# the Literal to admit both names verbatim; their reader fleet restarted on it and a real D342
-# config round-trips through the live inbox parser. Our emit path now validates AT the stamp,
-# so an inadmissible value fails loudly and locally instead of writing silently.
-# NOTE the constraint their one-field design carries: two generation experiments cannot run
-# concurrently on `generation_arm`. This A/B owns it while it runs.
-# A/B CLOSED 2026-08-02 (D351): prereg `4e369b779ca9` REFUTED on the post-cut cohort — honest-arm
-# p90 delta -0.0039 (arm B WORSE), bootstrap P(delta<=0) = 0.5210, and the secondary book-usable
-# rate agrees (0.60% vs 0.97%). The registered FALSIFIER action is "revert to a single map", so
-# the share goes to 0 and the incumbent component-rate map keeps the draw. NOT a pause: the
-# frozen-weights forward test was the follow-up for a WIN and is not triggered. 0 = no arm coin
-# drawn, no rng consumed, no `generation_arm` stamped => byte-identical to the pre-feature stream.
-# The field is now FREE for the next generation experiment (their one-field constraint above).
+# D341 Tier-1 generation A/B, CLOSED D351 (prereg 4e369b779ca9 REFUTED): 0 = no arm coin, no rng, no generation_arm stamp. Plumbing is scheduled for removal (repo-simplification 2026-09, Batch 5).
 Environment=FORGE_GENERATION_ARM_B_SHARE=0
+# --require-real-cache: skip the iteration rather than degrade to the synthetic cache (D080). --cohort-yield/--regime-gate-yield: D182/D183 yield axes, default-off in code. --quality-rank: the wf_p25 quality lane (D193), kill-switch FORGE_QUALITY_RANKER=off. ⚠️ Removing any flag reverts that axis byte-identically (hard rule #6).
 ExecStart=/home/aj/.local/bin/uv run forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank
 Restart=on-failure
 RestartSec=30
@@ -240,7 +41,6 @@ TimeoutStopSec=120
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=forge
-
 # Conservative hardening for a personal single-user service.
 NoNewPrivileges=true
 PrivateTmp=true

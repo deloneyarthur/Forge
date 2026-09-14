@@ -2182,7 +2182,7 @@ def _directional_signal_params(
 
     Sourced from `forge.enumeration.indicator_thresholds`, which encodes
     audited per-indicator distributions on real SPY bars (see
-    `docs/INDICATOR_THRESHOLDS.md`, 2026-05-14). Prior to this audit Forge
+    `_archive/INDICATOR_THRESHOLDS.md`, 2026-05-14). Prior to this audit Forge
     emitted directional threshold signals with empty params; Crucible's
     predicate then returned False on every bar, producing 0 activations
     and 100% signal_density rejection under the real feature cache.

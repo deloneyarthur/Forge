@@ -18,7 +18,7 @@
 # service quiesces forge.db so the copy is consistent (DuckDB + WAL).
 #
 # Bundle layout produced at <dest>:
-#   <dest>/proj/Forge/               working tree incl. .git (committed through v22)
+#   <dest>/proj/Forge/               working tree incl. .git (committed through the version in config/grammar.yaml)
 #   <dest>/proj/crucible_contracts/  shared editable dep (the pinned version)
 #   <dest>/forge_data/forge.db       accumulated state
 #
@@ -83,7 +83,7 @@ if [ "$GO" -eq 1 ]; then
   mkdir -p "$DEST/proj" "$DEST/forge_data"
 fi
 
-say "Forge working tree (incl. .git, committed through v22) -> $DEST/proj/Forge"
+say "Forge working tree (incl. .git, committed through the version in config/grammar.yaml) -> $DEST/proj/Forge"
 "${RSYNC[@]}" "${EXCLUDES[@]}" "$PROJ/Forge/" "$DEST/proj/Forge/"
 
 say "crucible_contracts (shared editable dep) -> $DEST/proj/crucible_contracts"

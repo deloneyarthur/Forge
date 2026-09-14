@@ -62,7 +62,7 @@ strongest practical argument *for* freezing, and it is not an argument that the 
 
 **Programme:** D328 → D389. **Grammar at declaration:** v55. **Preregistration registry: 31
 registered, 31 resolved, none open.**
-**Relates to:** `docs/proposals/grammar-freeze-criterion.md` (the criterion this reads against),
+**Relates to:** `_archive/PROPOSAL_grammar-freeze-criterion.md` (the criterion this reads against),
 `IMPLEMENTATION_DECISIONS.md` D328–D389, `INDEX_forge_answered.md` (Crucible-side agreements).
 
 Everything below stands as the record, with §2C re-founded and §7 refreshed.
@@ -306,7 +306,7 @@ Neither shows the declining signature. What is true of `swing_long` is that its 
 be bought by shifting toward the unthrottled lane — that lane's ceiling is below the gate.**
 
 The saturation experiment that would settle exhaustion is designed and **HELD** at
-`ceiling-saturation-experiment.md`, blocked on the refit-ordering answer; its honest cost is ~33
+`_archive/PROPOSAL_ceiling-saturation-experiment.md`, blocked on the refit-ordering answer; its honest cost is ~33
 days per doubling, ~3 months for the full falsifier.
 
 **AND OUR "ZERO PROMOTES" WAS A MEASUREMENT SHADOW (D370).** Crucible reproduced our 23/9/14

@@ -51,7 +51,7 @@ book in v1" thesis kept the park comfortable: its decorrelation half stands (boo
 Crucible triple-refuted the vol-event DIRECTION conditioning ask (call_wall/put_wall, §2c.1
 retraction, v24 handoff). Nothing in-v1 is currently pointed at the magnitude half.
 
-**What the grammar review sharpened (2026-06 `GRAMMAR_REVIEW_AND_EXPANSION.md` §3).** Tier 1
+**What the grammar review sharpened (2026-06 `_archive/GRAMMAR_REVIEW_AND_EXPANSION.md` §3).** Tier 1
 = debit verticals (same signals, defined-risk, recovers part of the VRP bleed, stays
 net-long-vega OTM/ATM); Tier 2 = calendars (new forward-vol axis, pays in RANGING); the
 machine-checked **net-debit ∧ net-long-vega ∧ defined-risk invariant REPLACES this dossier's
@@ -123,7 +123,7 @@ let the cheap signals accrue, resume deliberately.
   *every* regime, strongest in low-vol/calm; their debit-vertical **sizing is in flight** (un-surfaced,
   since we held the relay).
 - **The Path-C program of record** (gated probe+test stages, full structural framing):
-  `regime-orthogonal-arms.md`. **The exhaustion analysis:** `long-options-exhaustion-assessment.md`.
+  `_archive/PROPOSAL_regime-orthogonal-arms.md`. **The exhaustion analysis:** `long-options-exhaustion-assessment.md`.
   **The directive:** [[exhaust-long-options-before-v2-spreads]].
 
 ## 3. When to resume — the signals (operator decides; these are pulls, not gates)
@@ -157,7 +157,7 @@ Revisit Path C when one or more of these holds:
 regime. That number is the whole decision: it tells us whether the magnitude advantage justifies the build,
 and at what safety cost.
 
-**Then, only if the sizing justifies it,** the gated program in `regime-orthogonal-arms.md` runs in order —
+**Then, only if the sizing justifies it,** the gated program in `_archive/PROPOSAL_regime-orthogonal-arms.md` runs in order —
 **(i)** viability sizing (the relay above) → **(ii)** §8.7/CPCV magnitude confirmation → **(iii)** the SAFETY
 probe+test program (the "massive probe and test" the operator requires — correlated-book tail, drawdown,
 volmageddon stress) → **(iv)** cross-system plumbing (grammar v2 + contract/runner + gate recalibration +
@@ -187,7 +187,7 @@ sizer + QuantIQ). No grammar v2 byte is written until (i)–(iii) pass and the o
 |---|---|
 | `PROMPT_CRUCIBLE_PATHC_DEBIT_VERTICAL_SIZING.md` | The first resume step — **drafted, HELD, not sent.** |
 | `long-options-exhaustion-assessment.md` | Why long-options is exhausted (the M1–M4 detail). |
-| `regime-orthogonal-arms.md` | The full gated Path-C probe+test program + structural framing. |
+| `_archive/PROPOSAL_regime-orthogonal-arms.md` | The full gated Path-C probe+test program + structural framing. |
 | `PROMPT_CRUCIBLE_LONG_OPTIONS_EXHAUSTION.md` | ANSWERED — Crucible's confirmation. |
 | `../Crucible/docs/handoffs/FORGE_long_options_exhaustion_consolidated.md` | Crucible's confirming handoff. |
 | [[D152]] | Decision-log entry: exhaustion confirmed, gate satisfied. |

@@ -3,11 +3,9 @@
 Scope: any change to what Forge enumerates. Classification first — it determines the ritual
 (`docs/architecture.md` change taxonomy).
 
-> **Pending metadata fixes to piggyback on the next bump** — these don't change enumeration, so
-> do NOT bump *for* them; fold them into the next real change so the byte edit rides an
-> already-needed version increment:
-> - (none pending — Q49's relabel rode v32 (`indicator_thresholds.py`/`GRAMMAR.md`) and v33
->   (`custom_predicates.py` comments); Crucible fixed both kernel docstrings 07-13. CLOSED.)
+> **The grammar is FROZEN at v55 (D390). Step 0: `forge prereg register` with a required n; the
+> `freeze-governance` pre-commit hook refuses a `grammar.yaml` content change without an open
+> prereg (`FORGE_FREEZE_REOPENER=D###` for a §5 reopener, with that D-entry staged).**
 
 ## Classify the change
 
@@ -48,7 +46,7 @@ Scope: any change to what Forge enumerates. Classification first — it determin
 
 Crucible's registry must advertise it first (contracts gap otherwise). Then Forge-side:
 `indicator_thresholds.py` (real-data threshold ranges — distributions in
-`docs/INDICATOR_THRESHOLDS.md`), `signal_horizon.py` (horizon table), sampler regime pools
+`src/forge/enumeration/indicator_thresholds.py` — the code is the truth), `signal_horizon.py` (horizon table), sampler regime pools
 (`_build_regime_pool`) and R-rule predicate eligibility if it can serve as a regime gate.
 
 **Then verify layer 3 — the writer actually COMPUTES it (mandatory for a new DIRECTIONAL):**

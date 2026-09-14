@@ -12,7 +12,6 @@ D-entries before adding a new mechanism.
   `_pick_regime`, …). Attach a new weight at the single draw point where its cell is fully
   determined.
 - `feedback/trade_rate_priors.py` — expected-trades prior + `COLD_START_HYPOTHESES`.
-- `feedback/auto_tune.py` — prefilter calibration only (tighten-only).
 
 ## Structural requirements (each has precedent tests — copy the pattern)
 

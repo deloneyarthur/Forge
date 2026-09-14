@@ -1,6 +1,6 @@
 # Proposal: v39 — ve program repairs: exit-schema fix, ref_trailing_return veto sampling, iv_term_slope loosening (+ the ve ghost-label training cut)
 
-Status: **SCOPING — operator-gated; nothing ships off this doc.**
+Status: **DEPLOYED 2026-07-19 (D290).**
 Date: 2026-07-19. Source: `FORGE_ve_program_relay_2026-07-19.md` (their 3-day ve
 program close-out). Response relay: `PROMPT_CRUCIBLE_VE_PROGRAM_RESPONSE.md` (held
 for carry; §5.1/§5.4/§6 answered with data, no build needed there).

@@ -29,8 +29,8 @@
 > off this doc. Author: Crucible-PBO-handoff response.
 
 Relates to: `worst-quartile-complement-supply.md` (this **inverts its load-bearing 06-14 caveat**),
-`regime-orthogonal-arms.md` (Path A timing-gate item; the magnitude-worldview caps), `t2-ranging-floor-and-supply.md`
-(the `regime_supply` ranging floor now over-concentrating), `generation-model-levers.md` (the
+`_archive/PROPOSAL_regime-orthogonal-arms.md` (Path A timing-gate item; the magnitude-worldview caps), `t2-ranging-floor-and-supply.md`
+(the `regime_supply` ranging floor now over-concentrating), `_archive/PROPOSAL_generation-model-levers.md` (the
 `portfolio_contribution` reframe — **do not duplicate**), `PROMPT_CRUCIBLE_REFIT_PRIORITY_AND_WORSTQ_REGIME.md`
 (the relayed refit-lane prioritization, already feeding this), [[D186]] (no return data at generation →
 decorrelation owned at assembly), [[D193]] (the wf_p25 quality lane), [[D210]] (`relative_value` is healthy),
@@ -57,7 +57,7 @@ Crucible's 2026-06-25 handoff is the most consequential update to Forge's worldv
 Crucible framed orthogonal/ranging supply as *"breadth hygiene, NOT a promotion unlock"* because the wall
 was magnitude and mr's ~0.65 magnitude could not lift p25. **Now magnitude is cleared at assembly, so the
 same decorrelated supply is aimed at the *actual* binding gate (PBO).** The honest-cap sections in both
-`worst-quartile-complement-supply.md` and `regime-orthogonal-arms.md` ("none of this unlocks promotion")
+`worst-quartile-complement-supply.md` and `_archive/PROPOSAL_regime-orthogonal-arms.md` ("none of this unlocks promotion")
 were written under the magnitude worldview and must be re-read: the bar is no longer "does this leg clear
 1.5" (handled at assembly) but "does this family add an orthogonal dimension the book can be built around."
 
@@ -144,7 +144,7 @@ Replace/augment the component-rate reward in `compute_hypothesis_component_weigh
 book*, not standalone component-rate. This is the anti-Goodhart-correct fix: it rewards what Crucible *now*
 accepts (a low-PBO assembled book), not the stale proxy. **Forge cannot compute it ([[D186]])** — it needs
 a Crucible signal. This **overlaps the in-flight `portfolio_contribution` objective-reframe relay**
-(STATUS Tier-3 / `generation-model-levers.md`): **connect to it, do not duplicate.** Gated on Crucible
+(STATUS Tier-3 / `_archive/PROPOSAL_generation-model-levers.md`): **connect to it, do not duplicate.** Gated on Crucible
 exposing the signal.
 
 ### Layer 2 — the interim in-v1 lever: a bounded structural-diversity adjustment [feedback-change, operator-gated]
@@ -174,7 +174,7 @@ writeback). Only `iv_rank` is wired as a regime gate today (`mean_reversion`, R1
 for trend conditioning ([[D131]], `grammar.yaml:281`). Wiring any of the latter three as gates is a §3.5
 grammar change (version bump + archive + operator approval), **not** "nearly free."
 
-**Fresh rationale worth noting:** Forge's own `regime-orthogonal-arms.md` already flagged "`iv_term_slope`
+**Fresh rationale worth noting:** Forge's own `_archive/PROPOSAL_regime-orthogonal-arms.md` already flagged "`iv_term_slope`
 as a long-premium *timing gate* — Likely Forge-side, cheapest, do first" — but under the *magnitude*
 worldview, where the deep-research verdict killed it (costs bind, single-leg magnitude unestablished).
 Under the *dimensionality* worldview the rationale is different and un-refuted: gating shifts
@@ -223,7 +223,7 @@ Per the [[D210]]/[[D206]] discipline — measure before acting, especially after
 
 1. **Do `volatility_event` and `relative_value` top-tails reach the strong band (cpcv-p25 ≳ 1.3)?**
    If their distributions are capped below 1.3 (vol_event single legs pay the full VRP tide;
-   `regime-orthogonal-arms.md` §Path-A says single-leg magnitude is cost-bound), then un-suppressing them
+   `_archive/PROPOSAL_regime-orthogonal-arms.md` §Path-A says single-leg magnitude is cost-bound), then un-suppressing them
    adds *enumeration* diversity but **not strong-band dimensionality** — book-search still can't build a
    distinct third core, and the in-v1 lever is genuinely exhausted (→ v2/Path C). **This is the
    decision-relevant measurement; relayed to Crucible (writeback ask 1).** Forge cannot compute it (§1.2).

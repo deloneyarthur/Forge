@@ -26,6 +26,7 @@ uv run mypy --strict src                       # must be zero violations
 | hygiene (whitespace, yaml, large files) | all | |
 | grammar-version-bump | `config/grammar.yaml`, archive | enforces hard rule #10; `entry: uv run python scripts/...` (D351: bare `python` is absent on this box — the hook could never execute until 2026-08-02) |
 | grammar-doc-sync | grammar.yaml, `docs/GRAMMAR.md` | rule ids ↔ headings pairing |
+| freeze-governance | `config/grammar.yaml` | signed-freeze guard (D392): refuses a content change without an open preregistration, or `FORGE_FREEZE_REOPENER=D###` with that D-entry staged |
 
 History contains `--no-verify` commits with checks run manually — avoid adding more. If a hook
 fails to *execute* (as opposed to failing its check), treat that as a broken guard and fix the
