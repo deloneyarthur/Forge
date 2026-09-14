@@ -211,6 +211,21 @@ Any change that deploys on restart (config edits, new ranges, code) should clear
 `scripts/deploy_preflight.sh` first — it's step 0 of the deploy ritual (`tasks/deploy.md`).
 Review any **loosening** proposals (these need operator sign-off) in `OPEN_PROPOSALS.md`.
 
+### Weekly campaign run (the final state, pre-cutover: by hand)
+
+`forge campaign --dry-run` decides this week's plan and submits nothing; `forge campaign` is what
+`forge-campaign.timer` will execute after the Route C cutover (units in `deploy/systemd/`, not
+installed yet — cutover waits on Crucible's forge-scoped 14-day gated stream, D409). Read the
+journal block top to bottom: one `boot <check> ok|FAIL` line per precondition (any FAIL → exit 2,
+nothing submitted, the unit goes FAILED — that is the only page); one `trigger <name> FIRED|quiet
+<reason>` line per trigger; one `campaign <trigger> cells=N budget=B` line per campaign; then
+`selection: enumerated=… kept=… survived=… gated_out={…} planned=…` and the closing
+`campaign <run_id>: submitted N` (or `DRY RUN — planned N` / `no trigger; boot OK`). The record
+lands in `~/forge_data/campaigns/<run_id>.json`; `forge campaign status --forge-db "$SNAP"`
+(with `SNAP=$(scripts/live_db_snapshot.sh)`) shows what each run's submissions earned. A second
+`--dry-run` on the same exports must print the same plan — if it does not, an export changed
+under it (compare the record's `watermarks`).
+
 ### Changing the grammar
 
 The grammar is FROZEN at v55 (D390). Step 0: `forge prereg register` with a required n; the

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 import typer
 
+from forge.cli.campaign_cmd import campaign_app
 from forge.cli.campaigns_cmd import campaigns_app
 from forge.cli.feedback_cmd import cmd_feedback
 from forge.cli.grammar_cmd import grammar_app
@@ -3153,6 +3154,7 @@ app.command("feedback")(cmd_feedback)
 app.command("healthcheck")(cmd_healthcheck)
 app.command("status")(cmd_status)
 app.command("yield-audit")(cmd_yield_audit)
+app.add_typer(campaign_app, name="campaign")
 app.add_typer(campaigns_app, name="campaigns")
 app.add_typer(grammar_app, name="grammar")
 app.add_typer(prereg_app, name="prereg")

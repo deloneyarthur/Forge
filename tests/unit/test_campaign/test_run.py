@@ -29,6 +29,7 @@ _CFG = CampaignConfig(
     enumeration_attempts=300,
     oversample_factor=2,
     dead_min_decided=1000,
+    min_hypothesis_fraction=0.0,
 )
 
 

@@ -234,6 +234,7 @@ def enumerate_population(
     attempts: int,
     exports_dir: Path,
     now: datetime,
+    min_hypothesis_fraction: float,
 ) -> list[StrategyConfig]:
     """The unchanged cold-start v55 draw, no learned weights (the goldens' population).
 
@@ -246,7 +247,6 @@ def enumerate_population(
         resolve_effects,
     )
     from forge.enumeration.chain_inception import underlyings_below_inception  # noqa: PLC0415
-    from forge.enumeration.iterator import _PRODUCTION_MIN_HYPOTHESIS_FRACTION  # noqa: PLC0415
 
     out: list[StrategyConfig] = []
     try:
@@ -257,7 +257,7 @@ def enumerate_population(
             max_candidates=attempts,
             below_inception=underlyings_below_inception(now.date(), exports_dir=exports_dir),
             refutation_effects=resolve_effects(exports_dir=exports_dir),
-            min_hypothesis_fraction=_PRODUCTION_MIN_HYPOTHESIS_FRACTION,
+            min_hypothesis_fraction=min_hypothesis_fraction,
         ):
             out.append(config)
     except EnumerationCapped:
@@ -590,6 +590,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
             attempts=cfg.enumeration_attempts,
             exports_dir=exports_dir,
             now=started,
+            min_hypothesis_fraction=cfg.min_hypothesis_fraction,
         )
         sample = [(config, cell_key(config)) for config in population]
         dark = dark_cells((cell for _, cell in sample), stats)

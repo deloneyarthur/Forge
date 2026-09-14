@@ -524,6 +524,64 @@ use `forge ranker-model eval` / `eval-robustness`.
 forge status
 ```
 
+### forge campaign
+
+The weekly, zero-input challenger run — Forge's final state (plan 2026-09 §12; D406/D409).
+`forge campaign` executes one week's decision end to end: boot checks (contracts pin, grammar +
+archive, registry snapshot age, universe, gated/failed exports present, inbox backlog, open
+preregistrations) → reconcile the gated/failed exports → read the designated book
+(`designation_history`, `promoted_portfolios`, `component_contributions`) and Forge's own
+per-cell verdict stats → evaluate the five triggers (T1 designation flip → replacement cells;
+T2 refutation retraction, content-diff only; T3 new indicator id in an existing family; T4
+near-floor cells with stale evidence; T5 dark-cell exploration on a deterministic weekly
+rotation) → rejection-sample the UNCHANGED v55 population (cold-start draw, no learned weights,
+seed derived from `(grammar_version, registry_hash, ISO week)`) to the chosen cells → prefilter
+battery → structural challenger gate (protected book cells unless a replacement names them;
+Jaccard signal overlap ≥ `duplicate_jaccard` to a book leg; dead cells) → in-cell rank by F3
+`P(component)` × robustness `tail_norm` → submit at most `weekly_cap`. Rows carry
+`selection_mode = campaign:<trigger>` locally and `selection_arm = ranked` to Crucible (their
+09-13 §3). Knobs: `config/forge.yaml` `campaign:` over `forge.campaign.types.CampaignConfig`
+(the single home of defaults; unknown keys fail loud).
+
+`--dry-run` runs the same decision path and submits nothing; the record's `submitted_hashes`
+then lists the plan, so two dry runs on the same exports compare plan for plan. `--budget N`
+caps one run below the weekly cap. Path options (`--config`/`--no-config`, `--forge-db`,
+`--inbox`, `--crucible-db`, `--exports-dir`, `--records-dir`, `--models-dir`, `--config-root`)
+exist for hermetic runs; production passes none.
+
+**Exit codes are the paging contract** for `forge-campaign.service` (no `SuccessExitStatus`):
+0 = ok or no trigger (a no-trigger week still enumerates, proving the path boots), 2 = a boot
+check failed (nothing submitted, a `boot_failed` record written), 1 = an error after boot (an
+`error` record written, then re-raised).
+
+**Run record** `~/forge_data/campaigns/<run_id>.json`, schema `campaign_run/v1` — the replay
+key; Crucible's morning digest reads it once the daemon's journal lines stop:
+`schema_version`, `run_id` (`<ISO week>-<UTC stamp>`), `started_at`/`finished_at` (ISO 8601),
+`dry_run`, `status` (`ok` | `no_trigger` | `boot_failed` | `error`), `grammar_version`,
+`registry_hash`, `enumeration_inputs_hash`, `seed`, `iso_week`, `watermarks`
+(export → `<file>@<sha256[:12]>`), `boot` (name/ok/detail rows), `designated_id`, `triggers`
+(trigger/fired/reason/campaign), `campaigns` (trigger/cells/budget/reason/replacement_for/
+indicator_ids; cells are 5-element lists `[hypothesis, dte_bucket, axis, directional, regime]`),
+`enumerated`, `kept_in_cells`, `survived_battery`, `gated_out` (reason → count), `submitted`,
+`submitted_hashes`, `batch_id`, `baselines` (book_cells, refutation_hash/ids, registry_ids/
+families — what the next run's T1/T2/T3 compare against), `notes`.
+
+`forge campaign status [--last N] [--records-dir …] [--forge-db …]` prints recent runs newest
+first (status, fired triggers, campaigns, funnel counts) and, given a DB, the verdicts each run's
+submissions earned — point `--forge-db` at a `scripts/live_db_snapshot.sh` copy while a daemon
+holds the live file.
+
+Units: `deploy/systemd/forge-campaign.{service,timer}` (Sunday 03:00 UTC) exist in the tree and
+are **not installed until the Route C cutover** (plan §12.6 Batch 4), which waits on Crucible's
+forge-scoped 14-day gated stream (D409). Until then the daemon runs unchanged and the campaign
+is exercised by hand with `--dry-run`.
+
+```
+forge campaign --dry-run            # decide + rank, submit nothing, write the record
+forge campaign                      # the weekly run (what the timer executes)
+forge campaign status --last 4
+```
+
 ### forge campaigns list / audit
 
 The campaign registry — the discover→concentrate→farm loop as a first-class object (D299).

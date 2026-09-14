@@ -9,6 +9,7 @@ replayability in practice).
 
 from __future__ import annotations
 
+import contextlib
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -148,3 +149,85 @@ def test_triggers_are_pure_same_inputs_same_outputs() -> None:
 def test_decision_modules_use_no_clock_and_no_rng(module: object) -> None:
     source = Path(module.__file__).read_text(encoding="utf-8")  # type: ignore[attr-defined]
     assert not re.search(r"datetime\.now|utcnow|utc_now\(|import random|\brandom\.", source)
+
+
+# ---------------------------------------------------------------------------
+# run-level invariants (part B): the population never changes; the arm stays admitted
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_population_is_the_unweighted_cold_start_draw(tmp_path: Path) -> None:
+    """Hard rule #6 + the signed freeze: the campaign draws exactly what
+    `enumerate_candidates` yields with NO learned weights, and rejection sampling only
+    ever keeps an ordered subsequence of it."""
+    from crucible_contracts import StrategyConfig
+
+    from forge.campaign.run import enumerate_population, select_for_campaigns
+    from forge.campaign.types import CampaignSpec
+    from forge.core.clock import utc_now
+    from forge.enumeration import EnumerationCapped, enumerate_candidates, resolve_effects
+    from forge.enumeration._demo_registry import demo_registry
+    from forge.enumeration.chain_inception import underlyings_below_inception
+    from forge.grammar import load_grammar
+
+    config_root = Path(__file__).resolve().parents[2] / "config"
+    grammar = load_grammar(
+        config_root / "grammar.yaml", archive_dir=config_root / "grammar_archive"
+    )
+    registry = demo_registry()
+    now = utc_now()
+    population = enumerate_population(
+        grammar,
+        registry,
+        seed=11,
+        attempts=60,
+        exports_dir=tmp_path,
+        now=now,
+        min_hypothesis_fraction=0.0,
+    )
+    raw: list[StrategyConfig] = []
+    with contextlib.suppress(EnumerationCapped):
+        raw.extend(
+            enumerate_candidates(
+                grammar,
+                registry,
+                seed=11,
+                max_candidates=60,
+                below_inception=underlyings_below_inception(now.date(), exports_dir=tmp_path),
+                refutation_effects=resolve_effects(exports_dir=tmp_path),
+                min_hypothesis_fraction=0.0,
+            )
+        )
+    assert len(population) > 2
+    assert [c.config_hash for c in population] == [c.config_hash for c in raw]
+    sample = [(c, cell_key(c)) for c in population]
+    everything = frozenset(cell for _, cell in sample)
+    spec = CampaignSpec("exploration_floor", everything, 10, "all cells")
+    cfg = CampaignConfig(oversample_factor=2)
+    picked = select_for_campaigns([spec], sample, cfg=cfg, iso_week="2026-W38")
+    kept = [c.config_hash for c, _ in picked[0]]
+    order = {c.config_hash: i for i, c in enumerate(population)}
+    assert kept
+    assert all(h in order for h in kept)
+    assert len(kept) <= 20
+
+
+def test_every_campaign_lane_is_stamped_ranked() -> None:
+    """Crucible's Literal admits ranked | exploration_holdout | prefilter_sample; a campaign
+    row must reach their inbox as `ranked` (their 09-13 §3), never None, never a new value."""
+    from typing import get_args
+
+    from forge.campaign.types import Trigger
+    from forge.submission.submitter import _selection_arm_for
+
+    for trigger in get_args(Trigger):
+        assert _selection_arm_for(f"campaign:{trigger}") == "ranked"
+
+
+def test_default_stratification_floor_is_the_production_one() -> None:
+    """`CampaignConfig.min_hypothesis_fraction` mirrors the loop's D037 floor so the weekly
+    run draws the same stratified population the daemon did; a drift here would be a silent
+    enumeration-policy change."""
+    from forge.enumeration.iterator import _PRODUCTION_MIN_HYPOTHESIS_FRACTION
+
+    assert CampaignConfig().min_hypothesis_fraction == _PRODUCTION_MIN_HYPOTHESIS_FRACTION

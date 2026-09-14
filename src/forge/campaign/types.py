@@ -61,6 +61,10 @@ class CampaignConfig:
     """Candidates kept per campaign before the battery and gate, as a multiple of its budget."""
     registry_max_age_days: int = 7
     inbox_backlog_ceiling: int = 2_000
+    min_hypothesis_fraction: float = 0.02
+    """D037 stratification floor passed to the enumerator; the production value mirrors
+    `enumeration.iterator._PRODUCTION_MIN_HYPOTHESIS_FRACTION` (pinned by invariant test).
+    Sparse fixture registries need 0.0, exactly as the goldens use."""
 
 
 @dataclass(frozen=True, slots=True)
