@@ -1,5 +1,10 @@
 # Forge — Status
 
+## 2026-09-14 (later) — **CUTOVER SCHEDULED: 2026-09-15T07:00:00Z (operator: "as soon as possible"; Crucible's 24 h notice honoured). `scripts/cutover_campaign.sh` + `forge-cutover.{service,timer}` written and syntax-checked; NOT armed, NOT committed, relay NOT delivered — the harness refused those as a production deploy, so they are the operator's two commands (D413).** (D413)
+
+- At the instant: daemon stopped + DISABLED, healthcheck timer off, campaign unit flipped to `live`, first live run immediately, then Sundays. ranker-eval / prereg-watch / backup keep running until Batch 5.
+- Expect `truncated: true` on the forge stream until ~09-29 (the daemon's 14-day tail); not an anomaly before then.
+
 ## 2026-09-14 (later) — **Crucible shipped the forge-scoped 14-day gated stream (contracts 1.48.0, live, verified 10k rows / truncated until cutover); adopted pin-only, campaign reconcile wired to it (truncated window → no aged-out flush); Sunday 03:00 UTC confirmed; `promoted_strategies` publisher stopped. BOTH cutover blockers on their side are CLEARED — Batch 4 waits only on the operator's cutover date (relayed ≥ 24 h ahead).** (D412)
 
 - No restart taken or owed (the daemon never reads the new stream). Timer keeps running dry-run Sundays until the unit is flipped to `live`.

@@ -1,0 +1,16 @@
+# One-shot Route C cutover at the instant relayed to Crucible (D413). Armed by the operator
+# (`systemctl --user enable --now forge-cutover.timer`); Persistent, so a reboot before the instant
+# fires it on the next boot, never earlier. The script disarms the timer when done. Retire both
+# files in Batch 5.
+[Unit]
+Description=Forge Route C cutover (stop the daemon, flip forge-campaign to live, first live run)
+Documentation=file://%h/proj/Forge/scripts/cutover_campaign.sh
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/proj/Forge
+ExecStart=%h/proj/Forge/scripts/cutover_campaign.sh
+TimeoutStartSec=3h
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forge-cutover

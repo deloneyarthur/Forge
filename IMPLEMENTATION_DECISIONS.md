@@ -2166,3 +2166,42 @@ accepted. `campaign_run/v1` readable by their digest. Post-cutover expectation: 
 
 **Owed to them.** The cutover instant (UTC), ≥ 24 h ahead — the operator's date. **Both blockers on
 Crucible's side are now cleared; Batch 4 waits only on that date.**
+
+## D413 — 2026-09-14 — cutover SCHEDULED for 2026-09-15T07:00:00Z (operator: "as soon as possible"; Crucible's notice period is 24 h): the one-shot `forge-cutover.timer` + `scripts/cutover_campaign.sh` are written; ARMING and the instant's relay are the operator's two commands
+
+**Decision.** The operator chose the earliest cutover the standing obligation allows: Crucible asked for
+the instant ≥ 24 h ahead (their 09-14 §3; recorded in `freeze/INDEX_forge_answered.md`), so the
+instant is the first round hour past 24 h from the decision — **2026-09-15T07:00:00Z** (Tuesday 00:00
+PDT). It is the `ranked`-arm boundary Crucible records.
+
+**Built (this tree, uncommitted at the time of writing — see below).** `scripts/cutover_campaign.sh`
+(idempotent; `--check` = preconditions only): (1) deploy surface clean, unit carries a mode line,
+forge stream present; (2) `forge.service` stopped **and disabled** — a reboot must never restart the
+daemon (D104); (3) `forge-healthcheck.timer` disabled (daemon-shaped checks); `forge-ranker-eval`,
+`forge-prereg-watch`, `forge-backup` deliberately KEEP running until Batch 5 folds training and the
+DUE judge into the campaign (a deviation from plan §12.6's "disable three timers", for cause: the
+campaign has no in-run training yet, and the watcher is still the DUE judge); (4) the unit's
+`FORGE_CAMPAIGN_MODE` flipped `dry-run` → `live`, `daemon-reload`, verified in the loaded unit,
+committed; (5) the first live run immediately, synchronous; (6) `~/forge_data/campaigns/CUTOVER.json`
+written, `forge-cutover.timer` disarmed, best-effort push. Any failure leaves the cutover unit FAILED
+with the daemon stopped — nothing partial submits. `deploy/systemd/forge-cutover.{service,timer}`:
+`OnCalendar=2026-09-15 07:00:00 UTC`, `Persistent=true` (a reboot before the instant fires it on the
+next boot, never earlier).
+
+**Not done by the assistant, by design of the harness.** Arming the timer, committing the cutover
+files, and delivering the instant to Crucible were each refused by the auto-mode classifier as a
+production deploy. They are the operator's:
+```bash
+cd ~/proj/Forge && git add scripts/cutover_campaign.sh deploy/systemd/forge-cutover.service deploy/systemd/forge-cutover.timer IMPLEMENTATION_DECISIONS.md STATUS.md docs/proposals/repo-simplification-2026-09.md && git commit -m "D413: cutover scheduled 2026-09-15T07:00:00Z — forge-cutover timer + script" && git push
+ln -sf ~/proj/Forge/deploy/systemd/forge-cutover.service ~/proj/Forge/deploy/systemd/forge-cutover.timer ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now forge-cutover.timer && systemctl --user list-timers forge-cutover.timer
+```
+plus the relay (its text is in this session's transcript; file it as
+`freeze/relays/FORGE_CUTOVER_INSTANT_2026-09-15T07-00-00Z_…_2026-09-14.md` and commit — committing
+there is delivering). **If the relay is not delivered ≥ 24 h before the instant, move the instant
+later (never earlier) before arming.**
+
+**Expected after the instant.** `truncated: true` on the forge stream for up to 14 days (the daemon's
+tail ages out ~09-29; campaign verdicts are the newest rows so each Sunday still sees its own run;
+the aged-out flush stays off while truncated); a truncated file after ~09-29 is ours to relay. The
+morning digest's Forge section goes quiet. Batch 5 (remove the daemon era) follows the first live
+Sunday.
