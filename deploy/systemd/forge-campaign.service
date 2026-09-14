@@ -14,7 +14,7 @@ After=network.target
 [Service]
 Type=oneshot
 WorkingDirectory=%h/proj/Forge
-Environment=FORGE_CAMPAIGN_MODE=dry-run
+Environment=FORGE_CAMPAIGN_MODE=live
 ExecStart=%h/proj/Forge/scripts/campaign_run.sh
 TimeoutStartSec=3h
 # 13.8 GB peak on the first timer run (cell stats over the 9 GB snapshot + a 20k enumeration).
