@@ -1,7 +1,11 @@
-# forge-campaign.service — the weekly, zero-input challenger run (plan 2026-09 §12; D406/D409).
-# NOT INSTALLED until the Route C cutover (§12.6 Batch 4); the cutover instant is relayed to
-# Crucible first. No SuccessExitStatus on purpose: a failed boot check, a contracts drift, or a
-# missing export must leave the unit FAILED — that is the operator's only page.
+# forge-campaign.service — the weekly, zero-input challenger run (plan 2026-09 §12; D406/D409/D410).
+# FORGE_CAMPAIGN_MODE is the ONE operator decision this unit carries:
+#   dry-run — the dry-run weeks: snapshot DB, plan only, nothing submitted (installed 2026-09-14, D411)
+#   live    — the Route C cutover (§12.6 Batch 4): real DB, real submissions. Flip it ONLY after the
+#             daemon is stopped, Crucible's 14-day forge-scoped gated stream is live, and the cutover
+#             instant has been relayed (D409). The wrapper refuses live mode while forge.service runs.
+# No SuccessExitStatus on purpose: a refused mode, a failed boot check, contracts drift or a missing
+# export leaves the unit FAILED — that is the operator's only page. Edit → daemon-reload.
 [Unit]
 Description=Forge weekly campaign run (challengers for the designated book; no operator input)
 Documentation=file://%h/proj/Forge/docs/MANPAGE.md
@@ -10,8 +14,13 @@ After=network.target
 [Service]
 Type=oneshot
 WorkingDirectory=%h/proj/Forge
-ExecStart=%h/.local/bin/uv run forge campaign
+Environment=FORGE_CAMPAIGN_MODE=dry-run
+ExecStart=%h/proj/Forge/scripts/campaign_run.sh
 TimeoutStartSec=3h
+# 13.8 GB peak on the first timer run (cell stats over the 9 GB snapshot + a 20k enumeration).
+# Fail this unit rather than starve Crucible (its services OOM'd twice, D399/D401).
+MemoryHigh=16G
+MemoryMax=24G
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=forge-campaign

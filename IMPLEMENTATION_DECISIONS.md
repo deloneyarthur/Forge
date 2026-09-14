@@ -2100,3 +2100,32 @@ over the whole sample.
 **Next.** Dry-run weekly by hand (`forge campaign --dry-run --forge-db "$(scripts/live_db_snapshot.sh)"`)
 for two weeks, comparing the plan against what the daemon submits; relay the record schema (done in this
 session); then Batch 4 cutover per plan §12.6 once the stream is live.
+
+## D411 — 2026-09-14 — the dry-run weeks are AUTOMATED: `forge-campaign.timer` installed and enabled (Sunday 03:00 UTC) in a mode-guarded unit — `dry-run` now, `live` at the cutover by one operator edit
+
+**Operator:** "we should have a timer that runs, we need this automated." The hand-run ritual D410
+described lasted one day.
+
+**What shipped.** `scripts/campaign_run.sh` (8 tests) is the unit's `ExecStart`; the unit carries the ONE
+operator decision as `Environment=FORGE_CAMPAIGN_MODE=dry-run|live`. `dry-run`: `live_db_snapshot.sh`
+(reuses the prereg-watch snapshot when < 12 h old) then `forge campaign --dry-run --forge-db <snap>` —
+a plan and a `campaign_run/v1` record every Sunday, nothing submitted, the daemon untouched. `live`:
+refused with exit 2 while `forge.service` is active (the daemon owns the live DB and the run's
+reconcile writes; an accidental daemon stop must not turn a Sunday into a live submitting run before
+Crucible's 14-day stream exists, D409 §4.1); otherwise `forge campaign` on the live DB. Any other value
+is refused. No `SuccessExitStatus`; `MemoryHigh=16G` / `MemoryMax=24G` (the first timer run peaked at
+**13.8 GB** — cell stats over the 9 GB snapshot plus a 20k enumeration — on the box whose Crucible
+services OOM'd twice; fail the unit rather than starve them; the query is a Batch 6 optimisation
+target). Installed as symlinks like the other units; `daemon-reload`; `enable --now`. Next fire:
+2026-09-19 20:00 PDT = Sunday 03:00 UTC.
+
+**Smoke start through the unit (`systemctl --user start forge-campaign.service`):** `Result=success`,
+45 s wall, record `2026-W38-20260914T044046Z` — boot 8/8, designated `7f2a697ec6c1b119`, all five
+triggers quiet against the D410 baselines, 20,000 enumerated, submitted 0. Three records now exist for
+W38; next Sunday's is the first unattended one.
+
+**The cutover (plan §12.6 Batch 4) becomes:** stop the daemon and its three retiring timers → edit the
+unit's mode line to `live` → `daemon-reload` → relay the instant. Docs: MANPAGE (`forge campaign`,
+SCRIPTS row, timers), HOW-TO (Monday check + the situation entry), architecture timers list,
+NEW_BOX/setup_new_box (five timers, the fifth script). Nothing else changed; suite green; daemon
+unchanged.

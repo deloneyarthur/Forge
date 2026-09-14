@@ -83,6 +83,9 @@ journalctl --user -u forge-ranker-eval.service -n 20 --no-pager
 # Last nightly backup fresh? (forge-backup timer, 04:00)
 ls -lt ~/forge_data/backups/forge_db_*.duckdb | head -1
 
+# Weekly campaign dry-run ran? (forge-campaign timer, Sunday 03:00 UTC; a failed unit = a
+# refused mode, a boot check, or a run error — read the block, plan 2026-09 §12)
+journalctl --user -u forge-campaign.service -n 15 --no-pager
 # Registered read due / unwatchable? (forge-prereg-watch timer, 06:30; a failed unit = a
 # registered read came due silently or cannot be watched — D389/D392)
 journalctl --user -u forge-prereg-watch.service -n 5 --no-pager
@@ -211,11 +214,15 @@ Any change that deploys on restart (config edits, new ranges, code) should clear
 `scripts/deploy_preflight.sh` first — it's step 0 of the deploy ritual (`tasks/deploy.md`).
 Review any **loosening** proposals (these need operator sign-off) in `OPEN_PROPOSALS.md`.
 
-### Weekly campaign run (the final state, pre-cutover: by hand)
+### Weekly campaign run (the final state; the timer runs it in dry-run mode until the cutover)
 
-`forge campaign --dry-run` decides this week's plan and submits nothing; `forge campaign` is what
-`forge-campaign.timer` will execute after the Route C cutover (units in `deploy/systemd/`, not
-installed yet — cutover waits on Crucible's forge-scoped 14-day gated stream, D409). Read the
+`forge-campaign.timer` (Sunday 03:00 UTC) runs `scripts/campaign_run.sh`, which in the unit's
+`dry-run` mode snapshots the DB and runs `forge campaign --dry-run`: a plan and a record every
+week, nothing submitted, no operator input. Check it Monday with
+`journalctl --user -u forge-campaign.service -n 30 --no-pager` (a FAILED unit is the page). The
+Route C cutover = flip `FORGE_CAMPAIGN_MODE` to `live` in the unit after the daemon is stopped and
+Crucible's forge-scoped 14-day gated stream is live (D409); the wrapper refuses `live` while
+`forge.service` runs. Read the
 journal block top to bottom: one `boot <check> ok|FAIL` line per precondition (any FAIL → exit 2,
 nothing submitted, the unit goes FAILED — that is the only page); one `trigger <name> FIRED|quiet
 <reason>` line per trigger; one `campaign <trigger> cells=N budget=B` line per campaign; then

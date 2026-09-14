@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-14 (later) — **The dry-run weeks are automated: `forge-campaign.timer` installed + enabled (Sunday 03:00 UTC), unit in `dry-run` mode (snapshot DB, nothing submitted); smoke start through the unit = success, 45 s, 13.8 GB peak → `MemoryHigh=16G`/`MemoryMax=24G` on the unit. Cutover = flip the unit's `FORGE_CAMPAIGN_MODE` to `live` once the daemon is stopped and Crucible's stream is live; the wrapper refuses `live` while the daemon runs.** (D411)
+
+- Monday check: `journalctl --user -u forge-campaign.service -n 30`; a FAILED unit is the page. Five Forge timers now. Daemon unchanged.
+
 ## 2026-09-14 (later) — **Batch 3 BUILT: `forge campaign` lives beside the daemon (8 commits, suite 2,228 green). Two live dry-runs clean: boot 8/8, designated `7f2a697e`, baselines recorded, then "no trigger" on 20,000 enumerated in 44 s — the sweep already covers every reachable cell, so the weekly run stays quiet until a trigger fires. Nothing submitted, nothing installed, daemon unchanged.** (D410)
 
 - Fix landed mid-build: the campaign enumerates UNSTRATIFIED (`min_hypothesis_fraction=0.0`, `2211d47`) — the daemon's D037 floor capped the first dry-run at 800/20,000.

@@ -114,7 +114,10 @@ Determinism identity: `(grammar_version, registry_hash, seed)` → same enumerat
   telemetry-only); `forge-backup` (04:00, `scripts/backup_forge_db.sh` — nightly DR copy of `forge.db`
   + `models/`, D195); `forge-healthcheck` (hourly, `forge healthcheck` — alerts on the alive-but-stuck
   daemon states systemd can't see, D197); `forge-prereg-watch` (06:30, `scripts/freeze_read_watcher.py`
-  — a registered read must not come due silently, D392). (`forge-eod-check`, a 21:00 headless EOD
+  — a registered read must not come due silently, D392); `forge-campaign` (Sunday 03:00 UTC,
+  `scripts/campaign_run.sh` — the weekly zero-input challenger run, plan 2026-09 §12; in dry-run
+  mode until the Route C cutover flips the unit's `FORGE_CAMPAIGN_MODE` to `live`, D411).
+  (`forge-eod-check`, a 21:00 headless EOD
   read, was retired D253 — superseded by the hourly healthcheck.)
 - Forge state: `~/forge_data/forge.db` (DuckDB; live RW lock — snapshot before reading, see
   `docs/tasks/investigate-live.md`). Inter-system paths: table in `docs/HOW-TO.md`.

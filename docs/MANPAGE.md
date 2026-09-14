@@ -571,10 +571,15 @@ first (status, fired triggers, campaigns, funnel counts) and, given a DB, the ve
 submissions earned — point `--forge-db` at a `scripts/live_db_snapshot.sh` copy while a daemon
 holds the live file.
 
-Units: `deploy/systemd/forge-campaign.{service,timer}` (Sunday 03:00 UTC) exist in the tree and
-are **not installed until the Route C cutover** (plan §12.6 Batch 4), which waits on Crucible's
-forge-scoped 14-day gated stream (D409). Until then the daemon runs unchanged and the campaign
-is exercised by hand with `--dry-run`.
+Units: `forge-campaign.timer` (Sunday 03:00 UTC) → `forge-campaign.service` →
+`scripts/campaign_run.sh`, **installed and enabled 2026-09-14 (D411)** in **dry-run mode**: the unit's
+`Environment=FORGE_CAMPAIGN_MODE=dry-run` makes the wrapper snapshot the DB (`live_db_snapshot.sh`)
+and run `forge campaign --dry-run` — a plan and a record every Sunday, nothing submitted, the daemon
+unchanged. The Route C cutover (plan §12.6 Batch 4) is the operator flipping that line to `live`
+(+ `daemon-reload`) after the daemon is stopped, Crucible's forge-scoped 14-day gated stream is live,
+and the cutover instant is relayed (D409); the wrapper REFUSES `live` while `forge.service` is active
+and refuses any other value. `MemoryHigh=16G` / `MemoryMax=24G` fail the unit rather than starve
+Crucible. No `SuccessExitStatus`: a failed unit is the only page.
 
 ```
 forge campaign --dry-run            # decide + rank, submit nothing, write the record
@@ -787,7 +792,7 @@ history. `scripts/` holds only wired, ritual, and in-flight instruments.
 
 | Class | Scripts |
 |---|---|
-| WIRED — machinery executes them | `daily_ranker_eval.sh` (05:00 timer), `backup_forge_db.sh` (04:00 timer), `search_multiplicity_census.py` (invoked by the daily eval), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` + `check_freeze_governance.py` (pre-commit), `freeze_read_watcher.py` (06:30 `forge-prereg-watch` timer), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom) |
+| WIRED — machinery executes them | `daily_ranker_eval.sh` (05:00 timer), `backup_forge_db.sh` (04:00 timer), `search_multiplicity_census.py` (invoked by the daily eval), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` + `check_freeze_governance.py` (pre-commit), `freeze_read_watcher.py` (06:30 `forge-prereg-watch` timer), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom), `campaign_run.sh` (the `forge-campaign` timer's ExecStart: mode-guarded dry-run/live wrapper, D411) |
 | RITUAL / standing monitor | `tail_verified_alignment.py` (D155 verified-coverage alignment monitor; run against a `live_db_snapshot.sh` snapshot), `production_by_group.py` (per-arm/per-category production reads) |
 | IN-FLIGHT freeze/ceiling instruments | `freeze_tail_reading.py` (+ its importer `freeze_registered_read.py` — spent once its prereg-pinned tests retire with the declaration), `ceiling_record_test.py`, `joint_frontier.py` (D368), `second_gate_contrast.py` (carries the D360 measurement_basis pooling defect — repair queued in the freeze declaration), `threshold_resolution_value.py` (D353), `promoted_leg_recall.py` |
 
@@ -851,7 +856,7 @@ The Crucible rows below are the **Forge-relevant subset**, not Crucible's full u
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict, hygiene-judged once populated D284) + `rewire_streak_wfp25.jsonl` (gate-tail lane; the §8.6 tail clock retired D285), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197), `forge-prereg-watch` (06:30, `scripts/freeze_read_watcher.py` — DUE / waiting / UNWATCHABLE on open preregistrations; any non-OK marks the unit failed; D392). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-campaign` (Sunday 03:00 UTC, `scripts/campaign_run.sh` in dry-run mode until the cutover, D411); `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict, hygiene-judged once populated D284) + `rewire_streak_wfp25.jsonl` (gate-tail lane; the §8.6 tail clock retired D285), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197), `forge-prereg-watch` (06:30, `scripts/freeze_read_watcher.py` — DUE / waiting / UNWATCHABLE on open preregistrations; any non-OK marks the unit failed; D392). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
 
 ```
 # Inspect any service:

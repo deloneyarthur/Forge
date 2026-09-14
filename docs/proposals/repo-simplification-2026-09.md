@@ -712,15 +712,17 @@ reads `~/forge_data/campaigns/*.json`; `OPEN_PROPOSALS.md` stays parseable and s
 - **Batch 0, 1, 2** — as written in §10. Batch 2 shrinks to the gap tests that still matter:
   SIGTERM mid-submit (REL-4), explicit export-outage logging (REL-1/2), snapshot + preflight
   subprocess tests; the hot-grammar, model-reload and daily-eval tests are moot.
-- **Batch 3 — BUILT 2026-09-14 (D410; `96b8ab5`→`2211d47`); dry-run weeks in progress.** Originally: build `forge campaign` beside the daemon (TDD, no daemon change). `campaign/`
+- **Batch 3 — BUILT 2026-09-14 (D410; `96b8ab5`→`2211d47`); dry-run weeks AUTOMATED by `forge-campaign.timer` in dry-run mode (D411).** Originally: build `forge campaign` beside the daemon (TDD, no daemon change). `campaign/`
   package: `cells.py` (protected / dead / dark from exports + `forge.db`), `triggers.py` (T1–T5,
   pure functions of export contents), `gate.py` (challenger gate), `run.py` (steps 0–5),
   `report.py`. Run records + `status`. Two hand-run `--dry-run` weeks: compare its chosen cells with
   what the daemon actually submitted and with Crucible's verdicts; tune the defaults once.
   D-entry. Send the §12.5 relays.
 - **Batch 4 — cutover (deploy ritual).** Stop `forge.service`; disable `forge-healthcheck`,
-  `forge-ranker-eval`, `forge-prereg-watch`; install `forge-campaign.timer` (+ backup re-timed
-  after it); first live run by hand; then leave it to the timer.
+  `forge-ranker-eval`, `forge-prereg-watch`; flip `forge-campaign.service`'s
+  `FORGE_CAMPAIGN_MODE` from `dry-run` to `live` + `daemon-reload` (the timer is already installed,
+  D411; the wrapper refuses `live` while the daemon runs); re-time backup after it; first live run by
+  hand; then leave it to the timer.
   **Verify:** journal block shows boot OK + triggers + n ≤ 400; `~/forge_data/campaigns/<run>.json`
   written and replayable (`--dry-run` on the same watermarks reproduces the plan); Crucible's next
   gated export contains `campaign:*` rows; no `inbox/errors`; backup timer fires after the run;
