@@ -27,7 +27,18 @@ dirty="$(git status --porcelain -- src config pyproject.toml uv.lock deploy | wc
 [ "$dirty" -eq 0 ] || { log "REFUSED: deploy surface dirty ($dirty paths)"; exit 2; }
 grep -q '^Environment=FORGE_CAMPAIGN_MODE=' "$UNIT" || { log "REFUSED: unit has no mode line"; exit 2; }
 ls "$EXPORTS"/forge_gated_runs_*.json >/dev/null 2>&1 || { log "REFUSED: no forge_gated_runs export"; exit 2; }
-log "preconditions OK (mode=$(sed -n 's/^Environment=FORGE_CAMPAIGN_MODE=//p' "$UNIT"))"
+# Crucible's own guard (their crucible-cutover-guard timer, 22:50 PT on 2026-09-14) writes this relay
+# if their maintenance window left the writer / inbox watcher / forge stream unhealthy. Its presence
+# means "move the instant later": refuse here, leave the daemon running, and wait for their second
+# relay saying healthy before anyone re-arms.
+GUARD_RELAY_GLOB="${FORGE_FREEZE_RELAYS:-$HOME/proj/freeze/relays}/CRUCIBLE_maintenance_window_NOT_healthy*"
+# shellcheck disable=SC2086
+if ls $GUARD_RELAY_GLOB >/dev/null 2>&1; then
+  log "REFUSED: Crucible's guard relay reports the fleet NOT healthy ($(ls $GUARD_RELAY_GLOB | head -1))."
+  log "The instant moves LATER by relay; the daemon keeps running; do not re-arm until Crucible relays healthy."
+  exit 2
+fi
+log "preconditions OK (mode=$(sed -n 's/^Environment=FORGE_CAMPAIGN_MODE=//p' "$UNIT"); no Crucible NOT-healthy relay)"
 [ "${1:-}" = "--check" ] && exit 0
 
 # 2. the daemon: stop + disable
