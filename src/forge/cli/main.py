@@ -39,6 +39,19 @@ from forge.cli.ranker_model_cmd import ranker_model_app
 from forge.cli.status_cmd import cmd_status
 from forge.cli.yield_audit_cmd import cmd_yield_audit
 from forge.core.logging import configure_logging
+from forge.feedback.trade_rate_priors import load_trade_rate_priors as _load_trade_rate_priors
+from forge.grammar.version_audit import (
+    ensure_grammar_version_recorded_silently as _ensure_grammar_version_recorded_silently,
+)
+from forge.persistence.fingerprints import (
+    load_prior_structural_fingerprints as _load_prior_structural_fingerprints,
+)
+from forge.prefilters.factory import build_feature_cache as _build_feature_cache
+from forge.ranking.model import QUALITY_LANE_TARGET as _QUALITY_LANE_TARGET
+
+# The five `_`-aliases above are helpers that moved to permanent homes (Batch 5 prep, plan
+# 2026-09 §12.6): kept bound here for the daemon era and the test seams that patch
+# `forge.cli.main._build_feature_cache`; the daemon loop that uses them goes in Batch 5.
 from forge.version import __version__
 
 if TYPE_CHECKING:
@@ -152,84 +165,6 @@ def cmd_enumerate(
             typer.echo("  (none — 100% sampler->validator success rate)")
         for rule, count in counter.most_common(10):
             typer.echo(f"  {rule:30s} {count}")
-
-
-def _build_feature_cache(
-    registry: RegistrySnapshot,
-    seed: int,
-    *,
-    require_real: bool = False,
-    data_root: Path | None = None,
-) -> object:
-    """Construct the production FeatureCache; fall back to synthetic on failure.
-
-    Tries `crucible_contracts.FeatureCacheClient` against the writer socket
-    under `data_root` (default `~/optbt_data`). When the socket isn't reachable
-    (no Crucible running, writer restarting, e.g. in test environments) the
-    behaviour depends on `require_real`:
-
-      - `require_real=False` (dev/test default): fall back to
-        `SyntheticFeatureCache` so offline flows keep working — but log
-        LOUDLY, because synthetic returns are pure noise that make the whole
-        pre-filter battery meaningless (the 2026-05-28 RCA: a post-reboot
-        silent fallback rejected every config at `permutation_test`).
-      - `require_real=True` (production submission path): raise
-        `FeatureCacheUnavailableError` rather than degrade silently, so the
-        caller can skip the iteration instead of filtering/submitting on noise.
-
-    `data_root` is injectable so tests can point at a socket-free directory
-    without depending on whether a live writer exists on the host.
-    """
-    from pathlib import Path
-
-    from crucible_contracts import FeatureCacheClient, FeatureCacheUnavailableError
-
-    from forge.prefilters import SyntheticFeatureCache
-    from forge.prefilters.crucible_feature_cache import CrucibleFeatureCache
-
-    root = data_root if data_root is not None else Path.home() / "optbt_data"
-    socket_path = root / "db_writer.sock"
-    authkey_path = root / "db_writer.authkey"
-    db_path = root / "runs.duckdb"
-
-    unavailable_reason: str | None = None
-    if socket_path.exists() and authkey_path.exists():
-        try:
-            client = FeatureCacheClient(
-                socket_path=socket_path,
-                authkey_path=authkey_path,
-                db_path=db_path,
-            )
-            cache = CrucibleFeatureCache(
-                client,
-                data_history_days=registry.data_history_days,
-                data_start_date=registry.data_start_date,
-            )
-            # Probe — Crucible's writer may not yet support feature_batch
-            # requests (the writer-side handler ships in a separate change).
-            cache.probe()
-            return cache
-        except FeatureCacheUnavailableError as exc:
-            unavailable_reason = str(exc)
-    else:
-        unavailable_reason = f"writer socket not found at {socket_path}"
-
-    # Real cache unavailable. Hard rule: production never degrades silently.
-    if require_real:
-        raise FeatureCacheUnavailableError(
-            f"{unavailable_reason}; refusing to run on the synthetic cache "
-            "(--require-real-cache is set)."
-        )
-    typer.echo(
-        f"warning: {unavailable_reason}; falling back to SyntheticFeatureCache "
-        "— pre-filter results are NOT data-grounded.",
-        err=True,
-    )
-    return SyntheticFeatureCache(
-        root_seed=seed,
-        data_history_days=registry.data_history_days,
-        start_date=registry.data_start_date,
-    )
 
 
 @app.command("prefilter")
@@ -450,7 +385,6 @@ def cmd_check_activations(
 # don't spam the daemon journal every 60-second poll iteration.
 _HYPOTHESIS_WEIGHTS_LOAD_FAILED_LOGGED: bool = False
 _PROMOTED_CONFIGS_LOAD_FAILED_LOGGED: bool = False
-_TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED: bool = False
 _REWIRE_P_FLOOR_PARSE_FAILED_LOGGED: bool = False
 _QUALITY_RANK_MODE_INVALID_LOGGED: bool = False
 
@@ -739,23 +673,6 @@ _PREFILTER_SAMPLE_PARSE_FAILED_LOGGED: bool = False
 # self-wedges — 200+350=550 < 600. At high N the honest arm DOES displace ranked
 # production (the cost Crucible accepted); the operator reverts N after the baseline lands.
 _MAX_PREFILTER_SAMPLE_N = 350
-
-
-# v50 RETARGET (2026-07-24, versionless — SELECTION, not enumeration, so no grammar bump;
-# D287 precedent). The quality lane's ordering target moved target_wf_p25 -> target_cpcv_p25.
-# `wf_sharpe_p25` turned out to be a NON-BINDING enrichment label Crucible computes FOR this
-# ranker (threshold 0.0, admits 100% of stage two — their correction; it is not a gate), and
-# on the honest ARM it is ~ORTHOGONAL to the metric that does gate: sp(cpcv_p25, wf_p25) =
-# +0.031, versus +0.39 on the ranker-selected pool — a SELECTION ARTIFACT. Measured
-# consequence (target_sweep.py Run C — script retired 2026-08-06, git history: train on
-# non-honest rows, rank the unseen honest arm): ordering by wf_p25 lifts realized cpcv
-# +0.009 (i.e. baseline), by cpcv +0.178.
-# Endorsed by Crucible. The trainer publishes BOTH targets (daily_ranker_eval.sh), so
-# reverting is this one constant with no gap in either artifact.
-# SINGLE SOURCE OF TRUTH: the journal labels derive from this too. The first v50 batch logged
-# "quality_rank: wf_p25 ... (model=d8d85324)" — the cpcv model under a hardcoded wf label —
-# which would have read as a FAILED retarget to anyone verifying from the journal.
-_QUALITY_LANE_TARGET = "target_cpcv_p25"
 
 
 def _resolve_prefilter_sample_n() -> int:
@@ -1456,67 +1373,6 @@ def _format_regime_gate_yield_weights_line(
     return f"regime_gate_yield_weights: {len(weights)} cells learned; top: {parts}"
 
 
-def _load_trade_rate_priors(
-    forge_db_path: Path,
-    registry: RegistrySnapshot,
-    *,
-    min_trades: int,
-    current_grammar_version: str | None = None,
-) -> dict[BucketKey, BucketStats]:
-    """D076 / Q16 — compute per-bucket trade-rate posteriors for the empirical
-    `expected_trades` filter.
-
-    Mirrors `_load_hypothesis_weights` (gated_runs read via the file-based
-    export to dodge the writer's exclusive DuckDB lock; QueryError /
-    OSError catches degrade to empty dict; warn-once on first failure).
-    Empty dict → filter falls back to the activations heuristic for every
-    config, matching pre-D076 behaviour.
-
-    D081: `current_grammar_version` down-weights prior-grammar gated runs in the
-    posterior (judge a config mostly by its own grammar version's behaviour).
-    D098: `COLD_START_HYPOTHESES` (relative_value) goes further — its prior-
-    version cohort is dropped entirely, so its now-fixed-defect zero-trade
-    history can't keep the bucket in empirical-prior mode and block the v5
-    retest; the bucket cold-starts to the activations heuristic instead.
-    """
-    from crucible_contracts import load_recent_gated_runs_from_export
-    from crucible_contracts.exceptions import QueryError
-
-    from forge.feedback.trade_rate_priors import (
-        COLD_START_HYPOTHESES,
-        compute_trade_rate_priors,
-    )
-    from forge.persistence.db import db_connection
-
-    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
-        return {}
-    exports_dir = Path.home() / "optbt_data" / "exports"
-    try:
-        gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=10_000)
-    except (QueryError, OSError) as exc:
-        global _TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
-        if not _TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED:
-            typer.echo(
-                "trade_rate_priors: degraded to activations heuristic — "
-                f"export read failed ({type(exc).__name__}: {exc}). "
-                "Subsequent failures will be silent this process.",
-                err=True,
-            )
-            _TRADE_RATE_PRIORS_LOAD_FAILED_LOGGED = True
-        return {}
-    if not gated_runs:
-        return {}
-    with db_connection(forge_db_path) as conn:
-        return compute_trade_rate_priors(
-            conn,
-            gated_runs,
-            registry,
-            min_trades=min_trades,
-            current_grammar_version=current_grammar_version,
-            cold_start_hypotheses=COLD_START_HYPOTHESES,
-        )
-
-
 def _fetch_promoted_configs(
     _forge_db_path: Path,
     _crucible_db_path: Path | None,
@@ -1593,43 +1449,6 @@ def _warn_once_novelty_dedup_disabled() -> None:
         "CLI; if you see it from the autonomous loop, that's a regression of T2.7 "
         "(D049 / D060 / P2-5).\n"
     )
-
-
-def _load_prior_structural_fingerprints(forge_db_path: Path) -> frozenset[str]:
-    """T2.7 wiring (D049): populate `prior_structural_fingerprints` from
-    Forge's historical submissions.
-
-    Reads every `submissions.config_json`, computes the structural
-    fingerprint via `forge.prefilters.novelty.compute_structural_fingerprint`,
-    and returns the frozenset of unique fingerprints. The novelty filter
-    rejects new candidates whose fingerprint exactly matches any of these.
-
-    Cost: O(N) submissions x O(1) hash per. Forge's submissions table
-    is small (~4k rows at session-time); the full scan finishes in
-    milliseconds.
-
-    Returns an empty frozenset when the DB is `:memory:` or missing —
-    novelty's structural check becomes a no-op, matching pre-D049
-    behavior.
-    """
-    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
-        return frozenset()
-    from crucible_contracts import StrategyConfig
-
-    from forge.persistence.db import db_connection
-    from forge.prefilters.novelty import compute_structural_fingerprint
-
-    fingerprints: set[str] = set()
-    with db_connection(forge_db_path) as conn:
-        rows = conn.execute("SELECT config_json FROM submissions").fetchall()
-    for (cj,) in rows:
-        try:
-            cfg = StrategyConfig.model_validate_json(cj if isinstance(cj, str) else str(cj))
-        except (ValueError, TypeError):
-            # Skip malformed legacy rows — they shouldn't gate enumeration.
-            continue
-        fingerprints.add(compute_structural_fingerprint(cfg))
-    return frozenset(fingerprints)
 
 
 def _run_battery_for_seed(
@@ -1747,43 +1566,6 @@ def _run_battery_for_seed(
         timings["prefetch"] = t2 - t1
         timings["battery"] = t3 - t2
     return reports
-
-
-def _ensure_grammar_version_recorded_silently(
-    forge_db_path: Path,
-    *,
-    grammar: object,
-    yaml_path: Path,
-) -> None:
-    """D051: self-heal the grammar_versions audit row for the active grammar.
-
-    Called at the start of every `_run_one_cycle` invocation (production
-    loop). Idempotent — a SELECT-only no-op when the row already exists.
-    Errors are swallowed (logged-by-omission rather than crashing the
-    iteration) because this is the audit-trail, not a production-data path.
-    """
-    from forge.core.clock import utc_now
-    from forge.grammar.version_audit import ensure_grammar_version_recorded
-    from forge.persistence.db import db_connection
-
-    try:
-        with db_connection(forge_db_path) as conn:
-            wrote = ensure_grammar_version_recorded(
-                conn,
-                grammar=grammar,  # type: ignore[arg-type]  # Grammar import is lazy
-                yaml_path=yaml_path,
-                at=utc_now(),
-            )
-        if wrote:
-            typer.echo(
-                f"grammar_versions: recorded manual_bump row for "
-                f"{getattr(grammar, 'grammar_version', '?')}"
-            )
-    except Exception as exc:  # audit row, never crash production
-        typer.echo(
-            f"grammar_versions: skipped audit row ({type(exc).__name__}: {exc})",
-            err=True,
-        )
 
 
 def _reconcile_pending_silently(

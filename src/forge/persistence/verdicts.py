@@ -35,6 +35,11 @@ if TYPE_CHECKING:
     import duckdb
     from crucible_contracts import GatedRun
 
+# Verdict decisions that count as conversion (observed live literals: component / reject /
+# promote). One home for every reader of the ledger (moved from `feedback/yield_audit.py`,
+# Batch 5 prep).
+CONVERTING_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
+
 
 def record_verdicts(
     db: duckdb.DuckDBPyConnection,

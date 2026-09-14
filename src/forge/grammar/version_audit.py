@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -105,3 +106,42 @@ def ensure_grammar_version_recorded(
 
 
 __all__ = ["ensure_grammar_version_recorded"]
+
+
+def ensure_grammar_version_recorded_silently(
+    forge_db_path: Path,
+    *,
+    grammar: object,
+    yaml_path: Path,
+) -> None:
+    """D051: self-heal the grammar_versions audit row for the active grammar.
+
+    Called at the start of every daemon iteration and after every live campaign
+    submit (moved here from `cli/main.py`, Batch 5 prep). Idempotent — a SELECT-only
+    no-op when the row already exists.
+    Errors are swallowed (logged-by-omission rather than crashing the
+    iteration) because this is the audit-trail, not a production-data path.
+    """
+    import typer  # noqa: PLC0415 — journal line, as before
+
+    from forge.core.clock import utc_now  # noqa: PLC0415
+    from forge.persistence.db import db_connection  # noqa: PLC0415
+
+    try:
+        with db_connection(forge_db_path) as conn:
+            wrote = ensure_grammar_version_recorded(
+                conn,
+                grammar=grammar,  # type: ignore[arg-type]  # Grammar import is lazy
+                yaml_path=yaml_path,
+                at=utc_now(),
+            )
+        if wrote:
+            typer.echo(
+                f"grammar_versions: recorded manual_bump row for "
+                f"{getattr(grammar, 'grammar_version', '?')}"
+            )
+    except Exception as exc:  # audit row, never crash production
+        typer.echo(
+            f"grammar_versions: skipped audit row ({type(exc).__name__}: {exc})",
+            err=True,
+        )

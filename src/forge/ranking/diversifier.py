@@ -25,7 +25,7 @@ from forge.ranking.cell_floor import (
     CELL_FLOOR_BATCH_FRACTION,
     CELL_FLOOR_SLOTS_PER_CELL,
 )
-from forge.ranking.signal_key import content_key
+from forge.ranking.signal_key import jaccard_signal_keys, signal_keys
 
 if TYPE_CHECKING:
     from collections.abc import Set as AbstractSet
@@ -37,34 +37,10 @@ if TYPE_CHECKING:
     from forge.ranking.types import RankedCandidate
 
 
-def _signal_keys(config: StrategyConfig) -> frozenset[str]:
-    """Content-hash keys for similarity comparison (D024/D10).
-
-    Switched from `signal.id` to `content_key(signal)` in Phase 5 so
-    that signals with identical content but different ID strings count
-    as the same — required for honest cross-batch proximity scoring.
-    """
-    return frozenset(content_key(s) for s in config.signals)
-
-
-def jaccard_signal_ids(a: StrategyConfig, b: StrategyConfig) -> float:
-    """Jaccard overlap of two configs' signal content-keys (D024/D10).
-
-    Returns `1.0` for identical sets, `0.0` for disjoint sets, the
-    standard intersection-over-union ratio otherwise. Either config
-    having an empty signal set yields `0.0` (the diversifier never
-    needs to compare such configs in practice — pre-filters reject
-    them — but the metric stays defined).
-
-    Function name kept for back-compat; the key is now content-hash.
-    """
-    a_keys = _signal_keys(a)
-    b_keys = _signal_keys(b)
-    if not a_keys or not b_keys:
-        return 0.0
-    intersection = a_keys & b_keys
-    union = a_keys | b_keys
-    return len(intersection) / len(union)
+# Both moved to `ranking/signal_key.py` (Batch 5 prep); kept bound here for the daemon era
+# and the identity checks below (`similarity_fn is jaccard_signal_ids`).
+_signal_keys = signal_keys
+jaccard_signal_ids = jaccard_signal_keys
 
 
 def select_top_n(

@@ -18,15 +18,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from forge.ranking.signal_key import content_key
+from forge.ranking.signal_key import signal_keys
 
 if TYPE_CHECKING:
     from crucible_contracts import StrategyConfig
 
 
-def _signal_keys(config: StrategyConfig) -> frozenset[str]:
-    """Content-hash keys for proximity comparison (D024/D10)."""
-    return frozenset(content_key(s) for s in config.signals)
+# Moved to `ranking/signal_key.py` (Batch 5 prep); bound here for the daemon era.
+_signal_keys = signal_keys
 
 
 def compute_prior_promotion_proximity(

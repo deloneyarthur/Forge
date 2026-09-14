@@ -16,7 +16,7 @@ from collections.abc import Set as AbstractSet
 from crucible_contracts import StrategyConfig
 
 from forge.campaign.types import Book, CampaignConfig, CampaignSpec, CellKey, GateDecision
-from forge.ranking.diversifier import _signal_keys
+from forge.ranking.signal_key import signal_keys
 
 
 def _jaccard(a: AbstractSet[str], b: AbstractSet[str]) -> float:
@@ -44,7 +44,7 @@ def challenger_gate(
     """
     if cell in book.protected_cells and cell not in campaign.replacement_for:
         return GateDecision(keep=False, reason="protected_cell")
-    keys = _signal_keys(config)
+    keys = signal_keys(config)
     for leg in book.legs:
         if _jaccard(keys, leg.signal_ids) >= cfg.duplicate_jaccard:
             return GateDecision(keep=False, reason="duplicate_of_leg")

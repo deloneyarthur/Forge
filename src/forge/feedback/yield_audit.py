@@ -41,7 +41,8 @@ from typing import TYPE_CHECKING
 from forge.enumeration.sampler import (
     _STRUCTURALLY_UNTRADEABLE_UNDERLYINGS as STRUCTURALLY_EXCLUDED,
 )
-from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
+from forge.feedback.eras import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
+from forge.persistence.verdicts import CONVERTING_DECISIONS
 from forge.ranking.campaigns import CAMPAIGNS, Campaign
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
 
 # Verdict decisions that count as conversion. Observed live literals:
 # 'component' / 'reject' / 'promote' (forge campaigns audit, 2026-07-20).
-CONVERTING_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
+# Home moved to `persistence/verdicts.py` (Batch 5 prep); re-imported so callers keep working.
 
 _VE_HYPOTHESIS = "volatility_event"
 

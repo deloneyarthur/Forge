@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from forge.enumeration.underlying_class import underlying_class
+from forge.feedback import eras as _eras
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -259,7 +260,7 @@ _COVERAGE_UNVERIFIED_MARK: str = "coverage_unverified"
 # constant, not a clock read (hard rule #8 untouched). Any era boundary
 # declared after a model's training cutoff obsoletes that model (the F3 era
 # guard refuses it).
-CLEAN_ERA_LABEL_CUT: datetime = datetime(2026, 6, 10, 17, 17, 13, tzinfo=UTC)
+CLEAN_ERA_LABEL_CUT: datetime = _eras.CLEAN_ERA_LABEL_CUT  # home: feedback/eras.py (Batch 5 prep)
 
 # D290 (the v39 companion) — the ve ghost-label cut. Crucible's 2026-07-19 ve
 # close-out: 23/25 stored-cpcv ve components were GHOSTS (their
@@ -271,7 +272,7 @@ CLEAN_ERA_LABEL_CUT: datetime = datetime(2026, 6, 10, 17, 17, 13, tzinfo=UTC)
 # D105/D106 component-rate weighters, trade-rate priors, the ranker dataset,
 # arm-floor maturity) — the CLEAN_ERA precedent scoped to one hypothesis.
 # Non-ve rows and post-cut ve rows are untouched.
-VE_GHOST_LABEL_CUT: datetime = datetime(2026, 7, 18, 0, 0, 0, tzinfo=UTC)
+VE_GHOST_LABEL_CUT: datetime = _eras.VE_GHOST_LABEL_CUT  # home: feedback/eras.py (Batch 5 prep)
 
 _VE_GHOST_HYPOTHESIS = "volatility_event"
 

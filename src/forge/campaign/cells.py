@@ -28,11 +28,11 @@ from crucible_contracts import (
     load_promoted_portfolios_from_export,
 )
 
+from forge.campaign.cell_key import config_cell_from_json
 from forge.campaign.types import Book, BookLeg, CampaignConfig, CellKey, CellStats
-from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
-from forge.feedback.yield_audit import CONVERTING_DECISIONS
-from forge.ranking.campaigns import config_cell_from_json
-from forge.ranking.diversifier import _signal_keys
+from forge.feedback.eras import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
+from forge.persistence.verdicts import CONVERTING_DECISIONS
+from forge.ranking.signal_key import signal_keys
 from forge.submission.search_multiplicity import _XSECT_COMBINER_TYPE
 
 _ABSENT: str = "-"
@@ -124,7 +124,7 @@ def load_book(exports_dir: Path) -> Book:
                     portfolio_id=portfolio.portfolio_id,
                     hypothesis=cfg.hypothesis,
                     cell=cell_key(cfg),
-                    signal_ids=_signal_keys(cfg),
+                    signal_ids=signal_keys(cfg),
                     weight=component.weight,
                 )
             )

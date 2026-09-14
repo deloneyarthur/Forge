@@ -373,10 +373,8 @@ def _run_battery(
     config_root: Path,
     feature_cache: object,
 ) -> list[PreFilterReport]:
-    from forge.cli.main import (  # noqa: PLC0415
-        _load_prior_structural_fingerprints,
-        _load_trade_rate_priors,
-    )
+    from forge.feedback.trade_rate_priors import load_trade_rate_priors  # noqa: PLC0415
+    from forge.persistence.fingerprints import load_prior_structural_fingerprints  # noqa: PLC0415
     from forge.prefilters import default_filters, run_battery  # noqa: PLC0415
     from forge.prefilters.calibration import load_calibration  # noqa: PLC0415
     from forge.prefilters.types import FilterContext  # noqa: PLC0415
@@ -389,10 +387,10 @@ def _run_battery(
         prior_firing_dates={},
         calibration=calibration,
         rng_factory=SeedHierarchy(seed).rng,
-        prior_structural_fingerprints=_load_prior_structural_fingerprints(forge_db_path),
+        prior_structural_fingerprints=load_prior_structural_fingerprints(forge_db_path),
         trade_rate_priors=MappingProxyType(
             dict(
-                _load_trade_rate_priors(
+                load_trade_rate_priors(
                     forge_db_path,
                     registry,
                     min_trades=calibration.expected_trade_count.min_trades,
@@ -414,9 +412,9 @@ def _scorer(
 
     Never a Jaccard prior: `promoted_strategies` is retiring and read `[]` since 07-06
     (D409), so the old fallback was a zero prior wearing a name."""
-    from forge.cli.main import _QUALITY_LANE_TARGET  # noqa: PLC0415
     from forge.ranking.features import extract_features  # noqa: PLC0415
     from forge.ranking.model import (  # noqa: PLC0415
+        QUALITY_LANE_TARGET,
         load_latest_model,
         load_latest_robustness_model,
         robustness_tail_norm,
@@ -425,7 +423,7 @@ def _scorer(
 
     verdict = load_latest_model(models_dir)
     robust = (
-        load_latest_robustness_model(models_dir, target=_QUALITY_LANE_TARGET)
+        load_latest_robustness_model(models_dir, target=QUALITY_LANE_TARGET)
         if verdict is not None
         else None
     )
@@ -564,9 +562,11 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
     try:
         from crucible_contracts import load_forge_gated_runs_from_export  # noqa: PLC0415
 
-        from forge.cli.main import _ensure_grammar_version_recorded_silently  # noqa: PLC0415
         from forge.enumeration import enumeration_inputs_hash, registry_hash  # noqa: PLC0415
         from forge.feedback.consumer import reconcile_all_pending  # noqa: PLC0415
+        from forge.grammar.version_audit import (  # noqa: PLC0415
+            ensure_grammar_version_recorded_silently,
+        )
 
         # 1. reconcile + 3. stats (one connection; the battery and submit open their own)
         # The forge-scoped 14-day stream (contracts 1.48.0, D412) is the campaign's ledger: a
@@ -784,7 +784,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
             by_hypothesis=Counter(config.hypothesis for config, _ in sample),
             notes=notes,
         )
-        _ensure_grammar_version_recorded_silently(
+        ensure_grammar_version_recorded_silently(
             forge_db_path, grammar=grammar, yaml_path=config_root / "grammar.yaml"
         )
         record = _record(
@@ -802,9 +802,9 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
 
 
 def _real_feature_cache(registry: RegistrySnapshot, seed: int) -> object:
-    from forge.cli.main import _build_feature_cache  # noqa: PLC0415
+    from forge.prefilters.factory import build_feature_cache  # noqa: PLC0415
 
-    return _build_feature_cache(registry, seed, require_real=True)
+    return build_feature_cache(registry, seed, require_real=True)
 
 
 def _submit(
@@ -824,9 +824,9 @@ def _submit(
     by_hypothesis: Mapping[str, int],
     notes: list[str],
 ) -> tuple[str, int]:
-    from forge.cli.main import _QUALITY_LANE_TARGET  # noqa: PLC0415
     from forge.funnel.export import write_funnel_export  # noqa: PLC0415
     from forge.persistence.db import db_connection  # noqa: PLC0415
+    from forge.ranking.model import QUALITY_LANE_TARGET  # noqa: PLC0415
     from forge.ranking.shadow import run_shadow_scoring  # noqa: PLC0415
     from forge.submission.batch import BatchContext, mint_batch_id  # noqa: PLC0415
     from forge.submission.search_multiplicity import (  # noqa: PLC0415
@@ -876,7 +876,7 @@ def _submit(
             registry=registry,
             batch_id=str(result.batch_id),
             scored_at=batch.submitted_at,
-            robustness_target=_QUALITY_LANE_TARGET,
+            robustness_target=QUALITY_LANE_TARGET,
         )
         if shadow:
             notes.append(f"shadow_scores={shadow}")

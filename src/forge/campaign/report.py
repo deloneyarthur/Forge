@@ -182,7 +182,7 @@ def _verdict_counts(conn: duckdb.DuckDBPyConnection, hashes: Sequence[str]) -> t
     """(decided, converting) for the record's submissions, from Forge's own ledger."""
     if not hashes:
         return (0, 0)
-    from forge.feedback.yield_audit import CONVERTING_DECISIONS  # noqa: PLC0415
+    from forge.persistence.verdicts import CONVERTING_DECISIONS  # noqa: PLC0415
 
     placeholders = ", ".join("?" for _ in hashes)
     rows = conn.execute(

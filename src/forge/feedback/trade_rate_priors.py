@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from forge.feedback.rejection_weights import is_ve_ghost_label
@@ -267,4 +268,68 @@ __all__ = [
     "BucketKey",
     "BucketStats",
     "compute_trade_rate_priors",
+    "load_trade_rate_priors",
 ]
+
+
+# Per-process warn-once memo: the export-read failure line must not spam a journal.
+_LOAD_FAILED_LOGGED: bool = False
+
+
+def load_trade_rate_priors(
+    forge_db_path: Path,
+    registry: RegistrySnapshot,
+    *,
+    min_trades: int,
+    current_grammar_version: str | None = None,
+) -> dict[BucketKey, BucketStats]:
+    """D076 / Q16 — compute per-bucket trade-rate posteriors for the empirical
+    `expected_trades` filter. Moved here from `cli/main.py` (Batch 5 prep): the
+    weekly campaign needs the same read and the daemon loop is retired.
+
+    Mirrors `_load_hypothesis_weights` (gated_runs read via the file-based
+    export to dodge the writer's exclusive DuckDB lock; QueryError /
+    OSError catches degrade to empty dict; warn-once on first failure).
+    Empty dict → filter falls back to the activations heuristic for every
+    config, matching pre-D076 behaviour.
+
+    D081: `current_grammar_version` down-weights prior-grammar gated runs in the
+    posterior (judge a config mostly by its own grammar version's behaviour).
+    D098: `COLD_START_HYPOTHESES` (relative_value) goes further — its prior-
+    version cohort is dropped entirely, so its now-fixed-defect zero-trade
+    history can't keep the bucket in empirical-prior mode and block the v5
+    retest; the bucket cold-starts to the activations heuristic instead.
+    """
+    import typer  # noqa: PLC0415 — the warn-once line goes to the journal, as before
+    from crucible_contracts import load_recent_gated_runs_from_export  # noqa: PLC0415
+    from crucible_contracts.exceptions import QueryError  # noqa: PLC0415
+
+    from forge.persistence.db import db_connection  # noqa: PLC0415
+
+    if forge_db_path == Path(":memory:") or not forge_db_path.exists():
+        return {}
+    exports_dir = Path.home() / "optbt_data" / "exports"
+    try:
+        gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=10_000)
+    except (QueryError, OSError) as exc:
+        global _LOAD_FAILED_LOGGED  # noqa: PLW0603 — warn-once memo
+        if not _LOAD_FAILED_LOGGED:
+            typer.echo(
+                "trade_rate_priors: degraded to activations heuristic — "
+                f"export read failed ({type(exc).__name__}: {exc}). "
+                "Subsequent failures will be silent this process.",
+                err=True,
+            )
+            _LOAD_FAILED_LOGGED = True
+        return {}
+    if not gated_runs:
+        return {}
+    with db_connection(forge_db_path) as conn:
+        return compute_trade_rate_priors(
+            conn,
+            gated_runs,
+            registry,
+            min_trades=min_trades,
+            current_grammar_version=current_grammar_version,
+            cold_start_hypotheses=COLD_START_HYPOTHESES,
+        )
