@@ -2129,3 +2129,40 @@ unit's mode line to `live` → `daemon-reload` → relay the instant. Docs: MANP
 SCRIPTS row, timers), HOW-TO (Monday check + the situation entry), architecture timers list,
 NEW_BOX/setup_new_box (five timers, the fifth script). Nothing else changed; suite green; daemon
 unchanged.
+
+## D412 — 2026-09-14 — Crucible's forge-scoped 14-day gated stream is LIVE: contracts 1.48.0 adopted (pin-only), the campaign reconcile wired to it with the truncation rule, Sunday confirmed, `promoted_strategies` publisher stopped — both cutover blockers on their side are cleared
+
+**Inbound.** `CRUCIBLE_forge_gated_runs_stream_LIVE_glob_is_forge_gated_runs_not_gated_runs_forge_truncated_until_cutover_your_24h_correction_verified_2026-09-14.md`
+(contracts `9e1a27e` = 1.48.0; Crucible `4bade53` emission, `740ca19` publisher retired). Verified on
+disk before acting: `../crucible_contracts` at 1.48.0 with `ForgeGatedRunsExport` +
+`load_forge_gated_runs_from_export`; the first file read back through the loader = 10,000 rows,
+lookback 14, cap 10,000, `truncated: true`, span 09-13T07:17Z → 09-14T05:22Z (~22 h — their numbers
+exactly); `crucible-publisher@forge_gated_runs` active, 600 s poll, NRestarts 0; the
+`promoted_strategies` publisher gone from their fleet (files frozen at `[]`, our read unchanged).
+
+**Adopted.** `FORGE_EXPECTED_CONTRACT_VERSION` 1.47.0 → **1.48.0** (pin-only: additive loader + model,
+the all-source reader ignores the new glob); editable install refreshed, `uv.lock` bumped; pin test
+5/5, `forge check` OK. **No daemon restart owed and none taken**: the daemon never reads the new stream
+and 1.48.0 changes nothing it parses (D244/D245 asymmetry cannot arise).
+
+**Wired.** `feedback/consumer.reconcile_all_pending` gains three optional kwargs — `runs` (pre-loaded
+`GatedRun`s), `source_export` (verdict provenance), `flush_aged_out` — defaults reproduce the daemon
+path byte-for-byte (existing consumer tests unchanged). `campaign/run.py` step 1 now loads
+`load_forge_gated_runs_from_export(exports_dir)`: present → reconcile from it, provenance = the forge
+file name, **`flush_aged_out = not truncated`** (their §1.2: when the window is truncated the OLDEST
+verdicts are the missing ones, so absence is not evidence of "never decided" — the D052 watermark
+flush must not fire); the run record notes `forge_gated_runs: N rows, lookback 14 d, cap 10000,
+truncated=…` and the journal warns on truncation; absent → the all-source path, noted. The
+`forge_gated_runs` watermark joins the record. The glob is read ONLY through the contracts loader
+(their §1.1: six readers select the newest `gated_runs_*` by mtime; a `gated_runs_forge_*` name would
+have silently replaced the all-source stream — the name we suggested was wrong, theirs is right).
+Tests: 2 consumer (injected runs reconcile with provenance and no flush; with flush the stranded row
+ages out) + 3 campaign (stream present truncated/not → note + watermark; absent → fallback noted).
+
+**Also settled by their relay.** Sunday 03:00 UTC confirmed (34 h before their Monday 13:00 UTC census,
+14-day cohort minimum age → no partial-cohort read). Our 24 h / 10k-row correction verified and
+accepted. `campaign_run/v1` readable by their digest. Post-cutover expectation: every forge file reads
+`truncated: false` (≤ ~800 rows/14 d at ≤ 400/week); a truncated file then is worth a relay.
+
+**Owed to them.** The cutover instant (UTC), ≥ 24 h ahead — the operator's date. **Both blockers on
+Crucible's side are now cleared; Batch 4 waits only on that date.**

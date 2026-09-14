@@ -260,7 +260,11 @@ from crucible_contracts import (
 # constant, nothing else. Both additive and engine/QuantIQ-facing: pin-only adopt (D406, the
 # D267/D374 precedent). Both directions were already running 1.47.0 before this pin moved
 # (Crucible runner 2026-09-06T07:32:42Z, forge.service 2026-09-12 12:05 PDT) — no restart.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.47.0"
+# 1.48.0 (9e1a27e) — `ForgeGatedRunsExport` + `load_forge_gated_runs_from_export`: the forge-scoped
+# 14-day gated stream the weekly campaign reconciles from (D409 §4.1 option 2; D412). Additive; the
+# all-source reader ignores the new glob (`forge_gated_runs_*`). Pin-only adopt, no daemon restart:
+# the daemon never reads the new stream.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.48.0"
 
 
 def check_contracts_version() -> str:

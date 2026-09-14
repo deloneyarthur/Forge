@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -493,6 +494,9 @@ def reconcile_all_pending(
     crucible_db: Path,
     *,
     exports_dir: Path | None = None,
+    runs: Sequence[GatedRun] | None = None,
+    source_export: str | None = None,
+    flush_aged_out: bool = True,
 ) -> tuple[BatchFeedback, ...]:
     """Reconcile every batch with `submitted` rows against the gated-runs export.
 
@@ -524,7 +528,13 @@ def reconcile_all_pending(
     """
     if exports_dir is None:
         exports_dir = Path.home() / "optbt_data" / "exports"
-    runs = _fetch_crucible_runs(crucible_db, exports_dir)
+    # D412: a caller may hand in the runs it already read (the weekly campaign reads the
+    # forge-scoped 14-day stream, contracts 1.48.0) with their provenance; the daemon keeps
+    # the all-source fetch. `flush_aged_out=False` is for a TRUNCATED window: when the
+    # export dropped its oldest verdicts, an absent config_hash is not evidence that Crucible
+    # never decided it, so the D052 watermark flush must not fire (Crucible 09-14 §1.2).
+    injected = runs is not None
+    runs = list(runs) if runs is not None else _fetch_crucible_runs(crucible_db, exports_dir)
     failed = _fetch_failed_runs(exports_dir)
 
     # D111 — persist per-candidate verdicts for EVERY export row Forge ever
@@ -535,16 +545,14 @@ def reconcile_all_pending(
     # (best-effort mirror of the reader's newest-file selection; a race with
     # a concurrent publish mis-stamps at most one poll's rows — documented,
     # acceptable for provenance) + the installed contracts version.
-    newest_export = max(
-        exports_dir.glob("gated_runs_*.json"),
-        key=lambda p: p.stat().st_mtime,
-        default=None,
-    )
-    record_verdicts(
-        forge_db,
-        runs,
-        source_export=newest_export.name if newest_export is not None else None,
-    )
+    if not injected:
+        newest_export = max(
+            exports_dir.glob("gated_runs_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            default=None,
+        )
+        source_export = newest_export.name if newest_export is not None else None
+    record_verdicts(forge_db, runs, source_export=source_export)
 
     # 2026-07-05 incident: retire runner-failed / pool-broken runs Crucible reports
     # in `failed_runs` but that never enter `gated_runs`. Without this they sit
@@ -555,7 +563,8 @@ def reconcile_all_pending(
 
     # D052 — flush aged-out rows BEFORE the per-batch loop so the batch
     # query only enumerates batches still reachable via the export window.
-    _flush_aged_out_submissions(forge_db, runs)
+    if flush_aged_out:
+        _flush_aged_out_submissions(forge_db, runs)
 
     batch_rows = forge_db.execute(
         """

@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-14 (later) — **Crucible shipped the forge-scoped 14-day gated stream (contracts 1.48.0, live, verified 10k rows / truncated until cutover); adopted pin-only, campaign reconcile wired to it (truncated window → no aged-out flush); Sunday 03:00 UTC confirmed; `promoted_strategies` publisher stopped. BOTH cutover blockers on their side are CLEARED — Batch 4 waits only on the operator's cutover date (relayed ≥ 24 h ahead).** (D412)
+
+- No restart taken or owed (the daemon never reads the new stream). Timer keeps running dry-run Sundays until the unit is flipped to `live`.
+
 ## 2026-09-14 (later) — **The dry-run weeks are automated: `forge-campaign.timer` installed + enabled (Sunday 03:00 UTC), unit in `dry-run` mode (snapshot DB, nothing submitted); smoke start through the unit = success, 45 s, 13.8 GB peak → `MemoryHigh=16G`/`MemoryMax=24G` on the unit. Cutover = flip the unit's `FORGE_CAMPAIGN_MODE` to `live` once the daemon is stopped and Crucible's stream is live; the wrapper refuses `live` while the daemon runs.** (D411)
 
 - Monday check: `journalctl --user -u forge-campaign.service -n 30`; a FAILED unit is the page. Five Forge timers now. Daemon unchanged.

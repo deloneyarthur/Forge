@@ -72,6 +72,7 @@ _EXPORT_GLOBS: Mapping[str, str] = MappingProxyType(
         "registry": "registry_snapshot_*.json",
         "universe": "universe_tickers_*.json",
         "gated_runs": "gated_runs_*.json",
+        "forge_gated_runs": "forge_gated_runs_*.json",
         "failed_runs": "failed_runs_*.json",
         "refutations": "refutations_*.json",
         "promoted_portfolios": "promoted_portfolios_*.json",
@@ -561,13 +562,46 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
     grammar, registry = booted.grammar, booted.registry
     notes: list[str] = []
     try:
+        from crucible_contracts import load_forge_gated_runs_from_export  # noqa: PLC0415
+
         from forge.cli.main import _ensure_grammar_version_recorded_silently  # noqa: PLC0415
         from forge.enumeration import enumeration_inputs_hash, registry_hash  # noqa: PLC0415
         from forge.feedback.consumer import reconcile_all_pending  # noqa: PLC0415
 
         # 1. reconcile + 3. stats (one connection; the battery and submit open their own)
+        # The forge-scoped 14-day stream (contracts 1.48.0, D412) is the campaign's ledger: a
+        # weekly run that boots cold still sees its prior run. Until the cutover the daemon's
+        # rate floods it past the 10k cap and it reads `truncated: true` -- then the OLDEST
+        # verdicts are the missing ones, so no aged-out flush; after cutover a truncated file
+        # means something else is flooding source='forge' and is worth a relay.
+        forge_stream = load_forge_gated_runs_from_export(exports_dir)
         with db_connection(forge_db_path) as conn:
-            feedback = reconcile_all_pending(conn, crucible_db, exports_dir=exports_dir)
+            if forge_stream is None:
+                notes.append("forge_gated_runs: absent; reconciled from the all-source export")
+                echo("reconcile: forge_gated_runs stream ABSENT; all-source export used")
+                feedback = reconcile_all_pending(conn, crucible_db, exports_dir=exports_dir)
+            else:
+                newest_forge = _newest(exports_dir, _EXPORT_GLOBS["forge_gated_runs"])
+                n_rows = len(forge_stream.gated_runs)
+                span = (
+                    f"{n_rows} rows, lookback {forge_stream.lookback_days} d, "
+                    f"cap {forge_stream.cap}, truncated={forge_stream.truncated}"
+                )
+                notes.append(f"forge_gated_runs: {span}")
+                warn = (
+                    "; WINDOW TRUNCATED: oldest verdicts missing, aged-out flush skipped"
+                    if forge_stream.truncated
+                    else ""
+                )
+                echo(f"reconcile: forge_gated_runs {span}{warn}")
+                feedback = reconcile_all_pending(
+                    conn,
+                    crucible_db,
+                    exports_dir=exports_dir,
+                    runs=forge_stream.gated_runs,
+                    source_export=newest_forge.name if newest_forge is not None else None,
+                    flush_aged_out=not forge_stream.truncated,
+                )
             reconciled = sum(len(fb.outcomes) for fb in feedback)
             notes.append(f"reconciled {reconciled} outcome(s) across {len(feedback)} batch(es)")
             stats = load_cell_stats(conn)

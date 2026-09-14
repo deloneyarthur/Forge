@@ -632,7 +632,9 @@ Run steps, all deterministic given the export watermarks recorded in the run rec
    10,000 decisions across ALL sources — one file spans ~14 h and the 60 retained files reach ~24 h
    (Crucible refits alone decide ~5k/day). A weekly boot reconcile sees none of last week's verdicts.
    Resolution = a **forge-scoped, 14-day gated stream** (`source='forge'`) beside the existing one,
-   loader-first in contracts then emission (Crucible's option 2) — the weekly run must boot cold after
+   loader-first in contracts then emission (Crucible's option 2) — **LIVE 2026-09-14** (contracts
+   1.48.0 `load_forge_gated_runs_from_export`, glob `forge_gated_runs_*`; wired D412, truncated
+   windows skip the aged-out flush) — the weekly run must boot cold after
    any outage and still see two full weeks; a poller (their option 1) is a second moving part whose
    failure is a silent label gap. `failed_runs` already looks back 14 days (their `5b3aa42`, live,
    verified `lookback_days: 14`). Until the stream ships the daemon reconciles per iteration, so the

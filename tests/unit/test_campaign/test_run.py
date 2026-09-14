@@ -200,3 +200,44 @@ def test_missing_verdict_exports_fail_boot(tmp_path: Path, missing: str) -> None
     (env["exports"] / missing).unlink()
     record = _run(env, dry_run=True)
     assert record.status == "boot_failed"
+
+
+def _write_forge_stream(env: dict[str, Path], *, truncated: bool) -> None:
+    """Crucible's forge-scoped 14-day stream (contracts 1.48.0): the envelope the loader
+    validates, carrying the same GatedRun rows as the all-source export."""
+    payload = {
+        "schema_version": "1.0",
+        "exported_at": utc_now().isoformat(),
+        "lookback_days": 14,
+        "cap": 10000,
+        "truncated": truncated,
+        "gated_runs": [_one_gated_run()],
+    }
+    (env["exports"] / "forge_gated_runs_0001.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize("truncated", [True, False])
+def test_reconcile_reads_the_forge_stream_and_records_truncation(
+    tmp_path: Path, truncated: bool
+) -> None:
+    """D412: the campaign reconciles from `forge_gated_runs_*` (never the all-source glob)
+    and records whether the window was truncated — the rule that decides the aged-out flush."""
+    env = _env(tmp_path)
+    _write_forge_stream(env, truncated=truncated)
+    record = _run(env, dry_run=True)
+    assert record.status == "ok"
+    assert "forge_gated_runs" in record.watermarks
+    note = next(n for n in record.notes if n.startswith("forge_gated_runs:"))
+    assert f"truncated={truncated}" in note
+    assert "1 rows, lookback 14 d, cap 10000" in note
+    assert not any("absent" in n for n in record.notes)
+
+
+def test_reconcile_falls_back_when_the_forge_stream_is_absent(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    record = _run(env, dry_run=True)
+    assert record.status == "ok"
+    assert "forge_gated_runs" not in record.watermarks
+    assert any(n.startswith("forge_gated_runs: absent") for n in record.notes)

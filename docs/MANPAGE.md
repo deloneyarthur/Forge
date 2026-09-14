@@ -571,6 +571,14 @@ first (status, fired triggers, campaigns, funnel counts) and, given a DB, the ve
 submissions earned — point `--forge-db` at a `scripts/live_db_snapshot.sh` copy while a daemon
 holds the live file.
 
+Reconcile reads Crucible's **forge-scoped 14-day gated stream** (`forge_gated_runs_*.json`, contracts
+1.48.0, via `load_forge_gated_runs_from_export` — never by glob, the all-source `gated_runs_*` glob
+would collide) so a run that boots cold still sees its prior run's verdicts. While the daemon runs the
+file reads `truncated: true` (its rate floods the 10k cap; the OLDEST verdicts are the missing ones)
+and the run skips the D052 aged-out flush; after the cutover every file must read `truncated: false`
+— a truncated file then means something else is flooding `source='forge'` and is worth a relay
+(D412). An absent stream falls back to the all-source export and says so in the record.
+
 Units: `forge-campaign.timer` (Sunday 03:00 UTC) → `forge-campaign.service` →
 `scripts/campaign_run.sh`, **installed and enabled 2026-09-14 (D411)** in **dry-run mode**: the unit's
 `Environment=FORGE_CAMPAIGN_MODE=dry-run` makes the wrapper snapshot the DB (`live_db_snapshot.sh`)
