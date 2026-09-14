@@ -720,8 +720,9 @@ reads `~/forge_data/campaigns/*.json`; `OPEN_PROPOSALS.md` stays parseable and s
   `report.py`. Run records + `status`. Two hand-run `--dry-run` weeks: compare its chosen cells with
   what the daemon actually submitted and with Crucible's verdicts; tune the defaults once.
   D-entry. Send the §12.5 relays.
-- **Batch 4 — cutover: SCHEDULED 2026-09-15T07:00:00Z (D413), automated by `forge-cutover.timer` +
-  `scripts/cutover_campaign.sh`; ranker-eval and prereg-watch stay until Batch 5 (deviation, for cause).**
+- **Batch 4 — DONE: cutover RAN 2026-09-14T23:52:05Z (D416; planned 07:00Z, moved earlier on Crucible's
+  written waiver). `forge.service` disabled; `forge campaign` live; first live run no_trigger / 0 submitted.
+  ranker-eval and prereg-watch stay until Batch 5 (deviation, for cause).**
   Originally: stop `forge.service`; disable `forge-healthcheck`,
   `forge-ranker-eval`, `forge-prereg-watch`; flip `forge-campaign.service`'s
   `FORGE_CAMPAIGN_MODE` from `dry-run` to `live` + `daemon-reload` (the timer is already installed,

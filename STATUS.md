@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-14 (later) — **CUTOVER RAN 2026-09-14T23:52:05Z (operator ran the unit; Crucible waived the 24 h notice). `forge.service` DISABLED — the daemon era is over. `forge campaign` LIVE: first live run reconciled 624 verdicts from the forge stream, 20,000 enumerated, no trigger, 0 submitted. Timers now: campaign (Sun 03:00 UTC), backup, ranker-eval, prereg-watch. Batches 0–4 DONE; Batch 5 (remove the daemon era, plan §13) starts.** (D416)
+
+- Expect `truncated: true` on the forge stream until ~09-28T21:20Z; a truncated file after that is ours to relay. 16 GB peak on the live run (cap 24 GB) — Batch 6 target.
+
 ## 2026-09-14 (later) — **Crucible recorded the instant; one gap they found is FIXED: the absent-forge-stream fallback no longer runs the aged-out flush (an absent window is as blind as a truncated one). The `ranked` boundary is split by campaign identity — `submitted_hashes` in live run records is now a contract field.** (D415)
 
 - Nothing blocks the 09-15T07:00Z cutover. Watch item: one unreproduced test failure on the first scoped run, three clean re-runs after.

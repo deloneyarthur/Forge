@@ -2266,3 +2266,38 @@ watch item, not a blocker).
 
 **§2** their "truncated: false after cutover" wording withdrawn; ~09-29 stands. **§4** they will relay
 if daemon-shaped `source='forge'` rows keep arriving after 07:00Z.
+
+## D416 — 2026-09-14 — **THE CUTOVER RAN: 2026-09-14T23:52:05Z.** The daemon era is over — `forge.service` disabled, `forge campaign` LIVE; the first live run reconciled 624 verdicts from Crucible's forge stream, found no trigger, submitted nothing. Batch 4 DONE, seven hours early on Crucible's waiver
+
+**How it moved.** The plan was 07:00Z (D413). At 14:20 PT Crucible's maintenance unit stopped
+`forge.service` on the operator's instruction (left stopped and enabled at our ask — no casual restart
+of the refactored tree, D414). Their window ended 16:05 PT, fleet verified healthy 16:08 (writer,
+inbox watcher, `forge_gated_runs` publisher; the measure itself OOM'd on their side — nothing swapped,
+nothing of ours depends on it). The operator asked why we should wait; the only reason was our own
+24 h-notice promise, which Crucible waived in writing after confirming nothing on their side
+hard-codes the instant (their §20 splits the `ranked` arm by campaign identity, not time). The
+operator ran `systemctl --user start forge-cutover.service` at 16:52:05 PT.
+
+**What the unit did (journal):** preconditions OK (no NOT-healthy guard relay) → `forge.service`
+DISABLED + failed marker cleared (23:52:05Z — **the boundary**) → `forge-healthcheck.timer` disabled →
+`forge-campaign.service` flipped `dry-run` → `live`, `daemon-reload`, committed `18e1be1` → first live
+run 23:52:06Z–23:53:01Z → `~/forge_data/campaigns/CUTOVER.json` (`instant` = completion 23:53:01Z) →
+`forge-cutover.timer` disarmed → pushed. Linked units `forge.service`, `forge-healthcheck.timer`,
+`forge-cutover.timer` now read not-found to systemd (disabling a linked unit removes its link) — a
+reboot cannot start the daemon.
+
+**First live run `2026-W38-20260914T235206Z` (`dry_run: false`).** Reconciled **624 outcomes across 4
+batches** from `forge_gated_runs` (10,000 rows, `truncated: true` → aged-out flush skipped, D415);
+designated `7f2a697ec6c1b119`; registry `922007ff915202f9` (a new snapshot today, so the seed moved to
+639188649); 20,000 enumerated; all five triggers quiet; **submitted 0**, no batch, no inbox file;
+protected cells 11, dark 0. 56 s wall, **16 GB peak** (under the 24 GB cap; the cell-stats query is
+the Batch 6 target). Verified independently: `forge.service` inactive/disabled, the loaded unit
+carries `FORGE_CAMPAIGN_MODE=live`, timers = campaign / backup / ranker-eval / prereg-watch.
+
+**Relayed** (`freeze` `f967a3d`): the instant table to the second, the run's numbers, the ask to disarm
+their guard and amend §20 to 23:52:05Z. Their correction adopted: the forge stream stays
+`truncated: true` until ~2026-09-28T21:20Z (the daemon's last submission was 21:20Z, not 07:00Z).
+
+**State of the plan.** Batches 0–4 DONE. Forge is now what §12 described: no daemon, one weekly
+zero-input run (Sundays 03:00 UTC, next 2026-09-20), ≤ 400/week, page = a failed unit. The daemon-era
+code is still in the tree and is dead: Batch 5 (§13, G0–G7) removes it, starting now.
