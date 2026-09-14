@@ -1,5 +1,11 @@
 # Forge — Status
 
+## 2026-09-13 — **Batch 0 of the 2026-09 simplification plan: contracts pin 1.47.0 adopted (pin-only), D401's stale-model claim RETRACTED, final state decided = Route C automated `forge campaign`.** (D406)
+
+- Pin `1.44.0` → `1.47.0` + `uv.lock` committed; `forge check` OK; pin test green; tree deployable again. **No restart** — both directions already ran 1.47.0 (Crucible 09-06T07:32:42Z, forge.service 09-12 boot).
+- D401 retracted: models reload EVERY iteration (`main.py:1968/2377`); 4 model ids rolled 09-13 with NRestarts=0.
+- Plan of record: `docs/proposals/repo-simplification-2026-09.md` (§12 = final state). Batches 1–2 executing this session; Crucible relay filed to `freeze/relays/`.
+
 ## 2026-09-06 (latest) — **Crucible basis change, relayed BEFORE landing per D404's rule: CBOE panel open interest folds onto canonical chain rows at the runner restart. LANDED 2026-09-06T07:32:41Z (read from systemd here). Their AAPL/MU numbers replicate EXACTLY on our own join. Three chain-basis dates recorded: 07-17 / 08-12 / 09-06T07:32:41Z. Nothing to act on.** (D405)
 
 - **VERIFIED ON DISK:** `oi_fold` tree 6,796 partitions (exact), 11,675,278 rows, asof 07-17 → **09-04** (they wrote 09-05), 39 MB on disk (they wrote 77 MB); backfill mtimes 07:16:35–50Z. Own join of `chain_snapshots` ⟕ `oi_fold` on `occ_symbol` + their fill floor: **AAPL 09-02 78 of 86 in-band pass, MU 169 of 340 — exact.** Volume alias 07-17→08-11 confirmed (`open_interest == volume` on 100% of rows, 07-20 and 08-05).

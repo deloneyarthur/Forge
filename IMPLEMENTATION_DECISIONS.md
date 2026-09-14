@@ -3710,3 +3710,50 @@ rise at the 09-06 boundary is basis, not supply. **D404's watch now brackets thr
 Ack relay sent: the landing instant as read here, the exact replication, the two small
 discrepancies (partition range, on-disk size). No code, no grammar, no restart. **v55 frozen,
 zero open preregistrations.**
+
+## D406 — 2026-09-13 — Batch 0 of the 2026-09 simplification plan: contracts pin 1.44.0 → **1.47.0** (pin-only adopt), **D401's stale-model claim RETRACTED**, and the final state decided — Route C, automated
+
+**Context.** The operator asked for an extensive cleanup and simplification plan (2026-09-13); it is
+`docs/proposals/repo-simplification-2026-09.md` (a five-track read-only audit at HEAD `db1172f`; suite
+2,156 passed / 1 failed (this pin) / 1 skipped in 232 s). The operator then decided the FINAL STATE
+(plan §12): **Route C, automated** — no daemon; one weekly, zero-input `forge campaign` run that reads
+the designated champion + promoted books + component contributions, evaluates five triggers, rejection-
+samples the UNCHANGED v55 population to the chosen cells, applies a structural challenger gate, and
+submits ≤ 400/week (from ~80,000). Batches 0–2 were approved ("complete batches 0 to 2"); a relay to
+Crucible goes out in the same session.
+
+**Decision 1 — pin-only adopt 1.47.0.** `core/contracts_check.py` pins `1.47.0` (was `1.44.0`);
+`uv.lock` (already at 1.47.0, the operator's uncommitted change since 09-06) is committed. 1.45.0 =
+`PromotedPortfolio.position_key` (engine/QuantIQ-facing), 1.46.0 was reverted the same day, 1.47.0 =
+`DTE_BUCKET_WINDOWS` constant — additive, nothing Forge parses narrows (D267/D374 precedent).
+**No restart, and none is owed:** both directions already ran 1.47.0 before the pin moved (Crucible
+runner bound it 2026-09-06T07:32:42Z, D405; `forge.service` since the 2026-09-12 12:05 PDT boot,
+NRestarts=0), so the D244/D245 asymmetry cannot arise. Verified: `test_contracts_integration.py`
+5 passed; `forge check` → `crucible_contracts: 1.47.0 OK`. The hourly healthcheck's `contracts_pin`
+WARN (264 of 354 runs since 08-30) clears at the next hour. The tree is deployable again
+(`deploy_preflight.sh` dirty-surface NO-GO on `uv.lock` is gone).
+
+**Decision 2 — D401 retraction.** D401 recorded "F3 has been scoring with a 15-day-old model … the
+artifact would be picked up on the next restart." **False at HEAD and at the time it was written.**
+`load_latest_model` is called inside `_run_one_iteration` (`cli/main.py:1968` def, `:2377` call —
+in place since `20ef7ad`, 2026-06-14), as are `load_latest_robustness_model` (`:2411`) and
+`load_latest_tail_model` (`:2510`). Journal 2026-09-12 12:05 → 09-13: 59 iterations, `model_id`
+rolled `c0c3a234…` → `3046dc2b…` (verdict) and `9bbf621b…` → `01445f6c…` (quality) with zero
+restarts. The daily trainer changes what Forge submits the same day; D401's consequence 2 (the
+honest_scope A/B "less urgent because deferred to restart") is void with it — moot anyway, that prereg
+was withdrawn (D402). Recorded here rather than edited in place: a ledger entry is immutable.
+
+**Also recorded (found by the audit, acted on in Batches 1–2):** `forge-ranker-eval` peaks at
+20–34 GB RSS on every run since 08-25 (five sequential fits each re-reading the 8.9 GB snapshot) on
+the box whose Crucible services OOM'd twice (D399/D401); "~10 test files monkeypatch `forge.cli.main`"
+is 24, of which 22 only import `app`; Forge contains no equities code (the operator's template item
+was QuantIQ's PTS arm); `feedback/preregistration.py` is load-bearing for the `freeze-governance` hook,
+so the July retirement plan's "retire prereg machinery" row is wrong.
+
+**Alternatives.** Reverting `uv.lock` to 1.44.0 — rejected: the installed editable contracts and both
+running processes are 1.47.0; the lock would lie. Restarting `forge.service` for the pin — rejected:
+no behaviour depends on the constant beyond the startup check, and the daemon is retired at the
+Route C cutover (plan §12.6 Batch 4).
+
+**Action.** Batch 1 (records/docs/unit comments/hygiene) and Batch 2 (coverage-first tests) follow in
+this session, each with its own D-entry; the Crucible relay is filed to `freeze/relays/`.

@@ -255,7 +255,12 @@ from crucible_contracts import (
 # are precisely what `parse_forward_compatible` does NOT cover, and a new Literal member would have
 # hard-failed our registry reader. Optional with a None default, so pre-1.44 rows still validate.
 # Pin-only adopt on both: additive + relaxing, nothing Forge parses is removed or narrowed.
-FORGE_EXPECTED_CONTRACT_VERSION: str = "1.44.0"
+# 1.45.0 (a7b3b0a) — `PromotedPortfolio.position_key` (engine position key, QuantIQ-facing);
+# 1.46.0 (1f075aa) — REVERTED same day (baf3954); 1.47.0 (15b90b2) — `DTE_BUCKET_WINDOWS` as a
+# constant, nothing else. Both additive and engine/QuantIQ-facing: pin-only adopt (D406, the
+# D267/D374 precedent). Both directions were already running 1.47.0 before this pin moved
+# (Crucible runner 2026-09-06T07:32:42Z, forge.service 2026-09-12 12:05 PDT) — no restart.
+FORGE_EXPECTED_CONTRACT_VERSION: str = "1.47.0"
 
 
 def check_contracts_version() -> str:
