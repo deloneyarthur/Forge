@@ -7,7 +7,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-> **Rotation (2026-08-06, Step A3):** resolved/closed entries (36, Q7→Q62 era; +Q23/Q34/Q40/Q49/Q62 swept 2026-09-13, Batch 1) live
+> **Rotation (2026-08-06, Step A3):** resolved/closed entries (37, Q7→Q62 era; +Q23/Q34/Q40/Q49/Q62 swept 2026-09-13 Batch 1, +Q51 Batch 2) live
 > verbatim in `_archive/OPEN_QUESTIONS_RESOLVED.md`. This file holds OPEN questions
 > only; move an entry to the archive in the same commit that resolves it.
 
@@ -239,17 +239,6 @@ gate-pass-rate compare pre/post 06-24 vs pre/post fix would separate the noise f
 
 **Severity:** high-visibility incident, medium likely impact — prefilter precision only; the gate
 is the authority and its evidence is clean.
-
-## 2026-07-15 — Q51 — `test_held_out_platt_reduces_ece_vs_raw` flaky in full-suite runs (DuckDB scan-order-dependent even/odd Platt split) — **LOW (test flake; diagnostic lane only)**
-
-Failed once (of 3 full-suite runs) during the D273 deploy preflights; passes in isolation and in its
-own file. `_held_out_platt_ece` (`evaluation.py`) splits fit/eval halves by ROW INDEX (even/odd), and
-the row order comes from the shadow-eval SELECT — DuckDB gives NO order guarantee without ORDER BY and
-can vary across runs (parallel scans, load-dependent), so the split — and occasionally the assertion
-`ece_platt <= ece + 1e-9` — wobbles. Durable fix (next ranking-lane touch, not mid-deploy): ORDER BY a
-stable key in the eval query (or sort rows before the split) — deterministic split, unchanged
-semantics; then re-check the test's margin. Production impact: none on submissions (diagnostic
-telemetry); the same scan-order wobble technically touches the LIVE `model_ece_platt` journal number.
 
 ## 2026-07-20 — Q52 — QuantIQ D418 rider ask (via Crucible's xsect-union correction relay): generation-time `expected_trades`-under-INTEGER-CONTRACT-floor check at a declared reference NAV — **LOW (their words; detect-at-generation half only)**
 

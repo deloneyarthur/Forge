@@ -29,19 +29,54 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from crucible_contracts import RegistrySnapshot
+from crucible_contracts import IndicatorMetadata, RegistrySnapshot
 
 from forge.enumeration import enumerate_candidates
 from forge.enumeration.sampler import _VIX_CONDITIONER_ID, _VIX_CONDITIONER_SHARE
 from forge.grammar import Grammar, load_grammar
 from tests.fixtures.strategy_configs import minimal_registry_snapshot
-from tests.unit.test_enumeration.test_v44_vix_conditioner import _v44_registry
 
 _CONFIG_ROOT = Path(__file__).resolve().parents[3] / "config"
 
 
 def _grammar() -> Grammar:
     return load_grammar(_CONFIG_ROOT / "grammar.yaml", archive_dir=_CONFIG_ROOT / "grammar_archive")
+
+
+# Moved here 2026-09-13 when test_v44_vix_conditioner.py retired with its lever (v55, D366):
+# the served-registry fixture the retirement guard needs — vix_term_slope as a trend R2 gate.
+def _meta(
+    ind_id: str,
+    family: str,
+    *,
+    version: int = 1,
+    lookback: int = 0,
+    rank_coherent: bool = False,
+    market_wide: bool = False,
+) -> IndicatorMetadata:
+    return IndicatorMetadata(
+        id=ind_id,
+        version=version,
+        family=family,
+        lookback=lookback,
+        params_schema={},
+        rank_per_name_coherent=rank_coherent,
+        market_wide_by_design=market_wide,
+    )
+
+
+def _v44_registry(base: RegistrySnapshot) -> RegistrySnapshot:
+    """Fixture registry + the ids the conditioner path touches, families/flags
+    exactly as the live registry publishes them (the _v33 helper pattern).
+    vix_term_slope (macro, market_wide) becomes an R2 trend gate here, so the
+    conditioner leaves its minimal-fixture dormancy and emits."""
+    extra = (
+        _meta("residual_momentum", "trend", lookback=504, rank_coherent=True),
+        _meta("vix_term_slope", "macro", market_wide=True),
+        _meta("days_since_jump", "volatility", version=3, lookback=252, rank_coherent=True),
+        _meta("market_state", "macro", market_wide=True),
+    )
+    return base.model_copy(update={"indicators": (*base.indicators, *extra)})
 
 
 @pytest.fixture(scope="module")

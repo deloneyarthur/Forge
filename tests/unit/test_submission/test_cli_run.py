@@ -209,6 +209,7 @@ def test_summary_line_shows_counts(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_same_seed_is_deterministic(tmp_path: Path) -> None:
     # Hard rule #6: same (seed, grammar, registry) → byte-identical enumeration/submission.
     # Two INDEPENDENT fresh-DB runs at the same seed must submit the identical config set

@@ -1955,3 +1955,49 @@ copy stays until the operator confirms the D342 repair is closed.
 
 **Verification.** `test_phase6_invariants` + `test_phase0_invariants` + `test_cli_help` +
 `test_v1_grammar` green during the work; full suite run at the end of Batch 2 (D408).
+
+## D408 — 2026-09-13 — Batch 2 of the 2026-09 simplification plan: coverage first — three known bugs pinned as strict xfails, model-reload cadence and the snapshot script pinned, perf tests marked slow, the v44 conditioner tests and the Q51 flake removed
+
+**Scope.** Plan §10 Batch 2 as narrowed by §12.6 (final state = Route C): tests only, no `src/`,
+no scripts, no config. Suite after: **2,148 passed / 1 skipped / 3 xfailed in 214 s** (before Batch 0:
+2,156 passed / 1 failed / 1 skipped in 232 s). `ruff check tests` clean.
+
+**Known-bug gap tests — `@pytest.mark.xfail(strict=True)`, each verified with `--runxfail` to fail at
+the intended assertion, each flips LOUD when its fix lands (Batch 5):**
+- `tests/unit/test_cli/test_sigterm_handler.py` — REL-4: `forge run` installs no SIGTERM handler
+  (`signal.getsignal(SIGTERM)` is `SIG_DFL`); systemd stops the daemon with SIGTERM, and
+  `submitter.py` writes the inbox file inside the DB transaction, so a stop between the inbox write
+  and the commit leaves an inbox file with no row.
+- `tests/unit/test_cli/test_export_outage_signal.py` — REL-1: `_reconcile_pending_silently` on a
+  missing export + DB prints nothing at all (the `main.py` `except QueryError: return ()` swallow);
+  the test expects an explicit line naming `QueryError`/`export_unreadable`, mirroring the existing
+  promoted-configs warn-once memo.
+- `tests/unit/test_submission/test_rate_limiter_export_outage.py` — REL-2: the limiter neither logs
+  nor flags an unreadable export; accepts either a WARNING record or a `crucible_unreachable` status
+  attribute so the fix can pick the shape.
+
+**Behaviour pinned (pass today):** `test_model_reload_cadence.py` — `--loop --max-iterations 2`
+calls `load_latest_model` exactly twice on `<forge_db>/models` (the corrected D401 fact, D406);
+`tests/unit/test_scripts/test_live_db_snapshot.py` (3) — refuses a RAM-backed dir, fails cleanly on
+a missing live DB, refresh → reuse → `--force` → `--clean` on real disk with the copy opened
+read-only.
+
+**Suite shape.** The three perf tests carry `@pytest.mark.slow` (`-m slow` collects exactly them;
+`-m "not slow"` is now a real fast lane). `test_v44_vix_conditioner.py` (358 lines, 12 tests, ~12 s)
+DELETED — the v44/v45 conditioner is retired at v55 (D366); its `_v44_registry` fixture moved into
+`test_v55_vix_conditioner_retired.py`, whose silent-re-admission guard still passes. Q51's flaky
+`test_held_out_platt_reduces_ece_vs_raw` DELETED (DuckDB scan-order split; `evaluation.py` is retired
+under the final state, so no ORDER BY fix) — **Q51 CLOSED by deletion**, swept to the archive.
+`tests/README.md` corrected (two dozen files import `forge.cli.main`, 22 only `app`; the phase0
+clock scan covers `src/` only; the strict-xfail convention).
+
+**Not done, with reasons.** `deploy_preflight.sh` NO-GO-path test: the script hard-codes the repo
+path and always runs the full suite after the tree check, so its dirty-tree branch cannot be exercised
+in isolation — needs a `--check-only` flag (script change, Batch 5). Healthcheck level tests for
+`check_hypothesis_weights_fallback` / `check_registry_unknown_family`: already exist
+(`test_healthcheck.py:56-97`) — the audit's "parse-only" claim was wrong. Shared DB-row-builder
+fixture: Batch 6 (many of its 16 client files are slated for deletion). Hot-grammar-reread and
+daily-eval-script tests: moot under the final state.
+
+**Verification.** Full suite green (above); `scripts/deploy_preflight.sh` GO on a clean tree after
+the Batch 2 commit (run at the end of this session; result in STATUS).

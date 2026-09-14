@@ -155,6 +155,7 @@ def test_composite_score_is_none_for_every_battery_report(grammar: Grammar) -> N
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_perf_1000_candidates_well_under_phase3_budget(grammar: Grammar) -> None:
     """§12 Phase 3 budget: 10K candidates through full battery in < 30
     min (1800s). We run 1K here and require < 180s — a 1/10 scale at

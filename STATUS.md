@@ -1,5 +1,10 @@
 # Forge — Status
 
+## 2026-09-13 (later) — **Batch 2 DONE: coverage first. Three known bugs pinned as strict xfails (SIGTERM tear REL-4, unlogged export-outage swallows REL-1/REL-2), model-reload-per-iteration and the snapshot script pinned, 3 perf tests marked `slow`, v44 conditioner tests + the Q51 flake deleted (Q51 CLOSED). Suite 2,148 passed / 1 skipped / 3 xfailed in 214 s.** (D408)
+
+- `scripts/deploy_preflight.sh` → **GO** after the commit (tree clean, suite 2,148 passed / 1 skipped / 3 xfailed in 219 s). Batches 0–2 complete; nothing restarted. Next: Batch 3 = build `forge campaign` beside the daemon (plan §12.6), gated on Crucible's six answers (relay `480fe72`).
+- Deferred with reasons in D408: `deploy_preflight.sh --check-only` (Batch 5), row-builder fixture (Batch 6).
+
 ## 2026-09-13 (later) — **Batch 1 DONE: records rotated (STATUS 110→9 KB, ledger 472→202 KB, OQ 51→36 KB), 12 terminal records + fable-audit archived, 150 relay files removed, 40 stale doc facts fixed, forge.service 249→49 lines (directives byte-identical), prereg-watch units symlinked, runtime cruft archived. Zero production change.** (D407)
 
 - Left for the operator (§8.11): the 6.3 GB `forge.db.pre_arm_cleanup_20260731_230544` copy. Flagged for Batch 6: DESIGN §14 "25 rules" history row.

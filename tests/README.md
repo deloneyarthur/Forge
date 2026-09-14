@@ -15,10 +15,16 @@ Markers (pyproject): `unit`, `integration`, `invariants`, `slow`.
 
 - **Golden sampler-sequence tests** pin cold-start byte-identical enumeration (hard rule #6).
   A deliberate population change re-pins them — note it in the D-entry; never adjust casually.
-- **~10 test files monkeypatch `forge.cli.main` internals** (run-loop seams). `main.py`'s length
-  and structure are deliberate (D065/D105/D106 noqa) — refactors there break this suite layer.
-- **Time/RNG**: only `forge.core.clock` / `forge.core.seed`, even in tests that build fixtures —
-  `tests/invariants/test_phase0_invariants.py` scans for violations.
+- **Two dozen test files import `forge.cli.main`; 22 only import `app`** and drive it through
+  `CliRunner` (behaviour tests). The real private coupling is `test_cli/test_run_loop.py` plus a
+  handful of resolver/seam tests. `main.py`'s length and structure are deliberate
+  (D065/D105/D106 noqa) — refactors there must keep those seams bound.
+- **Time/RNG**: only `forge.core.clock` / `forge.core.seed`, even in tests that build fixtures.
+  Note the `tests/invariants/test_phase0_invariants.py` scan covers `src/` only — tests are
+  held to the rule by review, not by the scanner.
+- **Known-bug gap tests** use `@pytest.mark.xfail(strict=True, reason="REL-n … fixed in Batch N")`
+  so the suite stays green while the defect is documented, and the test flips LOUD (strict
+  XPASS) the moment the fix lands — remove the marker in the fixing commit.
 - Contracts exceptions may be caught only inside test fixtures.
 - Resilience tests model the §7.3 limiter/flush against the rolling export window; they are
   timezone-sensitive by design (see the 2026-06-07 migration fix in `STATUS.md`) — use blessed

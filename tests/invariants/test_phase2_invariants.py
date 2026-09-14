@@ -350,6 +350,7 @@ def test_v1_fixture_rejection_rate_is_zero(grammar: Grammar) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_perf_100k_configs_under_five_minutes(grammar: Grammar) -> None:
     """§4.5 acceptance criterion: enumerating 100K configs must complete in
     under 5 min (300s). On the v1 fixture we're typically ~15s, leaving
