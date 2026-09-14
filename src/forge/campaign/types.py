@@ -116,6 +116,9 @@ class CampaignSpec:
     reason: str
     replacement_for: frozenset[CellKey] = frozenset()
     """Protected cells this campaign is allowed to enter (T1 only)."""
+    indicator_ids: frozenset[str] = frozenset()
+    """T3 only: new registry ids to target; their cells have never been sampled, so
+    the run's rejection sampler keeps any config carrying one of these ids."""
 
 
 @dataclass(frozen=True, slots=True)
