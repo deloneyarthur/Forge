@@ -47,7 +47,11 @@ if systemctl --user is-active --quiet forge.service; then
 fi
 systemctl --user disable forge.service >/dev/null 2>&1 || true
 if systemctl --user is-enabled --quiet forge.service; then log "FAILED: forge.service still enabled"; exit 1; fi
-log "forge.service disabled (a reboot will not restart it)"
+# A manual stop of the loop exits 143 (SIGTERM) and the unit never declared that a success, so the
+# unit sits in `failed` after any stop (seen 2026-09-14 14:20 PT). Clear the marker so the retired
+# unit reads inactive/disabled, not as a fault for the next reader of `systemctl --user --failed`.
+systemctl --user reset-failed forge.service >/dev/null 2>&1 || true
+log "forge.service disabled (a reboot will not restart it); failed marker cleared"
 
 # 3. the daemon-shaped monitor
 systemctl --user disable --now forge-healthcheck.timer >/dev/null 2>&1 || true
