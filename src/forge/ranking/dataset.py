@@ -39,8 +39,9 @@ if TYPE_CHECKING:
 # any reject variant is 0.
 _POSITIVE_DECISIONS: frozenset[str] = frozenset({"component", "promote"})
 
-# Continuous worst-quartile regression targets (tail-aware ranker T1,
-# `docs/proposals/tail-aware-ranker.md`). Each reads `gate_results[gate].value`
+# Continuous worst-quartile regression targets (the tail-aware ranker T1 design,
+# `_archive/PROPOSAL_tail-aware-ranker.md`; the tail LANE retired D419). Each reads
+# `gate_results[gate].value`
 # — Forge consumes Crucible's already-computed metrics, never recomputes (§1.2).
 # Null when the gate is absent or carried no value. These are LABELS for the
 # regression head, never features (excluded from both models' feature sets).

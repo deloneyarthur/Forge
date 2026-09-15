@@ -69,3 +69,7 @@ allowlist; another reason it exists.
 - Auto-shipping anything into grammar.yaml (rule #10 versioning + operator
   deploy gate stand).
 - Touching prefilter thresholds (D206: that axis is retired, flat on the tail).
+
+---
+
+> **ARCHIVED 2026-09-15 (D424): the detector (`feedback/yield_audit.py`, `forge yield-audit`) was deleted in Batch 5 (D418/D419); under the signed freeze a rider is a grammar change needing a preregistration, and the campaign's dead-cell rule (`campaign/cells.py`) is the surviving evidence rule.**

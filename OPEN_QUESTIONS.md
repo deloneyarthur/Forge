@@ -7,7 +7,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-> **Rotation (2026-08-06, Step A3):** resolved/closed entries (38, Q7→Q62 era; +Q23/Q34/Q40/Q49/Q62 swept 2026-09-13 Batch 1, +Q51 Batch 2, +Q44 Batch 5 G4) live
+> **Rotation (2026-08-06, Step A3):** resolved/closed entries (46, Q7→Q62 era; +Q23/Q34/Q40/Q49/Q62 swept 2026-09-13 Batch 1, +Q51 Batch 2, +Q44 Batch 5 G4, +Q21/Q22/Q27/Q45/Q47/Q48/Q52/Q60 Batch 5 G7) live
 > verbatim in `_archive/OPEN_QUESTIONS_RESOLVED.md`. This file holds OPEN questions
 > only; move an entry to the archive in the same commit that resolves it.
 
@@ -71,36 +71,6 @@ Operator reviews at every phase boundary.
 
 ---
 
-## 2026-05-28 — Q21 — `permutation_test._full_window` treats a trading-day count as calendar days — **LOW SEVERITY (latent)**
-
-**Question:** `permutation_test.py:_full_window(data_start_date, data_history_days)` builds the null-distribution window as `data_history_days` *calendar* days from `data_start_date`. But `data_history_days` is a *trading*-day count (~252/yr). On the long window exposed 2026-05-28 (`data_start_date=2018-01-02`, `data_history_days=2118`), the generated window only reaches **2023-10-20** instead of ~2026 — so the permutation null pool silently excludes ~2.5 years of the most recent returns.
-
-**Why it surfaced:** Diagnosing the post-reboot stall (D080). The window doubled when the registry-publisher re-exported Crucible's 2018 Polygon backfill (`data_start_date` 2022→2018, `data_history_days` 1109→2118). Direct instrumentation on real-cache configs showed `permutation_test` still passes a healthy fraction (~454/5000 at the service level), so this is **not** an outage — it was a red herring during the D080 RCA. But the null pool being truncated by ~2.5y biases every config's p-value.
-
-**What I did instead:** Did NOT fix under the outage pressure (the outage was D080's synthetic fallback, not this). Logged for a clean TDD fix. Fix is small: span `data_start_date` → `utc_now()` (blessed clock, hard rule #8) by calendar days, or convert `data_history_days` to a calendar span (×365/252). A regression test must assert the pool's last date is near "today", not `start + data_history_days` calendar days.
-
-**Severity:** **low** — latent correctness wart; biases permutation p-values but does not block submission. Pre-2026-05-28 it was masked because the 3-year window happened to cover the activation domain.
-
-**Tag:** `permutation-test`, `calendar-vs-trading-day`, `latent`, `relates-to-D080`
-
-**Resolution 2026-05-28 — D082:** Fixed. `_full_window` now spans `ceil(n_trading_days × 366/252)` calendar days. Chose the calendar-conversion approach over the `utc_now()` anchor floated above — it keeps the window a pure function of the registry (deterministic per hard rule #6, no clock dependency) and over-covers safely (`returns()` drops surplus dateless days). TDD: +2 tests; full prefilter suite (230) green. Deploys on next `forge.service` restart.
-
-## 2026-05-28 — Q22 — prefetch is 17-38 min/batch — dominated by unique-spec count + writer load, not window size — **MEDIUM SEVERITY**
-
-**Question:** `phase_timings` shows `prefetch` (the `CrucibleFeatureCache.prefetch_for_batch` socket round-trips) costs 17-38 min/batch, dwarfing every other phase (battery 5-30s, submit 2-4min). At 1 batch / ~25-40 min plus the §7.3 ≥80%-gated wait, Forge throughput is heavily bottlenecked. Can Forge mitigate?
-
-**Investigation (2026-05-28):** Pulled the prefetch time-series. It was ALREADY 1000-2200s (17-36 min) on the OLD 3-year window (May 23-27, `data_history_days=1109`), and grew ~16× over May 21→25 (134s → 2181s) on a roughly fixed window. Today's window doubling (1109→2118) added only ~36% (pre-change avg ~1357s → post ~1852s), **sub-linear** — so window size is a MINOR lever. Large intraday variance (136s-682s on May 22 alone) points to **writer contention with the runner** (single-writer socket). Root cost: the sampler mints fresh thresholds per spec, so ~10k unique specs/batch are near-100% cache-miss every batch → ~10k indicator computations over the socket, no cross-batch amortization.
-
-**What I did instead:** characterized only; did NOT change enumeration behavior or batch size (operator-owned tuning / cross-system design per CLAUDE.md "stop and ask"). Candidate levers, each needing operator/Crucible decision:
-1. **Threshold quantization** (Forge-side): round sampled thresholds so specs repeat across batches → `signal_content_key` cache hits → fewer computations. Cost: reduces enumeration diversity.
-2. **Persistent feature cache** (Crucible-side): memoize activations by `content_key` across batches / a cheaper bulk estimation endpoint. Biggest win; their side.
-3. **Reduce `max_candidates`** (5000→smaller): fewer specs → faster prefetch; trades coverage for throughput.
-4. Narrowing Forge's analysis window: only ~36% win (window is not the driver) — low priority, but composes with Q21's fix.
-
-**Severity:** **medium** — no correctness break, but throughput is degraded enough to matter for the feedback-loop cadence (fewer batches gated/day = slower threshold learning).
-
-**Tag:** `prefetch-perf`, `feature-cache`, `writer-contention`, `throughput`, `relates-to-D080`
-
 ## 2026-05-29 — Q24 — Non-pairs template "hidden param contract" audit REFUTED; residual risk is the un-contracted pairs entry-key schema — **LOW SEVERITY (latent)**
 
 **Hypothesis investigated:** the generator improvement plan (`FORGE_GENERATOR_IMPROVEMENT_PLAN.md:56`) flagged that `trend_rider` / `regime_mean_revert` / `cross_sectional_rank` "likely have analogous hidden [entry-param] contracts that Forge can't satisfy" — the same trap D068/D072 fixed for `pairs_convergence` — potentially silently zero-trading whole hypotheses (a candidate explanation for the ~60% zero-trade rate).
@@ -116,16 +86,6 @@ Operator reviews at every phase boundary.
 **Tag:** `hard-rule-2`, `contracts-gap`, `pairs`, `zero-trade`, `crucible-coordination`, `relates-to-D068`, `relates-to-D072`
 
 ---
-
-## 2026-06-07 — Q27 — `forge_funnel.json` buckets by grammar-version STAMP, so the v9 bucket contains v8-code batches — re-bucket by the D104 cutover? — **LOW SEVERITY**
-
-**Symptom:** `funnel/aggregate.build_funnel_export` groups `batch_summaries` purely on `grammar_version`, and `build_version_map` likewise labels each `config_hash` by stamp. Per D104, 27 v9-stamped batches (06-05 07:52 → 06-06 04:40Z) ran v8 code, so the export's v9 upstream stages (enumerated / survived / rejection breakdown) blend two code generations. Crucible flagged it (`FORGE_v9_timecut_response.md` §2, "optional ask") and currently annotates around it — their gating stages cohort correctly via their own `grammar_cutovers.yaml` relabel.
-
-**Proposed fix (if/when wanted):** a Forge-side cutover config (mirroring Crucible's: `version`, `live_at`, `effective_prior`) consumed by `build_funnel_export`/`build_version_map` as a read-time relabel on `batch_summaries.submitted_at` — never rewriting stored stamps, always reporting the relabel count in `coverage`. Needs TDD (unit tests on the relabel + the never-silent count) + a schema_version note for the export consumers. ~Half-day.
-
-**Why not now:** Crucible-side stages are the ones that gate, and they already cohort correctly; the D104 hygiene rule (clean live tree) makes recurrence unlikely. Revisit if a third labeling incident happens or if Crucible upgrades the ask from "optional."
-
-**Tag:** `funnel`, `exports`, `relates-to-D104`, `relates-to-D096`, `low`
 
 ## 2026-06-07 — Q29 — Deferred D105 mechanisms: (a) threshold-DRAW adaptation for the 75-83% zero-trade composables; (b) general parameter-band bounds-learning — **(a) PARTIALLY RESOLVED 2026-06-09 (D113): prefilter-tightening arm refuted by measurement; sampler-side arm deprioritized** — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
 
@@ -155,116 +115,3 @@ Operator reviews at every phase boundary.
 **Tag:** `enum-grammar-lane`, `generation-coverage`, `low-EV`, `breadth-not-magnitude`, `operator-gated`, `relates-to-D152/D154/D156`
 
 ---
-
-## 2026-07-10 — Q45 — Nine never-sampled registry indicators (dark supply): no standing triage loop — **MEDIUM** — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
-
-**Question:** Crucible's resid_vix handoff (FORGE_resid_vix_generation_request_2026-07-11) audited
-nine registered indicators with zero Forge submissions ever: `residual_momentum`, `linreg_slope`,
-`vix_term_slope`, `pct_off_52w_high`, `days_to_cover`, `trend_confirmation`, `overnight_drift`,
-`cs_dispersion`, `market_sma_cross` (all nine verified present in
-`registry_snapshot_2026-07-11T010003Z.json`). The mechanism is Forge's DELIBERATE activation gate:
-an indicator without an `indicator_thresholds.py` entry is `is_threshold_skippable` in every
-threshold role (defensive since D030 — no audited range means no honest threshold, and an
-empty-params emission would zero-trade). Registered ≠ enumerable is by design; the gap is that
-nothing SURFACES the dark set — a registry id that never gets an activation decision stays dark
-forever, and the learned sampler can never gather evidence on it (their columns killed
-`linreg_slope x trend_confirmation`, but zero-sampling means Forge could never find that out
-itself).
-
-**What I did instead:** two of the nine (`residual_momentum`, `vix_term_slope`) now ride the v27
-activation proposal (OPEN_PROPOSALS `0a4d8da8`, Crucible-evidenced). The other seven remain dark.
-Proposed fix (operator review): a periodic dark-supply report — registry ids lacking threshold
-entries + per-id submission counts — as a healthcheck INFO line or a scheduled script, so each new
-registry id gets a conscious activate/defer/reject decision instead of silence. Activation itself
-should stay evidence-gated (D254: `check-activations` INERT = NO-GO); the fix is visibility, not
-auto-activation.
-
-**Severity:** medium — supply-side blind spot, but every activation still needs per-id evidence.
-
----
-
-## 2026-07-12 — Q47 — Trend lane lookback mix: `rolling_sharpe` (63d) warms up ~9 months earlier than `momentum_252` — **LOW, watch item, no action until Crucible's carry note** — **MOOT under D390 (grammar frozen at v55) unless a §5 reopener fires**
-
-**Question:** Crucible's absolute-vol handoff (`FORGE_mr_absolute_vol_gate_request_2026-07-12`,
-secondary observation, "no action required yet") reports that `rolling_sharpe`-ranked trend configs
-(63d lookback) warm up ~9 months earlier than `momentum_252`-ranked ones — relevant to early-window
-coverage in their fold evaluation. d36b1cb1-style configs are being evaluated in-book on their side;
-a note will follow on whether the trend lane's lookback mix deserves deliberate weight.
-
-**What I did instead:** logged only, per the handoff's own framing. If their note carries, the
-Forge-side axis is the trend directional mix (D105/D106 learned directional/bucket weights already
-adapt on evidence; a deliberate mix shift beyond that would be an enumeration-policy change with its
-own proposal). Nothing to build until their in-book evaluation lands.
-
-**Severity:** low — coverage observation, explicitly non-blocking, their measurement in flight.
-
----
-
-## 2026-07-12 — Q48 — Forge prefilter battery consumed cross-name activation dates since ~06-24 (Crucible writer cache bug): impact assessment pending their fix — **HIGH visibility, MEDIUM likely impact**
-
-**Question:** Crucible's `66a616d` (2026-06-24) keyed the writer feature-cache `activation_dates`
-rows on `(signal_content_key, sha256(first_dt))` — no underlying — so every underlying collides
-onto one row per spec content, first-writer-wins (verified live 2026-07-12: SPY/HAL/TGT/NVDA
-identical activation sets; non-monotonic threshold responses from poisoned rows; per-name data
-returns clean once cache-busted). Forge's prefilter battery reads exactly this layer per config
-underlying: since ~06-24, activation-count prefilters (expected_trades wall, signal density) have
-evaluated an unknown fraction of single-name configs against another name's firing dates. How much
-did stream quality (gate pass rate) degrade, and is any post-06-24 prefilter-derived signal
-(rejection weights on prefilter kills?) contaminated?
-
-**Scope bounds (verified):** value_series / returns / regime_label layers are keyed correctly —
-only activation_dates collides. Crucible's own gate/engine computes independently — gated_runs
-outcomes, learned feedback weights (gated-run-keyed), and all promotion evidence are CLEAN.
-`check-activations` INERT detection still works (no row exists for a never-computed spec); its
-per-name breakdown was decorative since 06-24, but past GO verdicts stand.
-
-**What I did instead:** relayed the bug with repro + suggested fix + cache-purge ask
-(`PROMPT_CRUCIBLE_FEATURE_CACHE_ACTIVATION_POISONING.md`); worked around it for the v28 probe via
-threshold-epsilon cache-busting. Impact assessment deferred until their fix + purge lands (funnel
-gate-pass-rate compare pre/post 06-24 vs pre/post fix would separate the noise floor).
-
-**Severity:** high-visibility incident, medium likely impact — prefilter precision only; the gate
-is the authority and its evidence is clean.
-
-## 2026-07-20 — Q52 — QuantIQ D418 rider ask (via Crucible's xsect-union correction relay): generation-time `expected_trades`-under-INTEGER-CONTRACT-floor check at a declared reference NAV — **LOW (their words; detect-at-generation half only)**
-
-The promoted book's paper shadow found contract INDIVISIBILITY bites at small
-NAV: the trend leg's `fixed_risk_pct 0.0075` = $187.50/trade at $25K NAV vs
-~$530–6,000 per in-band contract (fillable-in-top-10 counts: 1 @ $25K / 2 @
-$100K / 2 @ $200K). Backtests' fractional sizing hides the integer floor. The
-ask: flag structurally-unfillable sizing at EMISSION instead of at the shadow.
-
-Why not built yet: the check needs a PER-CONTRACT PREMIUM estimate at
-emission time, and no current prefilter input carries one (`expected_trades`
-consumes activations, not prices; the feature-cache reads we make are
-indicator activations). Options, relayed back as a question before any build:
-(a) Crucible serves a per-name "typical in-band contract premium" surface
-(feature-cache or export) and Forge adds a cheap prefilter
-`min_contracts_at_reference_nav >= 1`; (b) the check lives Crucible-side at
-queue time next to the row-45 liquidity preflight (where chain truth already
-lives — arguably the right home by the D278 principle "the mechanism is
-Crucible-measured per-name against THEIR chain data"); (c) drop — the capital
-side is the operator's and the shadow already detects it. Parked until their
-answer; the reference-NAV declaration itself is an operator choice.
-
-**↳ ANSWERED 2026-07-20 (same day, `FORGE_v42_ack_and_answers_2026-07-20.md`): shape (b), narrowed to an ANNOTATION.** The check lives Crucible-side at queue time next to the row-45 liquidity preflight (chain truth already in hand; (a) declined — no new cross-system surface for a LOW item). It will be an exported annotation (`min_contracts_at_reference_nav` on the verdict surface), NOT a reject — fractional sizing at engine capital is legitimate research; a non-statistical reject-class is not added quietly. **Build is gated on the OPERATOR declaring the reference NAV** (ties to the live-deposit decision); until then shape (c) is the operating truth — the shadow detects. Nothing Forge-side; Q52 stays open only as the operator-NAV tickler.
-
-## Q60 — `forge grammar reject-proposal` cannot run while the daemon holds the DB (2026-07-26, severity: low)
-
-**What.** Q58's recommended action (1) is to DECLINE proposal `f59812c7`. The command is
-`forge grammar reject-proposal --id … --initials …`, which does a `db_connection()` **write**
-(`UPDATE grammar_proposals SET status …`). The live `~/forge_data/forge.db` is held RW by
-`forge.service`, where even read-only opens fail intermittently (standing pitfall,
-`docs/tasks/investigate-live.md`). So the operator audit row cannot be written while the
-daemon runs.
-
-**Not urgent.** There is no auto-apply path (verified in Q58: `apply-proposal` is a separate
-CLI command, called zero times from the run loop), so a PENDING proposal is inert. The
-important half of Q58 — the **guard at source** — is shipped and prevents recurrence.
-
-**Staged.** Run `reject-proposal` inside the next stop→restart window, alongside any other
-DB-write chores. Pairs naturally with the `FORGE_PREFILTER_SAMPLE_N` 300 → 40 ramp.
-
-**Worth considering later, not now.** Every other operator DB-write command has the same
-constraint. A `--defer` mode that queues the audit row to a file the daemon folds in on its
-next loop would remove the coupling, but that is a design increment, not a fix for today.

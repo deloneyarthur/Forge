@@ -79,3 +79,7 @@ the holdout is the estimand's only clean window (P3.3 design intent).
 2c first (cheap, pure telemetry, de-risks everything downstream), then 2b
 (unblocks campaign velocity), then 2a (the model change, biggest lift), 2d
 alongside 2a. Each gets a prereg line before its comparison read.
+
+---
+
+> **ARCHIVED 2026-09-15 (D424): its 2b mechanism (`ranking/cell_floor.py`, the young-cell floor) was deleted with the daemon-era ranking (D419); the label-era rules it argued for live on in `feedback/eras.py`.**

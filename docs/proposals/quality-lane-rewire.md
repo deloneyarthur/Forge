@@ -1,5 +1,7 @@
 # Quality-lane re-wire: gate-then-tail (two-part `E[wf_p25 | clears]`)
 
+> **Post-cutover (2026-09-15, D424):** the campaign ranks in-cell by P(component) × robustness `tail_norm` (D410) — the robustness model this document designed is the one the weekly run trains and loads (`ranking/model.py`, `campaign/train.py`); the daemon's gate-tail LANE and its flip apparatus are retired (D419).
+
 Status: **ADOPTED — live in production since 2026-07-06** (D252 flipped
 `FORGE_QUALITY_RANK_MODE=gate-tail` on the unit, floor 0.02; D285 made the re-wire clock the
 adoption guard; every daily checkpoint since has qualified — this line was stale

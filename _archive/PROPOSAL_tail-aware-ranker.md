@@ -339,3 +339,7 @@ criterion plus the still-pending F3 go; enforcement on complement supply). **T3a
 persistence shipped inert (D141). No grammar/gate/loosening touched (§6). The headline change —
 **rank toward worst-quartile robustness, the thing that actually gates promotion** — is the
 producer-side answer to the binding constraint in [[promotion-gate-tiers-and-constraint]].
+
+---
+
+> **ARCHIVED 2026-09-15 (D424): the tail LANE this describes (T1 tail models ranking a daemon lane) retired with the daemon (D419); the campaign ranks in-cell by P(component) × robustness tail_norm (D410) and trains no tail model (D417). `ranking/dataset.py` still builds the tail regression targets; `ranking/model.train_tail_model` remains callable but unused.**

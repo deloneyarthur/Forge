@@ -259,3 +259,7 @@ Not a grammar edit, not a gate change, not a loosening of any §8.x bar (hard ru
 versionless feedback/ranker re-aim (the [[D103]]/[[D105]] lineage), shipped — if approved — via the
 feedback-change ritual + the D104 restart, A/B-flag-OFF-by-default. Layer 1 and the Priority-3 grammar bump
 are separately gated and not proposed for direct ship here.
+
+---
+
+> **ARCHIVED 2026-09-15 (D424): the D216 orthogonal-family floor was RETIRED (D367) and its code deleted in Batch 5 (D418/D420); no surviving module cites this design.**
