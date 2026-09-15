@@ -96,6 +96,9 @@ def label_for(decision: str, gate_results: Mapping[str, GateResult]) -> int:
     return int(decision in _POSITIVE_DECISIONS and honest_regime_coverage_row(gate_results))
 
 
+_CHUNK_ROWS: int = 50_000
+"""Rows per fetchmany: bounds the Python-object peak of each streamed pass."""
+
 _IDENTITY_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "crucible_run_id": pl.Utf8,
     "config_hash": pl.Utf8,
@@ -103,6 +106,104 @@ _IDENTITY_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "decision": pl.Utf8,
     "label": pl.Int64,
 }
+
+# Batch 6B (D426): the frame is built from two STREAMED passes and a polars join instead of one
+# fetchall() over verdicts JOIN submissions with per-verdict featurisation. Measured on the live
+# snapshot (1.27 M rows, 1.04 M configs) the old shape peaked at 24.4 GB; the join alone cost
+# 6 GB because DuckDB built its hash table on the verdicts side with the gate_results payload,
+# and the ORDER BY sorted that payload for another 4 GB. Features depend only on
+# (config, registry), so each config is featurised once; the join is a membership test against
+# pass 1; the canonical (decided_at, crucible_run_id) order is applied to the narrow identity
+# frame in polars. DuckDB orders a UUID as its text by design, so the polars string sort is the
+# same order. The frame is pinned column for column against the old implementation by
+# `tests/unit/test_ranking/test_dataset_streamed_vs_reference.py`.
+
+
+def _config_frame(
+    conn: duckdb.DuckDBPyConnection, registry: RegistrySnapshot, cut: datetime
+) -> tuple[dict[str, str], pl.DataFrame | None]:
+    """Pass 1: every config with a clean-era verdict, featurised once, plus its hypothesis.
+
+    D334-class trap, second occurrence (2026-07-25): re-reading OUR OWN stored config_json must
+    be forward-compatible. Contracts 1.36.0 stamped a `prefilter_sample` bool, 1.37.0 REMOVED
+    it, and rows from that era still carry it; a strict model_validate_json raised
+    extra_forbidden on the first such row and took the whole build with it (two nights of
+    frozen models, Q59). Strict validation still guards FIRST ingest at submit time.
+    """
+    hypothesis_of: dict[str, str] = {}
+    chunks: list[pl.DataFrame] = []
+    configs = conn.execute(
+        """
+        SELECT s.config_hash, s.config_json
+        FROM submissions s
+        WHERE s.config_hash IN (SELECT config_hash FROM verdicts WHERE decided_at >= ?)
+        """,
+        [cut],
+    )
+    while batch := configs.fetchmany(_CHUNK_ROWS):
+        records: list[dict[str, object]] = []
+        for config_hash, config_json in batch:
+            config = parse_forward_compatible(StrategyConfig, json.loads(config_json))
+            hypothesis_of[config_hash] = config.hypothesis
+            records.append(
+                {"config_hash": config_hash, **extract_features(config, registry).as_dict()}
+            )
+        chunks.append(pl.DataFrame(records, infer_schema_length=None))
+    if not chunks:
+        return hypothesis_of, None
+    # diagonal: a chunk may lack a one-hot that another chunk emits.
+    return hypothesis_of, pl.concat(chunks, how="diagonal")
+
+
+def _identity_frame(
+    conn: duckdb.DuckDBPyConnection,
+    cut: datetime,
+    hypothesis_of: Mapping[str, str],
+    *,
+    honest_scope: bool,
+    schema: Mapping[str, pl.DataType | type[pl.DataType]],
+) -> pl.DataFrame | None:
+    """Pass 2: one identity row per kept verdict, in canonical order.
+
+    A bare filtered scan streams out of DuckDB (execute() returns before the scan starts),
+    which is what bounds this pass; a verdict whose config has no submission is dropped here
+    exactly as the old inner join dropped it.
+    """
+    chunks: list[pl.DataFrame] = []
+    verdicts = conn.execute(
+        """
+        SELECT v.crucible_run_id, v.config_hash, v.decision, v.decided_at, v.gate_results
+        FROM verdicts v
+        WHERE v.decided_at >= ?
+        """,
+        [cut],
+    )
+    while batch := verdicts.fetchmany(_CHUNK_ROWS):
+        columns: dict[str, list[object]] = {name: [] for name in schema}
+        for run_id, config_hash, decision, decided_at, gate_results_json in batch:
+            hypothesis = hypothesis_of.get(config_hash)
+            if hypothesis is None:
+                continue
+            # D290: ghost-era ve labels are fiction (Crucible 07-19 close-out); never in the frame.
+            if is_ve_ghost_label(hypothesis, decided_at):
+                continue
+            gate_results = parse_gate_results(gate_results_json)
+            # D331 Part B: drop rows whose lane cannot carry a positive.
+            if honest_scope and not honest_regime_coverage_row(gate_results):
+                continue
+            columns["crucible_run_id"].append(str(run_id))
+            columns["config_hash"].append(config_hash)
+            columns["decided_at"].append(decided_at)
+            columns["decision"].append(decision)
+            columns["label"].append(label_for(decision, gate_results))
+            columns[COVERAGE_FEATURE].append(float(honest_regime_coverage_row(gate_results)))
+            for col, gate in _TARGET_GATE:
+                columns[col].append(_gate_value(gate_results, gate))
+        if columns["config_hash"]:
+            chunks.append(pl.DataFrame(columns, schema=dict(schema)))
+    if not chunks:
+        return None
+    return pl.concat(chunks).sort(["decided_at", "crucible_run_id"])
 
 
 def build_dataset(
@@ -143,70 +244,32 @@ def build_dataset(
         # DuckDB TIMESTAMP columns are naive-UTC by repo convention.
         cut = cut.astimezone(UTC).replace(tzinfo=None)
 
-    rows = conn.execute(
-        """
-        SELECT v.crucible_run_id, v.config_hash, v.decision, v.decided_at,
-               v.gate_results, s.config_json
-        FROM verdicts v
-        JOIN submissions s ON v.config_hash = s.config_hash
-        WHERE v.decided_at >= ?
-        ORDER BY v.decided_at, v.crucible_run_id
-        """,
-        [cut],
-    ).fetchall()
-
-    records: list[dict[str, object]] = []
-    feature_names: set[str] = set()
-    for run_id, config_hash, decision, decided_at, gate_results_json, config_json in rows:
-        # D334-class trap, second occurrence (2026-07-25): re-reading OUR OWN stored
-        # config_json must be forward-compatible. Contracts 1.36.0 stamped a
-        # `prefilter_sample` bool, 1.37.0 REMOVED it, and rows from that era still carry
-        # it — so a strict model_validate_json raised extra_forbidden on the first such
-        # row and took the whole dataset build with it. Consequence: `ranker-model train`
-        # and BOTH train-robustness targets failed nightly at 05:00 for ~2 days, logged
-        # benignly as "non-zero ... continuing", freezing the live cpcv model at its
-        # 07-23 fit — the same model carrying the rank_k collider (Q59). Strict validation
-        # still guards FIRST ingest at submit time; this is a RE-read.
-        config = parse_forward_compatible(StrategyConfig, json.loads(config_json))
-        # D290: ghost-era ve labels are fiction (Crucible 07-19 close-out) —
-        # they never enter the training frame.
-        if is_ve_ghost_label(config.hypothesis, decided_at):
-            continue
-        gate_results = parse_gate_results(gate_results_json)
-        # D331 Part B: drop rows whose lane cannot carry a positive. Placed AFTER the
-        # ve-ghost cut and BEFORE featurization so the skipped rows cost nothing.
-        if honest_scope and not honest_regime_coverage_row(gate_results):
-            continue
-        features = extract_features(config, registry).as_dict()
-        feature_names.update(features)
-        records.append(
-            {
-                "crucible_run_id": str(run_id),
-                "config_hash": config_hash,
-                "decided_at": decided_at,
-                "decision": decision,
-                "label": label_for(decision, gate_results),
-                COVERAGE_FEATURE: float(honest_regime_coverage_row(gate_results)),
-                **{col: _gate_value(gate_results, gate) for col, gate in _TARGET_GATE},
-                **features,
-            }
-        )
-
-    leading = [*_IDENTITY_SCHEMA, *TARGET_COLUMNS, COVERAGE_FEATURE]
     target_floats: dict[str, pl.DataType | type[pl.DataType]] = {
         c: pl.Float64 for c in (*TARGET_COLUMNS, COVERAGE_FEATURE)
     }
-    if not records:
+    identity_schema: dict[str, pl.DataType | type[pl.DataType]] = {
+        **_IDENTITY_SCHEMA,
+        "decided_at": pl.Datetime("us"),
+        **target_floats,
+    }
+    hypothesis_of, config_frame = _config_frame(conn, registry, cut)
+    identity = _identity_frame(
+        conn, cut, hypothesis_of, honest_scope=honest_scope, schema=identity_schema
+    )
+    if identity is None or config_frame is None:
         return pl.DataFrame(schema={**_IDENTITY_SCHEMA, **target_floats})
 
-    ordered_features = sorted(feature_names)
-    for record in records:
-        for name in ordered_features:
-            record.setdefault(name, 0.0)
-
-    return pl.DataFrame(records, schema_overrides=target_floats).select(
-        [*leading, *ordered_features]
-    )
+    feature_columns = [c for c in config_frame.columns if c != "config_hash"]
+    joined = identity.join(config_frame, on="config_hash", how="left", maintain_order="left")
+    # The feature set is the union over configs that SURVIVED the row filters (the old
+    # implementation featurised after filtering): a column that is null on every kept row was
+    # never emitted by a kept config, so it does not exist in the frame.
+    kept = [c for c in feature_columns if joined[c].null_count() < joined.height]
+    ordered_features = sorted(kept)
+    leading = [*_IDENTITY_SCHEMA, *TARGET_COLUMNS, COVERAGE_FEATURE]
+    return joined.with_columns(
+        [pl.col(c).fill_null(0.0).cast(pl.Float64) for c in ordered_features]
+    ).select([*leading, *ordered_features])
 
 
 def build_label_frame(
