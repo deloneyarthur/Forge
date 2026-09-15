@@ -3,9 +3,8 @@
 `Calibration` mirrors `config/prefilter.yaml` as a nested frozen dataclass.
 `load_calibration(path)` round-trips it. Adjustments arrive as
 `AdjustmentProposal`s; the API enforces hard rule #4's spirit by exposing
-`apply_tightening` (pure) and `write_loosening_proposal` (writes to
-`OPEN_PROPOSALS.md`) but NOT `apply_loosening`. Phase 3 ships only the
-mechanism; Phase 5 will wire the feedback-driven trigger.
+`apply_tightening` (pure) but NOT `apply_loosening` — and, since Batch 5 G4 (D421), no
+loosening proposal writer either: a loosening needs a preregistration and the operator.
 
 See DESIGN.md §5.5, `IMPLEMENTATION_DECISIONS.md` D021 (closure D3).
 """
@@ -439,27 +438,6 @@ def apply_tightening(
     )
 
 
-def write_loosening_proposal(proposal: AdjustmentProposal, inbox_path: Path) -> None:
-    """Append a loosen proposal to `OPEN_PROPOSALS.md` for operator review.
-
-    Structural enforcement of CLAUDE.md hard rule #4 (and the analogous
-    discipline for pre-filter loosening, D021/D3): there is intentionally
-    NO `apply_loosening` function on this module. Loosenings must go
-    through this path -> operator decides -> human-edited yaml.
-    """
-    if proposal.direction != "loosen":
-        msg = f"write_loosening_proposal rejected tighten proposal: {proposal.reason!r}"
-        raise ValueError(msg)
-    block = (
-        "\n---\n"
-        f"- direction: loosen\n"
-        f"- magnitude_pct: {proposal.magnitude_pct}\n"
-        f"- reason: {proposal.reason}\n"
-    )
-    with inbox_path.open("a", encoding="utf-8") as fh:
-        fh.write(block)
-
-
 def write_calibration_yaml(calibration: Calibration, path: Path) -> None:
     """Serialize `Calibration` back to the §10.2 YAML shape, atomically.
 
@@ -506,5 +484,4 @@ __all__ = [
     "load_calibration",
     "propose_adjustment",
     "write_calibration_yaml",
-    "write_loosening_proposal",
 ]

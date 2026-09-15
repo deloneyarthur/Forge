@@ -23,9 +23,7 @@ from forge.grammar.archive import (
 from forge.grammar.loader import load_grammar
 from forge.grammar.models import (
     CardinalityPredicate,
-    CompatibilityPredicate,
     CustomPythonPredicate,
-    ForbidsPredicate,
     Grammar,
     GrammarError,
     GrammarLoadError,
@@ -33,7 +31,6 @@ from forge.grammar.models import (
     NumericalRangePredicate,
     Predicate,
     PredicateResult,
-    RequiresPredicate,
     Rule,
 )
 from forge.grammar.path_resolver import resolve
@@ -42,9 +39,7 @@ from forge.grammar.validator import validate
 
 __all__ = [
     "CardinalityPredicate",
-    "CompatibilityPredicate",
     "CustomPythonPredicate",
-    "ForbidsPredicate",
     "Grammar",
     "GrammarError",
     "GrammarLoadError",
@@ -52,7 +47,6 @@ __all__ = [
     "NumericalRangePredicate",
     "Predicate",
     "PredicateResult",
-    "RequiresPredicate",
     "Rule",
     "archive_grammar",
     "compute_grammar_hash",

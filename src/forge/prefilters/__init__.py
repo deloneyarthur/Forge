@@ -9,7 +9,6 @@ from forge.prefilters.calibration import (
     apply_tightening,
     load_calibration,
     propose_adjustment,
-    write_loosening_proposal,
 )
 from forge.prefilters.feature_cache import (
     REGIMES,
@@ -38,5 +37,4 @@ __all__ = [
     "load_calibration",
     "propose_adjustment",
     "run_battery",
-    "write_loosening_proposal",
 ]

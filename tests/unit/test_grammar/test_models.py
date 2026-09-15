@@ -12,14 +12,11 @@ from pydantic import TypeAdapter, ValidationError
 
 from forge.grammar.models import (
     CardinalityPredicate,
-    CompatibilityPredicate,
     CustomPythonPredicate,
-    ForbidsPredicate,
     Grammar,
     NumericalRangePredicate,
     Predicate,
     PredicateResult,
-    RequiresPredicate,
     Rule,
 )
 
@@ -99,66 +96,6 @@ def test_cardinality_extra_field_rejected() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Requires + Forbids
-# ---------------------------------------------------------------------------
-
-
-def test_requires_construction() -> None:
-    p = RequiresPredicate.model_validate(
-        {
-            "type": "requires",
-            "if": {"field": "hypothesis", "value": "mean_reversion"},
-            "then": {"field": "exits", "includes": "time_stop"},
-        },
-    )
-    assert p.if_.field == "hypothesis"
-    assert p.if_.value == "mean_reversion"
-    assert p.then.includes == "time_stop"
-
-
-def test_forbids_construction() -> None:
-    p = ForbidsPredicate.model_validate(
-        {
-            "type": "forbids",
-            "if": {"field": "hypothesis", "value": "trend_continuation"},
-            "then": {"field": "exits", "includes": "hard_profit_target"},
-        },
-    )
-    assert p.if_.value == "trend_continuation"
-    assert p.then.includes == "hard_profit_target"
-
-
-def test_requires_extra_field_rejected() -> None:
-    with pytest.raises(ValidationError):
-        RequiresPredicate.model_validate(
-            {
-                "type": "requires",
-                "if": {"field": "hypothesis", "value": "x", "extra": 1},
-                "then": {"field": "exits", "includes": "y"},
-            },
-        )
-
-
-# ---------------------------------------------------------------------------
-# CompatibilityPredicate
-# ---------------------------------------------------------------------------
-
-
-def test_compatibility_construction() -> None:
-    p = CompatibilityPredicate(
-        type="compatibility",
-        field1="lookback_class",
-        field2="dte_bucket",
-        table={
-            "short_lookback": ("swing_short",),
-            "medium_lookback": ("swing_short", "swing_mid"),
-            "long_lookback": ("swing_mid", "swing_long"),
-        },
-    )
-    assert p.table["short_lookback"] == ("swing_short",)
-
-
-# ---------------------------------------------------------------------------
 # NumericalRangePredicate
 # ---------------------------------------------------------------------------
 
@@ -215,17 +152,6 @@ def test_predicate_union_parses_cardinality() -> None:
         {"type": "cardinality", "field": "hypothesis", "count": 1},
     )
     assert isinstance(p, CardinalityPredicate)
-
-
-def test_predicate_union_parses_requires() -> None:
-    p = _PREDICATE_TA.validate_python(
-        {
-            "type": "requires",
-            "if": {"field": "hypothesis", "value": "x"},
-            "then": {"field": "exits", "includes": "y"},
-        },
-    )
-    assert isinstance(p, RequiresPredicate)
 
 
 def test_predicate_union_unknown_type_rejected() -> None:

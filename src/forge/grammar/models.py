@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -101,55 +101,6 @@ class CardinalityPredicate(_PredicateBase):
         return self
 
 
-class _FieldValueClause(BaseModel):
-    """Atomic clause shared by `requires`/`forbids`: field equals value."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    field: str = Field(min_length=1)
-    value: Any
-
-
-class _FieldIncludesClause(BaseModel):
-    """Atomic clause shared by `requires`/`forbids`: field includes value."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    field: str = Field(min_length=1)
-    includes: Any
-
-
-class RequiresPredicate(_PredicateBase):
-    """If the `if`-clause matches `config`, the `then`-clause must also match.
-
-    §3.4 form: `if: {field, value}`, `then: {field, includes}`.
-    """
-
-    type: Literal["requires"]
-    if_: _FieldValueClause = Field(alias="if")
-    then: _FieldIncludesClause
-
-
-class ForbidsPredicate(_PredicateBase):
-    """If the `if`-clause matches `config`, the `then`-clause must NOT match."""
-
-    type: Literal["forbids"]
-    if_: _FieldValueClause = Field(alias="if")
-    then: _FieldIncludesClause
-
-
-class CompatibilityPredicate(_PredicateBase):
-    """Structural compatibility between two fields via a lookup table.
-
-    `field1`'s value (or a registry-resolved derived value, e.g.,
-    lookback→class) must appear under that key in `table`; that key's value
-    list must include `field2`'s value.
-    """
-
-    type: Literal["compatibility"]
-    field1: str = Field(min_length=1)
-    field2: str = Field(min_length=1)
-    table: dict[str, tuple[str, ...]]
-
-
 class NumericalRangePredicate(_PredicateBase):
     """Resolve `field` to a number; assert `min ≤ value ≤ max`. At least one
     of `min`/`max` must be set."""
@@ -181,13 +132,11 @@ class CustomPythonPredicate(_PredicateBase):
     function: str = Field(min_length=1)
 
 
+# `requires` / `forbids` / `compatibility` predicate types were removed in Batch 5 G4 (D421):
+# no rule in v55 or in any of the 55 archived grammars ever used them, and under the signed
+# freeze the loader refusing an unknown type is a feature, not a gap.
 Predicate = Annotated[
-    CardinalityPredicate
-    | RequiresPredicate
-    | ForbidsPredicate
-    | CompatibilityPredicate
-    | NumericalRangePredicate
-    | CustomPythonPredicate,
+    CardinalityPredicate | NumericalRangePredicate | CustomPythonPredicate,
     Field(discriminator="type"),
 ]
 
@@ -248,9 +197,7 @@ class Grammar(BaseModel):
 
 __all__ = [
     "CardinalityPredicate",
-    "CompatibilityPredicate",
     "CustomPythonPredicate",
-    "ForbidsPredicate",
     "Grammar",
     "GrammarError",
     "GrammarLoadError",
@@ -258,6 +205,5 @@ __all__ = [
     "NumericalRangePredicate",
     "Predicate",
     "PredicateResult",
-    "RequiresPredicate",
     "Rule",
 ]

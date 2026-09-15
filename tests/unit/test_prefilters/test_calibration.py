@@ -6,7 +6,8 @@ Covers:
 - Loader rejects unknown top-level keys, missing keys, and invalid types.
 - `propose_adjustment` returns the right direction + magnitude.
 - `apply_tightening` is pure and shifts knobs in the stricter direction.
-- `write_loosening_proposal` appends to ``OPEN_PROPOSALS.md`` and does not
+- there is no loosening write path at all (`write_loosening_proposal`, 0 callers, left in
+  Batch 5 G4 / D421; grammar changes need a preregistration, hard rule #4) and
   expose a symmetric ``apply_loosening`` that mutates calibration directly
   (Phase 3 closure D3 + CLAUDE.md hard rule #4).
 - The exported module surface has no ``apply_loosening`` — structural
@@ -25,7 +26,6 @@ from forge.prefilters.calibration import (
     apply_tightening,
     load_calibration,
     propose_adjustment,
-    write_loosening_proposal,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -282,29 +282,11 @@ def test_apply_tightening_rejects_loosen_proposal() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_write_loosening_proposal_appends_to_inbox(tmp_path: Path) -> None:
-    inbox = tmp_path / "OPEN_PROPOSALS.md"
-    p1 = AdjustmentProposal(direction="loosen", magnitude_pct=0.10, reason="promotion 0.3% < 0.5%")
-    p2 = AdjustmentProposal(direction="loosen", magnitude_pct=0.10, reason="promotion 0.2% < 0.5%")
-    write_loosening_proposal(p1, inbox)
-    write_loosening_proposal(p2, inbox)
-    body = inbox.read_text(encoding="utf-8")
-    assert "promotion 0.3% < 0.5%" in body
-    assert "promotion 0.2% < 0.5%" in body
-    assert body.count("- direction: loosen") == 2
-
-
-def test_write_loosening_proposal_rejects_tighten(tmp_path: Path) -> None:
-    p = AdjustmentProposal(direction="tighten", magnitude_pct=0.10, reason="x")
-    with pytest.raises(ValueError, match="tighten"):
-        write_loosening_proposal(p, tmp_path / "never_written.md")
-
-
 def test_module_does_not_expose_apply_loosening() -> None:
     """Structural enforcement of CLAUDE.md hard rule #4 (and the spec's
     analogous discipline for pre-filter loosening, D021/D3): there is
-    NO ``apply_loosening`` function on this module. Loosening must go
-    through `write_loosening_proposal` -> operator review."""
+    NO ``apply_loosening`` function on this module (and, since D421, no loosening
+    proposal writer either); loosening needs a preregistration + the operator."""
     assert not hasattr(calibration_module, "apply_loosening")
 
 
@@ -325,7 +307,6 @@ def test_calibration_module_public_surface() -> None:
         "load_calibration",
         "propose_adjustment",
         "write_calibration_yaml",
-        "write_loosening_proposal",
     }
     assert set(calibration_module.__all__) == expected
 

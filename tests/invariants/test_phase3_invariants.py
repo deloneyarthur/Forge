@@ -126,13 +126,12 @@ def test_short_circuit_no_later_filters_run_after_failure(grammar: Grammar) -> N
 
 def test_calibration_module_does_not_expose_apply_loosening() -> None:
     """Structural enforcement: `forge.prefilters.calibration` exposes
-    `apply_tightening` but NOT `apply_loosening`. Loosenings must go
-    through `write_loosening_proposal` -> operator review."""
+    `apply_tightening` but NOT `apply_loosening` (nor, since D421, any loosening
+    proposal writer). Loosening needs a preregistration + the operator (hard rule #4)."""
     assert not hasattr(calibration_module, "apply_loosening")
     assert "apply_loosening" not in calibration_module.__all__
     # The structural counterpart that we DO expose:
     assert hasattr(calibration_module, "apply_tightening")
-    assert hasattr(calibration_module, "write_loosening_proposal")
 
 
 # ---------------------------------------------------------------------------
