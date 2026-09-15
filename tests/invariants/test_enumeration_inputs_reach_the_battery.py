@@ -3,7 +3,7 @@
 D352 (v53 deploy, 2026-08-02): the daemon computed and journal-logged `below_inception` but never
 passed it to the enumerator, so generation ran UNFILTERED while the log claimed names were
 excluded — a journal line is not an emission proof. Re-targeted (Batch 5 G1) from
-`cli/main._run_one_iteration` to `campaign/run.enumerate_population`, the one place the weekly
+`cli/main._run_one_iteration` to `campaign/generate.enumerate_population`, the one place the weekly
 run enumerates. Guarded statically: the call must forward the structural inputs by keyword, and
 any local the function computes whose name is an `enumerate_candidates` parameter must be
 forwarded (pass `x=None` explicitly if deliberately withheld, so the omission is visible in a diff).
@@ -15,7 +15,7 @@ import ast
 from pathlib import Path
 
 _SRC = Path(__file__).resolve().parents[2] / "src" / "forge"
-_RUN = _SRC / "campaign" / "run.py"
+_RUN = _SRC / "campaign" / "generate.py"
 _ITERATOR = _SRC / "enumeration" / "iterator.py"
 _ENUMERATE = "enumerate_population"
 _CALLEE = "enumerate_candidates"

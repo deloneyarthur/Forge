@@ -13,18 +13,20 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from forge.campaign.types import (
+    CAMPAIGN_RUN_SCHEMA,
     BootCheck,
     CampaignSpec,
     CellKey,
     RunRecord,
     TriggerOutcome,
 )
+from forge.core.clock import utc_now
 
 if TYPE_CHECKING:
     import duckdb
@@ -259,3 +261,50 @@ __all__ = [
     "record_to_json",
     "write_record",
 ]
+
+
+def record_factory(
+    *,
+    run_id: str,
+    started: datetime,
+    iso_week: str,
+    dry_run: bool,
+    watermarks: Mapping[str, str],
+    boot: tuple[BootCheck, ...],
+) -> Callable[..., RunRecord]:
+    """The run's record with every field at its boot-failed default; each exit path overrides
+    only what it learned. ``finished_at`` is stamped when the record is made."""
+
+    def _record(**overrides: object) -> RunRecord:
+        base: dict[str, object] = {
+            "schema_version": CAMPAIGN_RUN_SCHEMA,
+            "run_id": run_id,
+            "started_at": started,
+            "finished_at": utc_now(),
+            "dry_run": dry_run,
+            "status": "boot_failed",
+            "grammar_version": None,
+            "registry_hash": None,
+            "enumeration_inputs_hash": None,
+            "seed": None,
+            "iso_week": iso_week,
+            "watermarks": watermarks,
+            "boot": boot,
+            "designated_id": None,
+            "triggers": (),
+            "campaigns": (),
+            "enumerated": 0,
+            "kept_in_cells": 0,
+            "survived_battery": 0,
+            "gated_out": {},
+            "submitted": 0,
+            "submitted_hashes": (),
+            "batch_id": None,
+            "baselines": {},
+            "notes": (),
+            "models": {},
+        }
+        base.update(overrides)
+        return RunRecord(**base)  # type: ignore[arg-type]
+
+    return _record
