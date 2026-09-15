@@ -12,11 +12,13 @@ Crucible's real DDL ships, switch tests to that and retire this fixture.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 import duckdb
+from crucible_contracts import get_recent_gated_runs
 
 CRUCIBLE_READ_SCHEMA: tuple[str, ...] = (
     """
@@ -86,3 +88,24 @@ def ephemeral_crucible_db(tmp_path: Path) -> Iterator[Path]:
     finally:
         if db_path.exists():
             db_path.unlink()
+
+
+def write_gated_runs_export(
+    exports_dir: Path,
+    crucible_db: Path,
+    *,
+    name: str = "gated_runs_0001.json",
+    limit: int = 1000,
+) -> Path:
+    """Publish the synthetic DB's current gated rows as a `gated_runs_*.json` export.
+
+    WHY: since D422 Forge reads Crucible ONLY through its exports (hard rule #2), so a
+    test that seeds the synthetic DB must hand the consumer what Crucible's publisher
+    would have written. Reading the FIXTURE DB directly here is the one place that is
+    allowed. Returns ``exports_dir`` (created) so it can be passed as ``exports_dir=``.
+    """
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    runs = get_recent_gated_runs(crucible_db, limit=limit)
+    payload = {"gated_runs": [json.loads(r.model_dump_json()) for r in runs]}
+    (exports_dir / name).write_text(json.dumps(payload), encoding="utf-8")
+    return exports_dir

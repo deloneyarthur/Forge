@@ -1,23 +1,13 @@
-# Forge main configuration. See docs/DESIGN.md §10.1.
-# D247: the never-read §10.1 keys (data_root, log_root, feedback.*) are retired;
-# the schema (forge_config.py, extra="forbid") rejects them if re-added.
+# Forge main configuration (plan 2026-09 §12; Batch 5 G5, D422).
+# Three things only: where Forge's DB lives, where Crucible's inbox is, and the weekly run's knobs.
+# The schema (forge_config.py, extra="forbid") rejects anything else — the daemon-era keys
+# (enumeration.*, submission.*, crucible.db_path) left with the daemon; a stale key fails loud.
 forge:
   db_path: ~/forge_data/forge.db
-
   crucible:
-    inbox_path: ~/optbt_data/inbox        # where Forge writes
-    db_path: ~/optbt_data/runs.duckdb     # where Forge reads (read-only)
-
-  enumeration:
-    max_candidates_per_batch: 5000   # v1 go-live; ramp once loop stability is proven
-    seed: 42
-
-  submission:
-    batch_size: 200
-    inflight_threshold: 0.80   # wait until 80% of prev batch is gated
-    poll_interval_seconds: 60  # v1 go-live; Crucible runner polls every 30s
-    stall_after_seconds: 10800 # Q38/D137 §7.3 stall guard: block if Crucible has
-                               # held new work >=3h with zero decisions (0=off)
-    max_inflight: 600          # D196/D200 §7.3 depth cap: block when the genuine in-flight
-                               # queue (submitted rows newer than the D110 flush watermark)
-                               # exceeds ~3x batch_size; bounds the learnable queue (0=off)
+    inbox_path: ~/optbt_data/inbox        # where the weekly run writes (contracts submit_candidate)
+  # campaign: overrides for forge.campaign.types.CampaignConfig (every field has a default there;
+  # unknown keys fail loud). Example:
+  #   campaign:
+  #     weekly_cap: 400
+  #     exploration_min: 20

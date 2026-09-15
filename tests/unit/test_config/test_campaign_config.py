@@ -16,14 +16,6 @@ forge:
   db_path: ~/forge_data/forge.db
   crucible:
     inbox_path: ~/optbt_data/inbox
-    db_path: ~/optbt_data/runs.duckdb
-  enumeration:
-    max_candidates_per_batch: 100
-    seed: 1
-  submission:
-    batch_size: 10
-    inflight_threshold: 0.8
-    poll_interval_seconds: 60
 """
 
 

@@ -20,7 +20,10 @@ import pytest
 from forge.feedback.consumer import consume_batch_results
 from forge.persistence.db import db_connection
 from tests.fixtures.strategy_configs import minimal_strategy_config
-from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
+from tests.fixtures.synthetic_crucible_db import (
+    build_synthetic_crucible_db,
+    write_gated_runs_export,
+)
 
 # ---------------------------------------------------------------------------
 # CLAUDE.md hard rule #4 (no apply_loosening) — structural
@@ -123,8 +126,9 @@ def test_consume_batch_results_is_idempotent(tmp_path: Path) -> None:
     with db_connection(forge_db) as conn:
         _insert_batch(conn, batch_id=batch_id, batch_size=1)
         _insert_forge_sub(conn, batch_id=batch_id, config=cfg)
-        a = consume_batch_results(conn, crucible_db, batch_id=batch_id)
-        b = consume_batch_results(conn, crucible_db, batch_id=batch_id)
+        exports = write_gated_runs_export(tmp_path / "exports", crucible_db)
+        a = consume_batch_results(conn, batch_id=batch_id, exports_dir=exports)
+        b = consume_batch_results(conn, batch_id=batch_id, exports_dir=exports)
         rows = conn.execute("SELECT COUNT(*) FROM submissions").fetchone()
     assert a.gated_count == b.gated_count
     assert a.promoted_count == b.promoted_count

@@ -60,7 +60,6 @@ def test_campaign_ends_as_error_and_submits_nothing_when_real_cache_unavailable(
             models_dir=env["models"],
             records_dir=env["records"],
             config_root=env["config_root"],
-            crucible_db=env["crucible_db"],
             cfg=_CFG,
             dry_run=False,
             skip_train=True,

@@ -57,7 +57,6 @@ def test_injected_runs_reconcile_with_their_provenance_and_no_flush(tmp_path: Pa
     with db_connection(forge_db) as conn:
         feedbacks = reconcile_all_pending(
             conn,
-            crucible_db,
             exports_dir=tmp_path / "noexports",
             runs=runs,
             source_export="forge_gated_runs_0001.json",
@@ -78,7 +77,6 @@ def test_injected_runs_with_flush_age_out_the_stranded_row(tmp_path: Path) -> No
     with db_connection(forge_db) as conn:
         reconcile_all_pending(
             conn,
-            crucible_db,
             exports_dir=tmp_path / "noexports",
             runs=runs,
             source_export="forge_gated_runs_0002.json",

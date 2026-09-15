@@ -514,7 +514,6 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
     models_dir: Path,
     records_dir: Path,
     config_root: Path,
-    crucible_db: Path,
     cfg: CampaignConfig,
     dry_run: bool,
     budget_override: int | None = None,
@@ -614,7 +613,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
                     "aged-out flush skipped"
                 )
                 feedback = reconcile_all_pending(
-                    conn, crucible_db, exports_dir=exports_dir, flush_aged_out=False
+                    conn, exports_dir=exports_dir, flush_aged_out=False
                 )
             else:
                 newest_forge = _newest(exports_dir, _EXPORT_GLOBS["forge_gated_runs"])
@@ -632,7 +631,6 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
                 echo(f"reconcile: forge_gated_runs {span}{warn}")
                 feedback = reconcile_all_pending(
                     conn,
-                    crucible_db,
                     exports_dir=exports_dir,
                     runs=forge_stream.gated_runs,
                     source_export=newest_forge.name if newest_forge is not None else None,

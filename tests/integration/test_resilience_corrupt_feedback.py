@@ -32,15 +32,18 @@ import duckdb
 from forge.feedback.consumer import consume_batch_results
 from forge.persistence.db import db_connection
 from tests.fixtures.strategy_configs import minimal_strategy_config
-from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
+from tests.fixtures.synthetic_crucible_db import (
+    build_synthetic_crucible_db,
+    write_gated_runs_export,
+)
 
 
 def _consume(forge_db: Path, crucible_db: Path, batch_id: uuid.UUID) -> object:
-    """The consumer call `forge feedback` used to wrap (the CLI left in Batch 5 G1)."""
+    """Consume through the production read path (D422): the synthetic DB's rows published as a
+    gated export — including the orphaned run, exactly as Crucible's publisher would emit it."""
+    exports = write_gated_runs_export(forge_db.parent / "exports", crucible_db)
     with db_connection(forge_db) as conn:
-        return consume_batch_results(
-            conn, crucible_db, batch_id=batch_id, exports_dir=forge_db.parent / "noexports"
-        )
+        return consume_batch_results(conn, batch_id=batch_id, exports_dir=exports)
 
 
 def _insert_crucible_gated_with_decision(

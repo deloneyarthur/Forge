@@ -21,7 +21,10 @@ from forge.feedback.consumer import reconcile_all_pending
 from forge.persistence.db import db_connection
 from forge.persistence.verdicts import record_verdicts
 from tests.fixtures.strategy_configs import minimal_strategy_config
-from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
+from tests.fixtures.synthetic_crucible_db import (
+    build_synthetic_crucible_db,
+    write_gated_runs_export,
+)
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -286,7 +289,9 @@ def test_reconcile_all_pending_records_verdicts(tmp_path: Path) -> None:
             decision="reject",
             failed_gate="min_oos_trade_count",
         )
-        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "no_exports")
+        reconcile_all_pending(
+            conn, exports_dir=write_gated_runs_export(tmp_path / "exports", crucible_db)
+        )
         rows = _verdict_rows(conn)
         assert len(rows) == 1
         assert str(rows[0][0]) == run_id
@@ -326,7 +331,9 @@ def test_reconcile_flushed_sentinel_rows_get_no_verdict(tmp_path: Path) -> None:
             decision="component",
             decided_at=newest_decision,
         )
-        reconcile_all_pending(conn, crucible_db, exports_dir=tmp_path / "no_exports")
+        reconcile_all_pending(
+            conn, exports_dir=write_gated_runs_export(tmp_path / "exports", crucible_db)
+        )
         rows = _verdict_rows(conn)
         assert [r[1] for r in rows] == [fresh_cfg.config_hash]
         sentinel = conn.execute(

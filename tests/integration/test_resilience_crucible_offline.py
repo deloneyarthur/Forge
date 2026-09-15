@@ -1,16 +1,13 @@
-"""Phase 6 — resilience scenario: Crucible offline (§12 / D025/D3.i).
+"""Phase 6 — resilience scenario: Crucible's gated export absent or corrupt (§12 / D025/D3.i).
 
-When `forge feedback` is invoked against a non-existent or unreachable
-``--crucible-db``, it must:
+Since D422 Forge reads Crucible ONLY through its exports (hard rule #2; the direct
+`runs.duckdb` fallback is gone). Two failure modes, two contracts:
 
-  1. Exit with a non-zero status (no silent success).
-  2. Surface a clean error message naming the unreachable DB (not a
-     bare stack trace).
-  3. Leave the Forge DB unchanged — no partial mutations to
-     ``submissions.status`` or ``batch_summaries.promotion_rate``.
-
-Property (3) is the resilience invariant that matters most: a missing
-Crucible DB must not corrupt Forge state.
+  1. An ABSENT export (dir or file) is zero runs: the consumer completes, and the
+     Forge DB is left unchanged — no partial mutation to `submissions.status` or
+     `batch_summaries.promotion_rate`. Presence is the weekly run's boot check.
+  2. A CORRUPT export must surface as `QueryError` (a corrupt snapshot is not
+     "0 gated"), again leaving the Forge DB unchanged.
 """
 
 from __future__ import annotations
@@ -70,46 +67,49 @@ def _read_submission_state(forge_db: Path) -> dict[str, object]:
     }
 
 
-def _consume(forge_db: Path, crucible_db: Path, batch_id: uuid.UUID) -> None:
-    """The consumer call `forge feedback` used to wrap (the CLI left in Batch 5 G1). No gated
-    export exists under `noexports`, so the consumer falls through to the direct-DB path — the
-    "Crucible offline" condition (D025/D3.i) it must surface, never swallow."""
+def _consume(forge_db: Path, exports_dir: Path, batch_id: uuid.UUID) -> object:
     with db_connection(forge_db) as conn:
-        consume_batch_results(
-            conn, crucible_db, batch_id=batch_id, exports_dir=forge_db.parent / "noexports"
-        )
+        return consume_batch_results(conn, batch_id=batch_id, exports_dir=exports_dir)
 
 
-def test_missing_crucible_db_raises_query_error(tmp_path: Path) -> None:
-    forge_db = tmp_path / "forge.db"
-    batch_id = _seed_forge_db_with_submitted_batch(forge_db)
-    missing_crucible = tmp_path / "does_not_exist.db"
-    assert not missing_crucible.exists()
-    with pytest.raises(QueryError):
-        _consume(forge_db, missing_crucible, batch_id)
-
-
-def test_missing_crucible_db_leaves_forge_db_unchanged(tmp_path: Path) -> None:
+def test_absent_export_is_zero_runs_and_leaves_submissions_unchanged(tmp_path: Path) -> None:
+    """Zero runs is a legitimate (if empty) reconcile: no submission row moves. The batch
+    summary is recomputed from what is known (nothing gated → promotion_rate 0.0), exactly as
+    it is when an export exists but names none of the batch's hashes — that recompute is
+    idempotent and is not the partial-mutation hazard this scenario guards against."""
     forge_db = tmp_path / "forge.db"
     batch_id = _seed_forge_db_with_submitted_batch(forge_db)
     before = _read_submission_state(forge_db)
     assert before["status"] == "submitted"
-    assert before["crucible_run_id"] is None
-    assert before["promotion_rate"] is None
-    with pytest.raises(QueryError):
-        _consume(forge_db, tmp_path / "does_not_exist.db", batch_id)
+    missing_dir = tmp_path / "no_exports"
+    assert not missing_dir.exists()
+    feedback = _consume(forge_db, missing_dir, batch_id)
+    assert getattr(feedback, "gated_count", None) == 0
     after = _read_submission_state(forge_db)
-    assert after == before, (
-        f"forge_db mutated despite Crucible offline: before={before}, after={after}"
-    )
+    assert after["status"] == "submitted"
+    assert after["crucible_run_id"] is None
+    assert after["completed_at"] is None
 
 
-def test_unreadable_crucible_db_does_not_crash_silently(tmp_path: Path) -> None:
-    """An empty/bogus file at the crucible_db path (a different failure mode than 'missing')
-    also surfaces as a clean QueryError rather than an unhandled crash."""
+def test_empty_export_dir_is_zero_runs(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     batch_id = _seed_forge_db_with_submitted_batch(forge_db)
-    bogus_crucible = tmp_path / "not_a_db.db"
-    bogus_crucible.write_bytes(b"this is not a duckdb file")
+    empty_dir = tmp_path / "exports"
+    empty_dir.mkdir()
+    feedback = _consume(forge_db, empty_dir, batch_id)
+    assert getattr(feedback, "gated_count", None) == 0
+    assert _read_submission_state(forge_db)["status"] == "submitted"
+
+
+def test_corrupt_export_raises_query_error_and_leaves_forge_db_unchanged(tmp_path: Path) -> None:
+    """A corrupt snapshot is not "0 gated": the loader's QueryError must propagate (never be
+    swallowed, CLAUDE.md blessed exceptions) and nothing in the Forge DB may move."""
+    forge_db = tmp_path / "forge.db"
+    batch_id = _seed_forge_db_with_submitted_batch(forge_db)
+    before = _read_submission_state(forge_db)
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    (exports / "gated_runs_0001.json").write_text("this is not json", encoding="utf-8")
     with pytest.raises(QueryError):
-        _consume(forge_db, bogus_crucible, batch_id)
+        _consume(forge_db, exports, batch_id)
+    assert _read_submission_state(forge_db) == before  # the raise precedes every write

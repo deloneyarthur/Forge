@@ -30,7 +30,6 @@ _DEFAULT_EXPORTS = Path("~/optbt_data/exports")
 _DEFAULT_RECORDS = Path("~/forge_data/campaigns")
 _DEFAULT_FORGE_DB = Path("~/forge_data/forge.db")
 _DEFAULT_INBOX = Path("~/optbt_data/inbox")
-_DEFAULT_CRUCIBLE_DB = Path("~/optbt_data/runs.duckdb")
 _EXIT_BOOT_FAILED = 2
 _EXIT_ERROR = 1
 
@@ -54,7 +53,7 @@ def cmd_campaign(
         help="Do not retrain the verdict/robustness models this run; rank on the newest artifacts.",
     ),
     config: Path = typer.Option(
-        _DEFAULT_CONFIG, "--config", help="forge.yaml (db/inbox/crucible paths + campaign: knobs)."
+        _DEFAULT_CONFIG, "--config", help="forge.yaml (db path, inbox path, campaign: knobs)."
     ),
     no_config: bool = typer.Option(
         False, "--no-config", help="Ignore forge.yaml; use defaults and explicit paths only."
@@ -64,9 +63,6 @@ def cmd_campaign(
     ),
     inbox: Path | None = typer.Option(
         None, "--inbox", help="Crucible inbox dir (default: forge.yaml or ~/optbt_data/inbox)."
-    ),
-    crucible_db: Path | None = typer.Option(
-        None, "--crucible-db", help="Crucible runs.duckdb, the consumer's fallback path only."
     ),
     exports_dir: Path = typer.Option(
         _DEFAULT_EXPORTS, "--exports-dir", help="Crucible exports dir (registry, gated, book)."
@@ -93,9 +89,6 @@ def cmd_campaign(
     inbox_path = (
         inbox or (cfg_file.crucible.inbox_path if cfg_file else _DEFAULT_INBOX)
     ).expanduser()
-    crucible_path = (
-        crucible_db or (cfg_file.crucible.db_path if cfg_file else _DEFAULT_CRUCIBLE_DB)
-    ).expanduser()
     try:
         record = run_campaign(
             forge_db_path=db_path,
@@ -104,7 +97,6 @@ def cmd_campaign(
             models_dir=(models_dir or db_path.parent / "models").expanduser(),
             records_dir=records_dir.expanduser(),
             config_root=(config_root or _repo_config_root()).expanduser(),
-            crucible_db=crucible_path,
             cfg=knobs,
             dry_run=dry_run,
             budget_override=budget,

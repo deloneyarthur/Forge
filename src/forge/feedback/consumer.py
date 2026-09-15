@@ -1,6 +1,6 @@
 """§8.2 feedback consumer — joins Crucible's gated runs to Forge's submissions.
 
-`consume_batch_results(forge_db, crucible_db, *, batch_id=None, since=None)`
+`consume_batch_results(forge_db, *, batch_id=None, since=None, exports_dir=None)`
 returns one `BatchFeedback` for one batch. As a side effect:
 
 - For each matched submission, updates `submissions.status` from `submitted`
@@ -13,7 +13,10 @@ The function is idempotent: re-consuming the same batch returns an equivalent
 sketches `get_gated_runs(filter=batch_id)`; in practice Crucible has no
 `forge_batch_id` column, so the join is Forge-side via `config_hash`.
 
-D024/D1: signature is `(forge_db, crucible_db, *, batch_id=None, since=None)`.
+D422 (Batch 5 G5): Crucible is read ONLY through its exports (hard rule #2) — the
+direct `runs.duckdb` fallback and its path parameter are gone. An absent or empty
+gated export yields zero runs (the weekly run's boot check already requires the
+export to exist; the forge-scoped stream is injected via `runs=`).
 
 D046 (2026-05-18): `reconcile_all_pending` reconciles ALL batches with
 `submitted` rows against the gated-runs export — not just the latest.
@@ -45,7 +48,6 @@ from typing import TYPE_CHECKING
 from crucible_contracts import (
     FailedRun,
     StrategyConfig,
-    get_recent_gated_runs,
     load_recent_failed_runs_from_export,
     load_recent_gated_runs_from_export,
     parse_forward_compatible,
@@ -224,37 +226,19 @@ def _update_batch_summary(
         )
 
 
-def _fetch_crucible_runs(
-    crucible_db: Path,
-    exports_dir: Path,
-) -> list[GatedRun]:
-    """Return recent gated runs via the EXPORT_LAYOUT file path with DB fallback.
+def _fetch_gated_runs(exports_dir: Path) -> list[GatedRun]:
+    """Recent gated runs from Crucible's newest all-source export, and nothing else.
 
-    Production path: read `EXPORT_LAYOUT.gated_runs_*.json` — works while
-    `crucible-db-writer.service` holds the DuckDB lock. Falls back to a
-    direct DuckDB read when no export exists (test fixtures).
-
-    Returns an empty list only when:
-      - exports_dir has no `gated_runs_*.json` file AND
-      - the direct DuckDB read returned no rows (NOT when it failed).
-
-    Raises `QueryError` when the export is missing AND the direct DuckDB
-    read fails — that's the "Crucible offline" condition the resilience
-    suite (Phase 6 D025/D3.i) expects callers to surface as a clean exit.
+    Hard rule #2: Crucible's `runs.duckdb` is never opened by Forge (its writer holds
+    an exclusive lock anyway). An absent directory or file is zero runs — the caller's
+    boot check owns presence; a malformed file raises `QueryError` from the loader,
+    which must surface, never be swallowed (a corrupt snapshot is not "0 gated").
     """
-    runs = load_recent_gated_runs_from_export(
-        exports_dir,
-        limit=_DEFAULT_CRUCIBLE_LIMIT,
-    )
-    if runs:
-        return runs
-    # No export file (or it's empty). Try the direct DB.
-    return get_recent_gated_runs(crucible_db, limit=_DEFAULT_CRUCIBLE_LIMIT)
+    return load_recent_gated_runs_from_export(exports_dir, limit=_DEFAULT_CRUCIBLE_LIMIT)
 
 
 def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
     forge_db: duckdb.DuckDBPyConnection,
-    crucible_db: Path,
     *,
     batch_id: uuid.UUID | None = None,
     since: datetime | None = None,
@@ -263,11 +247,8 @@ def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
 ) -> BatchFeedback:
     """Join Crucible gated runs to Forge submissions and update DB state.
 
-    Reads gated-run state via `EXPORT_LAYOUT.gated_runs_*.json` (contracts
-    v1.8.0+) by default, falling back to a direct DuckDB read when no
-    export is present. The export path side-steps the writer-lock issue
-    that blocks direct read-only opens while `crucible-db-writer.service`
-    is running.
+    Reads gated-run state from the newest `gated_runs_*.json` export (contracts
+    v1.8.0+); there is no direct-DuckDB path (hard rule #2, D422).
 
     When `crucible_runs` is supplied (D046 reconciler path), the export
     fetch is skipped — the caller is responsible for passing the same
@@ -287,7 +268,7 @@ def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
     if crucible_runs is None:
         if exports_dir is None:
             exports_dir = Path.home() / "optbt_data" / "exports"
-        crucible_runs = _fetch_crucible_runs(crucible_db, exports_dir)
+        crucible_runs = _fetch_gated_runs(exports_dir)
 
     matched: dict[str, GatedRun] = {}
     for gr in crucible_runs:
@@ -491,7 +472,6 @@ def _flush_failed_runs(
 
 def reconcile_all_pending(
     forge_db: duckdb.DuckDBPyConnection,
-    crucible_db: Path,
     *,
     exports_dir: Path | None = None,
     runs: Sequence[GatedRun] | None = None,
@@ -534,7 +514,7 @@ def reconcile_all_pending(
     # export dropped its oldest verdicts, an absent config_hash is not evidence that Crucible
     # never decided it, so the D052 watermark flush must not fire (Crucible 09-14 §1.2).
     injected = runs is not None
-    runs = list(runs) if runs is not None else _fetch_crucible_runs(crucible_db, exports_dir)
+    runs = list(runs) if runs is not None else _fetch_gated_runs(exports_dir)
     failed = _fetch_failed_runs(exports_dir)
 
     # D111 — persist per-candidate verdicts for EVERY export row Forge ever
@@ -581,7 +561,6 @@ def reconcile_all_pending(
         batch_id = uuid.UUID(str(batch_id_raw))
         fb = consume_batch_results(
             forge_db,
-            crucible_db,
             batch_id=batch_id,
             exports_dir=exports_dir,
             crucible_runs=runs,

@@ -101,7 +101,6 @@ def _env(tmp_path: Path) -> dict[str, Path]:
         "models": data / "models",
         "records": data / "campaigns",
         "config_root": config_root,
-        "crucible_db": tmp_path / "absent-runs.duckdb",
     }
 
 
@@ -116,7 +115,6 @@ def _run(
         models_dir=env["models"],
         records_dir=env["records"],
         config_root=env["config_root"],
-        crucible_db=env["crucible_db"],
         cfg=cfg,
         dry_run=dry_run,
         feature_cache_factory=lambda _registry, seed: SyntheticFeatureCache(root_seed=seed),

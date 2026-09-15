@@ -1,15 +1,11 @@
-"""Loader + Pydantic models for `config/forge.yaml` (DESIGN.md §10.1).
+"""Loader + Pydantic models for `config/forge.yaml`.
 
-D024/D8: original full §10.1 coverage; closes Phase 4 OQ-3 and OQ-5
-(default forge-db location comes from yaml). CLI flags are merged on top
-by the consumers (`forge.cli.main._resolve_run_defaults`), not here.
-
-D247 deviation from §10.1 (operator-approved): `data_root`, `log_root`,
-and the `feedback.*` cadence keys were never read at runtime and were
-retired from both the schema and `config/forge.yaml` — the feedback
-cadence is actually driven by `--consume-feedback` each loop iteration,
-and the CLI commands take `--data-root` as their own option. The unused
-`with_overrides` helper went with them.
+Since Batch 5 G5 (D422) the file carries three things: Forge's DB path, Crucible's
+inbox path, and the weekly run's `campaign:` knob overrides. Everything the daemon
+needed (`enumeration.*`, `submission.*`, `crucible.db_path`) left with the daemon;
+`extra="forbid"` makes a stale key fail loud instead of steering nothing (the D185
+anti-inertness lesson). Precedence: CLI flag > this file > dataclass defaults;
+`--no-config` = defaults + explicit paths.
 """
 
 from __future__ import annotations
@@ -30,52 +26,26 @@ def _expand(p: Path | str) -> Path:
 
 
 class CrucibleConfig(BaseModel):
+    """Where the run writes. Crucible is READ only through its exports (hard rule #2), so
+    there is no `db_path` here any more (D422)."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     inbox_path: Path
-    db_path: Path
 
-    @field_validator("inbox_path", "db_path", mode="after")
+    @field_validator("inbox_path", mode="after")
     @classmethod
     def _expand_paths(cls, v: Path) -> Path:
         return _expand(v)
 
 
-class EnumerationConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    max_candidates_per_batch: int = Field(ge=1)
-    seed: int
-
-
-class SubmissionConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    batch_size: int = Field(ge=1)
-    inflight_threshold: float = Field(ge=0.0, le=1.0)
-    poll_interval_seconds: int = Field(ge=1)
-    # Q38/D137 §7.3 stall guard: block submission when Crucible has had new work
-    # in hand for >= this many seconds and decided nothing. Optional; 0 (and
-    # absent) = disabled. Production opts in via config/forge.yaml (10800 = 3 h);
-    # the default-off keeps the no-config/dev path on the completion-fraction
-    # contract unchanged.
-    stall_after_seconds: int = Field(default=0, ge=0)
-    # D196 §7.3 aggregate in-flight-depth cap: block submission when the genuine
-    # in-flight queue (submitted rows newer than the D110 flush watermark) exceeds
-    # this many configs. Optional; 0 (and absent) = disabled. Production opts in via
-    # config/forge.yaml; the default-off keeps the dev/no-config path byte-identical.
-    max_inflight: int = Field(default=0, ge=0)
-
-
 class ForgeConfig(BaseModel):
-    """All-in-one §10.1 forge config — every CLI surface reads through this."""
+    """The whole of `config/forge.yaml`: paths + campaign knobs (D422)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     db_path: Path
     crucible: CrucibleConfig
-    enumeration: EnumerationConfig
-    submission: SubmissionConfig
     campaign: Mapping[str, Any] = Field(default_factory=dict)
     """Overrides for `forge.campaign.types.CampaignConfig` (plan §12.7). Kept as a raw
     mapping so the dataclass stays the single home of every default; validated by
@@ -114,9 +84,7 @@ def load_forge_config(path: Path) -> ForgeConfig:
 __all__ = [
     "CampaignConfig",
     "CrucibleConfig",
-    "EnumerationConfig",
     "ForgeConfig",
-    "SubmissionConfig",
     "campaign_config",
     "load_forge_config",
 ]
