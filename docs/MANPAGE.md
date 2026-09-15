@@ -185,57 +185,22 @@ forge prereg resolve <id> --outcome confirmed --evidence "post-cut rate 0.002 (n
 
 ## SCRIPTS
 
-Run via `.venv/bin/python scripts/NAME.py` from the Forge repo root.
+Seven files. Four are executed by machinery or the deploy ritual; three are pre-commit hooks.
+Run a Python one via `uv run python scripts/NAME.py` from the repo root (there is no `python` on
+this box's PATH — D351).
 
-### backup_forge_db.sh
+| Class | Script | Runs when | Does |
+|---|---|---|---|
+| WIRED | `campaign_run.sh` | `forge-campaign.timer`, Sunday 03:00 UTC | The unit's `ExecStart`: reads `FORGE_CAMPAIGN_MODE` (`live` since the 2026-09-14 cutover; `dry-run` snapshots the DB and plans only) and execs `forge campaign`; refuses any other value and refuses `live` while a daemon holds the DB (D411). |
+| WIRED | `backup_forge_db.sh` | `forge-backup.timer`, Sunday 04:30 UTC (after the run) | DR copy of `forge.db` (validated, atomic rename) + `models/` tarball into `FORGE_BACKUP_DEST` (default `~/forge_data/backups`, same disk); keeps the newest `FORGE_BACKUP_KEEP`, prunes only after a validated new copy (D195). |
+| WIRED | `live_db_snapshot.sh` | any read of the live DB | The blessed snapshot idiom: one real-disk copy, reused while fresh (`--max-age-min`), `--force`, `--clean`; never `/tmp` (a 62 GB tmpfs). |
+| RITUAL | `deploy_preflight.sh` | before every commit that changes the deploy surface | Read-only GO/NO-GO: clean deploy surface (`src config pyproject.toml uv.lock deploy`) + the full suite (covers the contracts-pin equality test and the campaign path); prints "GO — commit; the next Sunday run deploys" (`docs/tasks/deploy.md`). |
+| HOOK | `check_grammar_version_bump.py` | pre-commit, on `config/grammar.yaml` | Hard rule #10: a content change must bump `grammar_version` and archive the prior file. |
+| HOOK | `check_grammar_doc_sync.py` | pre-commit, on `grammar.yaml` / `docs/GRAMMAR.md` | Every rule id has a `## id:`/`### id:` heading in GRAMMAR.md and vice versa. |
+| HOOK | `check_freeze_governance.py` | pre-commit, on `config/grammar.yaml` | The signed freeze (D390/D392): a content change needs an OPEN preregistration with a stated n, or `FORGE_FREEZE_REOPENER=D###` with that ledger entry staged. |
 
-**Bash, not Python** — the `ExecStart` of the `forge-backup` timer (Sunday 04:30 UTC, after the
-campaign run; nightly until Batch 5 G0), runnable by hand too. Disaster-recovery backup of the non-git state. `cp`s the live `forge.db`
-between write bursts, **validates** the copy (opens it read-only and queries `submissions`; a torn
-mid-write copy fails and retries ≤3×), then publishes it via atomic same-fs rename as
-`forge_db_<UTC>.duckdb`; `~/forge_data/models/` is tar.gz'd alongside. Retention keeps the newest
-`FORGE_BACKUP_KEEP` (default 14) of each and prunes **only after** a validated new backup exists, so
-a failed run never deletes the last good one. Validation uses the venv python directly (no `forge`
-import) so a broken deploy can't break the backup. Env knobs: `FORGE_BACKUP_DEST` (default
-`~/forge_data/backups` — **same-disk**; point at a mounted external/remote target for true off-box
-DR), `FORGE_BACKUP_KEEP`, `FORGE_BACKUP_MIN_FREE_MB`. Deterministic-loop rules don't apply (ops glue,
-not `src/`); reverting = disable the timer. No args.
-
-```
-scripts/backup_forge_db.sh          # or: systemctl --user start forge-backup.service
-```
-
-### deploy_preflight.sh
-
-**Bash** — a read-only GO/NO-GO gate for the D104 deploy ritual (`docs/tasks/deploy.md`),
-run before committing + restarting. Checks (1) the git tree is clean (uncommitted tracked
-changes deploy on reboot) and (2) the FULL suite passes — which covers the contracts-pin
-equality test (D176) and the loop/single-iteration forward tests (D185), so a green suite
-proves pin-adoption + anti-inertness in one shot. Exit 0 = GO (prints the stop→restart
-steps); non-zero = NO-GO (prints the blocking reason). Never stops/starts the service or
-mutates the tree. No args.
-
-```
-scripts/deploy_preflight.sh
-```
-
-### check_grammar_version_bump.py / check_grammar_doc_sync.py
-
-Pre-commit hooks (no CLI args). The first enforces that a changed `grammar.yaml`
-bumps `grammar_version` and archives the prior version. The second keeps
-`grammar.yaml` rule IDs and `docs/GRAMMAR.md` headings in sync.
-
-### Full scripts inventory (every file in `scripts/`, classed)
-
-**Standing rule (2026-08-06): a one-off analysis script is DELETED with a retirement-ledger
-row below once its D-entry lands** — the conclusion lives in the ledger, the code in git
-history. `scripts/` holds only wired, ritual, and in-flight instruments.
-
-| Class | Scripts |
-|---|---|
-| WIRED — machinery executes them | `backup_forge_db.sh` (Sun 04:30 UTC timer), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` + `check_freeze_governance.py` (pre-commit), `freeze_read_watcher.py` (06:30 `forge-prereg-watch` timer), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom), `campaign_run.sh` (the `forge-campaign` timer's ExecStart: mode-guarded dry-run/live wrapper, D411) |
-| RITUAL / standing monitor | `tail_verified_alignment.py` (D155 verified-coverage alignment monitor; run against a `live_db_snapshot.sh` snapshot), `production_by_group.py` (per-arm/per-category production reads) |
-| IN-FLIGHT freeze/ceiling instruments | `ceiling_record_test.py`, `joint_frontier.py` (D368), `second_gate_contrast.py` (carries the D360 measurement_basis pooling defect — repair queued in the freeze declaration), `threshold_resolution_value.py` (D353), `promoted_leg_recall.py` |
+**Standing rule (2026-08-06): a one-off analysis script is DELETED with a retirement-ledger row
+below once its D-entry lands** — the conclusion lives in the ledger, the code in git history.
 
 Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
 Retired 2026-07-20 (D295 post-promotion sweep; recoverable from git history, tests removed with them): `backfill_verdicts.py` (D111 one-time catch-up, completed), `migrate_verdicts_decided_at.py` (D117 one-time era repair, completed), `requeue_high_value_configs.py` (one-off recovery, completed), `probe_option_momentum_min_months.py` (Q39 one-shot probe + its `probe_results/` output; Q39 resolved at v19/D138).
@@ -243,6 +208,7 @@ Retired 2026-07-20 (D298 — D206 made permanent): `propose_threshold_tightening
 Retired 2026-08-06 (repo-simplification Step C; conclusions all shipped and D-cited): the tail-target sweep chain `exceedance_target_sweep.py`, `exceedance_extreme_sweep.py`, `exceedance_merge_sweep.py`, `wf_blend_sweep.py`, `wf_p10_validation.py`, `sharpe_baseline_nested_test.py`, `tail_target_headtohead.py`, `tail_lane_tradeoff.py`, `trend_tail_target_sweep.py`, `target_sweep.py` (→ the live `FORGE_TAIL_LANE_SLOTS`/`FORGE_TREND_LANE_SLOTS` values + the cpcv retarget, D336/D345-era); the winner-prior trio `winner_prior_signal_probe.py`, `winner_prior_shadow.py`, `winner_prior_stage_one.py` (programme parked, prereg `916d79109b4d` refuted); `collider_fix_sweep.py` (Q59 → `FORGE_HONEST_LABEL_SCOPE=off`); `vix_conditioner_stage_decomposition.py`, `resid_vix_construct_split.py` (D339; superseded by the inline share computation in `daily_ranker_eval.sh`); the freeze-prep set `tail_lane_model_era_split.py`, `trend_lane_arm_read.py`, `exhaustion_power_assessment.py`, `honest_cell_scorecard.py`, `export_generation_by_version.py`, `tail_target_rank_ic.py` (preregs resolved / Tier-1 A/B closed D351).
 Retired 2026-08-06 (Step E2, D373 — the alpha-budget question is ANSWERED): `forge alpha-budget` (`feedback/alpha_budget.py` + `cli/alpha_budget_cmd.py` + tests) and `scripts/alpha_budget.py`. Its prereg `098ea730d5f2` resolved confirmed 2026-07-21; the exhaustion monitor it closed cannot reopen (dossier §0); the *standing* multiplicity accounting lives in `submission/search_multiplicity.py` (D310), which is unrelated code and stays. Spec/results record: `_archive/ALPHA_BUDGET_SCOPE.md`.
 Retired 2026-09-14 (Batch 5 G0 — the daemon era's timers folded into the weekly run; recoverable from git history, tests removed with them): `daily_ranker_eval.sh` (the 05:00 trainer — `forge campaign` now trains the two families it loads in-run, step 0.5, and prunes artifacts per `campaign.models_keep`; the streak clocks, campaign-carriage audit, activation probe, freeze census and vix-share rows had no consumer left), `search_multiplicity_census.py` (freeze metric B — the freeze is signed and hook-enforced, §8.4), `freeze_read_watcher.py` (its DUE/UNWATCHABLE judge is the boot check `preregistrations`, `feedback.preregistration.assess_watch_clocks`), `freeze_registered_read.py` + `freeze_tail_reading.py` (the registered-read instruments; a §5 reopener brings its own, §8.7), `cutover_campaign.sh` + `arm_cutover.sh` (the Route C cutover ran 2026-09-14T23:52:05Z, D416). Units retired with them: `forge-ranker-eval.{service,timer}`, `forge-prereg-watch.{service,timer}`, `forge-cutover.{service,timer}`.
+Retired 2026-09-15 (Batch 5 G7 / D424; recoverable from git): the seven spent research instruments — `ceiling_record_test.py` + `joint_frontier.py` (the D368 ceiling / joint-frontier reads behind the signed freeze declaration), `second_gate_contrast.py` (+ its test; the D339 conditioner contrast, defect repaired D395, conclusion unchanged), `threshold_resolution_value.py` (D310/D313 — thresholds quantised to 4 decimals make every emitted config unique; the DSR `search_n_trials` stamp lives in `submission/search_multiplicity.py`), `tail_verified_alignment.py` (the D155 verified-coverage alignment monitor — its lane retired with the daemon), `production_by_group.py` (the D341/D350 arm read; the A/B is closed), `promoted_leg_recall.py` (the 2026-07-26 promoted-leg reference-class read). The freeze is signed and hook-enforced; a §5 reopener brings its own instrument.
 
 ---
 
