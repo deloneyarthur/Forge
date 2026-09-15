@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from forge.enumeration.sampler import _FALLBACK_TIER_1_2_UNDERLYINGS
 from forge.enumeration.underlying_class import (
     DIVERSIFIED,
     HIGH_IDIO_VOL,
@@ -34,9 +33,11 @@ def test_unknown_ticker_defaults_to_high_idio_vol() -> None:
     assert underlying_class("ZZZT") == HIGH_IDIO_VOL
 
 
-def test_fallback_universe_fully_classified_with_expected_split() -> None:
-    """The D033 fallback pool: exactly its 4 Tier-1 ETFs are diversified,
-    everything else high-idio-vol (total function, no surprises offline)."""
-    classes = {t: underlying_class(t) for t in _FALLBACK_TIER_1_2_UNDERLYINGS}
+def test_index_etfs_are_diversified_and_single_names_are_not() -> None:
+    """The four broad index ETFs are the diversified class; every single name is
+    high-idio-vol (a total function, no surprises). Formerly asserted over the D033
+    fallback pool, which left with REL-5 (Batch 5 G6)."""
+    pool = ("SPY", "QQQ", "IWM", "DIA", "AAPL", "MSFT", "NVDA", "TSLA", "JPM", "XOM", "COIN")
+    classes = {t: underlying_class(t) for t in pool}
     diversified = {t for t, c in classes.items() if c == DIVERSIFIED}
     assert diversified == {"SPY", "QQQ", "IWM", "DIA"}

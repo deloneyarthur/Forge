@@ -508,33 +508,17 @@ _COHORT_EXPLORATION_FLOOR: float = 0.05
 # rule 6): breadth lifts the distribution CENTER, not the worst-quartile p25 — supply,
 # not a promotion unlock. Short-history (<~101 sessions) names fail-open on hurst.
 
-# D033 fallback — used when the Crucible universe export is absent.
-_FALLBACK_TIER_1_2_UNDERLYINGS: tuple[str, ...] = (
-    "SPY",
-    "QQQ",
-    "IWM",
-    "DIA",
-    "AAPL",
-    "MSFT",
-    "NVDA",
-    "TSLA",
-    "AMD",
-    "META",
-    "AMZN",
-    "GOOGL",
-    "NFLX",
-    "AVGO",
-    "BAC",
-    "JPM",
-    "XOM",
-    "CVX",
-    "BA",
-    "GE",
-    "GS",
-    "MS",
-    "COIN",
-    "MSTR",
-)
+
+class UniverseUnavailable(RuntimeError):
+    """Crucible's universe export is absent, empty or unreadable — the pool cannot be built.
+
+    REL-5 (Batch 5 G6, D423): the D033 hard-coded tier-1/2 fallback that used to fill in here is
+    GONE. Under the frozen grammar a silent fallback would enumerate a stale 24-name universe and
+    move `enumeration_inputs_hash` via `universe_fingerprint()` with nobody watching (hard rule #6).
+    The weekly run's boot check requires the export, so production never reaches this; tests pin
+    their pool via `conftest._pinned_universe`. With the export present nothing changed:
+    `universe_fingerprint()` is computed from the same sorted union as before."""
+
 
 # Exports directory Crucible publishes to. `load_universe_tiers_from_export`
 # globs `universe_tickers*.json` within it (contracts 1.13.0 flattened;
@@ -553,8 +537,8 @@ def _load_universe_tiers_cached() -> UniverseTiers | None:
         return load_universe_tiers_from_export(_UNIVERSE_EXPORT_DIR)
     except QueryError as err:
         # M-13: present-but-unparseable export is a DRIFT signal distinct from
-        # the expected "absent" offline case. The helper raises loudly; we log
-        # and fall back rather than silently narrowing the pool ~152 -> 24.
+        # the "absent" case. The helper raises loudly; we log the drift here and
+        # `_load_underlyings` raises `UniverseUnavailable` (REL-5: no fallback).
         _logger.warning(
             "universe_export_unreadable",
             path=str(_UNIVERSE_EXPORT_DIR),
@@ -570,22 +554,25 @@ def _load_underlyings() -> tuple[str, ...]:
     reader moved to the tiered sibling at 1.32.0, D292/v41 — IDENTICAL union
     by contract ("two views of one surface"), and required before Crucible
     retires the transition fold (the flattened reader would shrink the pool
-    118 -> 24 after retirement). Falls back to the D033 hardcoded list when
-    the export is absent/empty or unreadable (logged loudly).
+    118 -> 24 after retirement). Raises `UniverseUnavailable` when the export is
+    absent/empty or unreadable (REL-5; the D033 hard-coded fallback is gone).
     """
     tiers = _load_universe_tiers_cached()
     if tiers is not None:
         union = tuple(sorted({*tiers.tier_1, *tiers.tier_2, *tiers.tier_3}))
         if union:
             return union
-    _logger.info("universe_fallback_hardcoded", n_tickers=len(_FALLBACK_TIER_1_2_UNDERLYINGS))
-    return _FALLBACK_TIER_1_2_UNDERLYINGS
+    msg = (
+        "universe export absent, empty or unreadable: no `universe_tickers*.json` usable under "
+        f"{_UNIVERSE_EXPORT_DIR} (Crucible's universe publisher; REL-5 — no fallback pool)"
+    )
+    raise UniverseUnavailable(msg)
 
 
 def _tier3_symbols() -> frozenset[str]:
     """D292 (v41): TRUE tier-3 membership — feeds the single-name true-tier
     stamp and gates the xsect tier-3 exploration draw. Empty on old-shape
-    exports and the D033 fallback (export-gated dormancy: everything stamps
+    exports (export-gated dormancy: everything stamps
     tier=2 and no rng is consumed, the pre-v41 behavior exactly)."""
     tiers = _load_universe_tiers_cached()
     return frozenset(tiers.tier_3) if tiers is not None else frozenset()
@@ -921,8 +908,8 @@ def _pick_underlying(
 ) -> str | None:
     """Per-config underlying selection from the Tier 1+2 pool.
 
-    D078: reads from Crucible's universe export when available, falls back
-    to the D033 hardcoded list. Determinism preserved via shared rng.
+    D078: reads from Crucible's universe export (REL-5: absent export raises,
+    no hard-coded fallback). Determinism preserved via shared rng.
 
     D098 (v5): `relative_value` returns None — it is a pairs strategy whose
     legs Crucible's PairsConvergence resolves itself (post-commit 4f5271f it

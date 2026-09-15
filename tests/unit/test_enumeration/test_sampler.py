@@ -8,6 +8,7 @@ empty-pool / unsamplable-mode edges.
 
 from __future__ import annotations
 
+import json
 import random
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -767,6 +768,51 @@ def test_d105_bucket_weights_starve_low_yield_cell_but_not_to_zero(
     assert weighted.get("swing_mid", 0) > 0
 
 
+# The former D033 hard-coded pool, kept ONLY as a test universe: the D105/D106 draw tests
+# were written against its exact 24 names (4 index ETFs + 20 single names) and their
+# byte-identity references derive from `_load_underlyings()` itself, so publishing the
+# same names as a real export keeps them meaningful after REL-5 removed the fallback.
+_LEGACY_POOL_TIER_1: tuple[str, ...] = ("SPY", "QQQ", "IWM", "DIA")
+_LEGACY_POOL_TIER_2: tuple[str, ...] = (
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "TSLA",
+    "AMD",
+    "META",
+    "AMZN",
+    "GOOGL",
+    "NFLX",
+    "AVGO",
+    "BAC",
+    "JPM",
+    "XOM",
+    "CVX",
+    "BA",
+    "GE",
+    "GS",
+    "MS",
+    "COIN",
+    "MSTR",
+)
+
+
+@pytest.fixture(scope="session")
+def legacy_pool_export(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A universe export carrying the legacy 24-name pool (see above)."""
+    export_dir = tmp_path_factory.mktemp("legacy_pool")
+    (export_dir / "universe_tickers.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "tier_1": list(_LEGACY_POOL_TIER_1),
+                "tier_2": list(_LEGACY_POOL_TIER_2),
+            }
+        )
+    )
+    return export_dir
+
+
 # ---------------------------------------------------------------------------
 # D105 — underlying-class weighted pick. High-idio-vol single names minted
 # 12.8-27.9% in the yield map; diversified ETF/index sat at 0/~390. The class
@@ -774,15 +820,19 @@ def test_d105_bucket_weights_starve_low_yield_cell_but_not_to_zero(
 # ---------------------------------------------------------------------------
 
 
-def _pick_underlyings_against_fallback(
-    weights: dict[str, float] | None, *, n: int = 2000, with_earnings_gate: bool = False
+def _pick_underlyings_against_pool(
+    export_dir: Path,
+    weights: dict[str, float] | None,
+    *,
+    n: int = 2000,
+    with_earnings_gate: bool = False,
 ) -> dict[str, int]:
-    """Run `_pick_underlying` n times against the offline fallback pool."""
+    """Run `_pick_underlying` n times against the legacy 24-name test pool."""
     import forge.enumeration.sampler as sampler_mod
     from forge.enumeration.sampler import _load_underlyings, _pick_underlying
 
     original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
-    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d105_test_dir")
+    sampler_mod._UNIVERSE_EXPORT_DIR = export_dir
     try:
         _load_underlyings.cache_clear()
         rng = random.Random(0xD105)
@@ -798,19 +848,21 @@ def _pick_underlyings_against_fallback(
         _load_underlyings.cache_clear()
 
 
-def test_d105_underlying_cold_start_byte_identical(real_universe_loader: object) -> None:
+def test_d105_underlying_cold_start_byte_identical(
+    real_universe_loader: object, legacy_pool_export: Path
+) -> None:
     """Hard rule #6: class weights are an ADDED input — absent (None) and empty
     ({}) must reproduce the pre-D105 `rng.choice` sequence exactly."""
     import forge.enumeration.sampler as sampler_mod
     from forge.enumeration.sampler import _load_underlyings, _pick_underlying
 
     original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
-    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d105_test_dir")
+    sampler_mod._UNIVERSE_EXPORT_DIR = legacy_pool_export
     try:
         _load_underlyings.cache_clear()
         # D286 (v37): the baseline draws from the POST-exclusion pool — the
-        # fallback list carries GS/MSTR, which the untradeable filter now eats
-        # (pre-D286 the fallback and filtered pools happened to coincide).
+        # legacy pool carries GS/MSTR, which the untradeable filter now eats
+        # (pre-D286 the pool and filtered pools happened to coincide).
         pool = tuple(
             u
             for u in _load_underlyings()
@@ -833,7 +885,7 @@ def test_d105_underlying_cold_start_byte_identical(real_universe_loader: object)
 
 
 def test_d105_underlying_class_weights_tilt_toward_high_idio_vol(
-    real_universe_loader: object,
+    real_universe_loader: object, legacy_pool_export: Path
 ) -> None:
     """A learned high_idio_vol class (component-rate scale ~0.04) must pull the
     draw strongly toward single names while the floor keeps the diversified
@@ -841,10 +893,10 @@ def test_d105_underlying_class_weights_tilt_toward_high_idio_vol(
     from forge.enumeration.underlying_class import DIVERSIFIED, HIGH_IDIO_VOL, underlying_class
 
     weights = {HIGH_IDIO_VOL: 0.04, DIVERSIFIED: 0.002}
-    counts = _pick_underlyings_against_fallback(weights)
+    counts = _pick_underlyings_against_pool(legacy_pool_export, weights)
     div = sum(n for t, n in counts.items() if underlying_class(t) == DIVERSIFIED)
     high = sum(n for t, n in counts.items() if underlying_class(t) == HIGH_IDIO_VOL)
-    # Fallback pool was 4 diversified / 20 high; D309 (v43) excludes
+    # The legacy pool is 4 diversified / 20 high; D309 (v43) excludes
     # DIA/MSFT/AMZN from the draw -> 3 div / 18 high, and the floored
     # diversified share lands EXACTLY on the 5% bound (uniform would be ~14%).
     # The claim is unchanged — crushed to the floor but NOT zero — so the
@@ -854,7 +906,7 @@ def test_d105_underlying_class_weights_tilt_toward_high_idio_vol(
 
 
 def test_d105_underlying_weights_respect_earnings_etf_exclusion(
-    real_universe_loader: object,
+    real_universe_loader: object, legacy_pool_export: Path
 ) -> None:
     """T1.4 invariant survives the weighted path: with days_to_earnings in the
     regime, Tier-1 ETFs stay out of the pool regardless of class weights."""
@@ -862,7 +914,7 @@ def test_d105_underlying_weights_respect_earnings_etf_exclusion(
     from forge.enumeration.underlying_class import DIVERSIFIED, HIGH_IDIO_VOL
 
     weights = {HIGH_IDIO_VOL: 0.002, DIVERSIFIED: 0.04}  # even tilted TOWARD ETFs
-    counts = _pick_underlyings_against_fallback(weights, with_earnings_gate=True)
+    counts = _pick_underlyings_against_pool(legacy_pool_export, weights, with_earnings_gate=True)
     assert not set(counts) & _TIER_1_ETF_UNDERLYINGS
 
 
@@ -990,24 +1042,21 @@ def test_sampler_raises_when_no_sizer_mode_is_samplable(grammar: Grammar) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_load_underlyings_returns_fallback_when_no_export(
+def test_load_underlyings_raises_when_no_export(
     tmp_path: Path, real_universe_loader: object
 ) -> None:
-    """D078: when universe export is absent, fallback list is used."""
-    from forge.enumeration.sampler import (
-        _FALLBACK_TIER_1_2_UNDERLYINGS,
-        _load_underlyings,
-    )
-
-    _load_underlyings.cache_clear()
+    """REL-5 (Batch 5 G6): an absent universe export FAILS LOUD. The D033 hard-coded
+    fallback is gone — under the frozen grammar a silent fallback would enumerate a stale
+    universe and move `enumeration_inputs_hash` (hard rule #6) with nobody watching."""
     import forge.enumeration.sampler as sampler_mod
+    from forge.enumeration.sampler import UniverseUnavailable, _load_underlyings
 
     original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
     sampler_mod._UNIVERSE_EXPORT_DIR = tmp_path / "nonexistent_dir"
     try:
         _load_underlyings.cache_clear()
-        result = _load_underlyings()
-        assert result == _FALLBACK_TIER_1_2_UNDERLYINGS
+        with pytest.raises(UniverseUnavailable, match="nonexistent_dir"):
+            _load_underlyings()
     finally:
         sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
         _load_underlyings.cache_clear()
@@ -1042,24 +1091,18 @@ def test_load_underlyings_reads_export(tmp_path: Path, real_universe_loader: obj
         _load_underlyings.cache_clear()
 
 
-def test_m13_unreadable_export_logs_drift_warning(
+def test_m13_unreadable_export_logs_drift_warning_then_raises(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], real_universe_loader: object
 ) -> None:
-    """M-13: a present-but-unparseable universe export logs a distinct drift
-    WARNING (not silent) before falling back — separate from the expected
-    'file absent' offline case. Post-contracts-1.13.0 the helper raises
-    QueryError on the malformed file and `_load_underlyings` logs + falls back.
+    """M-13: a present-but-unparseable universe export logs a distinct drift WARNING
+    (`universe_export_unreadable`) and then (REL-5) raises — no fallback pool.
 
-    Asserts via capsys rather than structlog.testing.capture_logs(): the
-    module-level logger caches its bound logger once another test configures
-    structlog, so capture_logs() can't intercept it (order-dependent). The
-    rendered output is stable regardless.
+    Asserts via capsys rather than structlog.testing.capture_logs(): the module-level
+    logger caches its bound logger once another test configures structlog, so
+    capture_logs() can't intercept it (order-dependent). The rendered output is stable.
     """
     import forge.enumeration.sampler as sampler_mod
-    from forge.enumeration.sampler import (
-        _FALLBACK_TIER_1_2_UNDERLYINGS,
-        _load_underlyings,
-    )
+    from forge.enumeration.sampler import UniverseUnavailable, _load_underlyings
 
     (tmp_path / "universe_tickers.json").write_text("{ this is not valid json ")
 
@@ -1067,10 +1110,9 @@ def test_m13_unreadable_export_logs_drift_warning(
     sampler_mod._UNIVERSE_EXPORT_DIR = tmp_path
     try:
         _load_underlyings.cache_clear()
-        result = _load_underlyings()
-        assert result == _FALLBACK_TIER_1_2_UNDERLYINGS
+        with pytest.raises(UniverseUnavailable):
+            _load_underlyings()
         captured = capsys.readouterr()
-        # Drift WARNING emitted (distinct from the silent pre-fix `pass`).
         assert "universe_export_unreadable" in (captured.out + captured.err)
     finally:
         sampler_mod._UNIVERSE_EXPORT_DIR = original_dir
@@ -1084,7 +1126,9 @@ def test_m13_unreadable_export_logs_drift_warning(
 # ---------------------------------------------------------------------------
 
 
-def test_d106_name_weights_override_class_within_pool(real_universe_loader: object) -> None:
+def test_d106_name_weights_override_class_within_pool(
+    real_universe_loader: object, legacy_pool_export: Path
+) -> None:
     """A learned-hot name (AAPL-like) must outdraw its class peers; names
     without a name-level weight keep the class weight (the fallback chain)."""
     import forge.enumeration.sampler as sampler_mod
@@ -1092,7 +1136,7 @@ def test_d106_name_weights_override_class_within_pool(real_universe_loader: obje
     from forge.enumeration.underlying_class import DIVERSIFIED, HIGH_IDIO_VOL
 
     original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
-    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d106_test_dir")
+    sampler_mod._UNIVERSE_EXPORT_DIR = legacy_pool_export
     try:
         _load_underlyings.cache_clear()
         class_w = {HIGH_IDIO_VOL: 0.02, DIVERSIFIED: 0.002}
@@ -1119,13 +1163,15 @@ def test_d106_name_weights_override_class_within_pool(real_universe_loader: obje
         _load_underlyings.cache_clear()
 
 
-def test_d106_name_weights_cold_start_byte_identical(real_universe_loader: object) -> None:
+def test_d106_name_weights_cold_start_byte_identical(
+    real_universe_loader: object, legacy_pool_export: Path
+) -> None:
     """Both underlying maps empty -> the pre-D105 uniform rng.choice sequence."""
     import forge.enumeration.sampler as sampler_mod
     from forge.enumeration.sampler import _load_underlyings, _pick_underlying
 
     original_dir = sampler_mod._UNIVERSE_EXPORT_DIR
-    sampler_mod._UNIVERSE_EXPORT_DIR = Path("/nonexistent_d106_test_dir")
+    sampler_mod._UNIVERSE_EXPORT_DIR = legacy_pool_export
     try:
         _load_underlyings.cache_clear()
         # D286 (v37): baseline = the post-exclusion pool (see the D105 test).
