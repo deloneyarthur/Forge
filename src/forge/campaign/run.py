@@ -137,6 +137,34 @@ def _check(name: str, fn: Callable[[], str]) -> BootCheck:
         return BootCheck(name, False, f"{type(exc).__name__}: {exc}")
 
 
+def _prereg_gate(registry_path: Path, forge_db_path: Path | None) -> str:
+    """The DUE judge (Batch 5 G0; formerly the forge-prereg-watch timer): a registered read
+    that has come due, or a registration nothing can watch, FAILS the boot so the unit pages —
+    a read that drifts past its clock stops being the read that was promised (D389/D392).
+    Counts are basis-scoped in SQL; the metric itself is never read."""
+    from forge.feedback.preregistration import (  # noqa: PLC0415
+        assess_watch_clocks,
+        count_basis_rows,
+        open_registrations_raw,
+    )
+    from forge.persistence.db import db_connection  # noqa: PLC0415
+
+    entries = open_registrations_raw(registry_path)
+    if not entries:
+        return "0 open"
+    if forge_db_path is None or not forge_db_path.exists():
+        report = assess_watch_clocks(entries, lambda _fp, _since: 0)
+    else:
+        with db_connection(forge_db_path) as conn:
+            report = assess_watch_clocks(
+                entries, lambda fp, since: count_basis_rows(conn, fp, since)
+            )
+    detail = "; ".join(report.lines)
+    if report.status != "ok":
+        raise RuntimeError(f"{report.status.upper()}: {detail}")
+    return f"{len(entries)} open, none due: {detail}"
+
+
 def boot(
     *,
     exports_dir: Path,
@@ -144,13 +172,13 @@ def boot(
     config_root: Path,
     cfg: CampaignConfig,
     now: datetime,
+    forge_db_path: Path | None = None,
 ) -> _Booted:
     """Every precondition the run needs, each as its own row. All run even after
     the first failure so the journal shows the whole picture at once."""
     from crucible_contracts import load_universe_tickers_from_export  # noqa: PLC0415
 
     from forge.core.contracts_check import check_contracts_version  # noqa: PLC0415
-    from forge.feedback.preregistration import load_preregistrations  # noqa: PLC0415
     from forge.grammar import load_grammar  # noqa: PLC0415
     from forge.persistence.registry_loader import load_registry  # noqa: PLC0415
 
@@ -201,13 +229,7 @@ def boot(
         return f"backlog {backlog}"
 
     def _preregs() -> str:
-        # A registered read that is DUE is the watcher's job (forge-prereg-watch until the
-        # cutover folds it in); here an open registration is surfaced, never a failure.
-        path = config_root / "preregistrations.jsonl"
-        if not path.exists():
-            return "no registry"
-        open_ids = [e.prereg_id for e in load_preregistrations(path) if e.status == "registered"]
-        return f"{len(open_ids)} open" + (f": {', '.join(open_ids)}" if open_ids else "")
+        return _prereg_gate(config_root / "preregistrations.jsonl", forge_db_path)
 
     checks = (
         _check("contracts", lambda: f"crucible_contracts {check_contracts_version()}"),
@@ -496,6 +518,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
     cfg: CampaignConfig,
     dry_run: bool,
     budget_override: int | None = None,
+    skip_train: bool = False,
     feature_cache_factory: FeatureCacheFactory | None = None,
     echo: Echo = typer.echo,
 ) -> RunRecord:
@@ -516,6 +539,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
         config_root=config_root,
         cfg=cfg,
         now=started,
+        forge_db_path=forge_db_path,
     )
     for check in booted.checks:
         echo(f"boot {check.name:<16} {'ok  ' if check.ok else 'FAIL'} {check.detail}")
@@ -547,6 +571,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
             "batch_id": None,
             "baselines": {},
             "notes": (),
+            "models": {},
         }
         base.update(overrides)
         return RunRecord(**base)  # type: ignore[arg-type]
@@ -616,6 +641,20 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
             reconciled = sum(len(fb.outcomes) for fb in feedback)
             notes.append(f"reconciled {reconciled} outcome(s) across {len(feedback)} batch(es)")
             stats = load_cell_stats(conn)
+            # 0.5 train: the two families the ranking loads, from this same DB, published
+            # atomically before `_scorer` reads the newest artifact (Batch 5 G0 — this was the
+            # daily forge-ranker-eval timer; a weekly run needs fresh models once, right here).
+            models_trained: dict[str, str] = {}
+            if skip_train:
+                notes.append("train: skipped (--skip-train)")
+            else:
+                from forge.campaign.train import train_models  # noqa: PLC0415
+
+                trained = train_models(
+                    conn, registry, models_dir=models_dir, keep=cfg.models_keep, echo=echo
+                )
+                notes.extend(trained.notes)
+                models_trained = dict(trained.models)
         # 2. the book
         book: Book = load_book(exports_dir)
         dead = classify_dead(stats, cfg)
@@ -708,6 +747,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
             "campaigns": tuple(campaigns),
             "enumerated": len(sample),
             "baselines": baselines,
+            "models": models_trained,
         }
         if not campaigns:
             notes.append(f"dark cells seen: {len(dark)}; protected: {len(book.protected_cells)}")

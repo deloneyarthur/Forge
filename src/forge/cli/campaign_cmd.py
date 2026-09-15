@@ -48,6 +48,11 @@ def cmd_campaign(
     budget: int | None = typer.Option(
         None, "--budget", min=0, help="Cap this run's total submissions below the weekly cap."
     ),
+    skip_train: bool = typer.Option(
+        False,
+        "--skip-train",
+        help="Do not retrain the verdict/robustness models this run; rank on the newest artifacts.",
+    ),
     config: Path = typer.Option(
         _DEFAULT_CONFIG, "--config", help="forge.yaml (db/inbox/crucible paths + campaign: knobs)."
     ),
@@ -103,6 +108,7 @@ def cmd_campaign(
             cfg=knobs,
             dry_run=dry_run,
             budget_override=budget,
+            skip_train=skip_train,
         )
     except Exception as exc:
         typer.echo(f"campaign: error {type(exc).__name__}: {exc}", err=True)

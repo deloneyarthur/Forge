@@ -118,7 +118,7 @@ def _run(
         dry_run=dry_run,
         feature_cache_factory=lambda _registry, seed: SyntheticFeatureCache(root_seed=seed),
         echo=lines.append,
-        **kw,  # type: ignore[arg-type]
+        **{"skip_train": True, **kw},  # type: ignore[arg-type]
     )
     assert any(line.startswith("campaign ") for line in lines)
     return record
@@ -245,3 +245,82 @@ def test_reconcile_falls_back_when_the_forge_stream_is_absent(tmp_path: Path) ->
     assert "forge_gated_runs" not in record.watermarks
     note = next(n for n in record.notes if n.startswith("forge_gated_runs: absent"))
     assert "aged-out flush skipped" in note
+
+
+def test_training_on_a_thin_db_refuses_gracefully_and_the_run_continues(tmp_path: Path) -> None:
+    """G0: in-run training degrades, never crashes. The fixture DB has no verdicts, so both
+    fits refuse; the run ranks on whatever artifacts exist (none) and still completes."""
+    env = _env(tmp_path)
+    record = _run(env, dry_run=True, skip_train=False)
+    assert record.status == "ok"
+    assert record.models == {}
+    assert any(n.startswith("train verdict: refused") for n in record.notes)
+    assert any(n.startswith("train robustness[") and "refused" in n for n in record.notes)
+    assert not (env["models"] / ".staging").exists() or not list(
+        (env["models"] / ".staging").glob("*.json")
+    )
+
+
+def test_skip_train_is_recorded(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    record = _run(env, dry_run=True)
+    assert "train: skipped (--skip-train)" in record.notes
+    assert record.models == {}
+
+
+def _write_preregs(env: dict[str, Path], entries: list[dict[str, object]]) -> None:
+    (env["config_root"] / "preregistrations.jsonl").write_text(
+        "".join(json.dumps(e) + "\n" for e in entries), encoding="utf-8"
+    )
+
+
+def test_boot_fails_on_an_unwatchable_open_prereg(tmp_path: Path) -> None:
+    """D389 in code: a registration nothing can watch must not let the run proceed quietly."""
+    env = _env(tmp_path)
+    _write_preregs(env, [{"prereg_id": "bbbbbbbbbbbb", "status": "registered", "claim": "x"}])
+    record = _run(env, dry_run=True)
+    assert record.status == "boot_failed"
+    check = next(c for c in record.boot if c.name == "preregistrations")
+    assert not check.ok
+    assert "UNWATCHABLE" in check.detail
+
+
+def test_boot_fails_when_a_registered_read_is_due(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    _write_preregs(
+        env,
+        [
+            {
+                "prereg_id": "aaaaaaaaaaaa",
+                "status": "registered",
+                "claim": "x",
+                "cohort_cut": "2026-08-10T16:25:55+00:00",
+                "watch": {"n": 0, "basis_fp": "e1adced727678c8f"},
+            }
+        ],
+    )
+    record = _run(env, dry_run=True)
+    assert record.status == "boot_failed"
+    check = next(c for c in record.boot if c.name == "preregistrations")
+    assert "DUE" in check.detail
+
+
+def test_boot_passes_with_an_open_prereg_still_waiting(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    _write_preregs(
+        env,
+        [
+            {
+                "prereg_id": "aaaaaaaaaaaa",
+                "status": "registered",
+                "claim": "x",
+                "cohort_cut": "2026-08-10T16:25:55+00:00",
+                "watch": {"n": 7200, "basis_fp": "e1adced727678c8f"},
+            }
+        ],
+    )
+    record = _run(env, dry_run=True)
+    assert record.status == "ok"
+    check = next(c for c in record.boot if c.name == "preregistrations")
+    assert check.ok
+    assert "7,200 to go" in check.detail

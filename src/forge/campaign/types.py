@@ -61,6 +61,10 @@ class CampaignConfig:
     """Candidates kept per campaign before the battery and gate, as a multiple of its budget."""
     registry_max_age_days: int = 7
     inbox_backlog_ceiling: int = 2_000
+    models_keep: int = 4
+    """Artifacts kept per model family after the in-run training publishes (REL-12); older
+    files are deleted. The run loads only the newest, so anything past a few weeks of rollback
+    is dead weight the loaders still had to parse."""
     min_hypothesis_fraction: float = 0.0
     """D037 per-hypothesis floor passed to the enumerator. 0.0 on purpose: the floor is a
     submission-mix guarantee for the daemon's 200-config batches, and under a cold-start draw
@@ -213,6 +217,9 @@ class RunRecord:
     baselines: Mapping[str, object]
     """refutation_hash/ids, registry_ids/families, book_cells: what the next run compares to."""
     notes: tuple[str, ...] = ()
+    models: Mapping[str, str] = field(default_factory=dict)
+    """family -> model_id trained and published by THIS run (empty when training was skipped
+    or every fit refused; the ranking then used the previous artifacts, see notes)."""
 
 
 __all__ = [

@@ -125,6 +125,7 @@ def record_from_json(text: str) -> RunRecord:
         batch_id=data.get("batch_id"),
         baselines=dict(data.get("baselines", {})),
         notes=tuple(str(n) for n in data.get("notes", ())),
+        models={str(k): str(v) for k, v in dict(data.get("models", {})).items()},
     )
 
 

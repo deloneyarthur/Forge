@@ -70,6 +70,7 @@ def _record(run_id: str, started: datetime, *, status: str = "ok") -> RunRecord:
         submitted=2,
         submitted_hashes=("aaaa", "bbbb"),
         batch_id="batch-1",
+        models={"verdict": "abcdef12", "robustness:target_cpcv_p25": "12345678"},
         baselines={
             "book_cells": [list(_CELL_A)],
             "refutation_hash": "h1",

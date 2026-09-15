@@ -24,11 +24,14 @@ prevents cheating is tested code.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal
+
+if TYPE_CHECKING:
+    import duckdb
 
 # Confirmation outcomes. "insufficient" = not enough honest (post-cut) evidence yet.
 Outcome = Literal["confirmed", "refuted", "insufficient"]
@@ -182,12 +185,112 @@ def _opt_str(value: object) -> str | None:
     return None if value is None else str(value)
 
 
+# ---------------------------------------------------------------------------
+# Watch clocks — a registered read must not come due silently (D389/D392)
+# ---------------------------------------------------------------------------
+# Carried from the retired `scripts/freeze_read_watcher.py` (Batch 5 G0) into the weekly
+# run's boot check. The judge never computes the metric: it counts qualifying rows in the
+# REGISTERED basis and compares fingerprints. Peeking at the answer to decide whether to
+# page would be the read itself.
+
+WatchStatus = Literal["ok", "due", "unwatchable"]
+CountRows = Callable[[str, str], int]
+"""``(basis_fp, since_iso) -> qualifying rows`` — supplied by the caller, so this stays pure."""
+
+
+@dataclass(frozen=True, slots=True)
+class WatchReport:
+    status: WatchStatus
+    lines: tuple[str, ...]
+
+
+def open_registrations_raw(path: Path) -> list[dict[str, Any]]:
+    """Registered entries as raw JSON rows (the ``watch`` clock is an additive field the
+    typed :class:`PreregEntry` does not carry). Missing file -> empty; bad lines skipped."""
+    if not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and row.get("status") == "registered":
+            out.append(row)
+    return out
+
+
+def assess_watch_clocks(entries: Sequence[Mapping[str, Any]], count_rows: CountRows) -> WatchReport:
+    """DUE outranks UNWATCHABLE outranks ok; both non-ok states must fail the boot check.
+
+    UNWATCHABLE is the D389 defect itself: a registration with no ``watch: {n, basis_fp}``
+    clock is a claim nothing can check — re-register it with a clock or withdraw it."""
+    if not entries:
+        return WatchReport("ok", ("no open preregistrations",))
+    lines: list[str] = []
+    any_due = any_unwatchable = False
+    for row in entries:
+        pid = str(row.get("prereg_id", "?"))
+        watch = row.get("watch")
+        if not isinstance(watch, Mapping) or "n" not in watch or "basis_fp" not in watch:
+            any_unwatchable = True
+            lines.append(
+                f"UNWATCHABLE {pid}: registered with no machine-readable clock "
+                "(needs watch: {n, basis_fp}); re-register it with a clock or withdraw it (D389)"
+            )
+            continue
+        required = int(watch["n"])
+        basis_fp = str(watch["basis_fp"])
+        since = str(row.get("cohort_cut", ""))
+        have = count_rows(basis_fp, since)
+        if have >= required:
+            any_due = True
+            lines.append(
+                f"DUE {pid}: {have:,} rows in basis {basis_fp} since {since[:19]} "
+                f"(required {required:,}); take the read, it must not be extended"
+            )
+        else:
+            gap = required - have
+            lines.append(f"waiting {pid}: {have:,}/{required:,} in basis {basis_fp}, {gap:,} to go")
+    status: WatchStatus = "due" if any_due else ("unwatchable" if any_unwatchable else "ok")
+    return WatchReport(status, tuple(lines))
+
+
+def count_basis_rows(conn: duckdb.DuckDBPyConnection, basis_fp: str, since: str) -> int:
+    """The honest-arm / stage-one population the freeze reads use, scoped IN SQL to the
+    registered basis so a foreign-basis backlog can never inflate a clock (D387/D391)."""
+    row = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM submissions s
+        JOIN verdicts v ON v.config_hash = s.config_hash
+        LEFT JOIN batch_summaries b ON b.forge_batch_id = s.forge_batch_id
+        WHERE s.selection_mode = 'prefilter_sample'
+          AND v.measurement_basis IS DISTINCT FROM 'fullhist_refit'
+          AND TRY_CAST(json_extract_string(
+                v.gate_results,'$.cpcv_sharpe_p25.value') AS DOUBLE) IS NOT NULL
+          AND split_part(b.enumeration_inputs_hash,'|',2) = ?
+          AND s.submitted_at > TRY_CAST(? AS TIMESTAMP)
+        """,
+        [basis_fp, since],
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
 __all__ = [
     "ConfirmationResult",
     "Outcome",
     "PreregEntry",
+    "WatchReport",
+    "WatchStatus",
     "append_preregistration",
+    "assess_watch_clocks",
     "confirm_promotion_claim",
+    "count_basis_rows",
     "load_preregistrations",
+    "open_registrations_raw",
     "resolve_preregistration",
 ]
