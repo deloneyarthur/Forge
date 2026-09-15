@@ -14,7 +14,6 @@ across runs.
 from __future__ import annotations
 
 import math
-import random
 from typing import TYPE_CHECKING
 
 import structlog
@@ -122,18 +121,6 @@ def _compute_stratification_floor(
     return min(requested, cap)
 
 
-def _draw_arm(rng: random.Random | None, arm_b_share: float) -> str | None:
-    """Which generation arm this config is drawn under, or None when no A/B is running.
-
-    None is deliberate rather than "baseline": a config emitted with no A/B live must not be
-    taggable as a control arm, or it would silently enter a future arm comparison as data for
-    a treatment it was never eligible for.
-    """
-    if rng is None:
-        return None
-    return "book_usable" if rng.random() < arm_b_share else "baseline"
-
-
 def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v47 filter; refactor would be net harm
     grammar: Grammar,
     registry: RegistrySnapshot,
@@ -152,8 +139,6 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
     regime_gate_yield_weights: Mapping[tuple[str, str, str, str], float] | None = None,
     refutation_effects: RefutationEffects | None = None,
     below_inception: ChainInceptionExclusions | None = None,
-    generation_arm_b_weights: Mapping[tuple[str, str, str, str], float] | None = None,
-    generation_arm_b_share: float = 0.0,
     min_hypothesis_fraction: float = _DEFAULT_MIN_HYPOTHESIS_FRACTION,
 ) -> Iterator[StrategyConfig]:
     """Yield up to ``max_candidates`` grammar-valid configs lazily.
@@ -204,13 +189,6 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
 
     space = build_search_space(grammar, registry)
     rng = SeedHierarchy(seed).rng("enumeration")
-    # Tier 1 (D341) — the concurrent generation A/B. Its coin rides a SEPARATE seed stream so
-    # that switching the A/B on cannot perturb the enumeration draw itself, and when the A/B is
-    # off no coin is drawn at all: the stream is byte-identical to the pre-feature one
-    # (hard rule #6). Arms differ ONLY in which regime-gate yield map steers `_pick_regime`.
-    _ab_live = bool(generation_arm_b_weights) and generation_arm_b_share > 0.0
-    _arm_rng = SeedHierarchy(seed).rng("generation_arm") if _ab_live else None
-
     # D037 stratification setup: per-hypothesis quota, sorted name for
     # deterministic rotation order. D066/D098: exclude non-enumerable
     # hypotheses (overlay-only tail_hedge + disabled regime_arbitrage) so the
@@ -286,11 +264,7 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
                 underlying_name_weights=underlying_name_weights,
                 rank_combiner_share=rank_combiner_share,
                 cohort_yield_weights=cohort_yield_weights,
-                regime_gate_yield_weights=(
-                    generation_arm_b_weights
-                    if (_arm := _draw_arm(_arm_rng, generation_arm_b_share)) == "book_usable"
-                    else regime_gate_yield_weights
-                ),
+                regime_gate_yield_weights=regime_gate_yield_weights,
                 refutation_effects=refutation_effects,
                 below_inception=below_inception,
                 forced_hypothesis=forced_hypothesis,
@@ -326,19 +300,4 @@ def enumerate_candidates(  # noqa: PLR0912, PLR0915 — D037 stratification + v4
         yielded += 1
         if cfg.hypothesis in yielded_by_hyp:
             yielded_by_hyp[cfg.hypothesis] += 1
-        # Stamp AFTER sampling: `generation_arm` is hash-excluded (contracts 1.39.0), so this
-        # cannot move config_hash — which is the precondition for the A/B, since a hash-bearing
-        # arm tag would make an identical config drawn by both arms dedup into two strategies
-        # and the comparison would measure dedup instead of the weighting.
-        #
-        # RE-VALIDATED, and that is not belt-and-braces (2026-07-31 incident). `generation_arm`
-        # is a Literal, and `model_copy` does NOT validate — so an unaccepted arm name writes
-        # cleanly here and then detonates in every READER of the row, including
-        # `parse_forward_compatible`, because a literal_error is the D261 face forward-compat
-        # does not cover. That cost ~6h of daemon downtime and 350 poisoned rows. Validating at
-        # the stamp turns a silent write into a loud, local failure at the only point that can
-        # still fix it.
-        if _arm is None:
-            yield cfg
-        else:
-            yield type(cfg).model_validate({**cfg.model_dump(mode="json"), "generation_arm": _arm})
+        yield cfg
