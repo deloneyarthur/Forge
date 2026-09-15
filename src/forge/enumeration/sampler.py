@@ -211,32 +211,6 @@ _VOL_EVENT_POST_WINDOW_TD: int = 12
 # so we take the rank_k path, which needs no tier change.
 _RANK_K_CHOICES: tuple[int, ...] = (5, 10)
 
-# v51 (D###) — TOMBSTONE: `_TREND_RANK_K5_SHARE = 0.75` / `_TREND_HYPOTHESIS`, shipped in
-# v50 and REVERTED here the same night. It biased trend rank_k toward 5, which is the WORSE
-# value. The v50 evidence (Crucible's honest-arm read, trend med CPCV +0.4056 k=5 vs +0.1325
-# k=10) was COLLIDER BIAS and they retracted it in full
-# (CRUCIBLE_URGENT_rank_k_finding_was_COLLIDER_BIASED_..._2026-07-25).
-#
-# Mechanism, reproduced on OUR ledger before reverting: stage-two admission is the refit
-# TRIGGER, a function of config quality, so conditioning on it is a collider. In trend xsect,
-# `swing_long x k=10` converts 0 of 404 stage-one rows -- that cell is ENTIRELY ABSENT from
-# stage two -- so rank_k was silently confounded with dte_bucket; and in swing_mid the k=5
-# survivors are a more selected slice (54.5%) than k=10's (69.1%), inflating k=5 mechanically.
-# Same metric, same configs, only the conditioning changes:
-#     swing_mid  k5-k10   stage one (unselected) = -0.1712   (k=5 WORSE)
-#                         stage two (survivors)  = +0.0776   (k=5 "better")
-# The sign flips purely from conditioning. Berkson's paradox.
-#
-# THE RULE THIS BUYS (adopted both sides): parameter effects are estimated on STAGE ONE
-# (unselected) ONLY. The stage-two honest arm is a valid yardstick for grammar-VERSION
-# deltas -- like-conditioned cohorts either side -- but is NOT a valid instrument for
-# parameter attribution, because any param correlated with trigger probability gets a
-# biased and sometimes sign-flipped estimate there. Stratifying WITHIN the stage-two
-# population does not help: the collider is at its boundary, not inside it.
-#
-# Prereg b13b0f893a11 resolved REFUTED. Do not re-introduce a rank_k bias without a
-# stage-one estimate.
-
 _RANK_REBALANCE_CHOICES: tuple[str, ...] = ("weekly", "monthly")
 _RANK_DIRECTION_MODES: tuple[str, ...] = ("long_only", "long_short")
 
@@ -421,7 +395,6 @@ _MR_TIME_STOP_REQUIRED_PICK_P: float = 0.65
 # mispriced-cheap — v41 fixed a real cost bug). A future xsect tier=0 stamp
 # (explicit union scope, contracts 1.33.0 `ge=0`) waits on their §20 engine
 # pin + an explicit ask — relayed as a question, never guessed at.
-# (v41's `_XSECT_TIER3_SHARE = 0.15` retired here — tombstone per D169.)
 
 # D288 (v38) — exit-CLASS mix shift for trend swing_long (Crucible
 # FORGE_trend_swinglong_exit_mix_2026-07-16; COMPOSES with the v36 duration
@@ -2440,12 +2413,9 @@ def _sample_pre_earnings_setup_params(rng: random.Random) -> dict[str, object]:
 def _exit_params(exit_id: str, rng: random.Random) -> dict[str, object]:
     """E3: ``trailing_atr`` requires ``activate_after_gain_pct ≥ 0.30``.
 
-    D169 (v22): ``event_passed_exit`` samples ``n_bars_after_entry`` from the
-    loosening ladder so a fresh cohort tests whether widening the early time-cut
-    recovers the tail give-back ([[D168]]). D236 (v23, §2.7):
-    ``chandelier_exit`` samples ``atr_multiplier`` ∈ [2.0, 3.0] (tighter trail =
-    higher CPCV-p25). Deterministic via the seed hierarchy (the rng is the
-    per-config exit rng) — hard rules #6/#8 preserved.
+    D236 (v23, §2.7): ``chandelier_exit`` samples ``atr_multiplier`` ∈ [2.0, 3.0]
+    (tighter trail = higher CPCV-p25). Deterministic via the seed hierarchy (the
+    rng is the per-config exit rng) — hard rules #6/#8 preserved.
     """
     if exit_id == "trailing_atr":
         return {"activate_after_gain_pct": round(rng.uniform(0.30, 0.50), 2)}
