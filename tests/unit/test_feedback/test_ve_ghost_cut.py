@@ -28,6 +28,7 @@ from forge.feedback.eras import (
 )
 from forge.persistence.db import db_connection
 from forge.ranking.dataset import build_dataset
+from tests.fixtures.forge_db_rows import make_gated_run
 from tests.fixtures.strategy_configs import minimal_registry_snapshot, minimal_strategy_config
 
 _PRE_CUT = datetime(2026, 7, 10, 12, 0)  # noqa: DTZ001 — naive-UTC convention
@@ -36,29 +37,8 @@ _ERA = datetime(2026, 6, 10, 0, 0)  # noqa: DTZ001 — inside the clean era
 
 
 def _gated_run(*, config_hash: str, decision: str, decided_at: datetime):
-    from datetime import date
-
-    from crucible_contracts import GatedRun
-    from crucible_contracts.models import PromotionDecision, RunResult
-
-    rid = str(uuid.uuid4())
-    return GatedRun(
-        run=RunResult(
-            run_id=rid,
-            config_hash=config_hash,
-            metrics={"total_return": 0.1},
-            trade_count=120,
-            period_start=date(2021, 6, 2),
-            period_end=date(2026, 6, 1),
-            grammar_version="v20",
-        ),
-        decision=PromotionDecision(
-            run_id=rid,
-            decision=decision,  # type: ignore[arg-type]
-            gate_results={},
-            decided_at=decided_at,
-            decided_by="runner.forge_minimal",
-        ),
+    return make_gated_run(
+        config_hash=config_hash, decision=decision, decided_at=decided_at, grammar_version="v20"
     )
 
 

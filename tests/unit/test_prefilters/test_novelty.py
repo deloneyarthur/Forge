@@ -22,6 +22,7 @@ from forge.prefilters.calibration import load_calibration
 from forge.prefilters.feature_cache import REGIMES
 from forge.prefilters.novelty import NoveltyFilter
 from forge.prefilters.types import Filter, FilterContext
+from tests.fixtures.contexts import make_filter_context
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
     minimal_strategy_config,
@@ -53,13 +54,10 @@ def _ctx(
     activations: frozenset[date],
     prior_firing_dates: Mapping[str, frozenset[date]] | None = None,
 ) -> FilterContext:
-    return FilterContext(
-        registry=minimal_registry_snapshot(),
-        feature_cache=_FixedActivationsCache(activations),  # type: ignore[arg-type]
+    return make_filter_context(
+        feature_cache=_FixedActivationsCache(activations),
         prior_config_hashes=frozenset(prior_firing_dates or {}),
-        prior_firing_dates=prior_firing_dates or {},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
+        prior_firing_dates=prior_firing_dates,
     )
 
 

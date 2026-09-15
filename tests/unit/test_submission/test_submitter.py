@@ -14,7 +14,6 @@ from pathlib import Path
 from types import MappingProxyType
 
 import pytest
-from crucible_contracts import SignalSpec, StrategyConfig
 
 from forge.persistence.db import db_connection
 from forge.prefilters.types import FilterResult, PreFilterReport
@@ -25,67 +24,18 @@ from forge.submission.submitter import (
     SubmissionRecord,
     submit_batch,
 )
-from tests.fixtures.strategy_configs import minimal_strategy_config
+from tests.fixtures.contexts import make_batch_context, make_candidate, named_config
 
 
 def _ctx(*, seed: int = 0, submitted_at: datetime | None = None) -> BatchContext:
-    bid = mint_batch_id(seed=seed, grammar_version="v1", registry_hash="abc")
-    return BatchContext(
-        batch_id=bid,
-        grammar_version="v1",
-        registry_hash="abc",
-        submitted_at=submitted_at or datetime(2026, 5, 13, 12, tzinfo=UTC),
-        seed=seed,
-    )
+    return make_batch_context(seed=seed, submitted_at=submitted_at)
 
 
-def _named_config(name: str, directional_id: str) -> StrategyConfig:
-    return minimal_strategy_config().model_copy(
-        update={
-            "name": name,
-            "signals": (
-                SignalSpec(
-                    id=directional_id,
-                    type="threshold",
-                    role="directional",
-                    indicators=("rsi_2",),
-                    params={"threshold": 30.0},
-                ),
-                SignalSpec(
-                    id=f"iv_rg_{name}",
-                    type="threshold",
-                    role="regime_filter",
-                    indicators=("iv_rank",),
-                    params={"threshold": 50.0},
-                ),
-            ),
-        },
-    )
+_named_config = named_config
 
 
 def _candidate(name: str, directional_id: str, composite: float = 0.7) -> RankedCandidate:
-    cfg = _named_config(name, directional_id)
-    rep = PreFilterReport(
-        config=cfg,
-        passed=True,
-        filter_results=MappingProxyType(
-            {
-                "structural_redundancy": FilterResult(passed=True, score=1.0),
-                "resource_feasibility": FilterResult(passed=True, score=0.95),
-                "signal_density": FilterResult(passed=True, score=0.80),
-                "expected_trades": FilterResult(passed=True, score=0.70),
-                "novelty": FilterResult(passed=True, score=0.90),
-                "regime_exposure": FilterResult(passed=True, score=0.60),
-                "permutation_test": FilterResult(passed=True, score=0.85),
-            }
-        ),
-        diagnostic_notes=(),
-    )
-    return RankedCandidate(
-        report=rep,
-        prior_promotion_score=0.0,
-        composite_score=composite,
-    )
+    return make_candidate(named_config(name, directional_id), composite=composite)
 
 
 # ---------------------------------------------------------------------------

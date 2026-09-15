@@ -26,6 +26,8 @@ from forge.ranking.model import (
 )
 from forge.ranking.shadow import run_shadow_scoring
 from forge.ranking.types import RankedCandidate
+from tests.fixtures.contexts import make_candidate
+from tests.fixtures.forge_db_rows import insert_submission
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
     minimal_strategy_config,
@@ -103,26 +105,13 @@ def _add_robustness_model(models_dir: Path, *, target: str) -> str:
 
 
 def _candidate(composite: float = 0.7) -> RankedCandidate:
-    return RankedCandidate(
-        report=PreFilterReport(
-            config=minimal_strategy_config(),
-            passed=True,
-            filter_results={},
-            diagnostic_notes=(),
-        ),
-        prior_promotion_score=0.0,
-        composite_score=composite,
-    )
+    return make_candidate(composite=composite, filter_results={})
 
 
 def _insert_submission(db: duckdb.DuckDBPyConnection, *, batch_id: str, config_hash: str) -> str:
-    candidate_id = str(uuid.uuid4())
-    db.execute(
-        "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
-        "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
-        [candidate_id, batch_id, config_hash, _SCORED_AT, "submitted"],
+    return insert_submission(
+        db, config_hash=config_hash, batch_id=batch_id, submitted_at=_SCORED_AT
     )
-    return candidate_id
 
 
 def test_shadow_scores_table_created_by_ensure_schema() -> None:

@@ -7,9 +7,7 @@ configs would have NaN for most of any backtest.
 
 from __future__ import annotations
 
-import random
 from datetime import UTC, date, datetime
-from pathlib import Path
 
 import pytest
 from crucible_contracts import (
@@ -18,28 +16,17 @@ from crucible_contracts import (
     SignalSpec,
 )
 
-from forge.prefilters.calibration import load_calibration
-from forge.prefilters.feature_cache import SyntheticFeatureCache
 from forge.prefilters.resource_feasibility import ResourceFeasibilityFilter
 from forge.prefilters.types import Filter, FilterContext
+from tests.fixtures.contexts import make_filter_context
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
     minimal_strategy_config,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_PREFILTER_YAML = _REPO_ROOT / "config" / "prefilter.yaml"
-
 
 def _ctx(registry: RegistrySnapshot) -> FilterContext:
-    return FilterContext(
-        registry=registry,
-        feature_cache=SyntheticFeatureCache(root_seed=0),
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
-    )
+    return make_filter_context(registry=registry)
 
 
 def _short_history_registry(*, history_days: int, lookback: int) -> RegistrySnapshot:

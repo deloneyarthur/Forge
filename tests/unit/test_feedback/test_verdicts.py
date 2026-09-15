@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -20,6 +20,7 @@ import duckdb
 from forge.feedback.consumer import reconcile_all_pending
 from forge.persistence.db import db_connection
 from forge.persistence.verdicts import record_verdicts
+from tests.fixtures.forge_db_rows import insert_submission, make_gated_run, trade_count_gate
 from tests.fixtures.strategy_configs import minimal_strategy_config
 from tests.fixtures.synthetic_crucible_db import (
     build_synthetic_crucible_db,
@@ -43,37 +44,17 @@ def _gated_run(
     fullhist_refit_of: str | None = None,
     refit_selection: str | None = None,
 ):
-    from crucible_contracts import GatedRun
-    from crucible_contracts.models import GateResult, PromotionDecision, RunResult
-
-    rid = run_id or str(uuid.uuid4())
-    return GatedRun(
-        run=RunResult(
-            run_id=rid,
-            config_hash=config_hash,
-            metrics={"total_return": 0.1},
-            trade_count=trade_count,
-            period_start=date(2021, 6, 2),
-            period_end=date(2026, 6, 1),
-            grammar_version=grammar_version,
-            measurement_basis=measurement_basis,
-            fullhist_refit_of=fullhist_refit_of,
-            refit_selection=refit_selection,
-        ),
-        decision=PromotionDecision(
-            run_id=rid,
-            decision=decision,  # type: ignore[arg-type]
-            gate_results={
-                "min_oos_trade_count": GateResult(
-                    gate_name="min_oos_trade_count",
-                    passed=trade_count >= 100,
-                    value=float(trade_count),
-                    threshold=100.0,
-                ),
-            },
-            decided_at=decided_at or datetime(2026, 6, 9, 11, 37, 46),  # noqa: DTZ001 — export ships naive
-            decided_by="runner.forge_minimal",
-        ),
+    return make_gated_run(
+        config_hash=config_hash,
+        decision=decision,
+        run_id=run_id,
+        decided_at=decided_at,
+        trade_count=trade_count,
+        grammar_version=grammar_version,
+        gate_results=trade_count_gate(trade_count),
+        measurement_basis=measurement_basis,
+        fullhist_refit_of=fullhist_refit_of,
+        refit_selection=refit_selection,
     )
 
 
@@ -83,16 +64,11 @@ def _insert_submission(
     config_hash: str,
     status: str = "submitted",
 ) -> None:
-    db.execute(
-        "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
-        "config_json, submitted_at, status) VALUES (?, ?, ?, '{}', ?, ?)",
-        [
-            str(uuid.uuid4()),
-            str(uuid.uuid4()),
-            config_hash,
-            datetime(2026, 6, 9, 0, 55),  # noqa: DTZ001 — naive-UTC column convention
-            status,
-        ],
+    insert_submission(
+        db,
+        config_hash=config_hash,
+        status=status,
+        submitted_at=datetime(2026, 6, 9, 0, 55),  # noqa: DTZ001 — naive-UTC column convention
     )
 
 

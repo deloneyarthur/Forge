@@ -7,10 +7,8 @@ rejects below `calibration.predicted_activations.min_entries` (default 10).
 
 from __future__ import annotations
 
-import random
 from collections.abc import Iterable, Mapping
 from datetime import date
-from pathlib import Path
 
 from crucible_contracts import (
     CombinerSpec,
@@ -21,14 +19,11 @@ from crucible_contracts import (
     StrategyConfig,
 )
 
-from forge.prefilters.calibration import load_calibration
 from forge.prefilters.feature_cache import REGIMES
 from forge.prefilters.predicted_activations import PredictedActivationsFilter
 from forge.prefilters.types import Filter, FilterContext
-from tests.fixtures.strategy_configs import minimal_registry_snapshot
+from tests.fixtures.contexts import make_filter_context
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_PREFILTER_YAML = _REPO_ROOT / "config" / "prefilter.yaml"
 _MANDATORY_EXITS = (
     ExitSpec(id="expiry_exit"),
     ExitSpec(id="theta_cliff_exit"),
@@ -57,14 +52,7 @@ class _StubCache:
 
 
 def _ctx(cache: object) -> FilterContext:
-    return FilterContext(
-        registry=minimal_registry_snapshot(),
-        feature_cache=cache,  # type: ignore[arg-type]
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
-    )
+    return make_filter_context(feature_cache=cache)
 
 
 def _date_range(start: date, n: int) -> frozenset[date]:

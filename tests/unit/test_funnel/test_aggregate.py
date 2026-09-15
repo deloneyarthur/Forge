@@ -16,6 +16,7 @@ from pathlib import Path
 
 from forge.funnel.aggregate import build_funnel_export, build_version_map
 from forge.persistence.db import db_connection
+from tests.fixtures.forge_db_rows import insert_submission
 
 
 def _insert_batch(
@@ -54,21 +55,11 @@ def _insert_batch(
 
 
 def _insert_submission(conn: object, *, batch_id: uuid.UUID, config_hash: str) -> None:
-    conn.execute(  # type: ignore[attr-defined]
-        """
-        INSERT INTO submissions
-            (forge_candidate_id, forge_batch_id, config_hash, config_json,
-             submitted_at, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        [
-            str(uuid.uuid4()),
-            str(batch_id),
-            config_hash,
-            "{}",
-            datetime(2026, 5, 29, 12, tzinfo=UTC),
-            "submitted",
-        ],
+    insert_submission(
+        conn,
+        config_hash=config_hash,
+        batch_id=batch_id,
+        submitted_at=datetime(2026, 5, 29, 12, tzinfo=UTC),
     )
 
 

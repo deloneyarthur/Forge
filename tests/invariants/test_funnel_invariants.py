@@ -23,19 +23,18 @@ from types import MappingProxyType
 from forge.persistence.db import db_connection
 from forge.prefilters.types import FilterResult, PreFilterReport
 from forge.ranking.types import RankedCandidate
-from forge.submission.batch import BatchContext, mint_batch_id
+from forge.submission.batch import BatchContext
 from forge.submission.submitter import record_prefilter_rejections, submit_batch
+from tests.fixtures.contexts import make_batch_context
 from tests.fixtures.strategy_configs import minimal_strategy_config
 
 
 def _ctx(seed: int) -> BatchContext:
-    bid = mint_batch_id(seed=seed, grammar_version="v4", registry_hash="reg")
-    return BatchContext(
-        batch_id=bid,
+    return make_batch_context(
+        seed=seed,
         grammar_version="v4",
         registry_hash="reg",
         submitted_at=datetime(2026, 5, 29, 12, tzinfo=UTC),
-        seed=seed,
     )
 
 

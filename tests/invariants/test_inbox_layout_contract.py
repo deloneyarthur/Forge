@@ -15,69 +15,23 @@ See: `crucible_contracts.formats.INBOX_LAYOUT`; Crucible
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
-from types import MappingProxyType
 
-from crucible_contracts import INBOX_LAYOUT, SignalSpec
+from crucible_contracts import INBOX_LAYOUT
 
 from forge.persistence.db import db_connection
-from forge.prefilters.types import FilterResult, PreFilterReport
 from forge.ranking.types import RankedCandidate
-from forge.submission.batch import BatchContext, mint_batch_id
+from forge.submission.batch import BatchContext
 from forge.submission.submitter import submit_batch
-from tests.fixtures.strategy_configs import minimal_strategy_config
+from tests.fixtures.contexts import make_batch_context, make_candidate, named_config
 
 
 def _ctx() -> BatchContext:
-    return BatchContext(
-        batch_id=mint_batch_id(seed=7, grammar_version="v1", registry_hash="abc"),
-        grammar_version="v1",
-        registry_hash="abc",
-        submitted_at=datetime(2026, 5, 13, 12, tzinfo=UTC),
-        seed=7,
-    )
+    return make_batch_context(seed=7)
 
 
 def _candidate(name: str, directional_id: str) -> RankedCandidate:
-    cfg = minimal_strategy_config().model_copy(
-        update={
-            "name": name,
-            "signals": (
-                SignalSpec(
-                    id=directional_id,
-                    type="threshold",
-                    role="directional",
-                    indicators=("rsi_2",),
-                    params={"threshold": 30.0},
-                ),
-                SignalSpec(
-                    id=f"iv_rg_{name}",
-                    type="threshold",
-                    role="regime_filter",
-                    indicators=("iv_rank",),
-                    params={"threshold": 50.0},
-                ),
-            ),
-        },
-    )
-    report = PreFilterReport(
-        config=cfg,
-        passed=True,
-        filter_results=MappingProxyType(
-            {
-                "structural_redundancy": FilterResult(passed=True, score=1.0),
-                "resource_feasibility": FilterResult(passed=True, score=0.95),
-                "signal_density": FilterResult(passed=True, score=0.80),
-                "expected_trades": FilterResult(passed=True, score=0.70),
-                "novelty": FilterResult(passed=True, score=0.90),
-                "regime_exposure": FilterResult(passed=True, score=0.60),
-                "permutation_test": FilterResult(passed=True, score=0.85),
-            }
-        ),
-        diagnostic_notes=(),
-    )
-    return RankedCandidate(report=report, prior_promotion_score=0.0, composite_score=0.7)
+    return make_candidate(named_config(name, directional_id))
 
 
 def test_submitter_writes_files_flat_at_inbox_root(tmp_path: Path) -> None:

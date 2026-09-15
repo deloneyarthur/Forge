@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -20,8 +20,6 @@ from crucible_contracts import GatedRun, StrategyConfig
 from crucible_contracts.models import (
     PortfolioComponent,
     PromotedPortfolio,
-    PromotionDecision,
-    RunResult,
 )
 
 from forge.campaign.cells import (
@@ -34,6 +32,7 @@ from forge.campaign.cells import (
 from forge.campaign.types import CampaignConfig, CellStats
 from forge.feedback.eras import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
 from forge.persistence.db import open_db
+from tests.fixtures.forge_db_rows import make_gated_run
 from tests.fixtures.strategy_configs import grammar_valid_baseline, minimal_strategy_config
 
 # ---------------------------------------------------------------------------
@@ -80,24 +79,8 @@ def test_cell_key_absent_roles_are_marked() -> None:
 
 
 def _gated_run(config_hash: str, decided_at: datetime) -> GatedRun:
-    rid = str(uuid.uuid4())
-    return GatedRun(
-        run=RunResult(
-            run_id=rid,
-            config_hash=config_hash,
-            metrics={"total_return": 0.1},
-            trade_count=120,
-            period_start=date(2021, 6, 2),
-            period_end=date(2026, 6, 1),
-            grammar_version="v55",
-        ),
-        decision=PromotionDecision(
-            run_id=rid,
-            decision="promote",
-            gate_results={},
-            decided_at=decided_at,
-            decided_by="runner.forge_minimal",
-        ),
+    return make_gated_run(
+        config_hash=config_hash, decision="promote", decided_at=decided_at, grammar_version="v55"
     )
 
 

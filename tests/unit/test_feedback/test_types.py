@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from forge.feedback.types import BatchFeedback, CandidateOutcome
+from tests.fixtures.forge_db_rows import make_gated_run
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -18,40 +19,24 @@ from forge.feedback.types import BatchFeedback, CandidateOutcome
 def _gated_run(*, run_id: str = "r1", config_hash: str = "h1", promote: bool = True) -> Any:
     from datetime import date
 
-    from crucible_contracts import (
-        GatedRun,
-        GateResult,
-        PromotionDecision,
-        RunResult,
-    )
+    from crucible_contracts import GateResult
 
-    run = RunResult(
-        run_id=run_id,
+    return make_gated_run(
         config_hash=config_hash,
-        metrics={"walk_forward_sharpe_median": 1.2},
+        run_id=run_id,
+        decision="promote" if promote else "reject",
+        decided_at=datetime(2026, 5, 13, tzinfo=UTC),
         trade_count=80,
+        metrics={"walk_forward_sharpe_median": 1.2},
+        gate_results={
+            "sharpe_gate": GateResult(
+                gate_name="sharpe_gate", passed=promote, value=1.2 if promote else 0.4
+            )
+        },
+        decided_by="gate_v1",
         period_start=date(2022, 1, 1),
         period_end=date(2024, 12, 31),
     )
-    if promote:
-        gates = {"sharpe_gate": GateResult(gate_name="sharpe_gate", passed=True, value=1.2)}
-        decision = PromotionDecision(
-            run_id=run_id,
-            decision="promote",
-            gate_results=gates,
-            decided_at=datetime(2026, 5, 13, tzinfo=UTC),
-            decided_by="gate_v1",
-        )
-    else:
-        gates = {"sharpe_gate": GateResult(gate_name="sharpe_gate", passed=False, value=0.4)}
-        decision = PromotionDecision(
-            run_id=run_id,
-            decision="reject",
-            gate_results=gates,
-            decided_at=datetime(2026, 5, 13, tzinfo=UTC),
-            decided_by="gate_v1",
-        )
-    return GatedRun(run=run, decision=decision)
 
 
 def _strategy_config() -> Any:

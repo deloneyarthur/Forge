@@ -20,7 +20,6 @@ import pytest
 from crucible_contracts import CombinerSpec, StrategyConfig
 
 from forge.persistence.db import open_db
-from forge.prefilters.types import PreFilterReport
 from forge.ranking.types import RankedCandidate
 from forge.submission.search_multiplicity import (
     crucible_record_not_bind_live,
@@ -28,6 +27,8 @@ from forge.submission.search_multiplicity import (
     slot_key,
     stamp_search_n_trials,
 )
+from tests.fixtures.contexts import make_candidate
+from tests.fixtures.forge_db_rows import insert_submission
 from tests.fixtures.strategy_configs import minimal_strategy_config
 
 _XSECT_COMBINER = CombinerSpec(
@@ -55,18 +56,12 @@ def _config(
 
 
 def _insert_submission(conn: object, config: StrategyConfig) -> None:
-    conn.execute(  # type: ignore[attr-defined]
-        "INSERT INTO submissions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-            str(uuid.uuid4()),
-            str(uuid.uuid4()),
-            config.config_hash,
-            config.model_dump_json(),
-            datetime(2026, 7, 20, 12, tzinfo=UTC).replace(tzinfo=None),
-            "submitted",
-            None,
-            "ranked",
-        ],
+    insert_submission(
+        conn,
+        config_hash=config.config_hash,
+        config_json=config.model_dump_json(),
+        submitted_at=datetime(2026, 7, 20, 12, tzinfo=UTC).replace(tzinfo=None),
+        selection_mode="ranked",
     )
 
 
@@ -98,17 +93,7 @@ def _insert_verdict(conn: object, *, detail: str, decided_at: datetime) -> None:
 
 
 def _candidate(config: StrategyConfig) -> RankedCandidate:
-    return RankedCandidate(
-        report=PreFilterReport(
-            config=config,
-            passed=True,
-            filter_results={},
-            diagnostic_notes=(),
-            composite_score=0.5,
-        ),
-        prior_promotion_score=0.5,
-        composite_score=0.5,
-    )
+    return make_candidate(config, composite=0.5, prior=0.5, filter_results={}, report_composite=0.5)
 
 
 class TestSlotKey:

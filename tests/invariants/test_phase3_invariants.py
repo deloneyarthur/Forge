@@ -12,23 +12,20 @@ from pathlib import Path
 
 import pytest
 
-from forge.core.seed import SeedHierarchy
 from forge.enumeration import enumerate_candidates
 from forge.enumeration._demo_registry import demo_registry
 from forge.grammar import Grammar, load_grammar
+from forge.prefilters import calibration as calibration_module
 from forge.prefilters import (
-    SyntheticFeatureCache,
     default_filters,
-    load_calibration,
     run_battery,
 )
-from forge.prefilters import calibration as calibration_module
 from forge.prefilters.types import FilterContext, FilterResult
+from tests.fixtures.contexts import make_filter_context
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _GRAMMAR_PATH = _REPO_ROOT / "config" / "grammar.yaml"
 _ARCHIVE_DIR = _REPO_ROOT / "config" / "grammar_archive"
-_PREFILTER_YAML = _REPO_ROOT / "config" / "prefilter.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -37,15 +34,7 @@ def grammar() -> Grammar:
 
 
 def _ctx(seed: int) -> FilterContext:
-    hierarchy = SeedHierarchy(seed)
-    return FilterContext(
-        registry=demo_registry(),
-        feature_cache=SyntheticFeatureCache(root_seed=seed),
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=hierarchy.rng,
-    )
+    return make_filter_context(registry=demo_registry(), seed=seed)
 
 
 # ---------------------------------------------------------------------------

@@ -15,13 +15,12 @@ before production code:
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
 from crucible_contracts import GatedRun, StrategyConfig
-from crucible_contracts.models import GateResult, PromotionDecision, RunResult
+from crucible_contracts.models import GateResult
 
 from forge.feedback.eras import (
     CLEAN_ERA_LABEL_CUT,
@@ -32,6 +31,7 @@ from forge.persistence.db import db_connection
 from forge.persistence.verdicts import record_verdicts
 from forge.ranking.dataset import build_dataset
 from forge.ranking.features import extract_features
+from tests.fixtures.forge_db_rows import insert_submission, make_gated_run
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
     minimal_strategy_config,
@@ -47,39 +47,21 @@ def _gated_run(
     decided_at: datetime,
     gate_results: dict[str, GateResult] | None = None,
 ) -> GatedRun:
-    rid = str(uuid.uuid4())
-    return GatedRun(
-        run=RunResult(
-            run_id=rid,
-            config_hash=config_hash,
-            metrics={"total_return": 0.1},
-            trade_count=120,
-            period_start=date(2021, 6, 2),
-            period_end=date(2026, 6, 1),
-            grammar_version="v17",
-        ),
-        decision=PromotionDecision(
-            run_id=rid,
-            decision=decision,  # type: ignore[arg-type]
-            gate_results=gate_results or {},
-            decided_at=decided_at,
-            decided_by="runner.forge_minimal",
-        ),
+    return make_gated_run(
+        config_hash=config_hash,
+        decision=decision,
+        decided_at=decided_at,
+        gate_results=gate_results,
+        grammar_version="v17",
     )
 
 
 def _insert_submission(db: duckdb.DuckDBPyConnection, *, config_hash: str) -> None:
-    db.execute(
-        "INSERT INTO submissions (forge_candidate_id, forge_batch_id, config_hash, "
-        "config_json, submitted_at, status) VALUES (?, ?, ?, ?, ?, ?)",
-        [
-            str(uuid.uuid4()),
-            str(uuid.uuid4()),
-            config_hash,
-            minimal_strategy_config().model_dump_json(),
-            datetime(2026, 6, 10, 11, 0),  # noqa: DTZ001 — naive-UTC column convention
-            "gated",
-        ],
+    insert_submission(
+        db,
+        config_hash=config_hash,
+        config_json=minimal_strategy_config().model_dump_json(),
+        status="gated",
     )
 
 

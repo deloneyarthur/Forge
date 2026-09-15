@@ -12,39 +12,25 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from datetime import date
-from pathlib import Path
 
 import pytest
 
-from forge.core.seed import SeedHierarchy
 from forge.prefilters.battery import default_filters, run_battery
-from forge.prefilters.calibration import load_calibration
-from forge.prefilters.feature_cache import REGIMES, SyntheticFeatureCache
+from forge.prefilters.feature_cache import REGIMES
 from forge.prefilters.types import (
     FeatureDataUnavailable,
     Filter,
     FilterContext,
     FilterResult,
 )
+from tests.fixtures.contexts import make_filter_context
 from tests.fixtures.strategy_configs import (
-    minimal_registry_snapshot,
     minimal_strategy_config,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_PREFILTER_YAML = _REPO_ROOT / "config" / "prefilter.yaml"
-
 
 def _ctx() -> FilterContext:
-    hierarchy = SeedHierarchy(0)
-    return FilterContext(
-        registry=minimal_registry_snapshot(),
-        feature_cache=SyntheticFeatureCache(root_seed=0),
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=hierarchy.rng,
-    )
+    return make_filter_context(seed=0)
 
 
 class _RecordingFilter:

@@ -16,9 +16,6 @@ from typing import Any
 import pytest
 from crucible_contracts import (
     GatedRun,
-    GateResult,
-    PromotionDecision,
-    RunResult,
 )
 
 from forge.feedback.trade_rate_priors import (
@@ -26,34 +23,21 @@ from forge.feedback.trade_rate_priors import (
     compute_trade_rate_priors,
 )
 from forge.persistence.db import db_connection
+from tests.fixtures.forge_db_rows import make_gated_run, trade_count_gate
 from tests.fixtures.strategy_configs import minimal_registry_snapshot
 
 
 def _gated_run(*, config_hash: str, trade_count: int) -> GatedRun:
-    run_id = str(uuid.uuid4())
-    return GatedRun(
-        run=RunResult(
-            run_id=run_id,
-            config_hash=config_hash,
-            metrics={"n_trades": float(trade_count)},
-            trade_count=trade_count,
-            period_start=date(2024, 1, 1),
-            period_end=date(2024, 6, 30),
-        ),
-        decision=PromotionDecision(
-            run_id=run_id,
-            decision="reject",
-            gate_results={
-                "min_oos_trade_count": GateResult(
-                    gate_name="min_oos_trade_count",
-                    passed=trade_count >= 30,
-                    value=float(trade_count),
-                    threshold=30.0,
-                ),
-            },
-            decided_at=datetime.now(UTC),
-            decided_by="test/v1",
-        ),
+    return make_gated_run(
+        config_hash=config_hash,
+        decision="reject",
+        decided_at=datetime.now(UTC),
+        trade_count=trade_count,
+        metrics={"n_trades": float(trade_count)},
+        gate_results=trade_count_gate(trade_count, threshold=30.0),
+        decided_by="test/v1",
+        period_start=date(2024, 1, 1),
+        period_end=date(2024, 6, 30),
     )
 
 

@@ -7,7 +7,6 @@ pairwise signal-activation Jaccard overlap exceeds
 
 from __future__ import annotations
 
-import random
 from collections.abc import Iterable, Mapping
 from dataclasses import replace as _dc_replace
 from datetime import date
@@ -27,7 +26,7 @@ from forge.prefilters.calibration import load_calibration
 from forge.prefilters.feature_cache import REGIMES
 from forge.prefilters.signal_correlation import SignalCorrelationFilter
 from forge.prefilters.types import Filter, FilterContext
-from tests.fixtures.strategy_configs import minimal_registry_snapshot
+from tests.fixtures.contexts import make_filter_context, repo_calibration
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _PREFILTER_YAML = _REPO_ROOT / "config" / "prefilter.yaml"
@@ -59,21 +58,14 @@ class _StubCache:
 
 
 def _ctx(cache: object) -> FilterContext:
-    # Pin exclude_regime_filter=False so the base-mechanism tests (regime GATE included →
+    # Pin exclude_regime_filter=False so the base-mechanism tests (regime GATE included ->
     # co-firing rejected) stay valid regardless of the live config, which ships the flag ON
     # once 5082d332 is flipped. The ON behaviour has its own fixture (_ctx_exclude_regime).
-    base = load_calibration(_PREFILTER_YAML)
+    base = repo_calibration()
     calibration = _dc_replace(
         base, signal_correlation=_dc_replace(base.signal_correlation, exclude_regime_filter=False)
     )
-    return FilterContext(
-        registry=minimal_registry_snapshot(),
-        feature_cache=cache,  # type: ignore[arg-type]
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=calibration,
-        rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
-    )
+    return make_filter_context(feature_cache=cache, calibration=calibration)
 
 
 def _date_range(start: date, n: int) -> frozenset[date]:

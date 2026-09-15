@@ -6,34 +6,20 @@ Filter 1 of the §5.2 battery (O(1), cost_tier=1). Rejects configs whose
 
 from __future__ import annotations
 
-import random
 from collections.abc import Mapping
-from pathlib import Path
 
 import pytest
 
-from forge.prefilters.calibration import load_calibration
-from forge.prefilters.feature_cache import SyntheticFeatureCache
 from forge.prefilters.structural_redundancy import StructuralRedundancyFilter
 from forge.prefilters.types import Filter, FilterContext
+from tests.fixtures.contexts import make_filter_context
 from tests.fixtures.strategy_configs import (
-    minimal_registry_snapshot,
     minimal_strategy_config,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_PREFILTER_YAML = _REPO_ROOT / "config" / "prefilter.yaml"
-
 
 def _ctx(prior_hashes: frozenset[str]) -> FilterContext:
-    return FilterContext(
-        registry=minimal_registry_snapshot(),
-        feature_cache=SyntheticFeatureCache(root_seed=0),
-        prior_config_hashes=prior_hashes,
-        prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
-    )
+    return make_filter_context(prior_config_hashes=prior_hashes)
 
 
 def test_satisfies_filter_protocol() -> None:

@@ -8,16 +8,12 @@ hold time to estimate trades over the cached window; rejects below
 
 from __future__ import annotations
 
-import random
 from collections.abc import Iterable, Mapping
 from datetime import date
-from pathlib import Path
-from types import MappingProxyType
 
 import pytest
 
 from forge.feedback.trade_rate_priors import BucketKey, BucketStats
-from forge.prefilters.calibration import load_calibration
 from forge.prefilters.expected_trades import (
     _HOLD_DAYS_BY_BUCKET,
     _MAX_CONCURRENT_POSITIONS,
@@ -25,13 +21,10 @@ from forge.prefilters.expected_trades import (
 )
 from forge.prefilters.feature_cache import REGIMES
 from forge.prefilters.types import Filter, FilterContext
+from tests.fixtures.contexts import make_filter_context
 from tests.fixtures.strategy_configs import (
-    minimal_registry_snapshot,
     minimal_strategy_config,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_PREFILTER_YAML = _REPO_ROOT / "config" / "prefilter.yaml"
 
 
 class _FixedActivationsCache:
@@ -59,14 +52,8 @@ def _ctx(
     *,
     trade_rate_priors: dict[BucketKey, BucketStats] | None = None,
 ) -> FilterContext:
-    return FilterContext(
-        registry=minimal_registry_snapshot(),
-        feature_cache=_FixedActivationsCache(n_activations),  # type: ignore[arg-type]
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=lambda name: random.Random(hash(name) & 0xFFFFFFFF),
-        trade_rate_priors=MappingProxyType(trade_rate_priors or {}),
+    return make_filter_context(
+        feature_cache=_FixedActivationsCache(n_activations), trade_rate_priors=trade_rate_priors
     )
 
 

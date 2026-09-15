@@ -22,6 +22,7 @@ from forge.prefilters.calibration import _validate_forward_return_mode, load_cal
 from forge.prefilters.feature_cache import REGIMES, Regime
 from forge.prefilters.permutation_test import PermutationTestFilter, _significance_score
 from forge.prefilters.types import Filter, FilterContext
+from tests.fixtures.contexts import make_filter_context
 from tests.fixtures.strategy_configs import (
     minimal_registry_snapshot,
     minimal_strategy_config,
@@ -64,15 +65,7 @@ class _ReturnsCache:
 
 
 def _ctx(cache: _ReturnsCache, *, seed_root: int = 0) -> FilterContext:
-    hierarchy = SeedHierarchy(seed_root)
-    return FilterContext(
-        registry=minimal_registry_snapshot(),
-        feature_cache=cache,  # type: ignore[arg-type]
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=load_calibration(_PREFILTER_YAML),
-        rng_factory=hierarchy.rng,
-    )
+    return make_filter_context(feature_cache=cache, seed=seed_root)
 
 
 def _trading_window(n_days: int) -> list[date]:

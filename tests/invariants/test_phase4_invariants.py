@@ -11,15 +11,15 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from types import MappingProxyType
 
 import pytest
 
 from forge.persistence.db import db_connection
-from forge.prefilters.types import FilterResult, PreFilterReport
+from forge.prefilters.types import PreFilterReport
 from forge.ranking.types import RankedCandidate
 from forge.submission.batch import BatchContext, mint_batch_id
 from forge.submission.submitter import submit_batch
+from tests.fixtures.contexts import make_candidate, passing_report
 from tests.fixtures.strategy_configs import minimal_strategy_config
 
 
@@ -49,30 +49,11 @@ def _named_config(name: str, signal_ids: tuple[str, ...]) -> object:
 
 
 def _passing_report(name: str, signal_ids: tuple[str, ...]) -> PreFilterReport:
-    return PreFilterReport(
-        config=_named_config(name, signal_ids),  # type: ignore[arg-type]
-        passed=True,
-        filter_results=MappingProxyType(
-            {
-                "structural_redundancy": FilterResult(passed=True, score=1.0),
-                "resource_feasibility": FilterResult(passed=True, score=0.95),
-                "signal_density": FilterResult(passed=True, score=0.80),
-                "expected_trades": FilterResult(passed=True, score=0.70),
-                "novelty": FilterResult(passed=True, score=0.90),
-                "regime_exposure": FilterResult(passed=True, score=0.60),
-                "permutation_test": FilterResult(passed=True, score=0.85),
-            }
-        ),
-        diagnostic_notes=(),
-    )
+    return passing_report(_named_config(name, signal_ids))  # type: ignore[arg-type]
 
 
 def _candidate(name: str, signals: tuple[str, ...], score: float) -> RankedCandidate:
-    return RankedCandidate(
-        report=_passing_report(name, signals),
-        prior_promotion_score=0.0,
-        composite_score=score,
-    )
+    return make_candidate(_named_config(name, signals), composite=score)  # type: ignore[arg-type]
 
 
 def _batch(seed: int) -> BatchContext:
