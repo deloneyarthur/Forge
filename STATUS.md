@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 6 part B DONE (D426): cell stats 14.5 → 3.6 GB (SQL, 6× faster), training frame 24.4 → 8.4 GB (featurise per config, stream); whole live run 25–27 → 16.3 GB; caps 20/32 GB (daemon-reloaded). Outputs byte-identical (1,146 cells; 1,268,538 × 127 frame). Suite 1,580 green in 63 s.** (D426)
+
+- Next: part C — test consolidation (version-guard files, duplicated builders, table-driven predicate tests; goldens untouched). Then Batch 7.
+
 ## 2026-09-15 (later) — **Batch 6 part A DONE (D425): one battery builder (`prefilters/runner.py`), one home per helper (`core/paths.py`, `core/validation.py`), `campaign/run.py` 993 → 388 lines split into six phase modules, the arm-B draw branch removed (goldens green), tombstones cleared. The vix-conditioner shim STAYS (its removal moves the live sequence — grammar-version event). Suite 1,571 green in 63 s; dry-run identical. src 97 files / 18,856 LOC (+244 net: module headers).** (D425)
 
 - Next: part B — the two memory hot spots (`load_cell_stats` 16 GB, `build_dataset` 25 GB → DuckDB-side aggregation, per-config featurisation; whole run < 16 GB).

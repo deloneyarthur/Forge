@@ -2668,3 +2668,33 @@ with its config_json (1.30 M × ~3.2 KB `gate_results`) — then parses each in 
 `ranking/dataset.build_dataset` fetches the same join and featurises per verdict row: the 25 GB peak
 (1.05 M distinct hashes ≈ features per config, not per verdict). Targets: stats < 4 GB, training frame
 < 10 GB, whole live run < 16 GB, byte-identical stats/frames pinned against the current implementation.
+
+## D426 — 2026-09-15 — Batch 6 part B DONE: the two memory hot spots — cell stats 14.5 → 3.6 GB (SQL aggregation, 6× faster), the training frame 24.4 → 8.4 GB (featurise per config, stream); the whole live run 25–27 → 16.3 GB; unit caps 32/48 → 20/32 GB; outputs proven byte-identical
+
+**Commits** `5538be8` (B1 `load_cell_stats` in DuckDB), `5d86f77` (B2 `build_dataset` streamed), `133dc37`
+(B3 unit caps + MANPAGE/architecture). Suite **1,580 passed / 1 skipped / 0 xfailed in 63 s**. Dry-run
+identical to the prior record on every identity field (registry `c703b3b8…`, seed 1290051760, 20,000
+enumerated, five quiet triggers; only Crucible's rolling watermarks differ).
+
+| Hot spot | Before | After | Proof |
+|---|---|---|---|
+| `campaign/cells.load_cell_stats` | 36.8 s, 14.5 GB (two `fetchall()`s + per-row `json.loads`) | 5.7 s, 3.6 GB (cell key + aggregation in SQL; a 2 GB DuckDB memory limit scoped and restored) | 1,146 cells EQUAL on the live snapshot; `test_cells_sql_vs_python.py` (reference Python kept in the test, 11 tricky shapes) |
+| `ranking/dataset.build_dataset` | 86.1 s, 24.4 GB (one join fetch, featurise per verdict row) | 73.4 s, 8.4 GB (distinct configs featurised once, both passes streamed with `fetchmany`, narrow identity frame sorted in polars) | 1,268,538 × 127 frame EQUAL (`assert_frame_equal`); `test_dataset_streamed_vs_reference.py` (verbatim old build, 5 tests) |
+| whole live run, with training | 25.2–26.7 GB (D417) | **16,314,216 kB = 15.6 GiB**, 1 min 57 s; peak now inside the verdict fit (15.9 GB), not the ledger read | plan identical |
+
+**Semantics pinned, not assumed.** The SQL cell key replicates `cell_key_from_json` exactly: empty
+hypothesis/dte_bucket → `'-'`; `axis` = xsect iff `combiner.type = 'cross_sectional_rank'`; first
+`directional` / first `regime_filter` signal wins; empty indicator list → `'-'` / `'(nogate)'`; the cpcv
+value is type-gated like Python's `isinstance(value, int | float)` (a `"1.2"` string rejected, `true` → 1.0,
+null/missing → NULL); the ve ghost cut and the `since` override applied in SQL. The two remaining
+divergences exist only for JSON pydantic rejects at submit time, so no stored row can reach them. B2's
+first shape (JOIN + ORDER BY in SQL) measured 12.7 GB — DuckDB hashed the verdicts side with its 3.2 KB
+`gate_results` payload — so the committed shape scans verdicts bare, drops rows whose config is absent from
+pass 1, and sorts the identity frame in polars; UUID-vs-text order verified equal on the snapshot.
+
+**Caps.** `forge-campaign.service` → `MemoryHigh=20G` / `MemoryMax=32G` (binary G: 4.4 GiB headroom before
+throttling, 16 GiB before the kill). `daemon-reload` run here. Remaining reduction would have to come from
+the numpy materialisation inside `train_verdict_model` — not this batch's business.
+
+**Next:** part C — test consolidation (17 version-guard files → one emission-policy module; six duplicated
+row/ctx builders → `tests/fixtures/`; table-driven `test_custom_predicates`; goldens untouched).
