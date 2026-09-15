@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 5 G1 DONE (D418): the daemon loop + its command family are GONE — `cli/main.py` 2,952 → 254 lines, 29 files / 7,489 LOC deleted; `forge --help` = version · check · enumerate · prefilter · campaign · prereg. Suite 2,052 green in 116 s (was 220 s). Live dry-run reproduces the plan.** (D418)
+
+- REL-4 SIGTERM test re-targeted to the campaign oneshot (xfail until G6); the D352 battery-inputs invariant now reads `campaign/run.py`. Next: G2 (ranking, daemon era).
+
 ## 2026-09-15 — **Batch 5 G0 DONE (D417): the weekly run trains its own two models (verdict + cpcv robustness, retention 4/family) and judges preregistrations at boot (DUE/UNWATCHABLE = FAIL); ranker-eval + prereg-watch timers, 7 scripts, 6 unit files GONE (−3,279 LOC). Two Sunday-breaking defects found by live dry-runs and fixed (CUTOVER.json crashed the record loader; failed records wiped the baselines). Timers = campaign (Sun 03:00Z) + backup (Sun 04:30Z). Peak RSS with training 25–27 GB → caps 32/48 GB.** (D417)
 
 - Suite 2,219 green. Next: G1 (the daemon loop + its CLI leave `cli/main.py`).

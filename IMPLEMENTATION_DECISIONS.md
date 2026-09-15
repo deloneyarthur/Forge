@@ -2346,3 +2346,46 @@ plan identical to the live run `…235206Z` (same registry_hash, seed, 20,000 en
 trained `verdict_model_v1_20260915T002215Z_92117964`, `robustness_model_v1_20260915T002215Z_e4dcb547`.
 
 **Next:** G1 — the daemon loop and its CLI leave `cli/main.py`.
+
+## D418 — 2026-09-15 — Batch 5 G1 DONE: the daemon loop and its command family are gone — `cli/main.py` 2,952 → 254 lines, 29 files / 7,489 LOC deleted, `forge --help` = version · check · enumerate · prefilter · campaign · prereg
+
+**Commits** `124b002` (src + tests: 41 files, +186/−10,735) and `fd112fc` (docs + deploy: 8 files,
++131/−804). Suite **2,052 passed / 1 skipped / 2 xfailed in 116 s** (from 2,219 / 220 s — the loop's
+tests were the slow ones). Live dry-run `2026-W38-20260915T010542Z`: boot ok, reconciled from the forge
+stream (truncated → flush skipped), 20,000 enumerated, all five triggers quiet, submitted 0 — same plan
+class as `…003500Z`; `registry_hash` moved (`922007ff…` → `c703b3b8…`, a new Crucible snapshot between
+runs) and the seed with it, as designed.
+
+**Deleted.** `cli/main.py`: `cmd_run`, `_run_one_iteration`, `_resolve_run_defaults` + `_RUN_DEFAULT_*`,
+the nine learned-weight loaders + formatters, the eight env resolvers, the reconcile/feedback wrappers,
+the promoted-strategies read (`promoted_strategies` is retiring, D409), `check-activations`; the D414
+re-export aliases (no surviving importer). `cli/{feedback,healthcheck,status,grammar,yield_audit,
+campaigns,ranker_model}_cmd.py`; `prefilters/activation_smoke.py`; `deploy/systemd/forge.service`,
+`forge-healthcheck.{service,timer}`. Eighteen daemon-only tests (`test_run_loop`, `test_config_threading`,
+`test_generation_arm_flag`, `test_cell_floor_flag`, `test_healthcheck`, `test_status`, `test_grammar_cmd`,
+`test_feedback_cmd`, `test_ranker_model_cmd`, `test_campaigns_cmd`, `test_yield_audit_cmd`,
+`test_export_outage_signal` (REL-1's subject is gone), `test_model_reload_cadence` (covered by
+`test_train`/`test_run`), `test_activation_smoke`, `test_cli_run`, `test_orthogonal_family_floor_invariants`,
+`test_funnel_export_integration`, `test_resilience_partial_batch`).
+
+**Re-targeted, not lost.** REL-4 `test_sigterm_handler` → the `forge campaign` oneshot (still
+`xfail(strict)` until G6); `test_feature_cache_fallback` → the factory contract + a campaign test
+(unavailable cache → `status: error`, exception propagates, inbox empty); D352
+`test_enumeration_inputs_reach_the_battery` → `campaign/run.enumerate_population`'s
+`enumerate_candidates(...)` call; the two resilience suites → `consume_batch_results` / `QueryError`
+directly; phase5's D051 audit-row assertion → `run_campaign`; phase6's §13.2 needle → "both grammar hook
+scripts exist and are wired in `.pre-commit-config.yaml`"; `test_batch5_prep_seams` keeps the
+campaign-imports-nothing tripwire. `forge.cli.main` importers: 8 test files (6 only `app`), from 24.
+
+**Docs made truthful.** MANPAGE: nine command sections + the daemon env-knob essays removed,
+`forge.service` row RETIRED (D416). HOW-TO: start/stop → the two-timer note; the three "blocked …"
+situations → one retired-limiter note (the `rate limiter` needle survives until G4/G7 re-cut it);
+restore without a daemon; manual runs. architecture.md: diagram, `cli/` row, live-deployment bullet.
+CLAUDE.md: the production section now names `forge-campaign.timer` (same D104 hazard, weekly cadence)
+and the importer pitfall count. `deploy.md` and `deploy_preflight.sh`: preflight → commit → the Sunday
+run deploys; a hand `forge campaign --dry-run` is the post-deploy verify. NEW_BOX/setup_new_box: no
+daemon unit.
+
+**Next:** G2 — ranking, daemon era (`queue`, `diversifier`, `arm_floor`, `cell_floor`, `scorer`, `config`,
+`prior_promotion`, `calibration`, `drift`, `sequential_test`, `evaluation`, `campaign_audit`, `campaigns`,
+`regime_supply`, `ranker.yaml`; `ranking/types.py` trimmed to `RankedCandidate`).
