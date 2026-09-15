@@ -36,6 +36,7 @@ from forge.campaign.report import (
     load_latest_baseline_record,
     write_record,
 )
+from forge.campaign.stop import CampaignStopped, sigterm_guard
 from forge.campaign.triggers import (
     allocate_budgets,
     cells_with_indicators,
@@ -506,7 +507,43 @@ def _fmt_campaign(campaign: CampaignSpec) -> str:
     )
 
 
-def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, echoed step by step
+def run_campaign(
+    *,
+    forge_db_path: Path,
+    exports_dir: Path,
+    inbox_root: Path,
+    models_dir: Path,
+    records_dir: Path,
+    config_root: Path,
+    cfg: CampaignConfig,
+    dry_run: bool,
+    budget_override: int | None = None,
+    skip_train: bool = False,
+    feature_cache_factory: FeatureCacheFactory | None = None,
+    echo: Echo = typer.echo,
+) -> RunRecord:
+    """Execute one weekly run under the SIGTERM stop guard (REL-4) and return its record.
+
+    The guard lives here, not in the CLI, so every caller of a run — the unit, a hand run, a
+    test — gets the same stop contract; the CLI only maps the outcome to an exit code."""
+    with sigterm_guard():
+        return _run_campaign(
+            forge_db_path=forge_db_path,
+            exports_dir=exports_dir,
+            inbox_root=inbox_root,
+            models_dir=models_dir,
+            records_dir=records_dir,
+            config_root=config_root,
+            cfg=cfg,
+            dry_run=dry_run,
+            budget_override=budget_override,
+            skip_train=skip_train,
+            feature_cache_factory=feature_cache_factory,
+            echo=echo,
+        )
+
+
+def _run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, echoed step by step
     *,
     forge_db_path: Path,
     exports_dir: Path,
@@ -817,7 +854,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
             echo(f"campaign {run_id}: DRY RUN — planned {len(planned)}, submitted 0")
             return record
         # 12. submit
-        batch_id, submitted = _submit(
+        batch_id, submitted, unsubmitted = _submit(
             ranked,
             lanes=lanes,
             forge_db_path=forge_db_path,
@@ -836,12 +873,28 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
         ensure_grammar_version_recorded_silently(
             forge_db_path, grammar=grammar, yaml_path=config_root / "grammar.yaml"
         )
+        if unsubmitted:
+            # REL-4: SIGTERM arrived mid-batch; the in-flight candidate completed, the rest
+            # never started. The record says so and the unit exits non-zero (the page).
+            plural = "" if submitted == 1 else "s"
+            notes.append(
+                f"stopped by SIGTERM after {submitted} submission{plural}; "
+                f"{unsubmitted} planned candidate(s) not submitted"
+            )
+            record = _record(
+                status="error", submitted=submitted, batch_id=batch_id, notes=tuple(notes), **common
+            )
+            write_record(records_dir, record)
+            echo(f"campaign {run_id}: STOPPED by SIGTERM after {submitted} (batch {batch_id})")
+            raise CampaignStopped(notes[-1])
         record = _record(
             status="ok", submitted=submitted, batch_id=batch_id, notes=tuple(notes), **common
         )
         write_record(records_dir, record)
         echo(f"campaign {run_id}: submitted {submitted} (batch {batch_id})")
         return record
+    except CampaignStopped:
+        raise
     except Exception as exc:
         notes.append(f"{type(exc).__name__}: {exc}")
         record = _record(status="error", notes=tuple(notes))
@@ -872,7 +925,9 @@ def _submit(
     survived: int,
     by_hypothesis: Mapping[str, int],
     notes: list[str],
-) -> tuple[str, int]:
+) -> tuple[str, int, int]:
+    """Submit the ranked candidates; returns (batch_id, submitted, unsubmitted_after_stop)."""
+    from forge.campaign.stop import stop_requested  # noqa: PLC0415
     from forge.funnel.export import write_funnel_export  # noqa: PLC0415
     from forge.persistence.db import db_connection  # noqa: PLC0415
     from forge.ranking.model import QUALITY_LANE_TARGET  # noqa: PLC0415
@@ -912,6 +967,7 @@ def _submit(
             survived_count=survived,
             enumerated_by_hypothesis=dict(by_hypothesis),
             extra_lane_hashes=lanes,
+            should_stop=stop_requested,
         )
         try:
             funnel_path, _ = write_funnel_export(conn, forge_db_path.parent / "exports")
@@ -933,7 +989,11 @@ def _submit(
         f"submit: {result.submitted_count} submitted, {result.skipped_duplicate_count} duplicate, "
         f"{result.failed_count} failed"
     )
-    return (str(result.batch_id), result.submitted_count)
+    return (
+        str(result.batch_id),
+        result.submitted_count,
+        result.remaining_count if result.stopped_early else 0,
+    )
 
 
 __all__ = [

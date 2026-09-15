@@ -32,7 +32,7 @@ from crucible_contracts import submit_candidate
 from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from forge.ranking.types import RankedCandidate
     from forge.submission.batch import BatchContext
@@ -73,6 +73,10 @@ class BatchSubmissionResult:
     # one; if it does, this surfaces the regression instead of round-
     # tripping the config to Crucible only to be RunnerError'd.
     dropped_overlay_count: int = 0
+    # REL-4 (Batch 5 G6): a stop request was honoured between candidates; `remaining_count`
+    # candidates were never started (no inbox file, no row) — the run records it as an error.
+    stopped_early: bool = False
+    remaining_count: int = 0
 
 
 def _insert_batch_summary(
@@ -320,6 +324,7 @@ def submit_batch(
     holdout_hashes: frozenset[str] = frozenset(),
     prefilter_sample_hashes: frozenset[str] = frozenset(),
     extra_lane_hashes: Mapping[str, frozenset[str]] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> BatchSubmissionResult:
     """Submit a ranked batch to Crucible's inbox + Forge's DB.
 
@@ -357,8 +362,17 @@ def submit_batch(
     # pool's top-N). This lets Crucible reproduce the per-config selected-vs-pool
     # inflation directly. holdout rows are not rank-selected → rank stays None.
     ranked_rank = 0
+    stopped_early = False
+    remaining = 0
 
-    for candidate in candidates:
+    for position, candidate in enumerate(candidates):
+        # REL-4: honour a stop request BETWEEN candidates only. The in-flight candidate's
+        # inbox write + commit have completed by the time we get here; nothing after it
+        # starts, so the inbox and the `submissions` table stay in agreement.
+        if should_stop is not None and should_stop():
+            stopped_early = True
+            remaining = len(candidates) - position
+            break
         # P3.3 (B7): tag the exploration-holdout draw so evals can split biased-vs-unbiased
         # labels. Empty `holdout_hashes` (default / flag-OFF) → every row is 'ranked'.
         config_hash = candidate.report.config.config_hash
@@ -419,6 +433,8 @@ def submit_batch(
         failed_count=failed,
         records=tuple(records),
         dropped_overlay_count=dropped_overlay,
+        stopped_early=stopped_early,
+        remaining_count=remaining,
     )
 
 

@@ -325,3 +325,56 @@ def test_boot_passes_with_an_open_prereg_still_waiting(tmp_path: Path) -> None:
     check = next(c for c in record.boot if c.name == "preregistrations")
     assert check.ok
     assert "7,200 to go" in check.detail
+
+
+def test_sigterm_mid_batch_stops_between_candidates_and_records_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """REL-4 contract at the run level: a stop requested while the first candidate is in
+    flight lets that candidate finish (inbox file AND committed row), submits nothing more,
+    writes an `error` record naming the stop, and raises so the unit exits non-zero."""
+    import forge.submission.submitter as submitter_mod
+    from forge.campaign import stop
+    from forge.campaign.stop import CampaignStopped
+
+    env = _env(tmp_path)
+    plan = _run(env, dry_run=True)
+    assert len(plan.submitted_hashes) >= 2, "fixture must plan at least two candidates"
+    real_submit = submitter_mod.submit_candidate
+
+    def stopping_submit(config: object, inbox_root: Path) -> object:
+        receipt = real_submit(config, inbox_root)  # type: ignore[arg-type]
+        stop.request_stop()  # the signal lands while this candidate is in flight
+        return receipt
+
+    monkeypatch.setattr(submitter_mod, "submit_candidate", stopping_submit)
+    lines: list[str] = []
+    with pytest.raises(CampaignStopped):
+        run_campaign(
+            forge_db_path=env["forge_db"],
+            exports_dir=env["exports"],
+            inbox_root=env["inbox"],
+            models_dir=env["models"],
+            records_dir=env["records"],
+            config_root=env["config_root"],
+            cfg=_CFG,
+            dry_run=False,
+            skip_train=True,
+            feature_cache_factory=lambda _registry, seed: SyntheticFeatureCache(root_seed=seed),
+            echo=lines.append,
+        )
+    assert stop.stop_requested() is False, "the guard must clear the flag on exit"
+    from forge.campaign.report import load_records
+
+    record = [r for r in load_records(env["records"]) if not r.dry_run][-1]
+    assert record.status == "error"
+    assert record.submitted == 1
+    assert record.batch_id is not None
+    assert any("stopped by SIGTERM after 1 submission" in n for n in record.notes)
+    inbox_files = sorted(p.stem for p in env["inbox"].glob("*.json"))
+    with db_connection(env["forge_db"]) as conn:
+        rows = conn.execute(
+            "SELECT config_hash FROM submissions WHERE status = 'submitted'"
+        ).fetchall()
+    assert len(inbox_files) == 1
+    assert [str(r[0]) for r in rows] == inbox_files
