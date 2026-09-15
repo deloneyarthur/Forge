@@ -70,10 +70,10 @@ from forge.grammar.signal_horizon import (
 )
 from tests.fixtures.contexts import REPO_ROOT
 from tests.fixtures.registries import its_registry, rtr_registry, v33_registry, v44_registry
+from tests.fixtures.registries import v31_registry as _v31_registry
 from tests.fixtures.sampling import sample_configs
 from tests.fixtures.strategy_configs import minimal_registry_snapshot
 from tests.fixtures.universe_snapshot import UNIVERSE_TIER3_SNAPSHOT_2026_07_20
-from tests.unit.test_enumeration.test_sampler import _v31_registry
 
 _XSECT_SHARE = {"trend_continuation": 0.6, "mean_reversion": 0.6}
 

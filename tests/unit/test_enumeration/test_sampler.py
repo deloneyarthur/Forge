@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import random
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -39,16 +40,36 @@ from forge.grammar.custom_predicates import (
     _R3_EVENT_PROXIMITY_INDICATORS,
     _S5_HYPOTHESIS_EXITS,
 )
+from tests.fixtures.contexts import REPO_ROOT
+from tests.fixtures.registries import (
+    v17_registry as _v17_registry,
+)
+from tests.fixtures.registries import (
+    v18_registry as _v18_registry,
+)
+from tests.fixtures.registries import (
+    v25_registry as _v25_registry,
+)
+from tests.fixtures.registries import (
+    v26_registry as _v26_registry,
+)
+from tests.fixtures.registries import (
+    v27_registry as _v27_registry,
+)
+from tests.fixtures.registries import (
+    v29_registry as _v29_registry,
+)
+from tests.fixtures.registries import (
+    v31_registry as _v31_registry,
+)
 from tests.fixtures.strategy_configs import minimal_registry_snapshot
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_GRAMMAR_PATH = _REPO_ROOT / "config" / "grammar.yaml"
-_ARCHIVE_DIR = _REPO_ROOT / "config" / "grammar_archive"
 
 
 @pytest.fixture(scope="module")
 def grammar() -> Grammar:
-    return load_grammar(_GRAMMAR_PATH, archive_dir=_ARCHIVE_DIR)
+    return load_grammar(
+        REPO_ROOT / "config" / "grammar.yaml", archive_dir=REPO_ROOT / "config" / "grammar_archive"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -370,41 +391,28 @@ def test_d074_dte_window_uses_both_halves(
     assert len(dte_max_seen) >= 3, f"dte_max collapsed to {dte_max_seen}"
 
 
-def test_d074_kelly_fraction_sampled_for_fractional_kelly_mode(
-    grammar: Grammar,
-    registry: RegistrySnapshot,
+@pytest.mark.parametrize(
+    ("mode", "knob", "lo", "hi"),
+    [
+        ("fractional_kelly", "kelly_fraction", 0.10, 0.50),
+        ("vol_target", "vol_target_annual", 0.10, 0.30),
+    ],
+)
+def test_d074_sizer_mode_knob_sampled_in_range(
+    grammar: Grammar, registry: RegistrySnapshot, mode: str, knob: str, lo: float, hi: float
 ) -> None:
-    """fractional_kelly configs sample kelly_fraction in [0.10, 0.50]."""
+    """D074: each sizer mode samples its own knob inside the documented range, and across
+    300 seeds the knob takes at least 5 distinct values (not collapsed)."""
     seen: set[float] = set()
     for seed in range(300):
         cfg = _sample(grammar, registry, seed=seed)
-        if cfg.sizer.mode != "fractional_kelly":
+        if cfg.sizer.mode != mode:
             continue
-        assert 0.10 <= cfg.sizer.kelly_fraction <= 0.50, (
-            f"seed={seed}: kelly_fraction={cfg.sizer.kelly_fraction} out of range"
-        )
-        seen.add(cfg.sizer.kelly_fraction)
-    # Across enough seeds we should see >= 5 distinct kelly values.
+        value = getattr(cfg.sizer, knob)
+        assert lo <= value <= hi, f"seed={seed}: {knob}={value} out of range"
+        seen.add(value)
     if seen:
-        assert len(seen) >= 5, f"kelly_fraction collapsed to {sorted(seen)}"
-
-
-def test_d074_vol_target_sampled_for_vol_target_mode(
-    grammar: Grammar,
-    registry: RegistrySnapshot,
-) -> None:
-    """vol_target configs sample vol_target_annual in [0.10, 0.30]."""
-    seen: set[float] = set()
-    for seed in range(300):
-        cfg = _sample(grammar, registry, seed=seed)
-        if cfg.sizer.mode != "vol_target":
-            continue
-        assert 0.10 <= cfg.sizer.vol_target_annual <= 0.30, (
-            f"seed={seed}: vol_target_annual={cfg.sizer.vol_target_annual} out of range"
-        )
-        seen.add(cfg.sizer.vol_target_annual)
-    if seen:
-        assert len(seen) >= 5, f"vol_target_annual collapsed to {sorted(seen)}"
+        assert len(seen) >= 5, f"{knob} collapsed to {sorted(seen)}"
 
 
 def test_d074_fixed_risk_pct_keeps_default_kelly_and_vol_target(
@@ -428,34 +436,24 @@ def test_d074_fixed_risk_pct_keeps_default_kelly_and_vol_target(
 # ---------------------------------------------------------------------------
 
 
-def test_vol_target_chains_realized_vol(grammar: Grammar, registry: RegistrySnapshot) -> None:
-    """Find a seed where the sampler picks vol_target; assert realized_vol
-    is on the strategy."""
+@pytest.mark.parametrize(
+    ("mode", "indicator", "rule"),
+    [("vol_target", "realized_vol", "X1"), ("fractional_kelly", "expected_value_estimator", "X2")],
+)
+def test_sizer_mode_chains_its_estimator_indicator(
+    grammar: Grammar, registry: RegistrySnapshot, mode: str, indicator: str, rule: str
+) -> None:
+    """§3.5 X1/X2: every config in the sizer mode carries its estimator indicator, and the
+    mode is actually sampled within 200 seeds."""
     found = False
     for seed in range(200):
         cfg = _sample(grammar, registry, seed=seed)
-        if cfg.sizer.mode != "vol_target":
+        if cfg.sizer.mode != mode:
             continue
         found = True
         all_indicators = {ind for sig in cfg.signals for ind in sig.indicators}
-        assert "realized_vol" in all_indicators, (
-            f"X1 violated at seed={seed}: realized_vol missing from {all_indicators}"
-        )
-    assert found, "no vol_target sample in 200 seeds — sampler may be biased"
-
-
-def test_fractional_kelly_chains_ev_estimator(grammar: Grammar, registry: RegistrySnapshot) -> None:
-    found = False
-    for seed in range(200):
-        cfg = _sample(grammar, registry, seed=seed)
-        if cfg.sizer.mode != "fractional_kelly":
-            continue
-        found = True
-        all_indicators = {ind for sig in cfg.signals for ind in sig.indicators}
-        assert "expected_value_estimator" in all_indicators, (
-            f"X2 violated at seed={seed}: expected_value_estimator missing"
-        )
-    assert found, "no fractional_kelly sample in 200 seeds — sampler may be biased"
+        assert indicator in all_indicators, f"{rule} violated at seed={seed}: {all_indicators}"
+    assert found, f"no {mode} sample in 200 seeds; sampler may be biased"
 
 
 # ---------------------------------------------------------------------------
@@ -949,27 +947,22 @@ def test_d098_regime_arbitrage_not_sampled(grammar: Grammar, registry: RegistryS
         assert cfg.hypothesis != "regime_arbitrage", f"seed={seed} leaked regime_arbitrage"
 
 
-def test_d098_regime_arbitrage_blocked_when_forced(
-    grammar: Grammar, registry: RegistrySnapshot
+@pytest.mark.parametrize(
+    ("hypothesis", "seed", "match"),
+    [
+        ("regime_arbitrage", 0, r"forced_hypothesis='regime_arbitrage'"),
+        ("relative_value", 3, None),
+    ],
+)
+def test_disabled_hypothesis_blocked_when_forced(
+    grammar: Grammar, registry: RegistrySnapshot, hypothesis: str, seed: int, match: str | None
 ) -> None:
-    """D098 (v5): a direct sampler call must reject ``forced_hypothesis=
-    'regime_arbitrage'`` exactly as it does for the overlay-only set — it's no
-    longer in the samplable pool."""
+    """DISABLED_HYPOTHESES stay in grammar.yaml S1 (hard rule #1) but a direct sampler call
+    rejects forcing them: regime_arbitrage (D098/v5), relative_value (D328/v47, refuted +
+    dormant; supersedes the D098 underlying=None enumeration assertion)."""
     space = build_search_space(grammar, registry)
-    with pytest.raises(SamplerError, match=r"forced_hypothesis='regime_arbitrage'"):
-        sample_config(space, registry, random.Random(0), forced_hypothesis="regime_arbitrage")
-
-
-def test_d328_relative_value_retired_not_samplable(
-    grammar: Grammar, registry: RegistrySnapshot
-) -> None:
-    """D328 (v47): relative_value is retired into DISABLED_HYPOTHESES — refuted
-    (D215/D276: xsect rank-IC negative, corr-to-MR 0.88) + dormant. It stays in
-    grammar.yaml S1 (hard rule #1) but is never enumerated, so forcing it raises
-    (supersedes the D098 underlying=None enumeration assertion)."""
-    space = build_search_space(grammar, registry)
-    with pytest.raises(SamplerError):
-        sample_config(space, registry, random.Random(3), forced_hypothesis="relative_value")
+    with pytest.raises(SamplerError, match=match):
+        sample_config(space, registry, random.Random(seed), forced_hypothesis=hypothesis)
 
 
 def test_d098_non_pairs_hypothesis_still_gets_underlying(
@@ -1354,49 +1347,37 @@ def test_exit_params_other_exits_unchanged() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _v17_registry(base: RegistrySnapshot) -> RegistrySnapshot:
-    """Fixture registry + the two v17-activated live-registry ids."""
-    extra = (
-        IndicatorMetadata(
-            id="iv_minus_rv",
-            version=1,
-            family="iv_structure",
-            lookback=21,
-            params_schema={},
-            rank_per_name_coherent=False,
-            market_wide_by_design=False,
-        ),
-        IndicatorMetadata(
-            id="market_state",
-            version=1,
-            family="macro",
-            lookback=0,
-            params_schema={},
-            rank_per_name_coherent=False,
-            market_wide_by_design=True,
-        ),
-    )
-    return base.model_copy(update={"indicators": (*base.indicators, *extra)})
-
-
-def test_v17_ve_draws_iv_minus_rv_directional(grammar: Grammar, registry: RegistrySnapshot) -> None:
-    """D131 (v17): with threshold + horizon entries live, iv_minus_rv
-    auto-enters volatility_event's DIRECTIONAL pool via C2 (iv_structure).
-    Gate direction `<` — enter when IV is cheap vs realized (Goyal-Saretto,
-    net-debit book per Crucible's Q34 answer). Its 21d horizon is
-    medium_lookback → ve x swing_mid becomes reachable (the partial Q28
-    lift) — assert at least one such draw appears."""
-    reg = _v17_registry(registry)
+@pytest.mark.parametrize(
+    ("serving", "indicator", "op", "lo", "hi"),
+    [
+        (_v17_registry, "iv_minus_rv", "<", -0.05, 0.01),
+        (_v18_registry, "iv_term_slope", ">", 0.0077, 0.04),
+    ],
+)
+def test_ve_draws_iv_structure_directional(
+    grammar: Grammar,
+    registry: RegistrySnapshot,
+    serving: Callable[[RegistrySnapshot], RegistrySnapshot],
+    indicator: str,
+    op: str,
+    lo: float,
+    hi: float,
+) -> None:
+    """D131 (v17) iv_minus_rv (op '<', cheap IV vs realized) and D135 (v18) iv_term_slope
+    (op '>', steep contango; floor x1.3-loosened to 0.0077 by D290) auto-enter the ve
+    DIRECTIONAL pool via C2 once served; both are medium_lookback, so ve x swing_mid is
+    reachable and swing_short is the only other S4 bucket."""
+    reg = serving(registry)
     space = build_search_space(grammar, reg)
     seen = seen_swing_mid = 0
     for seed in range(400):
         cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
         d = next(s for s in cfg.signals if s.role == "directional")
-        if d.indicators[0] != "iv_minus_rv":
+        if d.indicators[0] != indicator:
             continue
         seen += 1
-        assert d.params["op"] == "<", cfg.name
-        assert -0.05 <= d.params["threshold"] <= 0.01, cfg.name
+        assert d.params["op"] == op, cfg.name
+        assert lo <= d.params["threshold"] <= hi, cfg.name
         if cfg.dte_bucket == "swing_mid":
             seen_swing_mid += 1
         else:
@@ -1453,71 +1434,6 @@ def test_v17_market_state_gate_allowed_on_rank_arm(
 # D135 (v18) — adoption cut: iv_term_slope ve directional (A2), pre_earnings
 # setup in R3; option_momentum deliberately NOT activated (data-starved, Q39)
 # ---------------------------------------------------------------------------
-
-
-def _v18_registry(base: RegistrySnapshot) -> RegistrySnapshot:
-    """Fixture registry + the live-registry ids relevant to the v18 cut
-    (flags/families exactly as the 52-id snapshot
-    `registry_snapshot_2026-06-10T172339Z.json` publishes them)."""
-    extra = (
-        IndicatorMetadata(
-            id="iv_term_slope",
-            version=1,
-            family="iv_structure",
-            lookback=0,
-            params_schema={},
-            rank_per_name_coherent=False,
-            market_wide_by_design=False,
-        ),
-        IndicatorMetadata(
-            id="option_momentum",
-            version=1,
-            family="smart_money",
-            lookback=147,
-            params_schema={},
-            rank_per_name_coherent=False,
-            market_wide_by_design=False,
-        ),
-        IndicatorMetadata(
-            id="pre_earnings_setup",
-            version=2,
-            family="calendar",
-            lookback=252,
-            params_schema={},
-            rank_per_name_coherent=False,
-            market_wide_by_design=False,
-        ),
-    )
-    return base.model_copy(update={"indicators": (*base.indicators, *extra)})
-
-
-def test_v18_ve_draws_iv_term_slope_directional(
-    grammar: Grammar, registry: RegistrySnapshot
-) -> None:
-    """D135 (v18): with threshold + horizon entries live, iv_term_slope
-    auto-enters volatility_event's DIRECTIONAL pool via C2 (iv_structure).
-    Gate direction `>` — upward slope predicts option returns (Vasquez
-    JFQA 2017; long-only book buys the steep-contango names). Its 21d
-    horizon is medium_lookback, making it the second medium-horizon ve
-    anchor (the A2 condition; full Q28 lift) — assert swing_mid draws."""
-    reg = _v18_registry(registry)
-    space = build_search_space(grammar, reg)
-    seen = seen_swing_mid = 0
-    for seed in range(400):
-        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="volatility_event")
-        d = next(s for s in cfg.signals if s.role == "directional")
-        if d.indicators[0] != "iv_term_slope":
-            continue
-        seen += 1
-        assert d.params["op"] == ">", cfg.name
-        # D290 (v39): the floor is the x1.3-loosened 0.0077 (was 0.01).
-        assert 0.0077 <= d.params["threshold"] <= 0.04, cfg.name
-        if cfg.dte_bucket == "swing_mid":
-            seen_swing_mid += 1
-        else:
-            assert cfg.dte_bucket == "swing_short", cfg.name  # S4 medium class
-    assert seen > 0
-    assert seen_swing_mid > 0
 
 
 def test_v33_ve_never_draws_pre_earnings_setup(
@@ -2031,32 +1947,22 @@ def test_regime_gate_yield_tilts_regime_draw(grammar: Grammar, registry: Registr
 # that ANDs on top of the mandatory trend-strength gate; trend_continuation only;
 # DORMANT until the registry serves the indicator.
 # ---------------------------------------------------------------------------
-def _v25_registry(base: RegistrySnapshot) -> RegistrySnapshot:
-    """Fixture registry + the v25 days_since_jump veto indicator (family
-    volatility, version 3, rank-per-name coherent) — the object Forge reads once
-    Crucible publishes the snapshot serving dsj."""
-    dsj = IndicatorMetadata(
-        id="days_since_jump",
-        version=3,
-        family="volatility",
-        lookback=252,
-        params_schema={},
-        rank_per_name_coherent=True,
-        market_wide_by_design=False,
-    )
-    return base.model_copy(update={"indicators": (*base.indicators, dsj)})
 
 
-def test_d258_dsj_veto_dormant_without_registry_indicator(
-    grammar: Grammar, registry: RegistrySnapshot
+@pytest.mark.parametrize(
+    ("indicator", "hypothesis"), [("days_since_jump", None), ("ivol", "mean_reversion")]
+)
+def test_veto_dormant_without_registry_indicator(
+    grammar: Grammar, registry: RegistrySnapshot, indicator: str, hypothesis: str | None
 ) -> None:
-    """Byte-identity's precondition: on a registry WITHOUT days_since_jump the veto
-    pool is empty, so no config carries the second gate and `days_since_jump` is
-    never emitted (complements the cold-start goldens)."""
+    """Byte-identity's precondition (D258 dsj, D263 ivol): on the base registry the veto pool
+    is empty, so no config carries a second gate and the id is never emitted (complements the
+    cold-start goldens)."""
+    space = build_search_space(grammar, registry)
     for seed in range(200):
-        cfg = _sample(grammar, registry, seed=seed)
+        cfg = sample_config(space, registry, random.Random(seed), forced_hypothesis=hypothesis)
         ids = {ind for s in cfg.signals for ind in s.indicators}
-        assert "days_since_jump" not in ids, f"dsj emitted while dormant at seed={seed}"
+        assert indicator not in ids, f"{indicator} emitted while dormant at seed={seed}"
         assert not any(s.id == "sig_regime_veto" for s in cfg.signals)
 
 
@@ -2091,18 +1997,31 @@ def test_d258_dsj_veto_active_on_trend_and_grammar_valid(
     assert veto_seen > 0, "no dsj-veto config produced under the active registry"
 
 
-def test_d258_dsj_veto_absent_on_non_trend_hypotheses(
-    grammar: Grammar, registry: RegistrySnapshot
+@pytest.mark.parametrize(
+    ("serving", "indicator", "hypothesis", "n_seeds"),
+    [
+        (_v25_registry, "days_since_jump", "mean_reversion", 200),
+        (_v26_registry, "ivol", "trend_continuation", 150),
+        (_v26_registry, "ivol", "volatility_event", 150),
+    ],
+)
+def test_veto_scoped_to_its_hypothesis(
+    grammar: Grammar,
+    registry: RegistrySnapshot,
+    serving: Callable[[RegistrySnapshot], RegistrySnapshot],
+    indicator: str,
+    hypothesis: str,
+    n_seeds: int,
 ) -> None:
-    """Scope: the veto pool is trend_continuation-only, so mean_reversion (and
-    every other hypothesis) never carries days_since_jump even when the registry
-    serves it."""
-    reg = _v25_registry(registry)
+    """Scope: the dsj veto pool is trend-only (D258) and the ivol pool MR-only (D263), so the
+    other hypotheses never carry the id even when the registry serves it. event_momentum is
+    DISABLED since v47 (forcing it raises), so trend + ve exercise the ivol guard."""
+    reg = serving(registry)
     space = build_search_space(grammar, reg)
-    for seed in range(200):
-        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis="mean_reversion")
+    for seed in range(n_seeds):
+        cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis=hypothesis)
         ids = {ind for s in cfg.signals for ind in s.indicators}
-        assert "days_since_jump" not in ids, f"dsj leaked onto mean_reversion at seed={seed}"
+        assert indicator not in ids, f"{indicator} leaked onto {hypothesis} at seed={seed}"
 
 
 # D258 dsj-ACTIVE cold-start golden (seed 7777, max 15) — the registry-hash-free
@@ -2194,46 +2113,6 @@ def test_d258_dsj_active_cold_start_golden(grammar: Grammar, registry: RegistryS
 # idiosyncratic_vol (contracts 1.28.0), so C1 lets it STACK on the volatility
 # gate (rv_rank/vol_regime) — the validated form.
 # ---------------------------------------------------------------------------
-def _v26_registry(base: RegistrySnapshot) -> RegistrySnapshot:
-    """Fixture registry + the v25 dsj veto AND the v26 ivol veto indicator (family
-    idiosyncratic_vol, version 1, lookback 63) — the object Forge reads once the
-    registry serves both (the live v26 state: dsj served since 2026-07-09, ivol
-    since the 1.28.0 reclassification)."""
-    dsj = IndicatorMetadata(
-        id="days_since_jump",
-        version=3,
-        family="volatility",
-        lookback=252,
-        params_schema={},
-        rank_per_name_coherent=True,
-        market_wide_by_design=False,
-    )
-    ivol = IndicatorMetadata(
-        id="ivol",
-        version=1,
-        family="idiosyncratic_vol",
-        lookback=63,
-        params_schema={},
-        rank_per_name_coherent=True,
-        market_wide_by_design=False,
-    )
-    return base.model_copy(update={"indicators": (*base.indicators, dsj, ivol)})
-
-
-def test_d263_ivol_veto_dormant_without_registry_indicator(
-    grammar: Grammar, registry: RegistrySnapshot
-) -> None:
-    """Byte-identity's precondition: on the base registry (no ivol) the MR veto
-    pool is empty, so no mean_reversion config carries an ivol second gate and
-    `ivol` is never emitted (complements the cold-start goldens)."""
-    space = build_search_space(grammar, registry)
-    for seed in range(200):
-        cfg = sample_config(
-            space, registry, random.Random(seed), forced_hypothesis="mean_reversion"
-        )
-        ids = {ind for s in cfg.signals for ind in s.indicators}
-        assert "ivol" not in ids, f"ivol emitted while dormant at seed={seed}"
-        assert not any(s.id == "sig_regime_veto" for s in cfg.signals)
 
 
 def test_d263_ivol_veto_active_on_mr_and_grammar_valid(
@@ -2278,23 +2157,6 @@ def test_d263_ivol_veto_active_on_mr_and_grammar_valid(
         assert p["percentile_window"] == 63, p
     assert veto_seen > 0, "no ivol-veto config produced under the active registry"
     assert stacked_on_volatility > 0, "ivol never stacked on a volatility gate (the validated form)"
-
-
-def test_d263_ivol_veto_absent_on_non_mr_hypotheses(
-    grammar: Grammar, registry: RegistrySnapshot
-) -> None:
-    """Scope: the ivol veto pool is mean_reversion-only, so trend_continuation (and
-    every other hypothesis) never carries ivol even when the registry serves it.
-    (dsj may still appear on trend — that's the v25 veto, a different pool.)"""
-    reg = _v26_registry(registry)
-    space = build_search_space(grammar, reg)
-    # D328 (v47): event_momentum dropped — it's DISABLED_HYPOTHESES now, so
-    # forcing it raises (not samplable). trend + ve still exercise the scope guard.
-    for hypothesis in ("trend_continuation", "volatility_event"):
-        for seed in range(150):
-            cfg = sample_config(space, reg, random.Random(seed), forced_hypothesis=hypothesis)
-            ids = {ind for s in cfg.signals for ind in s.indicators}
-            assert "ivol" not in ids, f"ivol leaked onto {hypothesis} at seed={seed}"
 
 
 # D263 v26 cold-start golden (seed 7777, max 15) on a registry serving BOTH dsj
@@ -2377,31 +2239,6 @@ def test_d263_ivol_active_cold_start_golden(grammar: Grammar, registry: Registry
 # assertions live in test_resid_vix_v27.py. The dormant goldens above stay
 # byte-identical (their fixtures serve neither id → pools unchanged).
 # ---------------------------------------------------------------------------
-def _v27_registry(base: RegistrySnapshot) -> RegistrySnapshot:
-    """Fixture registry + dsj + ivol (the v26 state) + the two v27 activations
-    (residual_momentum family=trend rank-coherent; vix_term_slope family=macro
-    market-wide) — the object Forge reads on the live v27 registry (both ids
-    long-registered; verified in registry_snapshot_2026-07-11T010003Z.json)."""
-    resid = IndicatorMetadata(
-        id="residual_momentum",
-        version=1,
-        family="trend",
-        lookback=504,
-        params_schema={},
-        rank_per_name_coherent=True,
-        market_wide_by_design=False,
-    )
-    vix_slope = IndicatorMetadata(
-        id="vix_term_slope",
-        version=1,
-        family="macro",
-        lookback=0,
-        params_schema={},
-        rank_per_name_coherent=False,
-        market_wide_by_design=True,
-    )
-    v26 = _v26_registry(base)
-    return v26.model_copy(update={"indicators": (*v26.indicators, resid, vix_slope)})
 
 
 def test_d264_resid_vix_pools_reachable(grammar: Grammar, registry: RegistrySnapshot) -> None:
@@ -2623,23 +2460,6 @@ def test_d265_ivol_veto_stacks_on_realized_vol_primary(
 # ---------------------------------------------------------------------------
 
 
-def _v29_registry(base: RegistrySnapshot) -> RegistrySnapshot:
-    """_v26_registry + market_realized_vol (family macro, version 1, lookback 0,
-    market-wide) — the live v29 state (their registry serves it since
-    registry_snapshot_2026-07-12T053611Z)."""
-    market_rv = IndicatorMetadata(
-        id="market_realized_vol",
-        version=1,
-        family="macro",
-        lookback=0,
-        params_schema={},
-        rank_per_name_coherent=False,
-        market_wide_by_design=True,
-    )
-    v26 = _v26_registry(base)
-    return v26.model_copy(update={"indicators": (*v26.indicators, market_rv)})
-
-
 def test_d266_market_rv_mr_primary_reachable_and_grammar_valid(
     grammar: Grammar, registry: RegistrySnapshot
 ) -> None:
@@ -2797,23 +2617,6 @@ def test_d266_market_rv_active_cold_start_golden(
 # (probe hold 10 td; the engine default is 5 and Forge never sampled it).
 # Constants/table/C2 unit tests: test_capitulation_bounce_v31.py.
 # ---------------------------------------------------------------------------
-
-
-def _v31_registry(base: RegistrySnapshot) -> RegistrySnapshot:
-    """_v29_registry + the parameterized `momentum` (family trend, version 1,
-    rank-coherent) — the live v31 state (their registry has served it all
-    along; it was Forge-side dark)."""
-    momentum = IndicatorMetadata(
-        id="momentum",
-        version=1,
-        family="trend",
-        lookback=504,
-        params_schema={},
-        rank_per_name_coherent=True,
-        market_wide_by_design=False,
-    )
-    v29 = _v29_registry(base)
-    return v29.model_copy(update={"indicators": (*v29.indicators, momentum)})
 
 
 def test_d270_momentum_pools_scoped_to_mean_reversion(
