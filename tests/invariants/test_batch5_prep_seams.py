@@ -44,24 +44,13 @@ def test_campaign_path_imports_nothing_from_the_daemon_era(path: Path) -> None:
 
 
 def test_old_names_are_still_bound_to_the_moved_objects() -> None:
+    """The daemon-era `cli/main` aliases left in Batch 5 G1; the remaining rebinds belong to
+    modules Batch 5 G2/G3 delete next and stay bound until then."""
     from forge.campaign import cell_key
-    from forge.cli import main
-    from forge.feedback import eras, rejection_weights, trade_rate_priors, yield_audit
-    from forge.grammar import version_audit
-    from forge.persistence import fingerprints, verdicts
-    from forge.prefilters import factory
-    from forge.ranking import campaigns, diversifier, model, prior_promotion, signal_key
+    from forge.feedback import eras, rejection_weights, yield_audit
+    from forge.persistence import verdicts
+    from forge.ranking import campaigns, diversifier, prior_promotion, signal_key
 
-    assert main._build_feature_cache is factory.build_feature_cache
-    assert (
-        main._load_prior_structural_fingerprints is fingerprints.load_prior_structural_fingerprints
-    )
-    assert main._load_trade_rate_priors is trade_rate_priors.load_trade_rate_priors
-    assert (
-        main._ensure_grammar_version_recorded_silently
-        is version_audit.ensure_grammar_version_recorded_silently
-    )
-    assert main._QUALITY_LANE_TARGET == model.QUALITY_LANE_TARGET == "target_cpcv_p25"
     assert diversifier._signal_keys is signal_key.signal_keys
     assert diversifier.jaccard_signal_ids is signal_key.jaccard_signal_keys
     assert prior_promotion._signal_keys is signal_key.signal_keys
@@ -71,16 +60,3 @@ def test_old_names_are_still_bound_to_the_moved_objects() -> None:
     assert campaigns.config_cell_from_json is cell_key.config_cell_from_json
     assert campaigns.config_cell is cell_key.config_cell
     assert campaigns.ExperimentCell == cell_key.ExperimentCell
-
-
-def test_the_fallback_patch_seam_still_reaches_the_daemon_call_site() -> None:
-    """`test_feature_cache_fallback.py` patches `forge.cli.main._build_feature_cache`; the
-    daemon's call sites resolve that module global at call time, so the alias must be a
-    plain module attribute (not a wrapper) or the patch would be bypassed."""
-    import inspect
-
-    from forge.cli import main
-
-    src = inspect.getsource(main)
-    assert "_build_feature_cache(" in src
-    assert "def _build_feature_cache(" not in src

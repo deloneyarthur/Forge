@@ -13,7 +13,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _README = _REPO_ROOT / "README.md"
 _OPEN_QUESTIONS = _REPO_ROOT / "OPEN_QUESTIONS.md"
-_GRAMMAR_CMD = _REPO_ROOT / "src" / "forge" / "cli" / "grammar_cmd.py"
+_PRECOMMIT = _REPO_ROOT / ".pre-commit-config.yaml"
+_SCRIPTS = _REPO_ROOT / "scripts"
 _DESIGN = _REPO_ROOT / "docs" / "DESIGN.md"
 # 2026-06-09 docs restructure: the README's Operations/Commands content moved
 # to the dedicated docs below (README is now a slim entry point). The D025
@@ -88,34 +89,6 @@ def test_architecture_maps_invariants_to_test_files() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_run_defaults_helper_is_exposed() -> None:
-    from forge.cli.main import _resolve_run_defaults
-
-    assert callable(_resolve_run_defaults)
-
-
-def test_forge_run_advertises_config_and_no_config_flags() -> None:
-    from forge.cli.main import app
-
-    run_cmd = next(c for c in app.registered_commands if (c.name or "") == "run")
-    assert run_cmd.callback is not None
-    import inspect
-
-    sig = inspect.signature(run_cmd.callback)
-    assert "config" in sig.parameters, "forge run is missing --config"
-    assert "no_config" in sig.parameters, "forge run is missing --no-config"
-
-
-def test_forge_feedback_advertises_config_and_no_config_flags() -> None:
-    import inspect
-
-    from forge.cli.feedback_cmd import cmd_feedback
-
-    sig = inspect.signature(cmd_feedback)
-    assert "config" in sig.parameters
-    assert "no_config" in sig.parameters
-
-
 # ---------------------------------------------------------------------------
 # D025/D8 + D9 — deferrals are logged in OPEN_QUESTIONS.md
 # ---------------------------------------------------------------------------
@@ -143,13 +116,15 @@ def test_q10_feature_cache_deferral_is_logged() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_grammar_approve_proposal_docstring_calls_out_manual_yaml_edit() -> None:
-    text = _GRAMMAR_CMD.read_text(encoding="utf-8")
-    # The clarifying note added in D025/D10.ii lives inside the
-    # approve-proposal callback's docstring; assert both the function
-    # name and the §13.2 keyword appear in the file.
-    assert "cmd_approve_proposal" in text
-    assert "§13.2" in text
+def test_grammar_version_safety_guard_lives_in_the_pre_commit_hooks() -> None:
+    """§13.2 (grammar version safety) used to be called out in `forge grammar approve-proposal`'s
+    docstring (D025/D10.ii); that CLI left with the daemon era (Batch 5 G1). The guard that
+    remains is structural: the version-bump scanner and the signed-freeze governance hook, both
+    wired in pre-commit. Assert the wiring, not a docstring."""
+    precommit = _PRECOMMIT.read_text(encoding="utf-8")
+    for script in ("check_grammar_version_bump.py", "check_freeze_governance.py"):
+        assert (_SCRIPTS / script).is_file(), f"{script} missing from scripts/"
+        assert script in precommit, f"{script} is not wired in .pre-commit-config.yaml"
 
 
 # ---------------------------------------------------------------------------

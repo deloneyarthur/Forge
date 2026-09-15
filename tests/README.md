@@ -15,10 +15,10 @@ Markers (pyproject): `unit`, `integration`, `invariants`, `slow`.
 
 - **Golden sampler-sequence tests** pin cold-start byte-identical enumeration (hard rule #6).
   A deliberate population change re-pins them — note it in the D-entry; never adjust casually.
-- **Two dozen test files import `forge.cli.main`; 22 only import `app`** and drive it through
-  `CliRunner` (behaviour tests). The real private coupling is `test_cli/test_run_loop.py` plus a
-  handful of resolver/seam tests. `main.py`'s length and structure are deliberate
-  (D065/D105/D106 noqa) — refactors there must keep those seams bound.
+- **Eight test files import `forge.cli.main`; six only import `app`** and drive it through
+  `CliRunner` (behaviour tests). The daemon loop and its monkeypatch seams left in Batch 5 G1;
+  `main.py` is a thin Typer entry point (version / check / enumerate / prefilter + the
+  `campaign` and `prereg` sub-apps).
 - **Time/RNG**: only `forge.core.clock` / `forge.core.seed`, even in tests that build fixtures.
   Note the `tests/invariants/test_phase0_invariants.py` scan covers `src/` only — tests are
   held to the rule by review, not by the scanner.

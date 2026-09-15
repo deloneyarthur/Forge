@@ -19,13 +19,12 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from typer.testing import CliRunner
+import pytest
+from crucible_contracts.exceptions import QueryError
 
-from forge.cli.main import app
+from forge.feedback.consumer import consume_batch_results
 from forge.persistence.db import db_connection
 from tests.fixtures.strategy_configs import minimal_strategy_config
-
-runner = CliRunner()
 
 
 def _seed_forge_db_with_submitted_batch(forge_db: Path) -> uuid.UUID:
@@ -71,115 +70,46 @@ def _read_submission_state(forge_db: Path) -> dict[str, object]:
     }
 
 
-def test_feedback_with_missing_crucible_db_exits_nonzero(tmp_path: Path) -> None:
+def _consume(forge_db: Path, crucible_db: Path, batch_id: uuid.UUID) -> None:
+    """The consumer call `forge feedback` used to wrap (the CLI left in Batch 5 G1). No gated
+    export exists under `noexports`, so the consumer falls through to the direct-DB path — the
+    "Crucible offline" condition (D025/D3.i) it must surface, never swallow."""
+    with db_connection(forge_db) as conn:
+        consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=forge_db.parent / "noexports"
+        )
+
+
+def test_missing_crucible_db_raises_query_error(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     batch_id = _seed_forge_db_with_submitted_batch(forge_db)
     missing_crucible = tmp_path / "does_not_exist.db"
     assert not missing_crucible.exists()
-
-    result = runner.invoke(
-        app,
-        [
-            "feedback",
-            "--no-config",
-            "--forge-db",
-            str(forge_db),
-            "--crucible-db",
-            str(missing_crucible),
-            "--batch-id",
-            str(batch_id),
-            "--open-proposals",
-            str(tmp_path / "OPEN_PROPOSALS.md"),
-        ],
-    )
-    assert result.exit_code != 0
+    with pytest.raises(QueryError):
+        _consume(forge_db, missing_crucible, batch_id)
 
 
-def test_feedback_with_missing_crucible_db_surfaces_clean_error(tmp_path: Path) -> None:
+def test_missing_crucible_db_leaves_forge_db_unchanged(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     batch_id = _seed_forge_db_with_submitted_batch(forge_db)
-    missing_crucible = tmp_path / "does_not_exist.db"
-
-    result = runner.invoke(
-        app,
-        [
-            "feedback",
-            "--no-config",
-            "--forge-db",
-            str(forge_db),
-            "--crucible-db",
-            str(missing_crucible),
-            "--batch-id",
-            str(batch_id),
-            "--open-proposals",
-            str(tmp_path / "OPEN_PROPOSALS.md"),
-        ],
-    )
-    combined = (result.stdout or "") + (result.stderr or "")
-    assert "Crucible" in combined or "crucible" in combined, (
-        f"expected Crucible-named error; got stdout={result.stdout!r} stderr={result.stderr!r}"
-    )
-
-
-def test_feedback_with_missing_crucible_db_leaves_forge_db_unchanged(tmp_path: Path) -> None:
-    forge_db = tmp_path / "forge.db"
-    batch_id = _seed_forge_db_with_submitted_batch(forge_db)
-    missing_crucible = tmp_path / "does_not_exist.db"
-
     before = _read_submission_state(forge_db)
     assert before["status"] == "submitted"
     assert before["crucible_run_id"] is None
     assert before["promotion_rate"] is None
-
-    runner.invoke(
-        app,
-        [
-            "feedback",
-            "--no-config",
-            "--forge-db",
-            str(forge_db),
-            "--crucible-db",
-            str(missing_crucible),
-            "--batch-id",
-            str(batch_id),
-            "--open-proposals",
-            str(tmp_path / "OPEN_PROPOSALS.md"),
-        ],
-    )
-
+    with pytest.raises(QueryError):
+        _consume(forge_db, tmp_path / "does_not_exist.db", batch_id)
     after = _read_submission_state(forge_db)
     assert after == before, (
         f"forge_db mutated despite Crucible offline: before={before}, after={after}"
     )
 
 
-def test_feedback_with_unreadable_crucible_db_does_not_crash_silently(tmp_path: Path) -> None:
-    """Sanity guard: an empty file at the crucible_db path (a different
-    failure mode than 'missing') also produces a non-zero exit + clean
-    error rather than crashing with an unhandled exception."""
+def test_unreadable_crucible_db_does_not_crash_silently(tmp_path: Path) -> None:
+    """An empty/bogus file at the crucible_db path (a different failure mode than 'missing')
+    also surfaces as a clean QueryError rather than an unhandled crash."""
     forge_db = tmp_path / "forge.db"
     batch_id = _seed_forge_db_with_submitted_batch(forge_db)
-    # Pre-create an empty file — duckdb will fail to open it as a valid DB
     bogus_crucible = tmp_path / "not_a_db.db"
     bogus_crucible.write_bytes(b"this is not a duckdb file")
-
-    result = runner.invoke(
-        app,
-        [
-            "feedback",
-            "--no-config",
-            "--forge-db",
-            str(forge_db),
-            "--crucible-db",
-            str(bogus_crucible),
-            "--batch-id",
-            str(batch_id),
-            "--open-proposals",
-            str(tmp_path / "OPEN_PROPOSALS.md"),
-        ],
-    )
-    # Either a QueryError (clean exit through our handler) or — if duckdb
-    # opens the bogus file and then fails downstream — some other non-zero
-    # path. Both are acceptable; the resilience invariant is that we exit,
-    # don't corrupt forge_db, and don't claim success.
-    assert result.exit_code != 0
+    with pytest.raises(QueryError):
+        _consume(forge_db, bogus_crucible, batch_id)

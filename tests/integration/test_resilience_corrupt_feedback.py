@@ -28,14 +28,19 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
-from typer.testing import CliRunner
 
-from forge.cli.main import app
+from forge.feedback.consumer import consume_batch_results
 from forge.persistence.db import db_connection
 from tests.fixtures.strategy_configs import minimal_strategy_config
 from tests.fixtures.synthetic_crucible_db import build_synthetic_crucible_db
 
-runner = CliRunner()
+
+def _consume(forge_db: Path, crucible_db: Path, batch_id: uuid.UUID) -> object:
+    """The consumer call `forge feedback` used to wrap (the CLI left in Batch 5 G1)."""
+    with db_connection(forge_db) as conn:
+        return consume_batch_results(
+            conn, crucible_db, batch_id=batch_id, exports_dir=forge_db.parent / "noexports"
+        )
 
 
 def _insert_crucible_gated_with_decision(
@@ -160,29 +165,14 @@ def test_orphaned_run_does_not_block_valid_runs(tmp_path: Path) -> None:
 
     batch_id = _seed_forge_batch(forge_db, [cfg_a, cfg_b, cfg_c])
 
-    result = runner.invoke(
-        app,
-        [
-            "feedback",
-            "--no-config",
-            "--forge-db",
-            str(forge_db),
-            "--crucible-db",
-            str(crucible_db),
-            "--batch-id",
-            str(batch_id),
-            "--open-proposals",
-            str(tmp_path / "OPEN_PROPOSALS.md"),
-        ],
-    )
-    assert result.exit_code == 0, f"feedback should exit 0 despite orphan; stdout={result.stdout!r}"
+    feedback = _consume(forge_db, crucible_db, batch_id)
 
     by_hash = _read_status_by_hash(forge_db)
     assert by_hash[cfg_a.config_hash] == "gated", "valid run A should be marked gated"
     assert by_hash[cfg_b.config_hash] == "submitted", "orphaned run B should stay submitted"
     assert by_hash[cfg_c.config_hash] == "gated", "valid run C should be marked gated"
-    assert "gated_count=2" in result.stdout
-    assert "promoted_count=1" in result.stdout
+    assert feedback.gated_count == 2  # type: ignore[attr-defined]
+    assert feedback.promoted_count == 1  # type: ignore[attr-defined]
 
 
 def test_orphaned_run_does_not_corrupt_batch_summary(tmp_path: Path) -> None:
@@ -208,21 +198,7 @@ def test_orphaned_run_does_not_corrupt_batch_summary(tmp_path: Path) -> None:
 
     batch_id = _seed_forge_batch(forge_db, [cfg_a, cfg_b, cfg_c])
 
-    runner.invoke(
-        app,
-        [
-            "feedback",
-            "--no-config",
-            "--forge-db",
-            str(forge_db),
-            "--crucible-db",
-            str(crucible_db),
-            "--batch-id",
-            str(batch_id),
-            "--open-proposals",
-            str(tmp_path / "OPEN_PROPOSALS.md"),
-        ],
-    )
+    _consume(forge_db, crucible_db, batch_id)
 
     with db_connection(forge_db) as conn:
         row = conn.execute(
@@ -262,22 +238,8 @@ def test_orphan_does_not_block_when_appears_in_arbitrary_position(tmp_path: Path
 
     batch_id = _seed_forge_batch(forge_db, [cfg_orphan, cfg_valid_1, cfg_valid_2])
 
-    result = runner.invoke(
-        app,
-        [
-            "feedback",
-            "--no-config",
-            "--forge-db",
-            str(forge_db),
-            "--crucible-db",
-            str(crucible_db),
-            "--batch-id",
-            str(batch_id),
-            "--open-proposals",
-            str(tmp_path / "OPEN_PROPOSALS.md"),
-        ],
-    )
-    assert result.exit_code == 0
+    feedback = _consume(forge_db, crucible_db, batch_id)
+    assert feedback.gated_count == 2  # type: ignore[attr-defined]
 
     by_hash = _read_status_by_hash(forge_db)
     assert by_hash[cfg_orphan.config_hash] == "submitted"

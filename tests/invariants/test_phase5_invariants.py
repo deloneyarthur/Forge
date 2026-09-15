@@ -357,25 +357,21 @@ def test_ensure_grammar_version_recorded_lands_active_grammar(tmp_path: Path) ->
     assert int(rule_count) == len(grammar.rules)
 
 
-def test_run_one_iteration_calls_audit_row_helper() -> None:
-    """D051: `_run_one_iteration` in `cli/main.py` must invoke the audit-row
-    self-healer so manual operator yaml bumps don't silently skip the
-    `grammar_versions` table. This is the structural assertion that the
-    contract is wired — pulling the call out without replacement would
-    re-introduce the regression that D051 fixed.
-
-    Hard rule #10 + D035: the stuck-state floor reads
-    `MAX(grammar_versions.changed_at)`; if the production loop stops
-    recording audit rows, the floor goes blind on the next manual bump.
-    """
+def test_campaign_run_calls_audit_row_helper() -> None:
+    """D051: the production path must invoke the audit-row self-healer so manual operator yaml
+    bumps don't silently skip the `grammar_versions` table. Re-targeted (Batch 5 G1) from the
+    daemon's `_run_one_iteration` to `campaign/run.run_campaign` — the weekly run is the
+    production loop now. Hard rule #10 + D035: the stuck-state floor reads
+    `MAX(grammar_versions.changed_at)`; if the production path stops recording audit rows, the
+    floor goes blind on the next manual bump."""
     import inspect
 
-    from forge.cli import main
+    from forge.campaign import run
 
-    source = inspect.getsource(main._run_one_iteration)
-    assert "_ensure_grammar_version_recorded_silently" in source, (
-        "_run_one_iteration no longer calls _ensure_grammar_version_recorded_silently"
-        "; the D051 audit-row self-heal has been silently removed."
+    source = inspect.getsource(run.run_campaign)
+    assert "ensure_grammar_version_recorded_silently" in source, (
+        "run_campaign no longer calls ensure_grammar_version_recorded_silently; "
+        "the D051 audit-row self-heal has been silently removed."
     )
 
 
@@ -446,28 +442,6 @@ def test_enrich_and_append_proposals_writes_counterfactual_phase() -> None:
     assert "counterfactual_note" in source, (
         "enrich_and_append_proposals no longer writes counterfactual_note"
         " to evidence_json; D053 disclaimer has been removed."
-    )
-
-
-def test_forge_run_and_forge_feedback_share_enrichment_helper() -> None:
-    """D054 / P1-2: `_consume_feedback_after_submit` (autonomous loop) and
-    `cmd_feedback` (manual) must both call `enrich_and_append_proposals`.
-    If either drifts to a direct `append_proposal` loop without the
-    enrichment, the operator-facing diagnostic output silently diverges
-    from the autonomous output."""
-    import inspect
-
-    from forge.cli import feedback_cmd, main
-
-    loop_src = inspect.getsource(main._consume_feedback_after_submit)
-    manual_src = inspect.getsource(feedback_cmd.cmd_feedback)
-    assert "enrich_and_append_proposals" in loop_src, (
-        "_consume_feedback_after_submit no longer calls "
-        "enrich_and_append_proposals; loop bypasses D053+T2.5."
-    )
-    assert "enrich_and_append_proposals" in manual_src, (
-        "cmd_feedback no longer calls enrich_and_append_proposals; "
-        "manual `forge feedback` bypasses D053+T2.5."
     )
 
 

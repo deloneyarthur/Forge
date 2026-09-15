@@ -2,7 +2,7 @@
 
 `load_forge_config(path) -> ForgeConfig` reads the forge.yaml and returns
 a validated config. CLI flags are merged on top by the consumers
-(`forge.cli.main._resolve_run_defaults`), not by this module.
+(the command modules; the daemon's `_resolve_run_defaults` left in Batch 5 G1), not here.
 
 D247: the never-read §10.1 keys (`data_root`, `log_root`, `feedback.*`)
 were retired from the schema; `extra="forbid"` now rejects them.
@@ -185,5 +185,5 @@ def test_load_rejects_negative_stall_after_seconds(tmp_path: Path) -> None:
 
 
 # D247: the `with_overrides` override tests were removed along with the
-# method — it had no production callers (`_resolve_run_defaults` in
-# forge.cli.main owns the CLI-over-yaml merge).
+# method — it had no production callers (the CLI-over-yaml merge lives in the
+# command modules; the daemon's `_resolve_run_defaults` left in Batch 5 G1).
