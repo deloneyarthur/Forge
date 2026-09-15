@@ -88,7 +88,8 @@ _AGED_OUT_SENTINEL_RUN_ID = "00000000-0000-0000-0000-000000000000"
 # compression: it tracks Crucible's decision clock directly.
 #
 # Sizing: must exceed real submit→decide latency so it never flushes a
-# still-pending batch (that would void §7.3 backpressure). D196 (2026-06-23)
+# still-pending batch (it would mis-age campaign rows; in the daemon era it voided §7.3
+# backpressure). D196 (2026-06-23)
 # lowered this 8d → 5d: direct measurement of matched submit→decide latency
 # (export decided_at - forge submitted_at, n=9,405) put the real p99 at ~3.1d.
 # The old 8d margin was sized off a survivorship-biased ~7.2d estimate and sat
@@ -96,7 +97,7 @@ _AGED_OUT_SENTINEL_RUN_ID = "00000000-0000-0000-0000-000000000000"
 # than needed — which kept D046's oldest-batch throttle pinned on a permanent
 # zombie batch (the D196 backpressure finding). 5d keeps ~2d headroom over the
 # real p99. Tunable; smaller = faster backlog recovery, but never below the true
-# submit→decide p99 or it voids §7.3.
+# submit→decide p99 or it mis-ages rows Crucible has not decided yet.
 STRANDED_AFTER = timedelta(days=5)
 
 
@@ -367,7 +368,7 @@ def _flush_aged_out_submissions(
     the current export but whose `submitted_at` precedes the watermark — those
     reconcile via the normal join. The margin (`STRANDED_AFTER`) prevents
     false-flushing rows Crucible simply hasn't decided yet; it must stay above
-    real submit->decide latency or it would void §7.3 backpressure.
+    real submit->decide latency or it would mis-age rows Crucible has not decided yet.
 
     Returns the number of rows transitioned. Empty `runs` is a no-op
     (Crucible-offline condition: leaving rows alone is the safe choice).
@@ -509,8 +510,8 @@ def reconcile_all_pending(
     if exports_dir is None:
         exports_dir = Path.home() / "optbt_data" / "exports"
     # D412: a caller may hand in the runs it already read (the weekly campaign reads the
-    # forge-scoped 14-day stream, contracts 1.48.0) with their provenance; the daemon keeps
-    # the all-source fetch. `flush_aged_out=False` is for a TRUNCATED window: when the
+    # forge-scoped 14-day stream, contracts 1.48.0) with their provenance; the all-source
+    # fetch remains the fallback path. `flush_aged_out=False` is for a TRUNCATED window: when the
     # export dropped its oldest verdicts, an absent config_hash is not evidence that Crucible
     # never decided it, so the D052 watermark flush must not fire (Crucible 09-14 §1.2).
     injected = runs is not None

@@ -288,7 +288,7 @@ def _submit_one(
         # Any unexpected failure (incl. KeyboardInterrupt mid-write) must not
         # leave the transaction open — that would strand the pending row AND
         # break the next candidate's BEGIN. Roll back so the slot is freed, then
-        # re-raise (the daemon loop guard / caller decides how to proceed).
+        # re-raise (the caller decides how to proceed; the campaign records an error).
         db.execute("ROLLBACK")
         raise
 

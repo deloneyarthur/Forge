@@ -635,7 +635,7 @@ def _load_earnings_covered_symbols() -> tuple[str, ...]:
 
     `max_age_days=None` at the read site: a stale coverage set (coverage changes
     slowly) beats HALTING generation, so a silently-dead publisher surfaces in ops
-    via the `check_earnings_coverage_export` healthcheck line rather than the loader's
+    via the export's age in the run's `watermarks` rather than the loader's
     `StaleExportError`. Absent export → `()` (the contract's cold semantics) → no
     intersection → v31 behaviour exactly. A corrupt export raises `QueryError`
     (`StaleExportError`, its subclass, cannot fire with `max_age_days=None`) → logged

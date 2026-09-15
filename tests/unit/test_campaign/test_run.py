@@ -378,3 +378,67 @@ def test_sigterm_mid_batch_stops_between_candidates_and_records_error(
         ).fetchall()
     assert len(inbox_files) == 1
     assert [str(r[0]) for r in rows] == inbox_files
+
+
+def test_live_run_records_prefilter_rejections_for_the_funnel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Crucible's funnel contract (D096): `forge_funnel.json`'s `rejection_breakdown` must
+    satisfy sum(breakdown) == enumerated - survived_prefilters per grammar version. For a
+    campaign batch `enumerated` is the kept-in-cells sample that went through the battery
+    (not the population sample). Flip every second kept candidate to a `novelty` rejection
+    and check the recorded counts reconcile (Batch 5 G6 wired `record_prefilter_rejections`)."""
+    import dataclasses
+    from types import MappingProxyType
+
+    import forge.campaign.run as run_mod
+    from forge.funnel.aggregate import build_funnel_export
+    from forge.prefilters.types import FilterResult
+
+    env = _env(tmp_path)
+    real_battery = run_mod._run_battery
+    flipped: list[int] = []
+
+    def flipping_battery(configs: object, **kwargs: object) -> list[object]:
+        reports = real_battery(configs, **kwargs)  # type: ignore[arg-type]
+        out = []
+        for i, report in enumerate(reports):
+            if i % 2 == 0:
+                out.append(report)
+                continue
+            flipped.append(i)
+            out.append(
+                dataclasses.replace(
+                    report,
+                    passed=False,
+                    filter_results=MappingProxyType(
+                        {"novelty": FilterResult(passed=False, score=0.0)}
+                    ),
+                )
+            )
+        return out
+
+    monkeypatch.setattr(run_mod, "_run_battery", flipping_battery)
+    record = _run(env, dry_run=False)
+    assert record.status == "ok"
+    assert record.batch_id is not None
+    assert flipped, "fixture must keep at least two candidates"
+    assert record.kept_in_cells == record.survived_battery + len(flipped)
+    with db_connection(env["forge_db"]) as conn:
+        row = conn.execute(
+            "SELECT enumerated_count, survived_count, prefilter_rejections FROM batch_summaries "
+            "WHERE forge_batch_id = ?",
+            [record.batch_id],
+        ).fetchone()
+        funnel = build_funnel_export(conn)
+    assert row is not None
+    enumerated, survived, rejections_json = int(row[0]), int(row[1]), row[2]
+    assert enumerated == record.kept_in_cells
+    assert survived == record.survived_battery
+    assert rejections_json is not None, "prefilter_rejections not recorded for the campaign batch"
+    rejections = json.loads(rejections_json)
+    assert rejections == {"novelty": len(flipped)}
+    per_version = funnel.per_grammar_version[record.grammar_version or ""]
+    assert sum(per_version.rejection_breakdown.values()) == (
+        per_version.enumerated - per_version.survived_prefilters
+    )

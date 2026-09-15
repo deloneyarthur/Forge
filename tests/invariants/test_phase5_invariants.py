@@ -323,10 +323,15 @@ def test_campaign_run_calls_audit_row_helper() -> None:
 
     from forge.campaign import run
 
-    source = inspect.getsource(run.run_campaign)
+    # G6 (REL-4) wrapped the run body: `run_campaign` is the SIGTERM guard around
+    # `_run_campaign`, so the production path's source is the inner function.
+    source = inspect.getsource(run._run_campaign)
     assert "ensure_grammar_version_recorded_silently" in source, (
-        "run_campaign no longer calls ensure_grammar_version_recorded_silently; "
+        "_run_campaign no longer calls ensure_grammar_version_recorded_silently; "
         "the D051 audit-row self-heal has been silently removed."
+    )
+    assert "sigterm_guard" in inspect.getsource(run.run_campaign), (
+        "run_campaign no longer wraps the run in the SIGTERM guard (REL-4)"
     )
 
 

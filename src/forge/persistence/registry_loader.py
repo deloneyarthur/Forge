@@ -64,7 +64,7 @@ def _parse_registry_tolerating_unknown_family(text: str) -> RegistrySnapshot:
     D261 (the ivol reclassification outage) showed a Crucible `family` added to
     `crucible_contracts` ahead of Forge's pin adoption makes the whole snapshot
     fail with a `literal_error` — not an extra field, so `parse_forward_compatible`
-    (D250) re-raises it and the daemon fails every poll (soft outage). Crucible
+    (D250) re-raises it and the run fails its boot check (soft outage). Crucible
     shipped `parse_skipping_unknown_literals` (contracts 1.29.0) as the shared
     tolerant reader for that face: it DROPS `skip_in` collection elements carrying
     an unknown enum member (and prunes additive unknown fields in the same pass),
@@ -72,7 +72,7 @@ def _parse_registry_tolerating_unknown_family(text: str) -> RegistrySnapshot:
     `literal_error` outside `skip_in`, or any genuine error, re-raises). Forge
     wires it here (hard rule #2 — inter-system tolerance lives in contracts, the
     D250 seam) rather than hand-rolling the prune, and re-emits any skips as its
-    own structured ``registry_unknown_family_skipped`` WARN so `forge healthcheck`
+    own structured ``registry_unknown_family_skipped`` WARN so the run's journal
     (`check_registry_unknown_family`, a separate process) can detect the degrade
     from the journal. Dropping an unknown-family indicator changes no enumerated
     config (Forge can't grammar-place it anyway); the WARN is the load-bearing

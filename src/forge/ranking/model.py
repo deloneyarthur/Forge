@@ -782,7 +782,7 @@ def load_latest_tail_model(models_dir: Path, *, base_target: str | None = None) 
     """Newest valid tail artifact by (trained_through, model_id); corrupt files skipped.
 
     Same degrade-never-crash contract as `load_latest_robustness_model`: a half-written or
-    schema-drifted artifact must not take the daemon down, it must leave the lane inert."""
+    schema-drifted artifact must not take the run down, it must leave the lane inert."""
     best: TailModel | None = None
     for path in sorted(models_dir.glob("tail_model_v*.json")) if models_dir.is_dir() else []:
         try:

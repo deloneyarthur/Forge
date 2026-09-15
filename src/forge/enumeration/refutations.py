@@ -27,7 +27,7 @@ side, mass 0) and map to nothing.
 
 The resolved ``RefutationEffects`` is threaded into ``sample_config`` /
 ``enumerate_candidates`` as an optional input (None = byte-identical, like the
-yield-map weights); the daemon reads the export and passes it. A stable
+yield-map weights); the weekly run reads the export and passes it. A stable
 ``refutation_fingerprint`` (over the ACTIVE effects, not the raw file) folds into
 ``enumeration_inputs_hash`` so each batch's identity tracks what shaped its draw
 (hard rule #6). Kill-switch: ``FORGE_REFUTATION_GUARD=off`` → empty effects.

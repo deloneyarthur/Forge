@@ -259,7 +259,7 @@ def load_calibration(path: Path) -> Calibration:
             ),
             # D076 / Q16 — optional with defaults so existing prefilter.yaml
             # files (pre-D076) keep loading. New deploys can pin explicit
-            # values; the daemon picks them up on next reload.
+            # values; the next weekly run reads them at boot.
             min_pass_probability=_validate_unit_float(
                 etc.get("min_pass_probability", 0.10),
                 "expected_trade_count",

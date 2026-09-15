@@ -631,7 +631,7 @@ def _run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, e
 
         # 1. reconcile + 3. stats (one connection; the battery and submit open their own)
         # The forge-scoped 14-day stream (contracts 1.48.0, D412) is the campaign's ledger: a
-        # weekly run that boots cold still sees its prior run. Until the cutover the daemon's
+        # weekly run that boots cold still sees its prior run. Until ~09-28 the retired daemon's
         # rate floods it past the 10k cap and it reads `truncated: true` -- then the OLDEST
         # verdicts are the missing ones, so no aged-out flush; after cutover a truncated file
         # means something else is flooding source='forge' and is worth a relay.
@@ -865,9 +865,7 @@ def _run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, e
             reg_hash=reg_hash,
             enum_inputs=enum_inputs,
             seed=seed,
-            enumerated=len(sample),
-            survived=len(survivors),
-            by_hypothesis=Counter(config.hypothesis for config, _ in sample),
+            reports=reports,
             notes=notes,
         )
         ensure_grammar_version_recorded_silently(
@@ -921,12 +919,16 @@ def _submit(
     reg_hash: str,
     enum_inputs: str,
     seed: int,
-    enumerated: int,
-    survived: int,
-    by_hypothesis: Mapping[str, int],
+    reports: Sequence[PreFilterReport],
     notes: list[str],
 ) -> tuple[str, int, int]:
-    """Submit the ranked candidates; returns (batch_id, submitted, unsubmitted_after_stop)."""
+    """Submit the ranked candidates; returns (batch_id, submitted, unsubmitted_after_stop).
+
+    Funnel contract (D096): `enumerated_count` is the KEPT sample that went through the
+    battery (`reports`), `survived_count` the reports that passed, and the per-filter rejection
+    counts recorded right after the batch row so `forge_funnel.json` satisfies
+    sum(rejection_breakdown) == enumerated - survived for campaign batches too (G6).
+    """
     from forge.campaign.stop import stop_requested  # noqa: PLC0415
     from forge.funnel.export import write_funnel_export  # noqa: PLC0415
     from forge.persistence.db import db_connection  # noqa: PLC0415
@@ -938,7 +940,10 @@ def _submit(
         slot_counts,
         stamp_search_n_trials,
     )
-    from forge.submission.submitter import submit_batch  # noqa: PLC0415
+    from forge.submission.submitter import (  # noqa: PLC0415
+        record_prefilter_rejections,
+        submit_batch,
+    )
 
     batch = BatchContext(
         batch_id=mint_batch_id(
@@ -963,12 +968,15 @@ def _submit(
             batch=batch,
             candidates=candidates,
             inbox_root=inbox_root,
-            enumerated_count=enumerated,
-            survived_count=survived,
-            enumerated_by_hypothesis=dict(by_hypothesis),
+            enumerated_count=len(reports),
+            survived_count=sum(1 for report in reports if report.passed),
+            enumerated_by_hypothesis=dict(Counter(report.config.hypothesis for report in reports)),
             extra_lane_hashes=lanes,
             should_stop=stop_requested,
         )
+        # D062/D064 per-filter rejection counts -> batch_summaries (same connection, so the
+        # UPDATE sees the row submit_batch just inserted); the funnel export reads them.
+        record_prefilter_rejections(conn, batch_id=result.batch_id, reports=reports)
         try:
             funnel_path, _ = write_funnel_export(conn, forge_db_path.parent / "exports")
             notes.append(f"funnel_export: {funnel_path.name}")

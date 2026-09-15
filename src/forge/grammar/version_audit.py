@@ -116,7 +116,7 @@ def ensure_grammar_version_recorded_silently(
 ) -> None:
     """D051: self-heal the grammar_versions audit row for the active grammar.
 
-    Called at the start of every daemon iteration and after every live campaign
+    Called after every live campaign submit (formerly at the start of every daemon iteration)
     submit (moved here from `cli/main.py`, Batch 5 prep). Idempotent — a SELECT-only
     no-op when the row already exists.
     Errors are swallowed (logged-by-omission rather than crashing the
