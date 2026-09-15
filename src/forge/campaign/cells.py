@@ -155,16 +155,93 @@ def _naive_utc(moment: datetime) -> datetime:
     return moment.astimezone(UTC).replace(tzinfo=None)
 
 
-def _cpcv_p25(gate_results: object) -> float | None:
-    """``verdicts.gate_results`` is ``{gate_name: {value, passed, threshold, ...}}``."""
-    payload = json.loads(gate_results) if isinstance(gate_results, str) else gate_results
-    if not isinstance(payload, dict):
-        return None
-    entry = payload.get(_CPCV_GATE)
-    if not isinstance(entry, dict):
-        return None
-    value = entry.get("value")
-    return float(value) if isinstance(value, int | float) else None
+_CELL_KEY_SQL: str = f"""
+    CASE WHEN json_extract_string(config_json, '$.hypothesis') IS NULL
+           OR json_extract_string(config_json, '$.hypothesis') = '' THEN '{_ABSENT}'
+         ELSE json_extract_string(config_json, '$.hypothesis') END AS hypothesis,
+    CASE WHEN json_extract_string(config_json, '$.dte_bucket') IS NULL
+           OR json_extract_string(config_json, '$.dte_bucket') = '' THEN '{_ABSENT}'
+         ELSE json_extract_string(config_json, '$.dte_bucket') END AS dte_bucket,
+    CASE WHEN json_extract_string(config_json, '$.combiner.type') = '{_XSECT_COMBINER_TYPE}'
+         THEN 'xsect' ELSE 'named' END AS axis,
+    json_extract_string(
+        list_filter(json_extract(config_json, '$.signals[*]'),
+                    x -> json_extract_string(x, '$.role') = 'directional')[1],
+        '$.indicators[0]') AS d0,
+    json_extract_string(
+        list_filter(json_extract(config_json, '$.signals[*]'),
+                    x -> json_extract_string(x, '$.role') = 'regime_filter')[1],
+        '$.indicators[0]') AS r0
+"""
+"""The census cell key computed inside DuckDB — the SQL twin of ``cell_key_from_json``.
+
+WHY SQL: the Python version parsed every ``submissions.config_json`` (1.19 M rows) and
+every clean-era verdict's config in the run process, a 16 GB peak for a few hundred
+cells (D417/D425). DuckDB's JSON functions do the same extraction in a streaming scan.
+The two twins are pinned equal by a differential test over the tricky shapes (missing
+roles, empty indicator lists, xsect without a gate, ghost-era ve rows, absent or null
+gate values) and were cross-checked over the full live snapshot when this landed (D426).
+Precedence, mirrored from the Python: ``d0`` = first indicator of the FIRST directional
+signal; ``r0`` = first indicator of the FIRST regime_filter signal; the canonical pair
+needs both, otherwise the gate-free fallback keeps the directional and marks the gate.
+"""
+
+_CELL_COLUMNS_SQL: str = f"""
+    hypothesis, dte_bucket, axis,
+    coalesce(d0, '{_ABSENT}') AS directional,
+    CASE WHEN d0 IS NOT NULL AND r0 IS NOT NULL THEN r0 ELSE '{_NO_GATE}' END AS regime
+"""
+
+# ``_cpcv_p25`` accepted int/float/bool (Python's ``isinstance(x, int | float)`` is true
+# for bool) and rejected strings; the JSON type gate mirrors that exactly — a stored
+# ``"1.2"`` stays None, ``true`` becomes 1.0, an absent or null value stays None.
+_CPCV_VALUE_SQL: str = f"""
+    CASE WHEN json_type(v.gate_results, '$.{_CPCV_GATE}.value')
+              IN ('DOUBLE', 'UBIGINT', 'BIGINT', 'BOOLEAN')
+         THEN TRY_CAST(json_extract(v.gate_results, '$.{_CPCV_GATE}.value') AS DOUBLE)
+    END
+"""
+
+_STATS_MEMORY_LIMIT: str = "2GB"
+"""DuckDB's default memory_limit is 80% of RAM; unbounded, the two stats scans take ~8.7 GB
+of process RSS (live snapshot, D426). Capped at 2 GB DuckDB spills and finishes in ~5 s at
+~3.5 GB RSS. Scoped to the call; the caller's setting is restored on exit."""
+
+
+def _cell_stats_rows(
+    conn: duckdb.DuckDBPyConnection,
+    since_naive: datetime,
+    ghost_cut: datetime,
+) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]]]:
+    """The two DuckDB aggregations behind ``load_cell_stats`` — one row per cell each."""
+    converting_list = ", ".join(f"'{d}'" for d in sorted(CONVERTING_DECISIONS))
+    submitted_rows = conn.execute(
+        f"""
+        WITH keyed AS (SELECT {_CELL_KEY_SQL} FROM submissions),
+             cells AS (SELECT {_CELL_COLUMNS_SQL} FROM keyed)
+        SELECT hypothesis, dte_bucket, axis, directional, regime, count(*)
+        FROM cells
+        GROUP BY ALL
+        """  # noqa: S608 -- constants only, no user input
+    ).fetchall()
+    verdict_rows = conn.execute(
+        f"""
+        WITH keyed AS (SELECT config_hash, {_CELL_KEY_SQL} FROM submissions),
+             cells AS (SELECT config_hash, {_CELL_COLUMNS_SQL} FROM keyed)
+        SELECT c.hypothesis, c.dte_bucket, c.axis, c.directional, c.regime,
+               count(*) AS decided,
+               count_if(v.decision IN ({converting_list})) AS converting,
+               max({_CPCV_VALUE_SQL}) AS best,
+               max(v.decided_at) AS newest
+        FROM verdicts v
+        JOIN cells c USING (config_hash)
+        WHERE v.decided_at >= ?
+          AND NOT (c.hypothesis = '{_VE_HYPOTHESIS}' AND v.decided_at < ?)
+        GROUP BY ALL
+        """,  # noqa: S608 -- constants only, no user input
+        [since_naive, ghost_cut],
+    ).fetchall()
+    return submitted_rows, verdict_rows
 
 
 def load_cell_stats(
@@ -180,50 +257,38 @@ def load_cell_stats(
     given) and, for volatility_event, after the ghost-label cut: pre-07-18 ve
     verdicts are fiction (D273/D290), never evidence. Timestamps come back
     tz-aware UTC so callers can compare them with ``utc_now()``.
+
+    Both aggregates run inside DuckDB over the SQL cell key (``_CELL_KEY_SQL``); the
+    process only ever holds one row per cell.
     """
     since_naive = _naive_utc(since or CLEAN_ERA_LABEL_CUT)
     ghost_cut = _naive_utc(VE_GHOST_LABEL_CUT)
-    submitted: dict[CellKey, int] = {}
-    decided: dict[CellKey, int] = {}
-    converting: dict[CellKey, int] = {}
-    best: dict[CellKey, float] = {}
-    newest: dict[CellKey, datetime] = {}
-    for (config_json,) in conn.execute("SELECT config_json FROM submissions").fetchall():
-        key = cell_key_from_json(json.loads(config_json))
-        submitted[key] = submitted.get(key, 0) + 1
-    rows = conn.execute(
-        """
-        SELECT s.config_json, v.decision, v.decided_at, v.gate_results
-        FROM verdicts v
-        JOIN submissions s USING (config_hash)
-        WHERE v.decided_at >= ?
-        """,
-        [since_naive],
-    ).fetchall()
-    for config_json, decision, decided_at, gate_results in rows:
-        key = cell_key_from_json(json.loads(config_json))
-        if key[0] == _VE_HYPOTHESIS and decided_at < ghost_cut:
-            continue
-        decided[key] = decided.get(key, 0) + 1
-        if decision in CONVERTING_DECISIONS:
-            converting[key] = converting.get(key, 0) + 1
-        value = _cpcv_p25(gate_results)
-        if value is not None and value > best.get(key, float("-inf")):
-            best[key] = value
-        if key not in newest or decided_at > newest[key]:
-            newest[key] = decided_at
-    keys = set(submitted) | set(decided)
-    return {
-        key: CellStats(
+    (previous_limit,) = conn.execute("SELECT current_setting('memory_limit')").fetchone()  # type: ignore[misc]
+    conn.execute(f"SET memory_limit = '{_STATS_MEMORY_LIMIT}'")
+    try:
+        submitted_rows, verdict_rows = _cell_stats_rows(conn, since_naive, ghost_cut)
+    finally:
+        conn.execute(f"SET memory_limit = '{previous_limit}'")
+    submitted: dict[CellKey, int] = {
+        (h, d, a, di, r): int(n) for h, d, a, di, r, n in submitted_rows
+    }
+    evidence: dict[CellKey, tuple[int, int, float | None, datetime]] = {
+        (h, d, a, di, r): (int(dec), int(conv), best, newest)
+        for h, d, a, di, r, dec, conv, best, newest in verdict_rows
+    }
+    keys = set(submitted) | set(evidence)
+    out: dict[CellKey, CellStats] = {}
+    for key in sorted(keys):
+        dec, conv, best, newest = evidence.get(key, (0, 0, None, None))
+        out[key] = CellStats(
             key=key,
             submitted=submitted.get(key, 0),
-            decided=decided.get(key, 0),
-            converting=converting.get(key, 0),
-            best_cpcv_p25=best.get(key),
-            newest_decided_at=(newest[key].replace(tzinfo=UTC) if key in newest else None),
+            decided=dec,
+            converting=conv,
+            best_cpcv_p25=None if best is None else float(best),
+            newest_decided_at=None if newest is None else newest.replace(tzinfo=UTC),
         )
-        for key in sorted(keys)
-    }
+    return out
 
 
 def classify_dead(
