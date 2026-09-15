@@ -13,7 +13,7 @@ its file exports, through `crucible_contracts` helpers).
 flowchart LR
     subgraph Forge["forge campaign — weekly (this repo)"]
         E[enumerate] --> P[prefilter] --> R[rank + diversify] --> S[submit]
-        F["feedback: consume → analyze → propose"] -. steers .-> E
+        F["feedback: consume (reconcile)"] -. verdict ledger .-> E
     end
     S -- "inbox/*.json (atomic)" --> C["Crucible: watch → backtest → gate"]
     C -- "exports/gated_runs_*.json" --> F
@@ -28,9 +28,10 @@ rank (§6.2 composite) → diversify (greedy, min-per-hypothesis floor) → subm
 → rate-limit (§7.3, three independent block reasons: ≥80% of the oldest in-flight batch must be
 gated; OR the D137 stall guard trips — Crucible idle ≥3h with our work pending; OR the aggregate
 in-flight depth exceeds `submission.max_inflight` — the D196 backpressure block bounding the total
-genuine in-flight queue, default-off, operator-enabled, D200) → consume feedback →
-analyze → propose (auto-apply tightenings; loosenings → `OPEN_PROPOSALS.md`). Cross-batch state
-lives in `~/forge_data/forge.db` only — never in process memory across runs.
+genuine in-flight queue, default-off, operator-enabled, D200) → consume feedback (reconcile
+into the verdict ledger). *This was the daemon's per-batch order; since the 2026-09-14 cutover
+(D416) the weekly `forge campaign` run replaces it — plan 2026-09 §12.3 — and the analyze → propose
+step is gone (D420).* Cross-batch state lives in `~/forge_data/forge.db` only.
 
 ## Module map
 
@@ -41,7 +42,7 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
 | `prefilters/` | `battery.py` runs filters cost-ascending — the live order is in code, not the §5.2 list (it grew past the original 7); `crucible_feature_cache.py` = real cache (via db_writer socket), `feature_cache.py` = synthetic fallback | §5 | `test_prefilters/` |
 | `ranking/` | The learned ranking models the weekly campaign ranks with (trained in-run) — per-file breakdown below the table; the §6.2 composite scorer, diversifier, floors and flip apparatus left with the daemon (D419) | §6 | `test_ranking/` |
 | `submission/` | Batch orchestration; atomic submit via contracts; §7.3 rate limiter; per-filter logging; `search_multiplicity.py` (D310 — per-slot cumulative `search_n_trials` stamp, self-gated on Crucible's `recorded_not_binding` marker); submission lanes tagged `selection_mode` ∈ {ranked, holdout, prefilter_sample, tail_lane, trend_lane} (P3.3/D335/`8cfe95f4a6e9`; the dark D316 young_explore lane was removed 2026-08-06, D378) | §7 | `test_submission/` |
-| `feedback/` | Consume gated/failed exports, learn weights, propose grammar changes — per-file breakdown below the table | §8 | `test_feedback/` |
+| `feedback/` | Consume gated/failed exports into the verdict ledger (reconcile, aged-out and failed-run flush), preregistrations + the boot-time DUE judge, expected-trades priors, the label-era cuts — per-file breakdown below the table. The learned draw weights and the grammar-proposal machinery left with the daemon (Batch 5 G3, D420) | §8 | `test_feedback/` |
 | `funnel/` | Per-batch funnel + join-map exports consumed by Crucible's instrumentation (D096) | D096 | `test_funnel/` |
 | `campaign/` | The weekly zero-input challenger run (plan 2026-09 §12, the final state): `types.py` (contract), `cells.py` (census cell key, the promoted book via contracts, per-cell verdict stats, dead-cell rule), `triggers.py` (T1–T5 as pure functions + weekly-cap allocation), `gate.py` (structural challenger gate), `run.py` (boot → reconcile → decide → rejection-sample the unchanged v55 population → battery → gate → rank → submit), `report.py` (replayable `campaign_run/v1` records + `status`). CLI: `cli/campaign_cmd.py`. Units not installed until cutover (D409). | §12 (plan) | `test_campaign/`, `invariants/test_campaign_invariants.py` |
 | `persistence/` | `db.py` (the blessed DB open), `schemas.py` (forge.db DDL — table summaries in `docs/MANPAGE.md`), `verdicts.py` (durable per-candidate verdict recording, D111; +label provenance `source_export`/`contracts_version`, D316), `registry_loader.py` | §9 | `test_persistence.py` |
@@ -63,17 +64,22 @@ Deleted 2026-09-15 (D419, git history has them): `queue`, `diversifier`, `arm_fl
 `sequential_test`, `evaluation`, `campaign_audit`, `campaigns` (the D299 registry — its cell-key
 extractors live in `campaign/cell_key.py`), `regime_supply`.
 
-**`feedback/` breakdown**:
-- `consumer.py` — reconcile + aged-out flush (D052/D110) + failed-run retirement (D240).
-- `analyzer.py` / `proposer.py` / `proposal_writer.py` (§9.1 — loosenings to
-  `OPEN_PROPOSALS.md` + `grammar_proposals`; wires `trade_concentration.py`, D047) /
-  `promoted_patterns.py` / `stuck_state.py`.
-- Learned weights: `rejection_weights.py` (the D094→D108 lineage), `trade_rate_priors.py`
-  (expected-trades prior + cold-start). (`auto_tune.py` was retired — D325; git history has it.)
-- Honesty ledgers: `preregistration.py` (behind `forge prereg`, D208, and the campaign's boot
-  DUE judge, D417; the D207 alpha-budget sibling retired 2026-08-06). `yield_audit.py` (D302)
-  was deleted 2026-09-15 (D419) — the dead-cell rule lives in `campaign/cells.py`.
-- Deleted: `threshold_proposer.py` (D298; git history has it).
+**`feedback/` breakdown** (four survivors, D420):
+- `consumer.py` — reconcile against the gated/failed exports (the weekly run hands in the
+  forge-scoped 14-day stream, D412), aged-out flush (D052/D110), failed-run retirement (D240).
+- `preregistration.py` — the prereg ledger behind `forge prereg` (D208), the `freeze-governance`
+  hook's data source (D392), and the campaign's boot-time DUE judge (D417).
+- `trade_rate_priors.py` — the expected-trades prior + `COLD_START_HYPOTHESES` the
+  `expected_trades` prefilter reads.
+- `eras.py` — the label-era cuts and the two label-honesty helpers every learned reader shares.
+- `types.py` — `CandidateOutcome`, `BatchFeedback` (the reconcile path's value types).
+- Deleted 2026-09-15 (Batch 5 G3, D420; git history has them): `rejection_weights.py` (the
+  D094→D108 learned draw weights — only the daemon consumed them), `analyzer.py` / `proposer.py` /
+  `proposal_writer.py` / `trade_concentration.py` (the §8.5 grammar-proposal machinery — under the
+  signed freeze nothing could apply a proposal without a preregistration), `stuck_state.py`,
+  `promoted_patterns.py`, `book_usable_weights.py`. Earlier: `yield_audit.py` (D419),
+  `threshold_proposer.py` (D298), `auto_tune.py` (D325). `OPEN_PROPOSALS.md` stays as a static,
+  machine-parsed record (QuantIQ parses `forge-proposals/v1`).
 
 A `king/` package (the meta-king generator arm) was retired at D190 and **removed from
 the tree** in the same commit (`f79394a`) — role subsumed by the standard-path quality lane;
@@ -170,14 +176,16 @@ MANPAGE/HOW-TO rows were dropped. Code identifiers are findable by grep; this co
   underlying-name) (D105/D106/D108).
 - **Enumeration-policy bump** — a grammar_version bump with NO `rules:` text change; the
   policy shift is Python-side (the norm since v5). See the change taxonomy above.
-- **Versionless change** — feedback/weight change re-aiming the draw distribution without
-  changing the population; must be cold-start byte-identical (hard rule #6).
+- **Versionless change** — (daemon era, retired D420) a learned-weight change re-aiming the draw
+  distribution without changing the population; the cold-start byte-identical rule (hard rule #6)
+  still binds any campaign-policy change.
 - **Cold-start** — sampler behavior with empty learned inputs; pinned byte-identical by golden
   tests. `COLD_START_HYPOTHESES` drops poisoned pre-vN rows so a hypothesis can re-learn.
-- **Exploration floor** — the D067 minimum hypothesis weight (`DEFAULT_EXPLORATION_FLOOR` in
-  `feedback/rejection_weights.py`); no learned tilt may starve a hypothesis to zero.
-- **Anti-Goodhart** — feedback rewards must track what Crucible *accepts* (component rate,
-  D105), never proxies like raw trade counts (the D094 reward got Goodharted; tests pin this).
+- **Exploration floor** — (daemon era, retired D420) the D067 minimum hypothesis weight so no
+  learned tilt starved a hypothesis; the campaign's equivalent is trigger T5 (dark cells).
+- **Anti-Goodhart** — (daemon era, retired D420) rewards tracked what Crucible *accepts*
+  (component rate, D105), never raw trade counts; the principle survives in the campaign's
+  evidence-based cell rules (`campaign/cells.py`).
 - **Emission proof** — before deploying enumeration changes: sample thousands of configs
   against the live registry export and verify the emitted mix shows the intended change
   (`docs/tasks/grammar-change.md`). A log line is not an emission proof (D352).
@@ -187,8 +195,8 @@ MANPAGE/HOW-TO rows were dropped. Code identifiers are findable by grep; this co
 - **Quality lane / `wf_p25`** — the D193 ranking-only robustness blend: a deterministic ridge
   predicting `target_wf_p25` (Crucible's walk-forward FLOOR) folded into the §6.2 prior.
   Predicts DOWNSIDE robustness, not the peak.
-- **Yield-map axes** — `--cohort-yield` / `--regime-gate-yield` (D182/D183): finer-grained
-  component-rate feedback weighting; versionless, cold-start byte-identical.
+- **Yield-map axes** — (daemon era, retired D420) `--cohort-yield` / `--regime-gate-yield`
+  (D182/D183), finer-grained component-rate draw weighting.
 - **Aged-out flush / sentinel** — the consumer marks dead `submitted` rows gated with a
   nil-UUID sentinel once behind the export watermark (`feedback/consumer.py` owns the value;
   D110 mechanism; the D240 failed-run retirement reuses the sentinel).

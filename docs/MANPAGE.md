@@ -267,8 +267,8 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 | `pre_filter_logs` | Per-(candidate, filter) pass/score/details. |
 | `verdicts` | Durable per-candidate Crucible decisions (D111): decision, decided_at, trade_count, grammar_version, full gate_results JSON. PK `crucible_run_id`, so re-gates append. Populated on every reconcile pass; survives the rolling export window. |
 | `grammar_versions` | Grammar change history (version, sha256, operator initials). |
-| `grammar_proposals` | Refinement proposals (pending/approved/rejected/applied). |
-| `promoted_patterns` | Discovered patterns across promoted strategies. |
+| `grammar_proposals` | Daemon-era refinement proposals. No writer since D420 (Batch 5 G3); kept for old DBs. |
+| `promoted_patterns` | Daemon-era pattern rows (8 ever). No writer since D420; kept for old DBs. |
 | `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. D140/D141 add `tail_score` + `tail_model_id` (the tail-aware model's predicted worst-quartile value — `wf_p25` per D191/D192, NULL until one is trained). Written post-submission; never read by the loop. |
 
 ---
