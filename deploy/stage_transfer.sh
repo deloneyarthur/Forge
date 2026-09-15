@@ -7,15 +7,17 @@
 #       physically travel as a sibling of Forge (Forge resolves it via the
 #       relative path ../crucible_contracts in pyproject [tool.uv.sources]).
 #   (2) ~/forge_data/forge.db is multi-GB of accumulated learning state, is
-#       gitignored, and is held OPEN by the running service — copy it out-of-band
-#       (this script) and quiesce first (--stop-service) for a consistent snapshot.
+#       gitignored, and is held OPEN while a weekly run is in progress — copy it
+#       out-of-band (this script), never during a run, and disable the Forge timers
+#       first (--stop-service) so no run starts mid-copy.
 #   (3) the non-portable .venv (uv bakes absolute interpreter paths) must NOT
 #       travel — setup_new_box.sh rebuilds it on the new box.
 # This script bundles (1)+(2) correctly and excludes the .venv per (3).
 #
 # Safe by default: PREVIEWS (rsync --dry-run) unless --go is passed, and never
-# stops the production service unless --stop-service is passed. Stopping the
-# service quiesces forge.db so the copy is consistent (DuckDB + WAL).
+# touches the Forge timers unless --stop-service is passed (which disables them so
+# no run can open forge.db mid-copy; DuckDB + WAL stay consistent). There is no
+# daemon since the 2026-09-14 cutover (D416).
 #
 # Bundle layout produced at <dest>:
 #   <dest>/proj/Forge/               working tree incl. .git (committed through the version in config/grammar.yaml)
@@ -58,18 +60,25 @@ if [ "$GO" -eq 0 ]; then
   say "DRY RUN — nothing is copied. Re-run with --go to write to $DEST"
 fi
 
-# Quiesce forge.db before copying (consistent snapshot of an open DuckDB file).
-SERVICE_WAS_STOPPED=0
+# Quiesce forge.db before copying (consistent snapshot of an open DuckDB file). Only a weekly
+# run opens it (D416): refuse during one; with --stop-service disable both timers so none starts.
+TIMERS_WERE_DISABLED=0
+if systemctl --user is-active --quiet forge-campaign.service 2>/dev/null; then
+  echo "forge-campaign.service is RUNNING (a weekly run holds forge.db). Wait for it to finish." >&2
+  exit 1
+fi
 if [ "$STOP_SERVICE" -eq 1 ]; then
-  if systemctl --user is-active --quiet forge.service 2>/dev/null; then
-    say "Stopping forge.service to quiesce forge.db"
-    [ "$GO" -eq 1 ] && systemctl --user stop forge.service && SERVICE_WAS_STOPPED=1
-  else
-    warn "forge.service not active — nothing to stop"
+  say "Disabling forge-campaign.timer + forge-backup.timer so no run starts mid-copy"
+  if [ "$GO" -eq 1 ]; then
+    if systemctl --user disable --now forge-campaign.timer forge-backup.timer 2>/dev/null; then
+      TIMERS_WERE_DISABLED=1
+    else
+      warn "could not disable the Forge timers (not installed here?)"
+    fi
   fi
-elif systemctl --user is-active --quiet forge.service 2>/dev/null; then
-  warn "forge.service is RUNNING and holds forge.db open."
-  warn "Copying it live risks an inconsistent snapshot. Re-run with --stop-service for a clean copy."
+else
+  warn "Forge timers left armed — a Sunday 03:00 UTC run could open forge.db mid-copy."
+  warn "Re-run with --stop-service for a guaranteed-quiet copy."
 fi
 
 EXCLUDES=(--exclude '.venv' --exclude '__pycache__' --exclude '.mypy_cache'
@@ -107,9 +116,9 @@ say "Done."
 if [ "$GO" -eq 1 ]; then
   printf 'Bundle staged at: %s\n' "$DEST"
   du -sh "$DEST/proj/Forge" "$DEST/proj/crucible_contracts" "$DEST/forge_data" 2>/dev/null || true
-  if [ "$SERVICE_WAS_STOPPED" -eq 1 ]; then
-    warn "forge.service left STOPPED on this box. To resume production here:"
-    printf '       systemctl --user start forge.service\n'
+  if [ "$TIMERS_WERE_DISABLED" -eq 1 ]; then
+    warn "Forge timers left DISABLED on this box. To resume production here:"
+    printf '       systemctl --user enable --now forge-campaign.timer forge-backup.timer\n'
   fi
 else
   printf 'Preview only. Re-run with --stop-service --go to write the bundle.\n'

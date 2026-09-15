@@ -3,9 +3,11 @@
 Candidate strategy generator for the Forge → Crucible → QuantIQ pipeline.
 
 Forge enumerates grammar-valid options strategy configurations, pre-filters them through cheap
-statistical checks, and submits survivors to Crucible for full backtest validation. It learns
-from Crucible's promotion decisions and refines its hypothesis grammar over time. Promotion rates
-start near zero and are expected to rise slowly (§1.3); most rejections are correct behavior.
+statistical checks, and submits survivors to Crucible for full backtest validation. Since the
+2026-09-14 cutover it does this once a week with no operator input (`forge campaign`): read the
+designated book and Crucible's verdicts, decide whether any cell deserves challengers, submit at
+most a few hundred. Most rejections are correct behavior (§1.3); a week that submits nothing is
+the design.
 
 ## Quick start
 
@@ -17,10 +19,9 @@ forge --help
 uv run pytest
 ```
 
-In production Forge runs as a systemd user service:
-`forge run --loop --consume-feedback --require-real-cache` — plus yield/quality ranking flags
-and env knobs; the authoritative flag set is the unit's `ExecStart` in
-`deploy/systemd/forge.service`.
+In production Forge is two systemd user timers and no daemon (D416): `forge-campaign.timer`
+(Sunday 03:00 UTC → `scripts/campaign_run.sh` → `forge campaign`) and `forge-backup.timer`
+(Sunday 04:30 UTC). Units in `deploy/systemd/`; the ritual in `docs/tasks/deploy.md`.
 
 ## Documentation
 
@@ -30,7 +31,7 @@ and env knobs; the authoritative flag set is the unit's `ExecStart` in
 | `CLAUDE.md` | Agent entry point: hard rules, commands, routing to everything else |
 | `docs/architecture.md` | As-built component map, data flow, change taxonomy |
 | `docs/MANPAGE.md` | Every CLI command, script, config file, DB table, pipeline service |
-| `docs/HOW-TO.md` | Operator runbook: start/stop, health checks, recovery |
+| `docs/HOW-TO.md` | Operator runbook: the weekly check, recovery, era boundaries |
 | `docs/GRAMMAR.md` | Narrative for each grammar rule (sync-enforced with `config/grammar.yaml`) |
 | `STATUS.md` | Live project state |
 | `docs/proposals/` | Active proposals + the freeze programme (terminal ones: `_archive/PROPOSAL_*.md`) |

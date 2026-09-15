@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Audience:** Implementing engineer or AI coding agent
 **Status:** Authoritative design for v1 — **intent and invariants**, not an as-built inventory
-**Last updated:** 2026-08-06 (as-built reconciliation, D201 pattern; original 2026-05-13)
+**Last updated:** 2026-09-15 (post-cutover banners, Batch 5 G7 / D424; as-built reconciliation 2026-08-06, D201 pattern; original 2026-05-13)
 
 > **How this spec relates to the living repo:** § numbers here are the citation currency of the
 > whole project — they are stable. Anything *volatile* (file layout, config values, weights,
@@ -26,6 +26,13 @@ Forge is the **generator** in the Forge → Crucible → QuantIQ pipeline. Befor
 Forge's job is **narrow**: produce candidate strategy configurations that respect a hypothesis grammar, cheaply pre-filter them, submit survivors to Crucible. It does not backtest. It does not validate. It learns from Crucible's promotion decisions and refines its grammar over time.
 
 When in doubt, defer to Crucible. Forge is the producer; Crucible is the authority on quality.
+
+> **Since the 2026-09-14 cutover (D416) Forge is one weekly, zero-input run** — `forge campaign`
+> (plan `docs/proposals/repo-simplification-2026-09.md` §12; map in `docs/architecture.md`). The
+> "component" decomposition and the refine-the-grammar-over-time framing below are the v1 intent;
+> the as-built pipeline is those stages inside one function, plus the triggers and the challenger
+> gate v1 lacked, and the grammar is FROZEN at v55 (D390). Sections whose mechanism left the tree
+> carry a banner; § numbers stay stable for citation.
 
 ---
 
@@ -56,68 +63,23 @@ Forge runs on the same workstation as Crucible. 12-core / 12 GB RAM. Forge's com
 
 Forge does not run in parallel with itself — single-process is sufficient. It does run in parallel with Crucible: while Crucible is processing a batch, Forge is enumerating the next batch.
 
+> As-built: the workstation carries Crucible's fleet too; the weekly run trains its two model
+> families in-process and is bounded by the unit's `MemoryHigh`/`MemoryMax` (D417). There is no
+> "next batch" to enumerate while Crucible works — one run, one week.
+
 ---
 
 ## 2. Architecture
 
 ### 2.1 Five-component architecture
 
-```
-┌────────────────────────────────────────────────────┐
-│ Hypothesis Grammar (GRAMMAR.md + grammar.yaml)     │
-│ - Human-readable rules                             │
-│ - Machine-checkable predicates                     │
-│ - Versioned, refined via supervised loosening      │
-└────────────────────┬───────────────────────────────┘
-                     │
-                     ▼
-┌────────────────────────────────────────────────────┐
-│ Component 1: Enumerator                            │
-│ - Walks grammar-valid combinations                 │
-│ - Produces 10K-100K candidate configs per batch    │
-└────────────────────┬───────────────────────────────┘
-                     │
-                     ▼
-┌────────────────────────────────────────────────────┐
-│ Component 2: Pre-filter Battery                    │
-│ - Signal density check                             │
-│ - Novelty check (vs prior tested configs)          │
-│ - Expected trade count                             │
-│ - Permutation test for signal information          │
-│ - Regime exposure check                            │
-│ - Structural redundancy check                      │
-│ - Resource feasibility check                       │
-└────────────────────┬───────────────────────────────┘
-                     │ (rejects ~90% of candidates)
-                     ▼
-┌────────────────────────────────────────────────────┐
-│ Component 3: Ranker & Queue                        │
-│ - Composite pre-filter score                       │
-│ - Diversification penalty (avoid clustering)       │
-│ - Top-N selection for submission                   │
-└────────────────────┬───────────────────────────────┘
-                     │
-                     ▼
-┌────────────────────────────────────────────────────┐
-│ Component 4: Submitter                             │
-│ - Writes YAML to Crucible's inbox                  │
-│ - Rate-limits submission to match Crucible's       │
-│   throughput                                       │
-│ - Tracks submission state                          │
-└────────────────────┬───────────────────────────────┘
-                     │
-                     ▼
-        (Crucible processes; results in DB)
-                     │
-                     ▼
-┌────────────────────────────────────────────────────┐
-│ Component 5: Feedback & Grammar Refiner            │
-│ - Reads Crucible's gated runs (read-only)          │
-│ - Updates pre-filter weights and ranker priors     │
-│ - Proposes grammar refinements                     │
-│ - Auto-applies tightening; surfaces loosening      │
-└────────────────────────────────────────────────────┘
-```
+> **Removed 2026-09-15 (D424); owned by `docs/architecture.md` §The pipeline.** The v1 box diagram
+> named five components — Enumerator (§4), Pre-filter battery (§5), Ranker & queue (§6), Submitter
+> (§7), Feedback & grammar refiner (§8) — feeding one another in a loop. As-built they are stages
+> of one weekly run in that order, preceded by reconcile + book + triggers and followed by the
+> challenger gate and a run record; the diagram was fiction on two counts (the loop, the refiner)
+> and was removed rather than maintained twice (the §9.1/§11 pattern). The § numbers keep the v1
+> component names because they are the project's citation currency.
 
 ### 2.2 Design principles
 
@@ -128,6 +90,9 @@ Forge does not run in parallel with itself — single-process is sufficient. It 
 5. **Auto-tightening is safe; auto-loosening is not.** The grammar refiner can automatically add rules (which reduce candidates) but never remove rules (which expand candidates) without supervised approval.
 6. **Diversity over depth.** A batch of 200 candidates spread across 20 hypothesis families beats 200 variations of one family.
 7. **Forge optimizes for promotion rate AND coverage.** If promotion rate is high but all promoted strategies are in one regime, Forge is under-exploring. Both metrics matter.
+
+> Principle 5 as-built (D420): no code writes `config/grammar.yaml` at runtime at all; tightening
+> and loosening alike are operator commits behind a preregistration (hard rule #4, re-cut).
 
 ### 2.3 Technology stack
 
@@ -510,6 +475,14 @@ Pre-filter thresholds (e.g., the 30-activation minimum, 80% overlap threshold) a
 
 ## 6. Component 3: Ranker and queue
 
+> **As-built banner (2026-09-15, D424).** The §6.2 composite score, its `config/ranker.yaml`
+> weights and the §6.3 greedy diversification left the tree with the daemon (Batch 5 G2, D419).
+> The weekly run ranks *within a campaign cell* by the verdict model's `P(component)` × a monotone
+> transform of the robustness model's prediction (`campaign/run.py`; both trained in-run, D417);
+> diversity is owned by the cell allocation and the structural challenger gate, not by a Jaccard
+> penalty; the "batch" is the weekly cap (§7.3 banner). Kept verbatim as intent — the §6.2 term
+> names are cited by the prefilter names and by `test_phase6_invariants`.
+
 ### 6.1 Responsibility
 
 From the pool of pre-filtered candidates, select the top-N for submission to Crucible.
@@ -592,6 +565,11 @@ Submission is atomic per-file (write to temp + rename). Crucible's inbox watcher
 
 ### 7.3 Rate limiting
 
+> **RETIRED as-built (Batch 5 G4, D421).** No in-flight limiter exists: a run submits at most
+> `campaign.weekly_cap` configs and refuses to start (boot check `inbox`, exit 2) when Crucible's
+> inbox backlog exceeds `campaign.inbox_backlog_ceiling`. The three block reasons below are the
+> daemon-era record (D046/D137/D196).
+
 Forge does not submit a new batch while the in-flight queue is too deep for Forge to learn from it. The submitter applies three independent block reasons; submission is held if ANY of them trips:
 
 1. **Per-batch completion** — the previous batch must be at least 80% `gated` in Crucible before the next is submitted (the original §7.3 rule). This prevents the inbox from becoming a deep queue Forge can't learn from.
@@ -609,6 +587,14 @@ A config that's rejected for grammar drift (e.g., references a deprecated indica
 ---
 
 ## 8. Component 5: Feedback and grammar refiner
+
+> **As-built banner (2026-09-15, D424).** §8.1–8.3 survive as `feedback/consumer.py` — one
+> reconcile per weekly run from Crucible's forge-scoped 14-day stream (contracts 1.48.0, D412) into
+> `verdicts` + `batch_summaries` — and as the in-run training of the two ranking models (D417).
+> §8.4–8.7 are HISTORICAL: the analyzer, proposer, auto-tightening and `OPEN_PROPOSALS.md` writer
+> left the tree in Batch 5 G3 (D420); the grammar is frozen at v55 (D390) and every change is an
+> operator commit behind a preregistration. `OPEN_PROPOSALS.md` remains as a static machine-parsed
+> record.
 
 ### 8.1 Responsibility
 
@@ -714,23 +700,22 @@ Only JSON files (D006) in `{crucible_data_root}/inbox/`. Never direct DB writes.
 
 ## 10. Configuration
 
-Three YAML files own their contents — this spec states only what each is FOR:
+Each config file owns its contents (`docs/MANPAGE.md` CONFIG FILES); this spec states only what
+each is FOR. Precedence everywhere: CLI flag > YAML > code default.
 
 ### 10.1 `config/forge.yaml`
-Runtime knobs: data/DB/log paths, enumeration batch size + seed, §7.3 submission thresholds
-(completion fraction, poll interval, `max_inflight`), feedback cadence. Precedence: CLI flag >
-`config/forge.yaml` > hardcoded default (`forge.config.forge_config`). The contracts pin does
-NOT live here — it is `FORGE_EXPECTED_CONTRACT_VERSION` in `core/contracts_check.py` (§13.5).
+Three keys (D422): `db_path`, `crucible.inbox_path`, and the optional `campaign:` overrides for
+`forge.campaign.types.CampaignConfig` (the single home of the run's defaults; unknown keys fail
+loud). The contracts pin does NOT live here — it is `FORGE_EXPECTED_CONTRACT_VERSION` in
+`core/contracts_check.py` (§13.5).
 
 ### 10.2 `config/prefilter.yaml`
-Per-filter thresholds for the §5 battery (§5.5 calibration). The §5.5 auto-tune trigger was
-retired (D206, permanent per D298); `config/auto_tightened_thresholds.yaml` is retained EMPTY
-because its fingerprint feeds `enumeration_inputs_hash` — deleting it changes the determinism
-identity (§13.1).
+Per-filter thresholds for the §5 battery (§5.5 calibration). Operator-owned; nothing writes it.
+`config/auto_tightened_thresholds.yaml` is retained EMPTY because its fingerprint feeds
+`enumeration_inputs_hash` — deleting it changes the determinism identity (§13.1).
 
 ### 10.3 `config/ranker.yaml`
-§6.2 composite weights + diversification method. The yaml key `regime_diversity` maps to the
-§6.2 `regime_exposure` term (historical key name, intentionally preserved).
+Gone with the §6.2 composite (Batch 5 G2, D419). The weekly run has no weight file.
 
 ---
 
@@ -750,77 +735,21 @@ ARE spec: one file per pre-filter / predicate type / CLI command; grammar versio
 > COMPLETE (handoffs in `_archive/PHASE_*_HANDOFF.md`); the estimates and deliverable lists are
 > the original 2026-05 planning record, kept verbatim. Live state lives in `STATUS.md`.
 
-Five phases. Estimated 6-10 weeks at part-time (~4 hrs/day), 4-6 weeks full-time.
+Seven phases (0–6), 2026-05 → 2026-06, each closed with a handoff in `_archive/PHASE_*_HANDOFF.md`.
+The deliverable column is the original planning wording.
 
-### Phase 0 — Bootstrap (3-5 days)
+| Phase | Built | Original deliverable |
+|---|---|---|
+| 0 Bootstrap | skeleton, configs, DuckDB schema, contracts version check, logging, CLI, pre-commit hooks | `forge --help` runs; tests pass on an empty skeleton |
+| 1 Grammar engine | `grammar.yaml` parser/validator, predicate types, version archive, the 21-rule v1 grammar + `GRAMMAR.md` | any `StrategyConfig` validates in < 10 ms; property tests on valid/invalid configs |
+| 2 Enumerator | deterministic seeded enumeration over the grammar against the registry | `forge enumerate --max-candidates=10000` yields 10K valid configs |
+| 3 Pre-filter battery | filter protocol + the seven v1 filters (later nine), unit tests per filter | `forge prefilter` runs the battery on enumerated candidates |
+| 4 Ranking + submission | composite scorer, greedy diversification, batch queue, atomic submitter, rate limiter | `forge run` performs one full cycle |
+| 5 Feedback + refinement | consumer of gated runs, analyzer, proposer, tightening pipeline, loosening workflow | the loop runs autonomously across batches |
+| 6 Polish | invariant + reproducibility + resilience tests, CLI help audit, runbook | suite green; runbook documents operation and recovery |
 
-- Project skeleton, configs, DuckDB schema
-- `crucible_contracts` integration (import, version check)
-- First successful read of Crucible's runs DB (synthetic data; Crucible may not be built yet)
-- Logging, error handling, basic CLI
-- Pre-commit hooks (ruff strict, mypy strict, version-bump check)
-
-**Deliverable**: `forge --help` runs; tests pass on empty skeleton.
-
-### Phase 1 — Grammar engine (7-10 days)
-
-- `grammar.yaml` parser and validator
-- All 6 predicate types (cardinality, requires, forbids, compatibility, numerical_range, custom_python)
-- Rule loader with version archive
-- Validator: given a StrategyConfig and a grammar, returns valid/invalid + reasons
-- v1 grammar (21 rules) written to `config/grammar.yaml`
-- `GRAMMAR.md` narrative documentation
-
-**Deliverable**: any StrategyConfig can be validated against the v1 grammar in < 10ms. Property test: 1000 random valid configs all pass validation; 1000 random invalid configs all fail.
-
-### Phase 2 — Enumerator (7-10 days)
-
-- CSP-style search over grammar
-- Deterministic enumeration (seed-controlled)
-- Integration with `crucible_contracts.IndicatorMetadata` to know what's in the registry
-- Performance optimization: enumerate 100K configs in < 5 min
-
-**Deliverable**: `forge enumerate --max-candidates=10000` produces 10K valid configs.
-
-### Phase 3 — Pre-filter battery (10-14 days)
-
-- Filter protocol and registry
-- All 7 filters implemented
-- Each filter has unit tests with known-pass and known-fail cases
-- Auto-tune mechanism (with manual override)
-- Performance: full battery on 10K candidates completes in < 30 min
-
-**Deliverable**: `forge prefilter --batch-id=test` runs the full battery on enumerated candidates.
-
-### Phase 4 — Ranking and submission (5-7 days)
-
-- Composite scorer
-- Diversification (greedy in v1; DPP optional)
-- Batch queue management
-- Submitter writes YAML to Crucible's inbox
-- Rate limiter watches Crucible's status
-
-**Deliverable**: `forge run` performs full cycle (enumerate → pre-filter → rank → submit). Stops when previous batch is 80% complete in Crucible.
-
-### Phase 5 — Feedback and refinement (10-14 days)
-
-- Consumer reads Crucible's gated runs
-- Analyzer extracts patterns
-- Proposer generates grammar refinement proposals
-- Auto-tightening pipeline
-- Supervised loosening workflow (proposals to `OPEN_PROPOSALS.md`)
-
-**Deliverable**: full feedback loop operational. Forge can run autonomously for multiple batches with grammar refinement.
-
-### Phase 6 — Polish and operational discipline (5-7 days)
-
-- Property-based invariant tests
-- Reproducibility tests (same seed + same grammar → byte-identical batch)
-- Resilience tests (Crucible offline; corrupt feedback; partial batches)
-- CLI completion and help text
-- Operational runbook in README
-
-**Deliverable**: full test suite green; runbook documents normal operation and recovery.
+The rate limiter (Phase 4), the analyzer/proposer/tightening machinery (Phase 5) and the
+`forge run` loop itself were retired in Batch 5 (D416–D421); what remains is `docs/architecture.md`.
 
 ---
 
@@ -844,6 +773,10 @@ A `grammar.yaml` change requires:
 
 The grammar refiner cannot modify `grammar.yaml` without writing an entry to `grammar_versions` table. Auto-tighten changes carry `operator_initials = NULL`; manual changes carry initials.
 
+> As-built (D420): stronger — no `src/forge` module writes `grammar.yaml` at runtime at all
+> (`test_phase5_invariants`, AST check). `grammar_versions` rows are written by
+> `grammar/version_audit.py` when a run first loads an operator-bumped version.
+
 ### 13.4 Submission idempotency
 
 A config with the same hash cannot be submitted twice. The `config_hash` column in `submissions` is unique-indexed.
@@ -860,6 +793,9 @@ Forge's grammar must not permit `equity` as a signal family. Validator rejects c
 
 Forge respects `worker_mem_limit_mb` from Crucible's `runtime.yaml` shared config. If pre-filtering OOMs, gracefully degrade and resume.
 
+> As-built: the bound is `MemoryHigh`/`MemoryMax` on `forge-campaign.service` (D417); contracts
+> expose no `worker_mem_limit_mb`, and the run fails loud (unit FAILED) rather than degrading.
+
 ---
 
 ## 14. Decision log
@@ -875,7 +811,7 @@ Append-only. Major design decisions documented here for the implementing agent.
 |---|---|---|---|
 | 2026-05-13 | Five-component architecture (Enumerator / Pre-filter / Ranker / Submitter / Feedback) | Each component has one job; failures are localized | One monolithic generator (poor testability) |
 | 2026-05-13 | Grammar in YAML + Python predicates | YAML for declarative rules, Python for escape-hatch rules | Pure Python (less human-readable); pure YAML (insufficient expressivity) |
-| 2026-05-13 | 25 rules in v1 grammar | Enough to constrain meaningfully without over-restricting | More rules (over-restriction); fewer rules (too much junk in submissions) |
+| 2026-05-13 | 25 rules in v1 grammar *(sic — literal count 21, D001 / §3.6)* | Enough to constrain meaningfully without over-restricting | More rules (over-restriction); fewer rules (too much junk in submissions) |
 | 2026-05-13 | Auto-tighten / supervised-loosen | Tightening reduces search space (safe); loosening expands (risky) | All-auto (drift); all-manual (slow) |
 | 2026-05-13 | DuckDB for Forge's own state | Consistent with Crucible; embeddable; column-store | SQLite (slower for analytics); separate process |
 | 2026-05-13 | Greedy diversification (not DPP in v1) | Simpler implementation; DPP can be added later if needed | DPP from day 1 (more complex, more correct) |

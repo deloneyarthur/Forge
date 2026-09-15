@@ -101,7 +101,7 @@ Jaccard signal overlap ≥ `duplicate_jaccard` to a book leg; dead cells) → in
 `--dry-run` runs the same decision path and submits nothing; the record's `submitted_hashes`
 then lists the plan, so two dry runs on the same exports compare plan for plan. `--budget N`
 caps one run below the weekly cap. Path options (`--config`/`--no-config`, `--forge-db`,
-`--inbox`, `--crucible-db`, `--exports-dir`, `--records-dir`, `--models-dir`, `--config-root`)
+`--inbox`, `--exports-dir`, `--records-dir`, `--models-dir`, `--config-root`)
 exist for hermetic runs; production passes none.
 
 **Exit codes are the paging contract** for `forge-campaign.service` (no `SuccessExitStatus`):
@@ -110,7 +110,7 @@ check failed (nothing submitted, a `boot_failed` record written), 1 = an error a
 `error` record written, then re-raised).
 
 **Run record** `~/forge_data/campaigns/<run_id>.json`, schema `campaign_run/v1` — the replay
-key; Crucible's morning digest reads it once the daemon's journal lines stop:
+key; Crucible's morning digest reads it:
 `schema_version`, `run_id` (`<ISO week>-<UTC stamp>`), `started_at`/`finished_at` (ISO 8601),
 `dry_run`, `status` (`ok` | `no_trigger` | `boot_failed` | `error`), `grammar_version`,
 `registry_hash`, `enumeration_inputs_hash`, `seed`, `iso_week`, `watermarks`
@@ -123,16 +123,16 @@ families — what the next run's T1/T2/T3 compare against), `notes`.
 
 `forge campaign status [--last N] [--records-dir …] [--forge-db …]` prints recent runs newest
 first (status, fired triggers, campaigns, funnel counts) and, given a DB, the verdicts each run's
-submissions earned — point `--forge-db` at a `scripts/live_db_snapshot.sh` copy while a daemon
+submissions earned — point `--forge-db` at a `scripts/live_db_snapshot.sh` copy while a run
 holds the live file.
 
 Reconcile reads Crucible's **forge-scoped 14-day gated stream** (`forge_gated_runs_*.json`, contracts
 1.48.0, via `load_forge_gated_runs_from_export` — never by glob, the all-source `gated_runs_*` glob
-would collide) so a run that boots cold still sees its prior run's verdicts. While the daemon runs the
-file reads `truncated: true` (its rate floods the 10k cap; the OLDEST verdicts are the missing ones)
-and the run skips the D052 aged-out flush; after the cutover every file must read `truncated: false`
-— a truncated file then means something else is flooding `source='forge'` and is worth a relay
-(D412). An absent stream falls back to the all-source export and says so in the record.
+would collide) so a run that boots cold still sees its prior run's verdicts. `truncated: true` means
+the OLDEST verdicts are missing (the 10k cap) and the run skips the D052 aged-out flush (D415); it is
+expected while the daemon era's last batches are still inside the 14-day window (STATUS has the
+date) and a relay-worthy anomaly after — something else flooding `source='forge'` (D412). An absent
+stream falls back to the all-source export, flush off, and says so in the record.
 
 **In-run training (Batch 5 G0).** After reconcile the run trains the two model families its
 ranking loads — the verdict model and the robustness model for `ranking.model.QUALITY_LANE_TARGET`
@@ -232,14 +232,14 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | Table | Holds |
 |---|---|
-| `submissions` | One row per submitted config. `config_hash` is unique-indexed (idempotency, hard rule #9). `status` lifecycle: `pending` (insert) → `submitted` \| `skipped_duplicate` \| `submission_failed`, then `gated` once Crucible decides — set on reconcile, on age-out, or on the D240 failed-run retirement (runner-FAILED runs from `failed_runs_*.json` are retired each poll with the aged-out sentinel `crucible_run_id`; `feedback/consumer.py`). `selection_mode` (P3.3/B7) tags each row `ranked` vs `holdout` so evals can split biased-vs-unbiased labels. |
+| `submissions` | One row per submitted config. `config_hash` is unique-indexed (idempotency, hard rule #9). `status` lifecycle: `pending` (insert) → `submitted` \| `skipped_duplicate` \| `submission_failed`, then `gated` once Crucible decides — set on reconcile, on age-out (only when the verdict window is complete, D415), or on the D240 failed-run retirement (runner-FAILED runs from `failed_runs_*.json`, aged-out sentinel `crucible_run_id`; `feedback/consumer.py`). `selection_mode` tags each row: `campaign:<trigger>` since the cutover; daemon-era rows read `ranked` / `holdout` / … — condition analyses on it. |
 | `batch_summaries` | Per-batch stats: size, grammar/registry version, promotion rate, prefilter rejections. |
-| `pre_filter_logs` | Per-(candidate, filter) pass/score/details. |
+| `pre_filter_logs` | Daemon-era per-(candidate, filter) rows. No writer since D421 (the run records aggregate counts in the run record + `forge_funnel.json`); kept for old DBs. |
 | `verdicts` | Durable per-candidate Crucible decisions (D111): decision, decided_at, trade_count, grammar_version, full gate_results JSON. PK `crucible_run_id`, so re-gates append. Populated on every reconcile pass; survives the rolling export window. |
 | `grammar_versions` | Grammar change history (version, sha256, operator initials). |
 | `grammar_proposals` | Daemon-era refinement proposals. No writer since D420 (Batch 5 G3); kept for old DBs. |
 | `promoted_patterns` | Daemon-era pattern rows (8 ever). No writer since D420; kept for old DBs. |
-| `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. D140/D141 add `tail_score` + `tail_model_id` (the tail-aware model's predicted worst-quartile value — `wf_p25` per D191/D192, NULL until one is trained). Written post-submission; never read by the loop. |
+| `shadow_scores` | D132/F2 telemetry: per (submitted candidate, model_id) the verdict model's P(component) next to the incumbent §6.2 composite. D140/D141 add `tail_score` + `tail_model_id` (the tail-aware model's predicted worst-quartile value — `wf_p25` per D191/D192, NULL until one is trained). Written post-submission; never read by the run. |
 
 ---
 
@@ -254,10 +254,11 @@ The Crucible rows below are the **Forge-relevant subset**, not Crucible's full u
 | `crucible-db-writer` | `start_db_writer.py` | Single-writer DuckDB process; holds the exclusive lock. All others depend on it. |
 | `crucible-inbox-watcher` | `start_inbox_watcher.py` | Polls `inbox/`, validates configs, queues runs. |
 | `crucible-runner@1` / `crucible-runner@2` | `start_runner.py` (templated instances) | Backtest queued runs through the full gate; write promotion decisions. Production runs the templated instances; the plain `crucible-runner.service` is inactive. |
-| `crucible-gated-runs-publisher` | `export_gated_runs.py --poll-interval 60` | Exports gated-run snapshots every 60s (Forge's read path). |
-| `crucible-failed-runs-publisher` | `export_failed_runs.py --poll-interval 300` | Exports `failed_runs_*.json` — runner-FAILED runs that never reach the gated export. Forge's D240 read path: the feedback consumer retires matching `submitted` rows each poll (`feedback/consumer.py` `_flush_failed_runs`) so failures stop pinning §7.3 in-flight depth. |
-| `crucible-promoted-strategies-publisher` | `export_promoted_strategies.py --poll-interval 60` | Exports promoted strategies every 60s (QuantIQ's read path). |
-| `crucible-component-contributions-publisher` | `export_component_contributions.py --poll-interval 60` | Exports per-promoted-portfolio contribution scores (D216); consumed by `forge healthcheck`'s soft presence check — empty until the first promotion. |
+| `crucible-gated-runs-publisher` | `export_gated_runs.py --poll-interval 600` | Exports the all-source rolling gated-run window (~24 h / 10k rows) every 10 min — the reconcile FALLBACK when the forge stream is absent. |
+| `crucible-publisher@forge_gated_runs` | `publish.py --stream forge_gated_runs` | The forge-scoped 14-day verdict stream (contracts 1.48.0, D412) — the weekly run's reconcile source; its `truncated` flag marks a capped window. |
+| `crucible-failed-runs-publisher` | `export_failed_runs.py --poll-interval 300` | Exports `failed_runs_*.json` — runner-FAILED runs that never reach the gated export. Forge's D240 read path: reconcile retires matching `submitted` rows (`feedback/consumer.py` `_flush_failed_runs`) so failures don't sit `submitted` forever. |
+| `crucible-promoted-portfolios-publisher` | `export_promoted_portfolios.py --poll-interval 60` | Exports `promoted_portfolios_*` — the books QuantIQ trades; the weekly run's book step reads it with `designation_history_*` (which names the designated one). |
+| `crucible-component-contributions-publisher` | `export_component_contributions.py --poll-interval 60` | Exports per-promoted-portfolio contribution scores (D216); the weekly run's book step reads it filtered to the designated portfolio (frozen at assembly). |
 | `crucible-registry-publisher` | `export_registry.py` | Publishes the indicator registry snapshot every ~6h (timer-driven oneshot, D166; was oneshot-at-startup pre-2026-06-15). Forge re-reads the newest snapshot by mtime. |
 | `crucible-universe-publisher` | `export_universe.py` | Timer-driven oneshot publishing `universe_tickers` (the underlying set enumeration draws from). |
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |

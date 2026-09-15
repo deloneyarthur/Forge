@@ -3,7 +3,8 @@
 Migrating Forge to a new machine. Profile chosen for this transfer:
 
 - **Same user + same paths** (`aj`, `/home/aj/proj/Forge`) → no unit edits.
-- **Bring `forge.db`** → preserve the feedback/learning state (months the loop can't reconstruct).
+- **Bring `forge.db`** → preserve the verdict ledger the weekly run trains and triggers on (months
+  of decisions it cannot reconstruct).
 - **Carry the working tree, not a fresh clone** → it preserves `.git` plus any in-flight,
   not-yet-committed operator work, and it carries `crucible_contracts`, which has no git remote
   and cannot be cloned.
@@ -30,9 +31,10 @@ The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_
    the bundle and rebuilt on the new box with `uv sync`. Same for
    `.mypy_cache/.ruff_cache/.pytest_cache/.hypothesis`.
 3. **`forge.db` is held open + gitignored.** `~/forge_data/forge.db` is a multi-GB DuckDB file
-   (single copy of every submission, verdict, grammar version/proposal, promoted pattern, shadow
-   score). It is under no git, and the running service holds an intermittent RW lock — stop the
-   service before copying so the snapshot is consistent (DuckDB + WAL).
+   (single copy of every submission, verdict, grammar version, shadow score). It is under no git,
+   and a run in progress holds an RW lock — never copy while `forge-campaign.service` is active
+   (`stage_transfer.sh` refuses during a run; `--stop-service` disables the timers so none starts
+   mid-copy) — so the snapshot is consistent (DuckDB + WAL).
 
 > The grammar on the tree is committed (whatever `grammar_version:` reads in `config/grammar.yaml`, archived under
 > `config/grammar_archive/`). Carrying `.git` is for any *in-flight* operator work, not because a
@@ -46,7 +48,7 @@ The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_
 # Preview first (copies nothing):
 ~/proj/Forge/deploy/stage_transfer.sh /media/aj/FLASHDRIVE
 
-# Real copy, with the service stopped so forge.db is a consistent snapshot:
+# Real copy, with the Forge timers disabled so no run opens forge.db mid-copy:
 ~/proj/Forge/deploy/stage_transfer.sh /media/aj/FLASHDRIVE --stop-service --go
 ```
 
@@ -64,9 +66,9 @@ Produces on the drive:
 The bundle carries **only `forge.db`** out of `~/forge_data/`. Everything else there is either
 rebuilt or regenerated on the new box:
 
-- `models/`, `ranker_eval/`, `backups/`, `logs/`, `exports/` — recreated by the daemon and its
-  timers (see below). The daily ranker-eval timer republishes a fresh learned-verdict + wf_p25
-  model within a day, so `models/` need not travel.
+- `models/`, `campaigns/`, `backups/`, `logs/`, `exports/` — recreated by the weekly run and the
+  backup timer (see below). The run trains its two model families in-process (D417), so `models/`
+  need not travel; the first run on the new box refits them.
 - `king_submissions.db` — **do NOT carry it.** The king/oracle arm was retired (D190); a new box
   must not stand up any king DB, oracle, or king timer. If a naive copy drags this file along,
   delete it.
@@ -98,14 +100,13 @@ provisions Python 3.12 if the box lacks it), ensures the data dirs, runs `forge 
 `forge check`, installs and **enables** the `forge-campaign` + `forge-backup` timers with linger, and
 runs the invariant smoke test. There is no daemon unit since the 2026-09-14 cutover (D416).
 
-It deliberately does **not** start the service (pass `--start` to override) — Crucible should come
-up first.
+It deliberately runs nothing (pass `--start` for one `forge campaign --dry-run`, plan only) —
+Crucible should come up first.
 
 ### Verify the units (the script installs them all)
 
 `setup_new_box.sh` symlinks every unit in `deploy/systemd/` into `~/.config/systemd/user/`
-and enables the timers (the daemon itself starts only with `--start`, after Crucible is up).
-Confirm the full set:
+and enables the timers. Confirm the set:
 
 ```bash
 systemctl --user list-timers 'forge-*'    # forge-campaign + forge-backup scheduled
@@ -116,11 +117,7 @@ The full unit set after bring-up:
 | Unit | Cadence | Purpose | Provenance |
 |---|---|---|---|
 | `forge-backup.timer` | Sunday 04:30 UTC | DR backup of `forge.db` + `models/`, after the campaign run | D195 / G0 |
-| `forge-healthcheck.timer` | hourly | `forge healthcheck` — detect an alive-but-unproductive daemon (CRITICAL surfaces in `--state=failed`) | D197 |
-| `forge-campaign.timer` | Sunday 03:00 UTC | `scripts/campaign_run.sh` — the weekly zero-input challenger run; `FORGE_CAMPAIGN_MODE` in the unit = `dry-run` (snapshot, nothing submitted) until the Route C cutover flips it to `live` | D410/D411 |
-
-(`forge-eod-check.timer`, a 21:00 headless-Claude EOD report created 06-10, was RETIRED D253 —
-alerting superseded by the hourly healthcheck; its prompt had fossilized on a v17 baseline.)
+| `forge-campaign.timer` | Sunday 03:00 UTC | `scripts/campaign_run.sh` — the weekly zero-input challenger run; `FORGE_CAMPAIGN_MODE` in the unit = `live` since the 2026-09-14 cutover (`dry-run` snapshots the DB and plans only) | D410/D411/D416 |
 
 ### Data directories
 
@@ -160,8 +157,7 @@ filters against the synthetic cache.
 
 Watch: `journalctl --user -u forge-campaign.service -n 40`. A healthy run prints the boot checks, the
 contracts line, `grammar_version` matching `config/grammar.yaml`, the trained model ids, the five
-trigger lines and the closing `campaign <run_id>: …` line
-prefetch.
+trigger lines and the closing `campaign <run_id>: …` line.
 
 ---
 
@@ -172,7 +168,7 @@ prefetch.
 | `~/proj/crucible_contracts` (version == Forge's pin) | shared | editable dep of **both**; one copy, same dir |
 | `~/optbt_data/inbox/` | Crucible | Forge **writes** candidates here |
 | `~/optbt_data/exports/` | Crucible | Forge **reads** registry / gated / promoted / universe |
-| `~/optbt_data/db_writer.sock` + feature cache | Crucible | needed live for Forge's `--require-real-cache` iterations |
+| `~/optbt_data/db_writer.sock` + feature cache | Crucible | needed live for the run's battery (`require_real=True`); down → the run ends as an `error` record (the page) |
 | `~/forge_data/forge.db` | Forge | Forge's own state — Crucible never touches it |
 
 ---
@@ -198,7 +194,8 @@ set one on the new box if the host has only one disk.
 - [ ] `systemctl --user list-timers 'forge-*'` → `forge-campaign` (Sun 03:00 UTC) and `forge-backup`
       (Sun 04:30 UTC), both scheduled (ranker-eval / prereg-watch / healthcheck retired with the daemon, Batch 5)
 - [ ] `ls ~/proj/Forge/scripts/*.sh` → backup / campaign_run / preflight / snapshot scripts present + executable
-- [ ] Crucible up + `~/optbt_data/exports/` populated → start Forge
-- [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version` matching `config/grammar.yaml`) without
-      `SchemaVersionMismatch`
-- [ ] `uv run forge healthcheck` → green (alive AND productive) once a batch or two have run
+- [ ] Crucible up + `~/optbt_data/exports/` populated → `uv run forge campaign --dry-run` (plan only)
+- [ ] The dry-run block: every `boot <check> ok`, `grammar_version` matching `config/grammar.yaml`,
+      no `SchemaVersionMismatch`
+- [ ] After the first Sunday: `uv run forge campaign status --last 1` shows the run and
+      `systemctl --user list-units 'forge*' --state=failed` is empty

@@ -1,7 +1,8 @@
 # Task: coordinate with Crucible / contracts
 
 Scope: cross-repo work. Forge, Crucible (`../Crucible`), and `../crucible_contracts` are sibling
-repos maintained by separate agents; the operator carries messages between them. System context:
+repos maintained by separate agents; relays travel through the shared `~/proj/freeze` repo (below)
+and the operator arbitrates. System context:
 `../PIPELINE.md`.
 
 ## The boundary
@@ -14,22 +15,17 @@ repos maintained by separate agents; the operator carries messages between them.
   `src/forge/core/contracts_check.py`, refresh `uv.lock`, update test fixtures, run `forge check`.
   §13.5 halts the CLI on MAJOR mismatch. Watch-item: Crucible has bumped contracts unannounced
   (D106) — `forge check` failing after a quiet period likely means this.
-- **A contracts minor that changes parsed models is NOT live-inert** (D124 post-mortem): the
-  running daemon keeps its boot-time contracts modules, so when Crucible's republished export
-  carries the new fields, every registry load fail-loops on `extra_forbidden` until the service
-  restarts (correct fail-loud, but emission stalls). If an adoption precedes a counterparty
-  republish, the go-ahead prompt must either (a) schedule the operator-gated restart BEFORE the
-  publish, or (b) state the expected stall-and-restart explicitly. Journal trap: the loop logs
-  `registry_loaded_from_export` BEFORE validation — a stalled daemon looks half-healthy; grep
-  for `extra_forbidden` and recent `batch_id=` lines to tell.
-- **A contracts bump must restart BOTH directions' processes** (D244/D245): each process holds its
-  boot-time contracts modules, so upgrade asymmetry wedges either path. READ direction (D244):
-  Forge's daemon fail-loops on new export fields until `forge.service` restarts. SUBMIT direction
-  (D245): Crucible's `crucible-inbox-watcher` rejects 100% of Forge's submissions as
-  `extra_forbidden` when Forge emits new `StrategyConfig` fields first — surfaces only as a quiet
-  `0/N gated` per-batch stall (inbox-rejected runs enter NEITHER `gated_runs` NOR `failed_runs`;
-  healthcheck's `inbox_rejections` check, D246, CRITs on it within hours). Adoption plans must
-  name both restarts explicitly: Forge `forge.service` AND Crucible's inbox watcher + exporter.
+- **There is no Forge process to restart** (D416): the weekly run imports whatever contracts the
+  tree pins when it starts, so an adoption is a commit and the next Sunday binds it. The hazard is
+  now asymmetry ACROSS THE WEEK, in both directions (the D124 / D244 / D245 lessons, re-cut):
+  - READ: if Crucible republishes exports with new fields before Forge adopts the pin, the Sunday
+    run fails loud at boot or reconcile (`extra_forbidden`; exit 2/1, unit FAILED = the page) and
+    submits nothing — one lost week, not a stall. Adopt before their publish, or accept the week.
+  - SUBMIT: if Forge emits new `StrategyConfig` fields before Crucible's inbox watcher restarts,
+    the whole week's batch is rejected `extra_forbidden` — those runs enter NEITHER `gated_runs`
+    NOR `failed_runs`, so the only symptom is the next run's reconcile seeing 0 decisions on that
+    `batch_id`. Adoption plans must name Crucible's restart (inbox watcher + exporters)
+    explicitly; Forge's side is the commit.
 
 ## The channel (D362 — the shared repo IS the transport)
 
@@ -53,8 +49,8 @@ delivering** — there is no separate "send" step and no unsent queue to track (
 3. Version strings and UTC timestamps for any cohort you want them to cut on.
 4. What Forge will do under each possible answer.
 
-After a grammar deploy, always relay the new version string + deploy timestamp so Crucible can
-run `crucible funnel --compare`.
+After a grammar deploy, always relay the new version string + the first live run's instant (the
+cohort boundary) so Crucible can run `crucible funnel --compare`.
 
 ## Incoming
 

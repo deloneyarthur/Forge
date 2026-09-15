@@ -1,20 +1,28 @@
 # Task: investigate live behavior / query state
 
-Scope: diagnosing the running pipeline or analyzing results. Read `STATUS.md`'s top block first —
-the anomaly may already be diagnosed.
+Scope: diagnosing the weekly run or analyzing results. Read `STATUS.md`'s top block first — the
+anomaly may already be diagnosed. Era boundaries that silently wreck joins: `docs/HOW-TO.md` §Eras.
 
-## Service health
+## Run health
 
 ```bash
-systemctl --user list-units 'forge*' 'crucible*'
-journalctl --user -u forge.service -n 50 --no-pager
-journalctl --user -u forge.service --since '1 hour ago' | grep -E 'blocked|error|Traceback|submitted'
+systemctl --user list-units 'forge*' 'crucible*' --state=failed   # a FAILED forge-campaign unit is the page
+systemctl --user list-timers 'forge-*'                             # next Sunday 03:00 / 04:30 UTC
+journalctl --user -u forge-campaign.service -n 60 --no-pager       # boot rows, triggers, selection line, closing line
+SNAP=$(scripts/live_db_snapshot.sh)
+uv run forge campaign status --last 4 --forge-db "$SNAP"           # records + what each run's submissions earned
 ```
+
+How to read the block: `docs/HOW-TO.md` §Weekly check. The record itself is
+`~/forge_data/campaigns/<run_id>.json` (`campaign_run/v1`; fields in `docs/MANPAGE.md`) — a second
+`--dry-run` on the same exports must reproduce the plan; if not, compare the two records'
+`watermarks`.
 
 ## Forge DB (the lock trap)
 
-The running service holds an intermittent RW lock on `~/forge_data/forge.db` that blocks even
-`read_only` opens. Snapshot first; the copy is consistent (DuckDB file copy).
+A run in progress holds an RW lock on `~/forge_data/forge.db` that blocks even `read_only` opens;
+between runs the file is quiet, but the habit stays: snapshot first (a DuckDB file copy is
+consistent), because a Sunday run can start under you.
 
 **Use the helper — do NOT hand-roll a `cp`, and NEVER snapshot into `/tmp`:**
 
@@ -29,91 +37,40 @@ with db_connection(Path('$SNAP')) as c:
 scripts/live_db_snapshot.sh --clean          # when you are done
 ```
 
-> **⚠️ WHY (2026-08-02, learned the expensive way).** This section used to say
-> `cp ~/forge_data/forge.db /tmp/forge_snapshot.db`. **`/tmp` on this box is a 62 GB tmpfs —
-> RAM — and the live DB is 6.7 GB.** Nine investigation snapshots in one session filled it and
-> **took the shell down twice**: every command, including `true` and `/bin/echo`, returned exit
-> 1 with *no output*, because the harness could not write its own output capture. It does not
-> present as "disk full", it presents as the tooling being broken, and it cost a mid-task
-> investigation both times. The helper enforces real disk, reuses one snapshot instead of
-> making a new 6.7 GB copy per question, and gives you `--clean`. `python` is also not on PATH
-> here — use `uv run python`, per the same class of stale instruction.
-
-Note the daemon writes to the tree it runs from, so a snapshot ages the moment you take it;
-`--force` re-copies when you need the current state rather than a fresh-enough one.
+> **WHY (2026-08-02, learned the expensive way).** `/tmp` on this box is a 62 GB tmpfs — RAM — and
+> the live DB is ~7 GB. Nine hand-rolled snapshots in one session filled it and took the shell down
+> twice: every command, `true` included, returned exit 1 with no output, because the harness could
+> not write its own output capture. It presents as broken tooling, not as "disk full". The helper
+> enforces real disk, reuses one copy instead of a new 7 GB per question, and gives you `--clean`.
+> `python` is also not on PATH here — use `uv run python`. `--force` re-copies when you need the
+> current state rather than a fresh-enough one.
 
 Useful queries (tables: `docs/MANPAGE.md` FORGE STATE DB):
 
 ```sql
--- Recent batches
+-- Campaign submissions by trigger and status
+SELECT selection_mode, status, COUNT(*) FROM submissions
+WHERE selection_mode LIKE 'campaign:%' GROUP BY 1, 2 ORDER BY 1, 2;
+-- Recent batches (one per weekly run that submitted)
 SELECT forge_batch_id, submitted_at, batch_size, promotion_rate, common_failures
 FROM batch_summaries ORDER BY submitted_at DESC LIMIT 10;
--- Status of the latest batch
-SELECT status, COUNT(*) FROM submissions
-WHERE forge_batch_id = (SELECT forge_batch_id FROM batch_summaries ORDER BY submitted_at DESC LIMIT 1)
-GROUP BY status;
--- Pending proposals / grammar audit trail
-SELECT proposal_id, proposed_at, proposal_type, rationale FROM grammar_proposals WHERE status='pending';
+-- What the campaign cohort earned (the durable ledger; re-gates append per run_id)
+SELECT v.decision, COUNT(*) FROM verdicts v JOIN submissions s USING (config_hash)
+WHERE s.selection_mode LIKE 'campaign:%' GROUP BY 1;
+-- Grammar version history (the loader's audit writes it on an operator bump)
 SELECT version, change_type, decided_at, operator_initials FROM grammar_versions ORDER BY decided_at DESC LIMIT 20;
 ```
 
 ## Crucible exports (Forge's only read path into Crucible)
 
 ```bash
-ls -t ~/optbt_data/exports/gated_runs_*.json | head -1   # fresh = < ~2 min old
+ls -t ~/optbt_data/exports/forge_gated_runs_*.json | head -1   # the 14-day forge-scoped verdict stream; fresh = minutes old
+ls -t ~/optbt_data/exports/gated_runs_*.json | head -1         # the all-source rolling top-10k window — the FALLBACK only
 ```
 
-Join export rows to `submissions` on `config_hash`. The export is a rolling **top-10k** window.
-
-## Cohort hygiene (gets analyses wrong silently)
-
-- Split by `grammar_version` (in the export since contracts 1.15.0). Pre-v5 re-gated rows carry
-  `grammar_version=None` — exclude them or they dominate "recent" aggregates (the D103 trap).
-- v9's true code cutover is **2026-06-06T06:48:49Z** (reboot-deploy), not the 06-07 migration (D104).
-- Timestamps before 2026-06-07 are PDT; after, UTC. Convert before joining DB rows or journals.
-- `decided_at` eras: exports published AFTER 2026-06-09T22:55Z emit tz-aware UTC (Crucible
-  fixed storage + export end-to-end, D117); on-disk export files from before then carry
-  naive LOCAL values (mixed eras — do not trust them without the +7h correction). The
-  `verdicts` table was repaired once via `scripts/migrate_verdicts_decided_at.py` (script
-  retired 2026-07-20, D295 — recoverable from git history); rows
-  written after the fix are correct at ingest.
-- **Cost-floor value era: hard-cut at `2026-06-09T22:52:57Z`** (Crucible-confirmed exact
-  restart; their "~23:09" STATUS note is the deploy-sequence tail). WF/CPCV/Sharpe **values**
-  decided before the cut were priced with zero slippage — never learn from or compare gate
-  values across the cut (D124).
-- **Coverage honesty is a row marker, not a time-cut:** trust
-  `gate_results["regime_coverage"].passed == true` AND `detail` NOT containing
-  `'coverage_unverified'` — byte-for-byte Crucible's `honest_regime_coverage` predicate.
-  Real coverage floors went live 2026-06-10T01:00:02Z (pairs) / 01:28:03Z (rank); earlier
-  rank/pairs coverage passes are unverified (D124).
-- **Fullhist-refit children re-gate under the same `config_hash` with a new `run_id`** —
-  `verdicts` holds both parent and child rows; lineage pointer at
-  `universe_json.submission_metadata.fullhist_refit_of` (D124).
-- **Earnings-calendar eras (D130, two-stage):** the forward calendar NEVER existed before
-  **2026-06-10T17:05:01Z** (`days_to_earnings` = 999 every bar before it → `<`-gates never
-  admitted; exposure contained at 86 prefilter-era submissions, zero verdicts). Indicator-side
-  reads are real from 17:05:01Z; **the mandatory `earnings_exit` only fires from Crucible's
-  NEXT runner restart after that** (wiring `1ca0361` — boundary flagged by them when it lands;
-  check D130/STATUS for the timestamp). Every backtest decided before the exit-side boundary
-  HELD THROUGH EARNINGS, every single-name config. Post-boundary protection is PARTIAL, not
-  binary: filing-date anchors are late for ~32.5% of events (their §20 probe) — do not read
-  the era flip as full earnings-risk exclusion.
-- **Chain open-interest eras (D404/D405, three dates, all forward-edge only):** bars before
-  **2026-07-17** are untouched by any of them. **07-17 → 08-11:** canonical `open_interest` was a
-  volume alias (`== volume` on every row), so the min-OI fill floor was a volume floor.
-  **08-12 → 2026-09-06T07:32:41Z:** canonical OI NULL on every row (`ibkr_tick101` real-or-NULL);
-  Crucible's selector skipped every IBKR near-ATM strike, every entry came from a CBOE supplement
-  row, and the spread gate bound hard (`spread_too_wide` 4–8% → 32–44% of signals). **From
-  2026-09-06T07:32:41Z** (runner restart; stage one and stage two share the shard): CBOE panel OI
-  folds onto canonical rows by OCC symbol — near-ATM selectable again, and the 07-17 → 08-11
-  alias is replaced by real OI where the panel has the contract. A verdict's era is its
-  `decided_at` against these instants — nothing on the row stamps it (the D386 Layer-2 gap).
-  Exposure is the span of affected bars inside the run window: ≤36 sessions today (~2.9% of a
-  5-yr stage-one window, ~1.6% of fullhist), growing a session per session. Watch the weekly
-  median of `gate_results['min_oos_trade_count'].value`: a move at an era boundary is basis, not
-  supply.
-- Post-D105, the sampler is weighted — condition scans on the live weights (no more
-  quasi-randomization).
+Join export rows to `submissions` on `config_hash`. The forge stream's `truncated` flag means its
+OLDEST verdicts are missing; the run then skips the aged-out flush (D415). Read the stream through
+`crucible_contracts.load_forge_gated_runs_from_export`, never by glob — the all-source glob collides.
 
 ## Refit-lane cohorts (`verdicts.refit_selection`) — the skim trap
 
@@ -140,39 +97,32 @@ Measured on our own rows (stage two, post-boundary):
 - **`promote_stamp_recovery` is excluded from BOTH**, always. It is a one-shot selected batch,
   not a lane.
 
-**AND ONE THAT IS OURS ALONE — the recovery batch is invisible to the tag in our mirror.** Our
-23 recovery rows were ingested minutes *before* the `refit_selection` column shipped (D375) and the
+**And one that is ours alone — the recovery batch is invisible to the tag in our mirror.** Our 23
+recovery rows were ingested minutes *before* the `refit_selection` column shipped (D375) and the
 writer is `INSERT OR IGNORE`, so they carry **NULL, not `'promote_stamp_recovery'`**. A naive
-`refit_selection IS NULL` filter therefore *includes* them:
-
-```
-untagged as-is                  n=1,887  medCPCV +0.5101  promotes 23
-  of which recovery-window      n=   14  medCPCV +1.5777  promotes  8
-untagged MINUS recovery window  n=1,873  medCPCV +0.5081  promotes 15
-```
-
-0.7% of the rows, **35% of the promotes**. Median-based reads barely notice; **promote-rate reads
-inflate by 53%**. So on our side the exclusion must be done by time, not tag:
+`refit_selection IS NULL` filter therefore *includes* them: 0.7% of the untagged rows, **35% of its
+promotes** (14 rows, medCPCV +1.5777, 8 promotes) — median reads barely notice, promote-rate reads
+inflate by 53%. Exclude them by time, not tag:
 
 ```sql
 AND decided_at NOT BETWEEN '2026-08-07 00:32:40' AND '2026-08-07 00:33:15'
 ```
 
-Rows from our next reconcile forward are correctly tagged; this applies only to that one batch.
+Rows reconciled after the column shipped are correctly tagged; this applies only to that one batch.
 
 ## Benign signals — do not "fix" these
 
 - `crucible-ingest-daily` unit "failed" — rfr-only oneshot failure; bars/chains fine.
-- `skipped: real feature cache unavailable` — `--require-real-cache` correctly skipping an
-  iteration while Crucible's db-writer is down/restarting.
 - Crucible runner/db-writer "Consumed … N G memory peak" on a CLEAN stop — a deploy restart,
   not an OOM or leak; the systemd peak counts reclaimable page cache (D117). The
   flag-worthy signal is an `oom-kill` line, nothing else.
+- `forge_gated_runs` `truncated: true` while the daemon era's last batches are inside the 14-day
+  window (STATUS has the date it should clear). After that date it is a relay, not a shrug (D412).
 
-## Retired daemon-era signals (Batch 5 G4, D421)
+## Retired daemon-era signals (Batch 5, D416–D421)
 
-The `blocked: …` journal lines (`prev batch N% gated`, `crucible stalled`, `in-flight depth N
-exceeds cap M`) came from the §7.3 rate limiter, deleted with the daemon era. The weekly run has
-no in-flight backpressure: `campaign.weekly_cap` bounds a run and the boot check refuses on an
-inbox backlog above `campaign.inbox_backlog_ceiling`. History: D046 / D137 / D196 / D200 and the
-D205 / D240 / D245 wedge incidents.
+`blocked: …` journal lines (`prev batch N% gated`, `crucible stalled`, `in-flight depth N exceeds
+cap M`) came from the §7.3 rate limiter; `skipped: real feature cache unavailable` from the daemon's
+`--require-real-cache` iteration skip. Neither exists: the weekly run has no in-flight backpressure
+(`campaign.weekly_cap` + the inbox-backlog boot check) and a missing writer socket ends the run as an
+`error` record (the page). History: D046 / D137 / D196 / D200 and the D205 / D240 / D245 wedges.

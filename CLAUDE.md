@@ -1,25 +1,26 @@
 # CLAUDE.md
 
 Project: **Forge** — candidate strategy generator for the Forge → Crucible → QuantIQ pipeline.
-Forge is a **producer**, not a validator: it enumerates grammar-valid strategy configs, cheaply
-pre-filters them, and submits survivors to Crucible's gate. Most submissions are rejected —
-**that is correct behavior** (§1.2, §1.3). Forge succeeds when its stream becomes *more likely*
-to promote over time. Crucible is the authority on quality; when in doubt, defer to it.
+Forge is a **producer**, not a validator: once a week it decides whether any cell of the strategy
+space deserves challengers, enumerates grammar-valid configs, cheaply pre-filters them, and submits
+survivors to Crucible's gate. Most submissions are rejected — **that is correct behavior** (§1.2,
+§1.3) — and a week that submits nothing is the design. Crucible is the authority on quality; when
+in doubt, defer to it.
 
-**Source of truth: `docs/DESIGN.md`.** If anything contradicts the spec, the spec wins; if
-something isn't in it, ask before inventing. Quote § numbers when justifying decisions.
+**Sources of truth:** `docs/DESIGN.md` for intent and invariants (§ numbers are the citation
+currency; bannered sections record what left the tree), `docs/architecture.md` for what is built.
+If something is in neither, ask before inventing. Quote § numbers when justifying decisions.
 
 ## This working tree IS production
 
-`forge-campaign.timer` (systemd user unit, Sundays 03:00 UTC) runs `forge campaign` from THIS
-directory via editable install — the weekly run is the pipeline since the 2026-09-14 cutover
-(D416); there is no daemon.
+`forge-campaign.timer` (systemd user unit, Sunday 03:00 UTC) runs `forge campaign` from THIS
+directory via editable install. There is no daemon (D416, 2026-09-14).
 
-- Grammar bumps build in a worktree (`git worktree add ../Forge-build`); other work in this
-  tree, short dirty windows. Keep this tree `git status`-clean: the next Sunday run (and a
-  reboot's re-armed timer) executes whatever the tree contains, committed or not (D104).
-- Deploys follow `docs/tasks/deploy.md`: preflight (clean deploy surface + full suite) → commit
-  → the next run deploys; verify with a hand `forge campaign --dry-run`. Nothing to restart.
+- Keep this tree `git status`-clean: the timer fires onto whatever the tree contains, committed or
+  not (D104). Grammar bumps build in a worktree (`git worktree add ../Forge-build`); other work
+  here, in short dirty windows.
+- A commit IS the deploy (`docs/tasks/deploy.md`: preflight → commit → the next Sunday run picks it
+  up; verify with `forge campaign --dry-run`). Starting the service by hand submits for real.
 
 ## Stack & commands
 
@@ -45,8 +46,8 @@ uv run forge --help                       # CLI reference: docs/MANPAGE.md
 4. **Grammar changes require a preregistration and the operator's signature.** No code writes
    `config/grammar.yaml` at runtime; the pre-commit `freeze-governance` and `grammar-version-bump`
    hooks enforce it (D390/D392). `OPEN_PROPOSALS.md` is a static, machine-parsed record.
-5. **No LLM in the production loop.** Enumerator / pre-filters / ranker / submitter / feedback
-   are deterministic Python.
+5. **No LLM in the production loop.** Every stage of the weekly run (reconcile / train / enumerate /
+   prefilter / gate / rank / submit) is deterministic Python — classical ML is fine, LLMs are not.
 6. **Enumeration is deterministic.** Same `(grammar_version, registry_hash, seed)` → same
    sequence. Property-tested; versionless changes must be cold-start byte-identical.
 7. **The grammar must not permit `equity` as a signal family** (§13.6). Crucible is options-only.
@@ -60,15 +61,15 @@ uv run forge --help                       # CLI reference: docs/MANPAGE.md
 
 ## Blessed APIs — use these, nothing else
 
-- **`crucible_contracts`** — the only inter-system import path. Models (StrategyConfig,
-  SignalSpec, RegistrySnapshot, GatedRun, PromotionDecision, …), helpers (`submit_candidate`,
-  `get_recent_gated_runs`, `get_promoted_strategies`, `validate_config_against_registry`, …),
-  layout/limit constants, exceptions (`ConfigInvalid`, `QueryError`, `SchemaVersionMismatch` —
-  never silently caught outside test fixtures).
+- **`crucible_contracts`** — the only inter-system import path: models (StrategyConfig,
+  RegistrySnapshot, GatedRun, …), helpers (`submit_candidate`, `load_forge_gated_runs_from_export`
+  — the verdict stream, never the all-source glob — `get_recent_gated_runs`,
+  `get_promoted_strategies`), layout/limit constants, exceptions (`ConfigInvalid`, `QueryError`,
+  `SchemaVersionMismatch` — never silently caught outside test fixtures).
 - **`forge.core.clock.utc_now()`** — the only clock. **`forge.core.seed.SeedHierarchy`** — the
   only RNG source (rule #8).
-- **`forge.core.contracts_check.check_contracts_version()`** at CLI startup; the
-  `FORGE_EXPECTED_CONTRACT_VERSION` pin lives there (§13.5).
+- **`forge.core.contracts_check.check_contracts_version()`** at CLI startup and in the campaign
+  boot check; the `FORGE_EXPECTED_CONTRACT_VERSION` pin lives there (§13.5).
 - **`forge.persistence.db.db_connection(path)`** — the only way to open Forge's DB.
 - **`crucible_contracts.submit_candidate(config, inbox_path)`** — the write path to Crucible's
   inbox (atomic tmp-then-rename, JSON per D006).
@@ -86,26 +87,28 @@ command; type hints on every public signature; docstrings say WHY, not what; no 
 
 ## Pitfalls (recurring, verified)
 
-- Live `~/forge_data/forge.db` holds an intermittent RW lock — even read-only opens fail.
+- A run in progress holds an RW lock on `~/forge_data/forge.db` — even read-only opens fail.
   Use `scripts/live_db_snapshot.sh` (never /tmp — a 62 GB tmpfs; `docs/tasks/investigate-live.md`).
-- Timestamps before 2026-06-07 are PDT (old box); after, UTC. Convert before joining.
-- Crucible's gated export is a rolling top-10k window with pre-v5 re-gate pollution; split
-  cohorts by `grammar_version` and time-cut v9 at 2026-06-06T06:48:49Z (D104).
-- Eight test files import `forge.cli.main` (six only import `app`); the daemon loop and its
-  monkeypatch seams left in Batch 5 G1 — `main.py` is now a thin Typer entry point.
+- Era boundaries silently wreck joins (PDT→UTC 2026-06-07, the v9 time-cut, the cost floor, the
+  OI eras, the refit-lane skim): read `docs/HOW-TO.md` §Eras before any cohort analysis.
+- Crucible's forge stream reads `truncated: true` until the daemon era's tail leaves the 14-day
+  window (STATUS has the date); after that a truncated file is a relay, not a shrug. The run skips
+  the aged-out flush whenever the window is incomplete or absent (D415).
+- `submitted_hashes` in campaign records is Crucible's join key — never rename or drop it; the
+  `selection_arm` sent to Crucible must be a value their Literal admits (campaign lanes stamp `ranked`).
 - `crucible-ingest-daily` "failed" is benign (rfr-only). Don't "fix" it.
 
 ## Operator gates — when to stop and ask
 
-Grammar bumps, loosenings, deploys/restarts, and §3.5 rule edits are operator-gated. Grammar
-FROZEN at v55 (D390): any change needs an open prereg first (pre-commit `freeze-governance`;
-§5 reopeners only). Each increment gets a D-entry plus a `STATUS.md` update.
+Operator-gated: grammar bumps (FROZEN at v55, D390 — open prereg first; §5 reopeners only), §3.5
+rule edits, `deploy/systemd/` edits, a live `systemctl --user start forge-campaign.service`. Each
+increment gets a D-entry plus a `STATUS.md` update.
 
 Stop immediately if: DESIGN.md self-contradicts; a hard-to-reverse structural choice looms
-(predicate types, filter ordering, DB schema); `crucible_contracts` lacks a needed model/field;
-a §3.5 rule seems wrong or in tension; a test fails undiagnosed for >1 hour; you want to propose
-a spec deviation. Everything else: log to `OPEN_QUESTIONS.md` with severity and proceed with the
-best interpretation. Deviations are proposed as Decision Log entries, never silent edits.
+(predicate types, filter ordering, DB schema, the run-record fields Crucible joins on);
+`crucible_contracts` lacks a needed model/field; a §3.5 rule seems wrong; a test fails undiagnosed
+for >1 hour; you want to propose a spec deviation. Everything else: log to `OPEN_QUESTIONS.md` with
+severity and proceed with the best interpretation. Deviations are Decision Log entries, never silent edits.
 
 ## Session discipline
 
@@ -115,8 +118,8 @@ rather than trusting context memory.
 
 Docs are part of the change: if a commit alters a CLI command/flag, a ritual, a config file's
 meaning, or module layout, update the doc that owns it (routing table below) in the same commit.
-Volatile facts (versions, weights, counts) belong in `STATUS.md`/D-entries, never in docs —
-a doc may state where a value lives, never the value.
+Volatile facts (versions, weights, counts, dates that will pass) belong in `STATUS.md`/D-entries,
+never in docs — a doc may state where a value lives, never the value.
 
 ## Where to look
 
@@ -124,19 +127,16 @@ a doc may state where a value lives, never the value.
 |---|---|
 | Spec / intent | `docs/DESIGN.md` (§3 grammar, §5 prefilters, §13 invariants) |
 | Live state, recent decisions | `STATUS.md` (top block), `IMPLEMENTATION_DECISIONS.md` (D###) |
-| As-built map, data flow, change taxonomy, root-file taxonomy | `docs/architecture.md` |
-| CLI commands / flags / scripts / services / DB tables | `docs/MANPAGE.md` |
-| Operating the pipeline (start/stop/recover) | `docs/HOW-TO.md` |
+| As-built map, data flow, change taxonomy, root-file taxonomy, terms | `docs/architecture.md` |
+| CLI commands / flags / scripts / services / DB tables / the run record | `docs/MANPAGE.md` |
+| Operating the weekly run (check, recover, eras) | `docs/HOW-TO.md` |
 | Grammar rules narrative (sync-enforced with grammar.yaml) | `docs/GRAMMAR.md` |
 | Changing grammar / enumeration policy (frozen — prereg first) | `docs/tasks/grammar-change.md` |
-| Deploying to the live service | `docs/tasks/deploy.md` |
-| Feedback / learned-weight changes | `docs/tasks/feedback-change.md` |
-| Debugging live behavior, DB/export queries | `docs/tasks/investigate-live.md` |
+| Deploying (the tree is the deploy; the Sunday run picks it up) | `docs/tasks/deploy.md` |
+| Debugging a run, DB/export queries | `docs/tasks/investigate-live.md` |
 | Lint / test / commit / hooks | `docs/tasks/quality-gates.md` |
 | Crucible / contracts coordination (relays: `~/proj/freeze/relays/`) | `docs/tasks/crucible-handoff.md` |
-| Active proposals / freeze programme | `docs/proposals/` (terminal ones: `_archive/PROPOSAL_*.md`) |
-| Domain terms | `docs/architecture.md` §Terms |
-| Indicator thresholds | `src/forge/enumeration/indicator_thresholds.py` |
+| The plan of record for the final state | `docs/proposals/repo-simplification-2026-09.md` (§12); terminal proposals: `_archive/PROPOSAL_*.md` |
 | New machine / migration | `deploy/NEW_BOX_TRANSFER.md` |
 
 Build slowly. Test ruthlessly. Trust the grammar — it is the heart of Forge.

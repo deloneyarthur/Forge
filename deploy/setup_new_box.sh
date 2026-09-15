@@ -16,7 +16,7 @@
 #   6. ensure ~/forge_data dirs; place forge.db if --copy-db given
 #   7. forge version + forge check  (contracts compat + DB schema-ensure)
 #   8. install + enable the systemd user timers (forge-campaign, forge-backup) (+ linger);
-#      start the daemon only if --start
+#      run one `forge campaign --dry-run` only if --start (there is no daemon, D416)
 #   9. invariant smoke test (the must-be-green bar)
 #
 # Flags:
@@ -96,7 +96,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 command -v uv >/dev/null 2>&1 || die "uv not on PATH after install — open a new shell or add ~/.local/bin to PATH"
 printf 'uv: %s\n' "$(uv --version)"
-command -v git >/dev/null 2>&1 || warn "git not found — needed to commit the v9 work later (apt install git)"
+command -v git >/dev/null 2>&1 || warn "git not found — needed to commit on this box (apt install git)"
 
 # --- 4. drop non-portable build artifacts that rode along ----------------------
 say "Removing stale .venv + caches (rebuilt below)"
@@ -129,8 +129,8 @@ say "forge version + forge check"
 ( cd "$FORGE" && uv run forge version )
 ( cd "$FORGE" && uv run forge check )   # contracts compat (§13.5) + DB schema-ensure
 
-# --- 8. systemd user units (daemon + timers) -----------------------------------
-say "Installing systemd user units (daemon + timers)"
+# --- 8. systemd user units (the two timer pairs) --------------------------------
+say "Installing systemd user units (forge-campaign + forge-backup)"
 UNIT_DIR="$HOME/.config/systemd/user"
 [ -f "$FORGE/deploy/systemd/forge-campaign.service" ] || die "missing unit file $FORGE/deploy/systemd/forge-campaign.service"
 mkdir -p "$UNIT_DIR"
@@ -176,5 +176,5 @@ Next steps
   3. Watch a live run:   journalctl --user -u forge-campaign.service -n 40
   4. Confirm health:     cd $FORGE && uv run forge check
   5. Verify the timers:  systemctl --user list-timers 'forge-*'
-     (forge-healthcheck reports CRITICAL until the daemon is started — expected.)
+     (a FAILED forge-campaign unit after a Sunday is the only page; no daemon exists, D416.)
 EOF

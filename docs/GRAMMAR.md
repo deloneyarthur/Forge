@@ -1,14 +1,17 @@
 # Forge — Hypothesis Grammar Narrative
 
-Every rule in `config/grammar.yaml` has a section in this document, paired by id. The pre-commit hook (`scripts/check_grammar_doc_sync.py`) enforces the pairing. The rule's `rationale_ref` points here (`GRAMMAR.md#{id}`).
+Every rule in `config/grammar.yaml` has a section here, paired by id; the pre-commit hook
+(`scripts/check_grammar_doc_sync.py`) enforces the pairing, and each rule's `rationale_ref` points
+here (`GRAMMAR.md#{id}`). The grammar is **FROZEN at v55** (D390): any change needs an open
+preregistration first (`docs/tasks/grammar-change.md`), and no code writes `grammar.yaml` at
+runtime (hard rule #4) — loosenings are operator commits, never applied by machinery.
 
-For each rule, four things:
-- **What.** Plain-language statement of the rule.
-- **Why.** The hypothesis the rule encodes — what failure mode it prevents.
-- **Cost.** How much of the strategy search space it eliminates (low / medium / high), interpreted the same way as `cost_estimate` in the YAML.
-- **Evidence to relax.** What we'd need to observe to justify loosening or removing the rule. Loosenings go through the `OPEN_PROPOSALS.md` review path (Phase 5); never silently to `grammar.yaml`.
-
-See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. Encoding notes (predicate-type choices, table values) live in `IMPLEMENTATION_DECISIONS.md` (D009-D018).
+Per rule: **What** (the LIVE rule — the predicate code in `src/forge/grammar/custom_predicates.py`
+is the source of truth), **Why**, **Cost** (low / medium / high, read like `cost_estimate` in the
+YAML), **Evidence to relax**. Where a rule body was amended after v1, the admission is one line
+carrying its D-entry; the measurement narrative lives in `IMPLEMENTATION_DECISIONS.md`, not here.
+`DESIGN.md` §3.5 holds the v1 statements verbatim (its drift banner names which bodies moved);
+encoding notes are D009–D018.
 
 ---
 
@@ -36,24 +39,16 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 ### S3: At least one regime gate per strategy
 
-> **v35 (D280) carve-out, shared with R1:** a mean_reversion config whose DIRECTIONAL is the
-> capitulation `momentum` id (the D270 C2 carve-out) is exempt from the min-1 regime gate —
-> the operator-approved BARE-DROP arm (OPEN_PROPOSALS `4d35a046`, Crucible adjudication
-> 2026-07-15: the v31 pinned rv_rank gate bound harmfully, 69/69 dead; no replacement gate).
-> Rule yaml untouched; the exemption lives at both predicate surfaces
-> (`_R1_GATE_EXEMPT_DIRECTIONALS`), keyed on the directional's exact indicator tuple.
+**What.** At least one signal has `role: regime_filter`. Two amendments, both at the predicate
+surface with the YAML untouched:
 
-> **`>=1` permits an OPTIONAL SECOND gate (no rule change).** The `min: 1`
-> cardinality has always allowed >1 regime gate; the sampler exercises this via
-> one mutually-exclusive optional-second-gate slot (max 2 total): the calm-side
-> VETOES (dsj v25, ivol/market_rv v26/v29, ref_trailing_return v39 — dormant
-> until Crucible serves the id) and, since **v44 (D317)**, the `vix_term_slope`
-> CONDITIONER on the xsect trend arm (ANDed onto a **hurst** trend-strength
-> primary — v45/D319 narrowed it from {adx,hurst} to hurst-only, adx×resid being
-> dead — the confirmed resid_vix price-axis pair; active immediately, vix is
-> already served). C1 keeps the second gate a different family from the primary.
-
-**What.** At least one signal has `role: regime_filter`.
+- **Exempt (v35, D280; shared with R1):** a `mean_reversion` config whose directional is the
+  capitulation `momentum` id (the C2 per-id carve-out) needs no gate — the operator-approved
+  bare-drop arm (`_R1_GATE_EXEMPT_DIRECTIONALS`, keyed on the directional's exact indicator tuple).
+- **`min: 1` permits an optional SECOND gate:** the sampler fills one mutually-exclusive
+  second-gate slot (max 2 total) from the veto pools listed under R1 and R2. The v44 hurst×vix
+  conditioner draw (D317/D319) was retired at v55 (D366). C1 keeps the second gate a different
+  family from the primary.
 
 **Why.** A strategy without a regime gate fires in every market state, including states where its hypothesis is structurally wrong. Mean-reversion fires when momentum is at its strongest; trend-continuation fires when the market is range-bound; volatility-event fires when no event is near. Each fire in the wrong regime is dead-weight risk. Requiring an explicit regime gate forces the strategy to declare when it should *not* fire.
 
@@ -68,18 +63,11 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 - `medium_lookback`: `swing_short` or `swing_mid`
 - `long_lookback`: `swing_mid` or `swing_long`
 
-> **v8 (D102, 2026-06-04).** The horizon is read from the Forge-owned table in
-> `forge.grammar.signal_horizon`, **not** `IndicatorMetadata.lookback`. The live
-> Crucible registry reports `lookback=0` for 34 of 43 indicators (and wrong
-> values for most of the rest — `rsi_2`→14, `adx`/`hurst`/`macd`→0), which had
-> collapsed this rule to "almost everything → `swing_short`" and produced
-> horizon-*mismatched* configs. v8 also makes the bucket *derived* from the
-> directional horizon at generation (`DTE_target = k·horizon`, snapped to the
-> nearest permitted bucket) rather than sampled blind, and stops the regime gate
-> from constraining the bucket (S4 was always about the directional signal). No
-> change to this rule's *intent* or text — only its horizon input and the
-> generation-time selection that honors it. See `IMPLEMENTATION_DECISIONS.md`
-> D102.
+The horizon is the Forge-owned table in `forge.grammar.signal_horizon`, **not**
+`IndicatorMetadata.lookback` (v8, D102 — the live registry reports `lookback=0` for most
+indicators, which had collapsed the rule to "almost everything → `swing_short`"); v8 also derives
+the bucket from the directional horizon at generation (`DTE_target = k·horizon`, snapped to the
+nearest permitted bucket) and stops the regime gate from constraining it. Intent and text unchanged.
 
 **Why.** A signal's lookback is its hypothesis about the time scale at which information matters. A 2-day RSI is making a 2-day claim; a 252-day momentum is making a multi-month claim. Pairing a 252-day signal with a 14-21 DTE position means the trade closes long before the signal's underlying thesis can play out. The match enforces that signal time-scale and position time-scale agree.
 
@@ -89,14 +77,10 @@ See `DESIGN.md` §3 for grammar structure and §3.5 for the original ruleset. En
 
 ### S5: Exit framework consistent with hypothesis
 
-> **(v3, D071-final)** — schema bump. The original v1/v2 model named a single
-> required exit per hypothesis ("must include `trailing_atr`"). v3 replaces that
-> with a four-part composition (`required_always` / `required_from_set` /
-> `optional_additions` / `forbidden`) so a hypothesis can offer a *choice* of
-> equivalent exits. Operator-approved; see `IMPLEMENTATION_DECISIONS.md`
-> D071-final and the source-of-truth table `_S5_HYPOTHESIS_EXITS` in
-> `src/forge/grammar/custom_predicates.py`. The §3.5 DESIGN text still uses the
-> single-required wording — see the L-3 amendment note in DESIGN §3.5 S5.
+Schema: v3 (D071-final) replaced "one required exit per hypothesis" with a four-part composition so
+a hypothesis can offer a *choice* of equivalent exits. The source-of-truth table is
+`_S5_HYPOTHESIS_EXITS` in `src/forge/grammar/custom_predicates.py`; DESIGN §3.5 keeps the v1
+single-required wording, bannered.
 
 **What.** Every config carries the four E1 mandatory exits
 (`expiry_exit`, `theta_cliff_exit`, `earnings_exit`, `liquidity_exit`, per
@@ -122,23 +106,17 @@ is a "foreign" exit and rejects.
 | `tail_hedge` | `roll_on_schedule_exit` | — | — | `hard_profit_target` |
 | `event_momentum` (v12, D109) | — | `time_stop` | `trailing_atr` / `chandelier_exit` | `hard_profit_target` |
 
-(`tail_hedge` is overlay-only and filtered at the sampler via D066's
-`OVERLAY_ONLY_HYPOTHESES`; its row is retained for parity. `hard_profit_target`
-is the canonical "profit-taking" exit forbidden per §3.5 — see D015 / D018.
-D236 (v23): `parabolic_sar_exit` was dropped from the `trend_continuation`
-pool — Crucible's exit sweep found `chandelier_exit` beats it on both the
-CPCV-p25 tail and WF; `chandelier_exit` also samples an `atr_multiplier`
-∈ [2.0, 3.0] tuned trail. D290 (v39): `event_passed_exit` moved from
-required to FORBIDDEN on `volatility_event` — Forge never emitted an
-`event_indicator`, so it always ran Crucible's fallback mode (a hard cut at
-entry+n_bars) truncating every ve hold; `time_stop` (n_bars ~ U[4,7]) is the
-required hold instead. D291 (v40): the `mean_reversion` required_from_set
-pick is WEIGHTED, not uniform — `time_stop` at p=0.65 (the timer-MR cell
-converts best; sampler policy, the schema sets themselves are unchanged) —
-and MR timer draws sample `n_bars` ~ U[8,12] at every non-capitulation
-bucket.)
+Lineage of the table: `tail_hedge` is overlay-only and filtered at the sampler (D066
+`OVERLAY_ONLY_HYPOTHESES`; row kept for parity); `hard_profit_target` is the canonical
+"profit-taking" exit §3.5 forbids (D015/D018); `parabolic_sar_exit` left the trend pool (v23, D236 —
+`chandelier_exit` beat it on both the CPCV-p25 tail and WF; chandelier samples an `atr_multiplier`
+∈ [2.0, 3.0] trail); `event_passed_exit` moved from required to FORBIDDEN on `volatility_event`
+(v39, D290 — Forge never emitted an `event_indicator`, so it only ever ran Crucible's fallback hard
+cut that truncated every ve hold; `time_stop` ~ U[4,7] is the required hold instead); the
+`mean_reversion` pick is WEIGHTED toward `time_stop` (p=0.65) and MR timer draws sample `n_bars`
+~ U[8,12] (v40, D291 — sampler policy; the sets themselves are unchanged).
 
-**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — a trailing/chandelier stop captures that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — a time stop or target/zscore exit bounds exposure. Volatility-event strategies have a discrete event in mind — exits reference the IV collapse (`iv_crush_exit`) plus a short required hold (`time_stop`; `event_passed_exit` is forbidden since v39/D290 — with no `event_indicator` emitted it only ever ran the fallback hard cut that truncated every ve hold). `event_momentum` (v12, D109) rides the post-earnings drift, which decays over ~5–20 td: a `time_stop` is the primary exit (the drift window closing), momentum trailing (`trailing_atr`/`chandelier_exit`) optionally lets a strong drift run, and `hard_profit_target` is forbidden — the payoff is convex/positive-skew (long optionality on the drift), the same profile as the vol_event winners. The `required_from_set` choice lets Forge enumerate equivalent exit framings without contradicting the hypothesis; the `K_MAX_OPTIONAL` cap keeps the optional tail from bloating the stack.
+**Why.** Each hypothesis has a built-in answer to "when is the trade over." Trend strategies are right until the trend breaks — a trailing/chandelier stop captures that; hard profit targets cap upside on the very moves the strategy is trying to ride. Mean-reversion is right within a known time horizon — a time stop or target exit bounds exposure. Volatility-event strategies have a discrete event in mind — exits reference the IV collapse (`iv_crush_exit`) plus a short required hold (`time_stop`). `event_momentum` (v12, D109) rides the post-earnings drift, which decays over ~5–20 td: a `time_stop` is the primary exit (the drift window closing), momentum trailing (`trailing_atr`/`chandelier_exit`) optionally lets a strong drift run, and `hard_profit_target` is forbidden — the payoff is convex/positive-skew (long optionality on the drift), the same profile as the vol_event winners. The `required_from_set` choice lets Forge enumerate equivalent exit framings without contradicting the hypothesis; the `K_MAX_OPTIONAL` cap keeps the optional tail from bloating the stack.
 
 **Cost.** Medium. Excludes most internally-inconsistent exit stacks; the surviving candidates have well-shaped exits.
 
@@ -150,7 +128,13 @@ bucket.)
 
 ### C1: No two indicators from the same family
 
-**What.** Across all signals in the strategy, no two indicators share the same `IndicatorMetadata.family` (the 13 canonical families: `trend`, `trend_strength`, `mean_reversion`, `volatility`, `iv_structure`, `dealer_positioning`, `flow`, `macro`, `calendar`, `fundamental`, `smart_money`, `pairs`, `post_event_drift`). The check reads `IndicatorMetadata.family` dynamically — the canonical list is `crucible_contracts._INDICATOR_FAMILIES` (13 since v12/D109 added `post_event_drift` for H2 event_momentum; `trend_strength` was added by D019); this prose count is informational only. **This is the §2.1 fact H2 depends on:** `sue` is `post_event_drift` and `days_since_earnings` is `calendar` (Crucible reclassified it from `post_event_drift`), so the PEAD pair — surprise directional + post-event timing gate — is C1-legal in one config.
+**What.** Across all signals in the strategy, no two indicators share the same
+`IndicatorMetadata.family`. The check reads the family dynamically; the canonical list is
+`crucible_contracts._INDICATOR_FAMILIES` (13 as of v12: `trend`, `trend_strength` (D019),
+`mean_reversion`, `volatility`, `iv_structure`, `dealer_positioning`, `flow`, `macro`, `calendar`,
+`fundamental`, `smart_money`, `pairs`, `post_event_drift` (D109) — the count here is informational).
+H2 depends on one fact of that list: `sue` is `post_event_drift` and `days_since_earnings` is
+`calendar`, so the PEAD pair (surprise directional + post-event timing gate) is C1-legal in one config.
 
 **Why.** Two same-family indicators correlate by construction — they're measuring the same latent variable through different statistics. RSI(2) and RSI(14) are both mean-reversion family; using both is redundancy that inflates apparent confluence. The rule forces signal diversity: confluence comes from independent information sources, not parameter variations.
 
@@ -161,15 +145,28 @@ bucket.)
 ### C2: Directional signal family matches hypothesis
 
 **What.** The directional signal's indicator family must match the hypothesis per the table:
-- `trend_continuation` → `trend`, `smart_money` (v19, D138 — `option_momentum`, the Heston-et-al. option-momentum continuation factor; the sibling `expected_value_estimator` is pinned out of the directional path. v33, D276: `option_momentum` is retired from directional EMISSION — 100% structurally dead in the funnel — via the sampler pool exclusion; the family admission and this rule are unchanged)
-- `mean_reversion` → `mean_reversion`, `dealer_positioning` (D062 — walls/gamma-flip as MR magnets); plus the per-id carve-out `momentum` (v31, D270 — see below)
+- `trend_continuation` → `trend`, `smart_money` (v19, D138 — `option_momentum`; retired from
+  EMISSION at v33, D276 — 100% structurally dead in the funnel — the family admission stands)
+- `mean_reversion` → `mean_reversion`, `dealer_positioning` (D062 — walls/gamma-flip as MR
+  magnets); plus the per-id carve-out `momentum` (v31, D270 — below)
 - `regime_arbitrage` → any family
 - `relative_value` → `pairs`
 - `volatility_event` → `iv_structure`, `flow`, or `dealer_positioning` (D062)
 - `tail_hedge` → `macro`
-- `event_momentum` → `post_event_drift` (v12, D109 — the directional is `sue`, the standardized earnings surprise driving the drift)
+- `event_momentum` → `post_event_drift` (v12, D109 — the directional is `sue`, the standardized
+  earnings surprise driving the drift)
 
-**v31 (D270) — per-id carve-outs (`_C2_HYPOTHESIS_EXTRA_IDS`).** An indicator id listed for a hypothesis passes C2 even though its registry FAMILY is not in the table. Exactly one entry exists: the parameterized `momentum` id under `mean_reversion` — the capitulation-bounce family (Crucible `FORGE_capitulation_bounce_generation_request_2026-07-12`: trailing 3-10-day drop trigger `momentum < θ`, θ ∈ [−0.083, −0.041] log ≈ −8%..−4% simple, in ELEVATED realized vol — buy the panic print with a long call). The id's family label follows the KERNEL (a trailing log-return measurement, family `trend`), but the drop trigger is a contrarian REVERSION thesis whose validated chassis is time-stop-primary — MR's exit schema (S5), not trend's. Admitting the whole `trend` family would flood MR with continuation directionals; the carve-out is one id, and `momentum` is symmetrically PIN-EXCLUDED from `trend_continuation`'s directional pool (its `<`-side trigger under a continuation thesis would be label-dishonest — exactly what C2 exists to prevent) and from the cross-sectional rank path (the rank combiner sorts DESCENDING; top-N by raw momentum is the inverse mechanism). Operator-approved loosening, OPEN_PROPOSALS `e9d74318`.
+**Per-id carve-outs (v31, D270; `_C2_HYPOTHESIS_EXTRA_IDS`).** An indicator id listed for a
+hypothesis passes C2 although its registry FAMILY is not in the table. One entry exists: the
+parameterized `momentum` id under `mean_reversion` — the capitulation-bounce family (a trailing
+3–10-day drop trigger `momentum < θ`, θ ∈ [−0.083, −0.041] log, in ELEVATED realized vol — buy the
+panic print with a long call). The kernel's family is `trend`; the thesis is contrarian REVERSION
+whose validated chassis is MR's time-stop exit schema (S5). Admitting the whole `trend` family would
+flood MR with continuation directionals, so the carve-out is one id, and `momentum` is symmetrically
+pin-excluded from `trend_continuation`'s directional pool (its `<`-side trigger under a continuation
+thesis would be label-dishonest — exactly what C2 prevents) and from the cross-sectional rank path
+(the rank combiner sorts DESCENDING; top-N by raw momentum is the inverse mechanism).
+Operator-approved loosening, OPEN_PROPOSALS `e9d74318`.
 
 **Why.** A trend-continuation strategy that takes direction from a `pairs` indicator is taking direction from a relationship test, not from a trend signal — the hypothesis label and the signal disagree. Forcing the match keeps hypothesis labels honest. `regime_arbitrage` is the deliberate exception: by definition the strategy switches regimes, so any family that drives the switch is admissible.
 
@@ -293,75 +290,91 @@ The trend overrides widen the UPPER edge only: systematically buying low-delta/O
 
 ## Regime coherence rules
 
-### R1: Mean-reversion requires IV-rank gate (v1, D013; v11, D107; v20, D150; v22, D167; v24, D254; v28, D265; v29, D266; v35, D280)
+### R1: Mean-reversion requires a reversion-regime gate
 
-**What.** When `hypothesis == "mean_reversion"`, at least one `regime_filter` signal must reference `iv_rank` with `params.threshold ≤ 50`, **or** `gamma_flip_distance_pct` (v11, D107 — the dealer-gamma regime switch, MR side), **or** `hurst` (v20, D150 — the mean-reverting H<0.5 side, op `"<"`), **or** `rv_rank` (v22, D167 — cheap realized vol, op `"<"` = LOW/calm), **or** `vol_regime` (v24, D254 — the discrete vol tercile, `< 2` = exclude the high-vol tercile), **or** `realized_vol` (v28, D265 — ABSOLUTE annualized 21d realized vol, op `"<"`, sweep 0.15-0.30), **or** `market_realized_vol` (v29, D266 — the MARKET-level absolute-RV gate: the reference underlying's annualized 21-session realized vol, op `"<"`, same sweep). (D013 collapsed the second clause about directional-family alignment — redundant given C2.)
+Lineage: v1 D013 → v11 D107 → v20 D150 → v22 D167 → v24 D254 → v28 D265 → v29 D266 → v35 D280
+(each admission is one line below).
+
+**What.** When `hypothesis == "mean_reversion"`, at least one `regime_filter` signal must reference
+one of: `iv_rank` with `params.threshold ≤ 50`; `gamma_flip_distance_pct`; `hurst`; `rv_rank`;
+`vol_regime`; `realized_vol`; `market_realized_vol`. The non-`iv_rank` members are accepted
+**op-agnostically** — the predicate checks id presence and the sampler sets the side (the D107
+"same gate, opposite side" convention). D013 collapsed the v1 second clause about
+directional-family alignment (redundant given C2). Exempt: the capitulation `momentum` directional
+(v35, D280 — the bare-drop arm; see S3).
 
 **Why.** Mean-reversion makes money on premium that reverts; the gate forces "fire only in a
-reversion-friendly regime." Per accepted member — mechanism and admission, with the full
-measurement narrative in the cited D-entry:
+reversion-friendly regime." Per member — mechanism and admission:
 - `iv_rank ≤ 50` (v1, D013) — fire only when premium is cheap enough for reversion to have room.
-- `gamma_flip_distance_pct`, op `"<"` (v11, D107) — dealer LONG-gamma / dampening regime; the
-  complement of R2's trend-side gamma gate. Chain-reader: single-name confluence only
-  (`space.rank_excluded_ids`).
-- `hurst < 0.5` (v20, D150) — anti-persistence, the mathematical ranging signature; same
-  indicator as R2's trend gate, opposite side (the regime "switch"; C4 keeps it single-role).
-  Rank-coherent (Q33/D151), so hurst-gated MR ranks. The D254 sweep later found it
-  null-to-negative as an MR gate, so the sampler biases away from it — it stays in the OR.
-- `rv_rank < θ` (v22, D167) — cheap realized vol; measured independent of AND dominant over the
-  hurst gate, rank-coherent, and the densest conditioner. (Q49 caveat: the "rank" kernels are
-  min-max range-positions, not statistical percentiles; calibrated gates unaffected.)
-- `vol_regime < 2` (v24, D254) — discrete Int8 vol tercile, RAW threshold only (`use_percentile`
-  is degenerate on a 3-value series); the cross-sectional-MR champion in Crucible's WF+CPCV
-  sweep (+0.244 cpcv-p25 over the cost gate, 6/6 components).
-- `realized_vol < θ`, θ ∈ [0.15, 0.30] annualized (v28, D265) — ABSOLUTE spike gate: percentile
-  gates normalize in regime-WIDE spikes (every name volatile → ranks mid-distribution), the
-  absolute threshold binds regardless. Per-name semantics with strongly name-heterogeneous pass
-  rates; C1 makes it REPLACE the percentile gate in the vol-family slot, never both.
-- `market_realized_vol < θ` (v29, D266) — Crucible's PREFERRED market-level variant of the same
-  thesis (SPY-reference rv21, byte-matched semantics); family `macro` BY DESIGN so it stacks
-  with vol-family primaries and doubles as the second veto-pool member (below).
+- `gamma_flip_distance_pct`, op `"<"` (v11, D107) — dealer LONG-gamma / dampening regime, the
+  complement of R2's trend-side gamma gate; single-name confluence only (`space.rank_excluded_ids`).
+- `hurst < 0.5` (v20, D150) — anti-persistence, the ranging signature; R2's indicator on the
+  opposite side (C4 keeps it single-role); measured null-to-negative as an MR gate at D254, so the
+  sampler biases away from it — it stays in the OR.
+- `rv_rank < θ` (v22, D167) — cheap realized vol; the densest conditioner, dominant over hurst.
+  (Q49: the "rank" kernels are min-max range positions, not statistical percentiles.)
+- `vol_regime < 2` (v24, D254) — discrete Int8 vol tercile, RAW threshold only; the
+  cross-sectional-MR champion in Crucible's WF+CPCV sweep.
+- `realized_vol < θ`, θ ∈ [0.15, 0.30] annualized (v28, D265) — ABSOLUTE spike gate: binds in
+  regime-WIDE spikes where percentile gates normalize; C1 makes it REPLACE the percentile gate in
+  the vol-family slot, never both.
+- `market_realized_vol < θ` (v29, D266) — the market-level variant (SPY-reference rv21); family
+  `macro` BY DESIGN so it stacks with vol-family primaries and doubles as a veto-pool member.
+
+**The elevated side (v31, D270).** The capitulation-bounce family deliberately emits `rv_rank > θ`,
+θ ∈ [50, 80]: its thesis IS the (panic drop × elevated realized vol) pair — the corner the champion
+MR family vetoes — which is what makes its supply structurally decorrelated. The gate is PINNED for
+that directional (a calm gate ANDed onto a panic-print trigger would never co-fire), the calm-side
+veto slot is skipped, and the pin composes with C1's chain guard (no `vol_target` sizer).
+
+**The optional MR veto slot (v26 D263, v29 D266).** A `mean_reversion` config may carry ONE optional
+second `regime_filter`: `ivol` (per-name CAPM-residual idiosyncratic vol, family `idiosyncratic_vol`,
+`op: "<"`, percentile plateau [0.2, 0.4], window 63 — excludes the high-idio-vol "falling knives"
+whose reversion fails) or `market_realized_vol` (family `macro`), one drawn per config, each eligible
+iff no indicator of its own family is already present. Neither satisfies R1 on its own; `ivol` is
+emitted only when the registry serves the id.
 
 **Cost.** Medium. Excludes mean-reversion strategies that don't explicitly gate on one of the accepted ranging proxies (`iv_rank`, `gamma_flip_distance_pct`, `hurst`, `rv_rank`, `vol_regime`, `realized_vol`, `market_realized_vol`).
 
-**Evidence to relax.** Promoted mean-reversion strategies that use a regime proxy outside the accepted set `{iv_rank, gamma_flip_distance_pct, hurst, rv_rank, vol_regime, realized_vol, market_realized_vol}` (e.g., `iv_zscore`, a custom realized-vs-implied ratio, or a new percentile-rank conditioner). (Fired: the v24/D254 `vol_regime` admission, and the v28/D265 `realized_vol` admission — Crucible's champion post-mortem as the outside-the-pool evidence.)
+**Evidence to relax.** Promoted mean-reversion strategies that use a regime proxy outside the accepted set `{iv_rank, gamma_flip_distance_pct, hurst, rv_rank, vol_regime, realized_vol, market_realized_vol}` (e.g., `iv_zscore`, a custom realized-vs-implied ratio, or a new percentile-rank conditioner). (Fired twice: the v24/D254 `vol_regime` and the v28/D265 `realized_vol` admissions — Crucible's champion post-mortem as the outside-the-pool evidence.)
 
-**v31 (D270) — the capitulation-bounce family uses the ELEVATED side of `rv_rank`.** R1's non-`iv_rank` gates are accepted **op-agnostically** (the D107 "same gate, opposite side" convention — the predicate checks id presence, the sampler sets the side). Every family before v31 emitted the calm side; the capitulation-bounce family (`momentum` drop-trigger directional, the C2 per-id carve-out) deliberately emits `rv_rank > θ`, θ ∈ [50, 80] — its thesis IS the (panic drop × elevated realized vol) pair, the corner the champion MR family vetoes (`rv_rank < 62`), which is what makes its supply structurally decorrelated. The gate is PINNED for that directional (never iv_rank/gamma/hurst — a calm gate ANDed onto a panic-print trigger would structurally never co-fire), the calm-side veto slot is skipped, and the pin composes with C1's chain guard (no `vol_target` sizer — the X1 `realized_vol` chain occupies the `volatility` family slot `rv_rank` needs). Gate-OFF arms fail R1 by construction → injection lane.
+### R2: Trend strategies require a trend-regime gate
 
-**v26 (D263) / v29 (D266) — the optional MR veto slot: `ivol` (v26) or `market_realized_vol` (v29), one drawn per config.** In addition to the mandatory MR regime gate above, a `mean_reversion` config may carry an OPTIONAL SECOND `regime_filter` gate: `ivol` (per-name CAPM-residual idiosyncratic vol, family `idiosyncratic_vol`, `op: "<"`, percentile plateau [0.2,0.4], window 63). It EXCLUDES the high-idio-vol oversold names — the "falling knives" whose reversion fails (Bhootra-Hur 2015; Crucible `FORGE_ivol_lo_mr_entry_gate_2026-07-09`, +0.163 cpcv, 6/6). §3.5 S3 permits more than one regime gate, so R1 stays satisfied by the primary gate. UNLIKE the R2 `days_since_jump` veto (`volatility` family, mutually exclusive with the level gates), `ivol` is `idiosyncratic_vol` — a DISTINCT C1 family — so it STACKS **on top of** the `rv_rank` / `vol_regime` gate (the validated form; the reason contracts 1.28.0 split the family). It is **not** a member of R1's accepted set (it does not satisfy R1 on its own), and it is emitted only when the registry serves the id. **v29 (D266)** widens the veto pool to TWO members — `market_realized_vol` (family `macro`) joins `ivol`, so the market-vol gate can ride as the ANDed second gate on a volatility primary (`rv_rank`/`vol_regime`/`realized_vol`): Crucible's "pair it with EITHER existing gate". One veto slot is still drawn per config (never `ivol` AND `market_realized_vol` together — three-gate stacks remain a Q46-class emission change), and the sampler's C1 guard is per-ID (each veto id eligible iff no indicator of its OWN family is already in the config).
-
-### R2: Trend strategies require regime gate (v2, D077; v11, D107; v17, D131; v27, D264)
+Lineage: v1 → v2 D077 → v11 D107 → v17 D131 → v27 D264 (v55 D366 retired the separate conditioner draw).
 
 **What.** When `hypothesis == "trend_continuation"`, at least one `regime_filter` signal must reference indicator `adx`, `hurst`, `rv_rank`, `gamma_flip_distance_pct`, `market_state`, or `vix_term_slope`.
 
 **Why.** Trend-continuation presumes a trend exists; firing range-bound is dead-weight risk.
-Per member — mechanism and admission, details in the cited D-entry:
+Per member — mechanism and admission:
 - `adx` (trend strength) and `hurst > 0.5` (persistence) — v1.
 - `rv_rank < θ` (v2, D077) — cheap realized vol, the PTS thesis for trend long calls.
-- `gamma_flip_distance_pct > θ` (v11, D107) — dealers SHORT gamma amplify moves (GEX
-  literature); the complement of R1's MR-side gamma gate.
+- `gamma_flip_distance_pct > θ` (v11, D107) — dealers SHORT gamma amplify moves (GEX literature);
+  the complement of R1's MR-side gamma gate.
 - `market_state > 0` (v17, D131 — first firing of the relax clause) — momentum pays after
-  up-markets and inverts after down-markets (Cooper/Gutierrez/Hameed JF 2004). Market-wide by
+  up-markets and inverts after down-markets (Cooper/Gutierrez/Hameed JF 2004); market-wide by
   design → coherent on trend's rank arm.
 - `vix_term_slope > θ`, θ ∈ [0, 2] (v27, D264 — second firing, via OPEN_PROPOSALS `0a4d8da8`) —
-  contango = calm. REVERSES the v17 deliberate exclusion on Crucible's campaign-grade probe
-  (the first walk-forward-gate pass in program history, WF 2.0611 with `residual_momentum`);
-  their measured failure mode (stays in contango too long at bear onsets) is why the sampled
-  range explores tighter thresholds. Market-wide → rank-arm-coherent.
-  (v55, D366: the separate hurst×vix CONDITIONER draw was retired — share zeroed — after Q46
-  closed refuted; vix-as-primary-gate is unaffected.)
+  contango = calm; admitted on Crucible's campaign-grade probe (the first walk-forward-gate pass in
+  program history, with `residual_momentum`), reversing the v17 exclusion; the tighter sampled range
+  reflects their measured failure mode (stays in contango too long at bear onsets). The separate
+  hurst×vix conditioner draw was retired at v55 (D366) after Q46 closed refuted; vix as a primary
+  gate is unaffected.
+
+**The optional volatility veto (v25, D258).** A `trend_continuation` config may carry ONE optional
+second `regime_filter`: `days_since_jump` (family `volatility`, `op: "<"`, threshold on the 30–65
+trading-day plateau) — vetoes "dead tape", names with no ≥5% move for N+ days, where the trend
+champion's theta-bleed losses cluster. Because it is `volatility` family, C1 makes it mutually
+exclusive with the level gates (`rv_rank` / `vol_regime`): a config picks the frequency veto OR a
+level gate, never both. It does not satisfy R2 on its own and is emitted only when the registry
+serves the id (dormant otherwise).
 
 **Cost.** Medium. Excludes trend strategies without an explicit regime filter from the accepted set.
 
 **Evidence to relax.** Promoted trend strategies that use a regime gate outside `{adx, hurst, rv_rank, gamma_flip_distance_pct, market_state, vix_term_slope}`. (Fired twice: the v17 `market_state` admission, and the v27 `vix_term_slope` admission — where the outside-the-pool evidence arrived as Crucible's campaign-grade probe rather than a post-promotion observation.)
 
-**v25 (D258) — optional volatility veto (`days_since_jump`).** In addition to the mandatory trend-strength gate above, a `trend_continuation` config may carry an OPTIONAL SECOND `regime_filter` gate: `days_since_jump` (family `volatility`, `op: "<"`, threshold on the 30–65 trading-day plateau). It vetoes "dead tape" — names with no ≥5% move for N+ days, where the trend champion's theta-bleed losses cluster (Crucible `FORGE_days_since_jump_indicator_2026-07-08`). §3.5 S3 permits more than one regime gate, so R2 stays satisfied by the primary gate; and because it is `volatility` family, C1 keeps `days_since_jump` mutually exclusive with the volatility-level gates (`rv_rank` / `vol_regime`) — a config picks the frequency veto OR a level gate, never both. It is **not** a member of R2's accepted set (it does not satisfy R2 on its own), and it is emitted only when the registry serves the id (dormant otherwise).
-
 ### R3: Volatility-event strategies require event-proximity gate
 
-> **(v2, D039 + M-9)** — pool widened from 2 to 5 event-proximity indicators
-> and ETF-incompatibility added. **(v18, D135)** — pool widened to 6:
-> `pre_earnings_setup` (operator-approved adoption cut).
+Lineage: v1 (2 gates) → v2 D039 + M-9 (5, plus the ETF incompatibility) → v18 D135 (6: `pre_earnings_setup`).
 
 **What.** When `hypothesis == "volatility_event"`, at least one `regime_filter` signal must reference one of the six event-proximity indicators: `days_to_earnings`, `days_to_fomc`, `days_to_cpi`, `days_to_nfp`, `days_to_opex`, `pre_earnings_setup` (all `calendar` family). **ETF exception:** ETF underlyings (`SPY`, `QQQ`, `IWM`, `DIA`) have no earnings, so `days_to_earnings` returns the sentinel/far value and never fires — the (ETF underlying, `days_to_earnings`) combination is rejected at validation time (T1.4/D039). `pre_earnings_setup` composes `days_to_earnings`, so it carries the same ETF rejection (D135). On ETFs the gate must use a macro-calendar indicator instead.
 

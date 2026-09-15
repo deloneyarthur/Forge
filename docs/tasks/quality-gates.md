@@ -5,7 +5,7 @@ Scope: the gates every change passes before commit, and the commit conventions.
 ## Commands
 
 ```bash
-uv run pytest                                  # full suite (count grows — latest in STATUS.md/D-entries). Deploy gate = service stopped
+uv run pytest                                  # full suite (count in STATUS.md/D-entries). Deploy gate = this, uncontended (not during a Sunday run)
 uv run pytest tests/unit/test_grammar          # scope while iterating
 uv run pytest -m "not slow"                    # markers: unit/integration/invariants/slow
 uv run ruff check src tests scripts            # strict select-set in pyproject.toml
@@ -41,7 +41,7 @@ record any manual-verification fallback in the commit/STATUS rather than skippin
   update, and updates to any doc it invalidates (CLAUDE.md session discipline) in the same or
   adjacent commit.
 - TDD evidence in the message where it matters (suite counts, RED→GREEN).
-- Don't push unless the operator expects it; the live service runs from the tree, not origin.
+- Don't push unless the operator expects it; the timer runs from the tree, not origin.
 
 ## Verify
 

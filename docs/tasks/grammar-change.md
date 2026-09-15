@@ -14,15 +14,19 @@ Scope: any change to what Forge enumerates. Classification first — it determin
 2. **Enumeration-policy bump** (the norm since v5) — Python-side change that alters the emitted
    population (sampler constants, predicate pools, threshold/horizon tables, parameter bounds).
    Still bumps `grammar_version` for cohort attribution; `rules:` text untouched.
-3. **Loosening** (widens the space based on feedback) — NEVER auto-applied: write to
-   `OPEN_PROPOSALS.md` and wait for the operator (hard rule #4). Tightenings may auto-apply.
-4. Pure draw-distribution change → not a grammar change; see `feedback-change.md`.
+3. **Loosening** (widens the space) — an operator commit behind a preregistration like any other
+   grammar change (hard rule #4); nothing auto-applies in either direction, and `OPEN_PROPOSALS.md`
+   is a static record with no writer (D420).
+4. Selection-policy change (which cells a run targets, budgets, the challenger gate) → not a
+   grammar change: ordinary code in `src/forge/campaign/`, TDD + full suite + `deploy.md`. The
+   population must stay byte-identical (the sampler goldens + `test_campaign_invariants`).
 
 ## Steps
 
 1. Re-read `docs/DESIGN.md` §3 + the relevant `docs/GRAMMAR.md` section; check hard rules #1, #3,
    #4, #6, #7.
-2. If `forge.service` is running, build in a worktree (`deploy.md`), not the live tree.
+2. Build in a worktree (`deploy.md`), not the live tree — the timer fires onto whatever this tree
+   contains.
 3. TDD: failing tests first — `tests/unit/test_grammar/` or `test_enumeration/`; hard-rule-adjacent
    behavior gets a `tests/invariants/` test. Golden sampler-sequence assertions may need deliberate
    re-pinning — never casual edits.
@@ -37,10 +41,10 @@ Scope: any change to what Forge enumerates. Classification first — it determin
 7. Append the D-entry to `IMPLEMENTATION_DECISIONS.md`; update `STATUS.md`.
 8. Gates + commit (`quality-gates.md`) — both grammar pre-commit hooks fire on grammar paths.
 9. Run an emission proof (recipe below). Quick smoke: `uv run forge enumerate --max 50 --summary`.
-10. Deploy (`deploy.md`). The service records the `manual_bump` row in `grammar_versions` at
-    startup — do not insert one by hand.
-11. Relay the new version string + deploy timestamp to Crucible (`crucible-handoff.md`) for
-    `crucible funnel --compare v{N-1} v{N}`.
+10. Deploy (`deploy.md`). The next run records the `manual_bump` row in `grammar_versions` when it
+    first loads the new version (`grammar/version_audit.py`) — do not insert one by hand.
+11. Relay the new version string + the first live run's instant to Crucible (`crucible-handoff.md`)
+    for `crucible funnel --compare v{N-1} v{N}`.
 
 ## Adding a new indicator (checklist)
 
@@ -50,13 +54,13 @@ Crucible's registry must advertise it first (contracts gap otherwise). Then Forg
 (`_build_regime_pool`) and R-rule predicate eligibility if it can serve as a regime gate.
 
 **Then verify layer 3 — the writer actually COMPUTES it (mandatory for a new DIRECTIONAL):**
-```bash
-uv run forge check-activations --indicators <new-id>   # must print [ OK ]; exit 0
-```
-Registered + enumerable is NOT sufficient. `sma_slope`/`ad_slope` cleared both but Crucible's
+registered + enumerable is NOT sufficient. `sma_slope`/`ad_slope` cleared both but Crucible's
 feature-cache writer returned 0 activations for every name, so they zero-traded silently — 0/2800
-submitted for ~5h post-deploy (D254). `check-activations` probes the live writer per directional; a
-`[INERT]` verdict (0 activations everywhere) is a **NO-GO** — relay to Crucible, don't ship it.
+submitted for ~5h post-deploy (D254). The `forge check-activations` probe left with the daemon
+(Batch 5 G1): ask Crucible to probe the writer for the new id in the relay that announces the bump
+(`crucible-handoff.md`) BEFORE the first live run, and read that run's `gated_out` / funnel
+`rejection_breakdown` afterwards — the `predicted_activations` prefilter rejecting every carrier is
+the same INERT verdict, one week late. An inert directional is a **NO-GO**; don't ship it.
 
 ## Emission proof (recipe)
 
@@ -100,6 +104,5 @@ uv run pytest tests/unit/test_grammar tests/unit/test_enumeration tests/invarian
 # pre-commit takes ONE hook id per run (two ids in one call is a usage error):
 uv run pre-commit run grammar-version-bump --all-files
 uv run pre-commit run grammar-doc-sync --all-files
-# layer-3: any newly-adopted directional must actually fire on the live writer (D254)
-uv run forge check-activations --indicators <new-directional-ids>   # exit 0 = every one produces activations
+# layer-3 (D254): a newly-adopted directional must fire on the live writer — Crucible probes it (relay); see above
 ```

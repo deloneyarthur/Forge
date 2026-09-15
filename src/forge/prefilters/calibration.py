@@ -75,7 +75,7 @@ class SignalCorrelationCalibration:
     # on event-calendar gates (days_to_nfp/cpi/fomc/opex), while genuine content-pair
     # redundancy is rare + marginal. When True, only alpha-bearing signals (non-
     # regime_filter) are compared. Changes the config population → operator flip +
-    # prereg (docs/tasks/feedback-change.md). False (default) → byte-identical.
+    # prereg (docs/tasks/grammar-change.md). False (default) → byte-identical.
     exclude_regime_filter: bool = False
 
 
@@ -100,7 +100,7 @@ class PermutationTestCalibration:
     #   "cumulative_trading"— the fix: cumulative return over the next `horizon` TRADING
     #                         days (T+1..T+k via the returns index), null built on the same
     #                         statistic. Changes the config population → operator-flip +
-    #                         prereg (docs/tasks/feedback-change.md). Absent → legacy.
+    #                         prereg (docs/tasks/grammar-change.md). Absent → legacy.
     forward_return_mode: str = "single_day"
     # (The P1-2a `volatility_event_absolute_move` knob lived here until D301 —
     # prereg e1a43ba8 was refuted + thesis-inverted, DROPPED at D235; the flag
