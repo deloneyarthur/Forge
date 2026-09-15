@@ -91,7 +91,7 @@ def parse_gate_results(raw: str) -> dict[str, GateResult]:
 
 def label_for(decision: str, gate_results: Mapping[str, GateResult]) -> int:
     """THE label: positive decision AND D128-honest coverage. Shared by the
-    dataset builder and `forge.ranking.evaluation` so they cannot drift."""
+    dataset builder and every reader of the frame so they cannot drift."""
     return int(decision in _POSITIVE_DECISIONS and honest_regime_coverage_row(gate_results))
 
 
@@ -130,8 +130,7 @@ def build_dataset(
     55.4%, an 11x lift. Note it is a POPULATION filter, not a positives filter — an
     honestly-evaluated REJECT is real negative evidence and is retained. On the scoped
     population `label_for` reduces to "decision is positive", since honesty is true for
-    every row, so the label predicate itself is unchanged and cannot drift from
-    `forge.ranking.evaluation`.
+    every row, so the label predicate itself is unchanged for every reader of the frame.
 
     ESTIMAND SHIFT, stated rather than buried: F3 then estimates
     ``P(component | honestly evaluated)`` rather than ``P(component | emitted)``. We

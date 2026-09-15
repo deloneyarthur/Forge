@@ -27,7 +27,6 @@ from forge.feedback.rejection_weights import (
     is_ve_ghost_label,
 )
 from forge.persistence.db import db_connection
-from forge.ranking.arm_floor import compute_mature_arms
 from forge.ranking.dataset import build_dataset
 from tests.fixtures.strategy_configs import minimal_registry_snapshot, minimal_strategy_config
 
@@ -111,30 +110,6 @@ def test_label_frame_excludes_ghost_ve_rows() -> None:
     assert "ve_ghost_hash" not in hashes
     assert "ve_clean_hash" in hashes
     assert "tc_hash" in hashes
-
-
-def test_mature_arms_ignore_ghost_ve_verdicts() -> None:
-    """Ghost ve verdicts must not mature an arm: 30 pre-cut ve verdicts leave the
-    arm YOUNG; 30 post-cut ve verdicts mature it."""
-    from forge.ranking.arm_floor import YOUNG_ARM_VERDICT_THRESHOLD
-
-    n = YOUNG_ARM_VERDICT_THRESHOLD + 5
-    with db_connection() as conn:
-        _seed_submission(conn, hypothesis="volatility_event", config_hash="ve_ghost_hash")
-        for _ in range(n):
-            _seed_verdict(conn, config_hash="ve_ghost_hash", decision="reject", decided_at=_PRE_CUT)
-        mature_pre = compute_mature_arms(conn, era_cut=_ERA)
-
-    with db_connection() as conn:
-        _seed_submission(conn, hypothesis="volatility_event", config_hash="ve_clean_hash")
-        for _ in range(n):
-            _seed_verdict(
-                conn, config_hash="ve_clean_hash", decision="reject", decided_at=_POST_CUT
-            )
-        mature_post = compute_mature_arms(conn, era_cut=_ERA)
-
-    assert not mature_pre  # ghost rows matured nothing
-    assert mature_post  # honest rows mature normally
 
 
 @pytest.mark.parametrize("hypothesis", ["mean_reversion", "trend_continuation"])

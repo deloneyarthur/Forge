@@ -1,30 +1,14 @@
-"""forge.ranking — composite scorer, greedy diversifier, batch queue (Phase 4)."""
+"""forge.ranking — the learned ranking models the weekly campaign ranks with.
+
+What remains after Batch 5 G2 (2026-09-15): `features.py` / `dataset.py` (the honest-era
+training frame), `model.py` (pure-Python IRLS + artifacts, trained in-run), `shadow.py`
+(per-submission shadow scores, the retraining telemetry), `signal_key.py` (signal content keys
++ Jaccard, the gate's duplicate measure) and `types.RankedCandidate`. The §6.2 composite scorer,
+the greedy diversifier, the floors and the flip apparatus left with the daemon (D419).
+"""
 
 from __future__ import annotations
 
-from forge.ranking.config import load_ranker_config
-from forge.ranking.diversifier import jaccard_signal_ids, select_top_n
-from forge.ranking.prior_promotion import compute_prior_promotion_proximity
-from forge.ranking.queue import rank_batch, rank_batch_with_exploration, rank_batch_with_holdout
-from forge.ranking.scorer import Ranker
-from forge.ranking.types import (
-    DiversificationConfig,
-    RankedCandidate,
-    RankerConfig,
-    RankerWeights,
-)
+from forge.ranking.types import RankedCandidate
 
-__all__ = [
-    "DiversificationConfig",
-    "RankedCandidate",
-    "Ranker",
-    "RankerConfig",
-    "RankerWeights",
-    "compute_prior_promotion_proximity",
-    "jaccard_signal_ids",
-    "load_ranker_config",
-    "rank_batch",
-    "rank_batch_with_exploration",
-    "rank_batch_with_holdout",
-    "select_top_n",
-]
+__all__ = ["RankedCandidate"]

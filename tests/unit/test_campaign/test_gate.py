@@ -12,7 +12,7 @@ from __future__ import annotations
 from forge.campaign.cells import cell_key
 from forge.campaign.gate import challenger_gate
 from forge.campaign.types import Book, BookLeg, CampaignConfig, CampaignSpec, CellKey
-from forge.ranking.diversifier import _signal_keys
+from forge.ranking.signal_key import signal_keys
 from tests.fixtures.strategy_configs import minimal_strategy_config
 
 _CFG = CampaignConfig()
@@ -25,7 +25,7 @@ def _leg(config: object, portfolio_id: str = "book") -> BookLeg:
         portfolio_id=portfolio_id,
         hypothesis=cfg.hypothesis,  # type: ignore[attr-defined]
         cell=cell_key(cfg),  # type: ignore[arg-type]
-        signal_ids=_signal_keys(cfg),  # type: ignore[arg-type]
+        signal_ids=signal_keys(cfg),  # type: ignore[arg-type]
         weight=0.5,
     )
 

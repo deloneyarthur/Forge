@@ -17,23 +17,10 @@ import pytest
 
 from forge.persistence.db import db_connection
 from forge.prefilters.types import FilterResult, PreFilterReport
-from forge.ranking.diversifier import select_top_n
-from forge.ranking.queue import rank_batch
-from forge.ranking.scorer import Ranker
-from forge.ranking.types import RankedCandidate, RankerWeights
+from forge.ranking.types import RankedCandidate
 from forge.submission.batch import BatchContext, mint_batch_id
 from forge.submission.submitter import submit_batch
 from tests.fixtures.strategy_configs import minimal_strategy_config
-
-
-def _default_weights() -> RankerWeights:
-    return RankerWeights(
-        signal_density=0.30,
-        novelty=0.25,
-        regime_diversity=0.20,
-        permutation_test=0.15,
-        prior_promotion_proximity=0.10,
-    )
 
 
 def _named_config(name: str, signal_ids: tuple[str, ...]) -> object:
@@ -144,61 +131,6 @@ def test_batch_id_changes_when_any_triple_field_changes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Ranker composite_score is in [0, 1]
-# ---------------------------------------------------------------------------
-
-
-def test_every_ranker_score_is_in_unit_interval() -> None:
-    """The §6.2 weighted sum of unit-interval components with weights
-    summing to 1.0 is mathematically in [0, 1]; the scorer also clamps
-    to absorb float drift. This is the integration-level guard."""
-    r = Ranker(weights=_default_weights())
-    reports = [_passing_report(f"r{i}", (f"sig_{i}",)) for i in range(20)]
-    for rep in reports:
-        score = r.score(rep, prior_promotion_score=0.5)
-        assert 0.0 <= score <= 1.0
-
-
-# ---------------------------------------------------------------------------
-# Diversifier returns exactly N (or all if pool < N) and no repeats
-# ---------------------------------------------------------------------------
-
-
-def test_diversifier_returns_exactly_n_when_pool_is_large() -> None:
-    cands = tuple(_candidate(f"c{i}", (f"sig_{i}",), 0.5 + i * 0.01) for i in range(20))
-    out = select_top_n(cands, n=5)
-    assert len(out) == 5
-
-
-def test_diversifier_returns_all_when_pool_smaller_than_n() -> None:
-    cands = tuple(_candidate(f"c{i}", (f"sig_{i}",), 0.5 + i * 0.05) for i in range(3))
-    out = select_top_n(cands, n=100)
-    assert len(out) == 3
-
-
-def test_diversifier_never_repeats_a_candidate() -> None:
-    cands = tuple(_candidate(f"c{i}", (f"sig_{i}",), 0.5) for i in range(10))
-    out = select_top_n(cands, n=10)
-    names = [r.report.config.name for r in out]
-    assert len(names) == len(set(names))
-
-
-# ---------------------------------------------------------------------------
-# rank_batch is deterministic for the same inputs
-# ---------------------------------------------------------------------------
-
-
-def test_rank_batch_is_deterministic() -> None:
-    r = Ranker(weights=_default_weights())
-    reports = tuple(_passing_report(f"r{i}", (f"sig_{i}",)) for i in range(8))
-    a = rank_batch(r, reports, promoted_strategies=(), n=3)
-    b = rank_batch(r, reports, promoted_strategies=(), n=3)
-    a_names = [c.report.config.name for c in a]
-    b_names = [c.report.config.name for c in b]
-    assert a_names == b_names
-
-
-# ---------------------------------------------------------------------------
 # Submitter: every submitted candidate produces a submissions row with the
 # correct config_hash + status
 # ---------------------------------------------------------------------------
@@ -255,16 +187,14 @@ def test_unique_index_on_config_hash_is_enforced(tmp_path: Path) -> None:
 
 
 def test_perf_rank_and_submit_30_candidates_under_5s(tmp_path: Path) -> None:
-    """§12 Phase 4 budget is implicit (it's a 5-7 day phase, not perf-
-    constrained). This is a regression guard: ranking + submitting 30
-    candidates shouldn't take more than 5 seconds. Anything slower
-    points to per-candidate work that should have been batched."""
+    """Regression guard: scoring + ordering + submitting 30 candidates must not take more
+    than 5 seconds. Anything slower points to per-candidate work that should have been
+    batched. Ranking here is the campaign's shape — order by score, take the top N."""
     forge_db = tmp_path / "forge.db"
     inbox = tmp_path / "inbox"
-    r = Ranker(weights=_default_weights())
-    reports = tuple(_passing_report(f"r{i}", (f"sig_{i}",)) for i in range(30))
+    cands = [_candidate(f"r{i}", (f"sig_{i}",), 0.3 + (i % 7) * 0.1) for i in range(30)]
     t0 = time.perf_counter()
-    ranked = rank_batch(r, reports, promoted_strategies=(), n=10)
+    ranked = sorted(cands, key=lambda c: -c.composite_score)[:10]
     with db_connection(forge_db) as conn:
         submit_batch(conn, batch=_batch(seed=0), candidates=ranked, inbox_root=inbox)
     elapsed = time.perf_counter() - t0

@@ -28,14 +28,11 @@ from hypothesis import strategies as st
 
 from forge.persistence.db import db_connection
 from forge.prefilters.types import FilterResult, PreFilterReport
-from forge.ranking.diversifier import select_top_n
-from forge.ranking.scorer import Ranker
-from forge.ranking.types import RankedCandidate, RankerWeights
+from forge.ranking.types import RankedCandidate
 from forge.submission.batch import BatchContext, mint_batch_id
 from forge.submission.submitter import submit_batch
 from tests.fixtures.grammar_property_helpers import valid_strategy_config
 
-_RANKER_FILTER_KEYS = ("signal_density", "novelty", "regime_exposure", "permutation_test")
 _ALL_FILTER_KEYS = (
     "structural_redundancy",
     "resource_feasibility",
@@ -45,16 +42,6 @@ _ALL_FILTER_KEYS = (
     "regime_exposure",
     "permutation_test",
 )
-
-
-def _default_weights() -> RankerWeights:
-    return RankerWeights(
-        signal_density=0.30,
-        novelty=0.25,
-        regime_diversity=0.20,
-        permutation_test=0.15,
-        prior_promotion_proximity=0.10,
-    )
 
 
 def _batch_for(seed: int) -> BatchContext:
@@ -144,84 +131,3 @@ def test_property_submission_idempotency(
     assert second.submitted_count == 0
     assert second.skipped_duplicate_count == len(submittable)
     assert second.dropped_overlay_count == len(overlay)
-
-
-# ---------------------------------------------------------------------------
-# (ii) §6.2 ranker composite score stays in [0, 1]
-# ---------------------------------------------------------------------------
-
-
-@given(
-    config=valid_strategy_config(),
-    filter_scores=st.fixed_dictionaries(
-        {k: st.floats(min_value=0.0, max_value=1.0, allow_nan=False) for k in _ALL_FILTER_KEYS}
-    ),
-    prior_promotion=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
-)
-@settings(
-    max_examples=200,
-    deadline=None,
-    suppress_health_check=[HealthCheck.function_scoped_fixture],
-)
-def test_property_ranker_score_in_unit_interval(
-    config: object,
-    filter_scores: dict[str, float],
-    prior_promotion: float,
-) -> None:
-    """For any in-range filter scores + prior-promotion score, the §6.2
-    composite is in [0, 1]. RankerWeights sum to 1.0 by invariant; the
-    scorer also clamps to absorb float drift."""
-    r = Ranker(weights=_default_weights())
-    report = _report_from(config, filter_scores)
-    score = r.score(report, prior_promotion_score=prior_promotion)
-    assert 0.0 <= score <= 1.0, (
-        f"ranker score out of [0, 1]: got {score!r} for filter_scores={filter_scores!r}, "
-        f"prior={prior_promotion!r}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# (iii) Diversifier returns exactly min(n, pool_size) candidates
-# ---------------------------------------------------------------------------
-
-
-@given(
-    configs=st.lists(valid_strategy_config(), min_size=0, max_size=12),
-    composite_scores=st.lists(
-        st.floats(min_value=0.0, max_value=1.0, allow_nan=False), min_size=0, max_size=12
-    ),
-    n=st.integers(min_value=0, max_value=20),
-)
-@settings(
-    max_examples=75,
-    deadline=None,
-    suppress_health_check=[HealthCheck.function_scoped_fixture],
-)
-def test_property_diversifier_returns_exactly_min_n_pool(
-    configs: list[object],
-    composite_scores: list[float],
-    n: int,
-) -> None:
-    """`select_top_n(pool, n)` returns exactly `min(n, len(pool))` items.
-    No selected candidate is absent from the input pool."""
-    pair_count = min(len(configs), len(composite_scores))
-    pool = tuple(
-        RankedCandidate(
-            report=_report_from(
-                configs[i],
-                {k: 0.5 for k in _ALL_FILTER_KEYS},
-            ),
-            prior_promotion_score=0.0,
-            composite_score=composite_scores[i],
-        )
-        for i in range(pair_count)
-    )
-    selected = select_top_n(pool, n=n)
-    expected_size = min(n, len(pool))
-    assert len(selected) == expected_size, (
-        f"diversifier returned {len(selected)} for pool={len(pool)}, n={n}; "
-        f"expected min={expected_size}"
-    )
-    pool_ids = {id(c) for c in pool}
-    for s in selected:
-        assert id(s) in pool_ids, "diversifier returned a candidate not in the input pool"

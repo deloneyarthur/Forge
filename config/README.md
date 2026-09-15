@@ -11,4 +11,5 @@ Scope: ownership warnings only. File-by-file semantics: `docs/MANPAGE.md` (CONFI
   script lives in git history); the loader's fingerprint still reads it — don't hand-edit.
 - `prefilter.yaml` — operator-owned; the daemon never writes it (the auto-tune writer is
   retired, D206/D298).
-- `forge.yaml`, `ranker.yaml` — operator-owned; CLI flags override YAML.
+- `forge.yaml` — operator-owned; CLI flags override YAML. (`ranker.yaml` was deleted 2026-09-15,
+  D419 — the §6.2 composite it configured left with the daemon.)

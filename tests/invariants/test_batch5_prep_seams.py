@@ -44,19 +44,10 @@ def test_campaign_path_imports_nothing_from_the_daemon_era(path: Path) -> None:
 
 
 def test_old_names_are_still_bound_to_the_moved_objects() -> None:
-    """The daemon-era `cli/main` aliases left in Batch 5 G1; the remaining rebinds belong to
-    modules Batch 5 G2/G3 delete next and stay bound until then."""
-    from forge.campaign import cell_key
-    from forge.feedback import eras, rejection_weights, yield_audit
-    from forge.persistence import verdicts
-    from forge.ranking import campaigns, diversifier, prior_promotion, signal_key
+    """The daemon-era `cli/main` aliases left in G1 and the ranking re-exports in G2; the
+    remaining rebinds belong to `feedback/rejection_weights`, which Batch 5 G3 deletes next,
+    and stay bound until then."""
+    from forge.feedback import eras, rejection_weights
 
-    assert diversifier._signal_keys is signal_key.signal_keys
-    assert diversifier.jaccard_signal_ids is signal_key.jaccard_signal_keys
-    assert prior_promotion._signal_keys is signal_key.signal_keys
     assert rejection_weights.CLEAN_ERA_LABEL_CUT is eras.CLEAN_ERA_LABEL_CUT
     assert rejection_weights.VE_GHOST_LABEL_CUT is eras.VE_GHOST_LABEL_CUT
-    assert yield_audit.CONVERTING_DECISIONS is verdicts.CONVERTING_DECISIONS
-    assert campaigns.config_cell_from_json is cell_key.config_cell_from_json
-    assert campaigns.config_cell is cell_key.config_cell
-    assert campaigns.ExperimentCell == cell_key.ExperimentCell
