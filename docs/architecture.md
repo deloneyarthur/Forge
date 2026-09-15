@@ -39,7 +39,7 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
 | `grammar/` | Load/validate `config/grammar.yaml`; predicate engine; S4 horizon table (`signal_horizon.py` — Forge-owned, registry `lookback` is a warmup not a horizon, D102); archive consistency (`archive.py`) | §3 | `test_grammar/` |
 | `enumeration/` | Search space + seeded sampler; per-indicator threshold table (`indicator_thresholds.py`); underlying classes (`underlying_class.py`); registry fingerprint | §4 | `test_enumeration/` |
 | `prefilters/` | `battery.py` runs filters cost-ascending — the live order is in code, not the §5.2 list (it grew past the original 7); `crucible_feature_cache.py` = real cache (via db_writer socket), `feature_cache.py` = synthetic fallback | §5 | `test_prefilters/` |
-| `ranking/` | Composite scorer + diversifier + the learned ranking models — per-file breakdown below the table | §6 | `test_ranking/` |
+| `ranking/` | The learned ranking models the weekly campaign ranks with (trained in-run) — per-file breakdown below the table; the §6.2 composite scorer, diversifier, floors and flip apparatus left with the daemon (D419) | §6 | `test_ranking/` |
 | `submission/` | Batch orchestration; atomic submit via contracts; §7.3 rate limiter; per-filter logging; `search_multiplicity.py` (D310 — per-slot cumulative `search_n_trials` stamp, self-gated on Crucible's `recorded_not_binding` marker); submission lanes tagged `selection_mode` ∈ {ranked, holdout, prefilter_sample, tail_lane, trend_lane} (P3.3/D335/`8cfe95f4a6e9`; the dark D316 young_explore lane was removed 2026-08-06, D378) | §7 | `test_submission/` |
 | `feedback/` | Consume gated/failed exports, learn weights, propose grammar changes — per-file breakdown below the table | §8 | `test_feedback/` |
 | `funnel/` | Per-batch funnel + join-map exports consumed by Crucible's instrumentation (D096) | D096 | `test_funnel/` |
@@ -49,25 +49,19 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
 | `config/` | `forge_config.py` — precedence: CLI flag > `config/forge.yaml` > hardcoded (`--no-config`) | §10 | `test_config/` |
 | `cli/` | `main.py` (`forge` entry point: `version`, `check`, `enumerate`, `prefilter` — the last two are offline diagnosis on the demo registry), `campaign_cmd.py` (`forge campaign` + `status`, the weekly run, plan 2026-09 §12), `prereg_cmd.py` (`forge prereg` — the preregistration ledger the `freeze-governance` hook reads, D392). The daemon (`forge run --loop`) and its operator commands left in Batch 5 G1 (git history holds them). | — | `test_cli/` |
 
-**`ranking/` breakdown** (the most fragmented package — 21 files):
-- Scoring + selection: composite scorer (weights in `config/ranker.yaml`); `queue.py`
-  batch-ranking orchestrator (`rank_batch` composes the §6 components); `prior_promotion.py`
-  Jaccard prior (the pre-F3 fallback); greedy `diversifier.py` (`min_per_hypothesis` floor,
-  D103; per-arm exploration floor via `arm_floor.py`, D136).
-- Learned verdict model: `features.py` / `dataset.py` (honest-era frame) / `model.py`
-  (pure-Python IRLS + artifacts) / `shadow.py` (post-submit telemetry) / `evaluation.py`
-  (shadow-vs-incumbent). Wired into the §6.2 prior slot: F3 sets
-  `prior_promotion_proximity := P(component)` (D149; kill-switch `FORGE_F3_RANKER`), and the
-  wf_p25 quality lane multiplies by `tail_norm` of a robustness prediction (`--quality-rank`,
-  D193; kill-switch `FORGE_QUALITY_RANKER`). Both fill only the prior term.
-- Learned-audit guards: `calibration.py` (Platt recalibration), `drift.py` (input-drift +
-  model-adoption), `sequential_test.py` (SPRT flip/streak gate).
-- Campaigns + floors: `campaigns.py` (D299 registry — discover→concentrate→farm; also owns the
-  `config_cell` extractor pair); `campaign_audit.py` (ranked-vs-holdout carriage detector);
-  `cell_floor.py` (young-cell floor, `FORGE_YOUNG_CELL_FLOOR`, D307). The D287 hand-pin
-  reservation machinery was removed 2026-08-06 (D376; pin set empty since D305).
-- Telemetry: `regime_supply.py` (D144 journal line; never reshapes a batch); `signal_key.py`
-  (contracts re-export).
+**`ranking/` breakdown** (6 files after Batch 5 G2):
+- `features.py` — featurize a config against the registry family map (the model input).
+- `dataset.py` — the honest-era training frame (verdicts ⋈ submissions; era cuts from
+  `feedback/eras.py`; D128 coverage-honest labels).
+- `model.py` — pure-Python IRLS verdict / robustness / tail models + artifact load/save
+  (`QUALITY_LANE_TARGET` = the robustness target the campaign ranks with).
+- `shadow.py` — per-submission shadow scores, the retraining telemetry.
+- `signal_key.py` — signal content keys + Jaccard (the challenger gate's duplicate measure).
+- `types.py` — `RankedCandidate` (what the submitter persists).
+Deleted 2026-09-15 (D419, git history has them): `queue`, `diversifier`, `arm_floor`, `cell_floor`,
+`scorer`, `config` (+ `config/ranker.yaml`), `prior_promotion`, `calibration`, `drift`,
+`sequential_test`, `evaluation`, `campaign_audit`, `campaigns` (the D299 registry — its cell-key
+extractors live in `campaign/cell_key.py`), `regime_supply`.
 
 **`feedback/` breakdown**:
 - `consumer.py` — reconcile + aged-out flush (D052/D110) + failed-run retirement (D240).
@@ -76,9 +70,9 @@ lives in `~/forge_data/forge.db` only — never in process memory across runs.
   `promoted_patterns.py` / `stuck_state.py`.
 - Learned weights: `rejection_weights.py` (the D094→D108 lineage), `trade_rate_priors.py`
   (expected-trades prior + cold-start). (`auto_tune.py` was retired — D325; git history has it.)
-- Honesty ledgers: `preregistration.py` (behind `forge prereg`, D208; the D207 alpha-budget
-  sibling retired 2026-08-06, question answered); `yield_audit.py` (D302 dead-cell detector,
-  writes nothing).
+- Honesty ledgers: `preregistration.py` (behind `forge prereg`, D208, and the campaign's boot
+  DUE judge, D417; the D207 alpha-budget sibling retired 2026-08-06). `yield_audit.py` (D302)
+  was deleted 2026-09-15 (D419) — the dead-cell rule lives in `campaign/cells.py`.
 - Deleted: `threshold_proposer.py` (D298; git history has it).
 
 A `king/` package (the meta-king generator arm) was retired at D190 and **removed from
