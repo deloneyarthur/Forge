@@ -69,10 +69,10 @@ def test_manpage_has_commands_section() -> None:
 
 def test_howto_lists_recovery_procedures() -> None:
     text = _HOWTO.read_text(encoding="utf-8")
-    # Recovery topics that must stay documented (renamed with the 2026-06-09
-    # restructure: rate-limit recovery lives under the "blocked" situation,
-    # grammar.yaml repair under "Changing the grammar").
-    for needle in ("Crucible offline", "rate limiter", "Changing the grammar"):
+    # Recovery topics that must stay documented: the Crucible-offline path, the
+    # submission bound (the weekly cap + inbox backlog check replaced the §7.3 rate
+    # limiter in Batch 5 G4, D421), grammar.yaml repair under "Changing the grammar".
+    for needle in ("Crucible offline", "weekly cap", "inbox backlog", "Changing the grammar"):
         assert needle in text, f"docs/HOW-TO.md missing recovery topic: {needle!r}"
 
 

@@ -93,8 +93,7 @@ command; type hints on every public signature; docstrings say WHY, not what; no 
   cohorts by `grammar_version` and time-cut v9 at 2026-06-06T06:48:49Z (D104).
 - Eight test files import `forge.cli.main` (six only import `app`); the daemon loop and its
   monkeypatch seams left in Batch 5 G1 — `main.py` is now a thin Typer entry point.
-- "blocked: prev batch N% gated" = the §7.3 limiter working; `crucible-ingest-daily` "failed"
-  is benign (rfr-only). Don't "fix" either.
+- `crucible-ingest-daily` "failed" is benign (rfr-only). Don't "fix" it.
 
 ## Operator gates — when to stop and ask
 

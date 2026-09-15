@@ -248,7 +248,7 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | File | Controls |
 |---|---|
-| `forge.yaml` | Forge DB path, Crucible wiring, enumeration cap, batch size, rate-limit threshold, stall-guard window (`submission.stall_after_seconds`, D137), in-flight-depth cap (`submission.max_inflight`, D196; 0=off). (`data_root`/`log_root`/`feedback.*` cadence keys retired D247 — never read; feedback runs every iteration via `--consume-feedback`.) |
+| `forge.yaml` | Forge DB path, Crucible wiring, enumeration cap, batch size, and the `campaign:` knobs; the `submission.inflight_threshold` / `stall_after_seconds` / `max_inflight` keys steered the §7.3 rate limiter deleted in Batch 5 G4 (D421) and are removed in G5. (`data_root`/`log_root`/`feedback.*` cadence keys retired D247 — never read; feedback runs every iteration via `--consume-feedback`.) |
 | `grammar.yaml` | The 21 grammar rules (S/C/R/X families). Operator-owned; version-bumped + archived on change. |
 | `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation) + calibration keys (the auto-tune writer is retired, D206/D298). |
 | `auto_tightened_thresholds.yaml` | RETIRED-EMPTY (`tightenings: []`, D206, permanent per D298). Retained because its fingerprint feeds `enumeration_inputs_hash` — deleting it changes the determinism identity. |

@@ -458,9 +458,9 @@ def _flush_failed_runs(
 
     Retires matching rows with the SAME terminal marker as the aged-out flush:
     `status='gated'` + `_AGED_OUT_SENTINEL_RUN_ID`. That sentinel is already excluded
-    from the §7.3 depth count (`rate_limiter._evaluate_inflight_depth`), the
-    rate-limiter H-1 completion count, and the M-7 promotion_basis denominator, so a
-    failed run correctly contributes to none of them. Reuses the marker rather than
+    from the M-7 promotion_basis denominator (and was excluded from the retired daemon's
+    §7.3 depth and completion counts, D421), so a failed run correctly contributes to
+    none of them. Reuses the marker rather than
     minting a second one so the "not a real gate decision" exclusion stays
     single-sourced across those call sites.
 

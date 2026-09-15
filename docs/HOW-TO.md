@@ -57,13 +57,14 @@ Batch 5 G0). Deeper digging (forge.db queries, cohort analysis, known traps):
 
 ## Common situations
 
-### The daemon-era "blocked: …" lines (retired with `forge run`, D416)
+### Too many submissions? The weekly cap and the boot backlog check
 
-The daemon's §7.3 rate limiter printed `blocked: prev batch N% gated`, `blocked: crucible
-stalled` and `blocked: in-flight depth N exceeds cap M`; all three were the limiter working as
-designed (D046/D137/D196), not faults. The weekly run has no in-flight backpressure — its boot
-check refuses only on an inbox backlog above `campaign.inbox_backlog_ceiling`. If Crucible's
-publishers die, the campaign's reconcile sees a stale export: `systemctl --user status
+The daemon's §7.3 rate limiter (`blocked: prev batch N% gated` / `crucible stalled` /
+`in-flight depth N exceeds cap M`) was deleted in Batch 5 G4 (D421). Two things replaced it: the
+weekly cap (`campaign.weekly_cap`, default in `forge.campaign.types.CampaignConfig`) bounds what one
+run may submit, and the boot check refuses the whole run when the inbox backlog exceeds
+`campaign.inbox_backlog_ceiling` (a FAILED unit is the page). If Crucible's publishers die, the
+run's reconcile sees a stale export: `systemctl --user status
 crucible-gated-runs-publisher.service crucible-publisher@forge_gated_runs.service`.
 
 ### Exports are stale / Forge can't see results

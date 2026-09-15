@@ -162,7 +162,6 @@ Rows from our next reconcile forward are correctly tagged; this applies only to 
 
 ## Benign signals — do not "fix" these
 
-- `blocked: prev batch N% gated` — the §7.3 limiter doing its job (Crucible backpressure).
 - `crucible-ingest-daily` unit "failed" — rfr-only oneshot failure; bars/chains fine.
 - `skipped: real feature cache unavailable` — `--require-real-cache` correctly skipping an
   iteration while Crucible's db-writer is down/restarting.
@@ -170,46 +169,10 @@ Rows from our next reconcile forward are correctly tagged; this applies only to 
   not an OOM or leak; the systemd peak counts reclaimable page cache (D117). The
   flag-worthy signal is an `oom-kill` line, nothing else.
 
-## `blocked: crucible stalled` — the D137 stall guard fired (NOT benign, but self-clearing)
+## Retired daemon-era signals (Batch 5 G4, D421)
 
-Distinct journal line from the benign `prev batch N% gated`:
-`blocked: crucible stalled — no decisions since <ts> (<X.X>h); <N> configs pending ≥3h`.
-The §7.3 stall guard (`submission.stall_after_seconds`, default 3 h) tripped — Crucible's
-decision clock `max(decided_at)` has been stale ≥3 h while Forge has work submitted after it.
-This is the guard working as designed (it would have caught the 2026-06-10 wedge at +3 h
-instead of +18 h). It is **stateless and self-clearing**: one fresh Crucible decision advances
-the clock past every pending witness and the next poll submits again — no Forge intervention.
-
-The signal points UPSTREAM. Diagnose the runner (`futex_do_wait` at 0% CPU + byte-identical
-exports = the wedge signature), restart it if wedged, and relay a wedge prompt
-(`PROMPT_CRUCIBLE_RUNNER_WEDGE.md`). Never lower the knob to "unblock" — that just resumes
-feeding the dead gate (the exact waste the guard exists to prevent). Deadlock-immune by
-construction: if the clock is stale because *Forge* was quiet (our outage/migration), no
-submission postdates it, so the guard stays silent and the next batch flows.
-
-## `blocked: in-flight depth N exceeds cap M` — the §7.3 backpressure block (D196/D200)
-
-The third §7.3 block reason (beside the per-batch completion fraction and the D137 stall
-guard): the *aggregate* genuine in-flight `submitted` depth — rows newer than the flush
-watermark, summed across batches — exceeds `submission.max_inflight`. Normally this is the
-throttle working: Crucible is draining slower than Forge submits, and it self-clears as the
-queue drains below the cap.
-
-Since D240 the feedback consumer also retires runner-FAILED runs **every poll** from
-Crucible's `failed_runs_*.json` export (`feedback/consumer.py` `_flush_failed_runs`), so
-failures can no longer sit `submitted` and pin the depth metric until the 5-day age-out
-(the 2026-06-24 / 2026-07-05 incidents). A *persistent* depth block therefore means either
-the `crucible-failed-runs-publisher` is down (failed runs invisible again) or a genuine
-Crucible backlog. Diagnose with the D205/D240 join: forge.db `submitted` rows vs Crucible's
-`run.status` / the failed_runs export, on `config_hash` — a large `submitted`-but-FAILED
-overlap means the failed-runs read path is broken, not the gate slow.
-
-tz trap while correlating: `journalctl --since` parses timestamps as LOCAL (PDT box config)
-while the exports/DB are UTC — prefer relative forms (`--since -15min`) over absolute ones.
-
-## When "blocked" IS a wedge (the completion-fraction path)
-
-Hours of consecutive `prev batch N% gated` blocks while exports stay fresh and Crucible's runner is
-gating → check the aged-out flush watermark logic in `feedback/consumer.py` (history: D052 → D061 →
-D110) and whether the pinned oldest batch predates a code change (skip procedure: `docs/HOW-TO.md`).
-(Post-D137 this specific 18-h-blind-window wedge is caught by the stall guard above within 3 h.)
+The `blocked: …` journal lines (`prev batch N% gated`, `crucible stalled`, `in-flight depth N
+exceeds cap M`) came from the §7.3 rate limiter, deleted with the daemon era. The weekly run has
+no in-flight backpressure: `campaign.weekly_cap` bounds a run and the boot check refuses on an
+inbox backlog above `campaign.inbox_backlog_ceiling`. History: D046 / D137 / D196 / D200 and the
+D205 / D240 / D245 wedge incidents.
