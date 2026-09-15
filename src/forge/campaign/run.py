@@ -56,7 +56,6 @@ from forge.campaign.types import (
     TriggerOutcome,
 )
 from forge.core.clock import utc_now
-from forge.core.seed import SeedHierarchy
 
 if TYPE_CHECKING:
     from crucible_contracts import RegistrySnapshot, StrategyConfig
@@ -396,36 +395,18 @@ def _run_battery(
     config_root: Path,
     feature_cache: object,
 ) -> list[PreFilterReport]:
-    from forge.feedback.trade_rate_priors import load_trade_rate_priors  # noqa: PLC0415
-    from forge.persistence.fingerprints import load_prior_structural_fingerprints  # noqa: PLC0415
-    from forge.prefilters import default_filters, run_battery  # noqa: PLC0415
+    """The battery over the kept candidates, built by the one shared runner (Batch 6 A1)."""
     from forge.prefilters.calibration import load_calibration  # noqa: PLC0415
-    from forge.prefilters.types import FilterContext  # noqa: PLC0415
+    from forge.prefilters.runner import build_filter_context, run_battery_over  # noqa: PLC0415
 
-    calibration = load_calibration(config_root / "prefilter.yaml")
-    ctx = FilterContext(
+    ctx = build_filter_context(
         registry=registry,
-        feature_cache=feature_cache,  # type: ignore[arg-type]
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=calibration,
-        rng_factory=SeedHierarchy(seed).rng,
-        prior_structural_fingerprints=load_prior_structural_fingerprints(forge_db_path),
-        trade_rate_priors=MappingProxyType(
-            dict(
-                load_trade_rate_priors(
-                    forge_db_path,
-                    registry,
-                    min_trades=calibration.expected_trade_count.min_trades,
-                )
-            )
-        ),
+        seed=seed,
+        calibration=load_calibration(config_root / "prefilter.yaml"),
+        feature_cache=feature_cache,
+        forge_db_path=forge_db_path,
     )
-    prefetch = getattr(feature_cache, "prefetch_for_batch", None)
-    if callable(prefetch):
-        prefetch(list(configs))
-    filters = default_filters()
-    return [run_battery(cfg, ctx, filters) for cfg in configs]
+    return run_battery_over(configs, ctx)
 
 
 def _scorer(

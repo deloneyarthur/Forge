@@ -153,17 +153,11 @@ def cmd_prefilter(
     from pathlib import Path
 
     from forge.core.contracts_check import check_contracts_version
-    from forge.core.seed import SeedHierarchy
     from forge.enumeration import enumerate_candidates, registry_hash
     from forge.grammar import load_grammar
     from forge.persistence.registry_loader import load_registry
-    from forge.prefilters import (
-        SyntheticFeatureCache,
-        default_filters,
-        load_calibration,
-        run_battery,
-    )
-    from forge.prefilters.types import FilterContext
+    from forge.prefilters import SyntheticFeatureCache, default_filters, load_calibration
+    from forge.prefilters.runner import build_filter_context, run_battery_over
 
     check_contracts_version()
     grammar_path = Path(__file__).resolve().parents[3] / "config" / "grammar.yaml"
@@ -174,8 +168,6 @@ def cmd_prefilter(
     # Offline preview command (synthetic cache) — demo fallback allowed,
     # same as `forge enumerate`; production paths use the fail-loud default.
     registry = load_registry(allow_demo_fallback=True)
-    calibration = load_calibration(prefilter_yaml)
-    seed_hierarchy = SeedHierarchy(seed)
     if synthetic_cache:
         feature_cache: object = SyntheticFeatureCache(
             root_seed=seed,
@@ -184,13 +176,14 @@ def cmd_prefilter(
         )
     else:
         feature_cache = build_feature_cache(registry, seed)
-    ctx = FilterContext(
+    # No forge.db: no prior fingerprints, no trade-rate priors — the offline preview's
+    # battery has always run without Forge's ledger (Batch 6 A1 shared builder).
+    ctx = build_filter_context(
         registry=registry,
-        feature_cache=feature_cache,  # type: ignore[arg-type]
-        prior_config_hashes=frozenset(),
-        prior_firing_dates={},
-        calibration=calibration,
-        rng_factory=seed_hierarchy.rng,
+        seed=seed,
+        calibration=load_calibration(prefilter_yaml),
+        feature_cache=feature_cache,
+        forge_db_path=None,
     )
 
     typer.echo(
@@ -207,7 +200,7 @@ def cmd_prefilter(
         enumerate_candidates(grammar, registry, seed=seed, max_candidates=max_candidates),
         start=1,
     ):
-        report = run_battery(cfg, ctx, filters)
+        report = run_battery_over([cfg], ctx, filters)[0]
         if report.passed:
             passed_count += 1
             verdict = "PASS"
