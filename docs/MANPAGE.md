@@ -191,7 +191,7 @@ this box's PATH — D351).
 
 | Class | Script | Runs when | Does |
 |---|---|---|---|
-| WIRED | `campaign_run.sh` | `forge-campaign.timer`, Sunday 03:00 UTC | The unit's `ExecStart`: reads `FORGE_CAMPAIGN_MODE` (`live` since the 2026-09-14 cutover; `dry-run` snapshots the DB and plans only) and execs `forge campaign`; refuses any other value and refuses `live` while a daemon holds the DB (D411). |
+| WIRED | `campaign_run.sh` | `forge-campaign.timer`, Sunday 03:00 UTC | The unit's `ExecStart`: reads `FORGE_CAMPAIGN_MODE` (`live` since the 2026-09-14 cutover; `dry-run` snapshots the DB and plans only) and execs `forge campaign`; refuses any other value (D411; the daemon guard left with the daemon, Batch 6). |
 | WIRED | `backup_forge_db.sh` | `forge-backup.timer`, Sunday 04:30 UTC (after the run) | DR copy of `forge.db` (validated, atomic rename) + `models/` tarball into `FORGE_BACKUP_DEST` (default `~/forge_data/backups`, same disk); keeps the newest `FORGE_BACKUP_KEEP`, prunes only after a validated new copy (D195). |
 | WIRED | `live_db_snapshot.sh` | any read of the live DB | The blessed snapshot idiom: one real-disk copy, reused while fresh (`--max-age-min`), `--force`, `--clean`; never `/tmp` (a 62 GB tmpfs). |
 | RITUAL | `deploy_preflight.sh` | before every commit that changes the deploy surface | Read-only GO/NO-GO: clean deploy surface (`src config pyproject.toml uv.lock deploy`) + the full suite (covers the contracts-pin equality test and the campaign path); prints "GO — commit; the next Sunday run deploys" (`docs/tasks/deploy.md`). |
