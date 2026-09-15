@@ -153,6 +153,10 @@ refuses any other value. `MemoryHigh=32G` / `MemoryMax=48G` (the run trains its 
 25-27 GB peak measured, D417) fail the unit rather than starve Crucible. No `SuccessExitStatus`: a
 failed unit is the only page.
 
+The one env knob the run itself reads is `FORGE_REFUTATION_GUARD` (default on): `off` disables the
+D320 refutation routing in the enumerator and therefore CHANGES `enumeration_inputs_hash` — it is a
+kill-switch for a Crucible-registry incident, not a tuning knob; leave it unset.
+
 ```
 forge campaign --dry-run            # decide + rank, submit nothing, write the record
 forge campaign                      # the weekly run (what the timer executes)
@@ -248,9 +252,9 @@ Under `config/`. CLI flags override YAML; YAML overrides hardcoded defaults.
 
 | File | Controls |
 |---|---|
-| `forge.yaml` | Forge DB path, Crucible wiring, enumeration cap, batch size, and the `campaign:` knobs; the `submission.inflight_threshold` / `stall_after_seconds` / `max_inflight` keys steered the §7.3 rate limiter deleted in Batch 5 G4 (D421) and are removed in G5. (`data_root`/`log_root`/`feedback.*` cadence keys retired D247 — never read; feedback runs every iteration via `--consume-feedback`.) |
+| `forge.yaml` | Three keys (D422): `db_path` (Forge's DuckDB), `crucible.inbox_path` (where the weekly run writes), and the optional `campaign:` overrides for `forge.campaign.types.CampaignConfig` (every field has a default there; unknown keys fail loud). The schema is `extra="forbid"`: the daemon-era keys (`enumeration.*`, `submission.*`, `crucible.db_path` — Crucible is read only through its exports, hard rule #2) fail loud if re-added. |
 | `grammar.yaml` | The 21 grammar rules (S/C/R/X families). Operator-owned; version-bumped + archived on change. |
-| `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, novelty, regime exposure, permutation) + calibration keys (the auto-tune writer is retired, D206/D298). |
+| `prefilter.yaml` | Per-filter thresholds (signal density, expected trades, predicted activations, novelty, signal correlation, regime exposure, permutation test). Operator-owned; nothing writes it (the auto-tune trigger and its `auto_tune:` key left with the daemon, D422). |
 | `auto_tightened_thresholds.yaml` | RETIRED-EMPTY (`tightenings: []`, D206, permanent per D298). Retained because its fingerprint feeds `enumeration_inputs_hash` — deleting it changes the determinism identity. |
 | `grammar_archive/v{N}.yaml` | Frozen copies of each prior grammar version. |
 
