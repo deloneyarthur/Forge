@@ -42,8 +42,9 @@ uv run forge --help                       # CLI reference: docs/MANPAGE.md
    A missing model is a contracts gap to surface, not to work around.
 3. **Never propose grammar relaxations that lower Crucible's promotion gate.** Grammar can
    change; the gate cannot.
-4. **Auto-tightening can ship without approval; auto-loosening cannot.** Loosening writes to
-   `OPEN_PROPOSALS.md` and waits — never directly to `grammar.yaml`. Structurally enforced.
+4. **Grammar changes require a preregistration and the operator's signature.** No code writes
+   `config/grammar.yaml` at runtime; the pre-commit `freeze-governance` and `grammar-version-bump`
+   hooks enforce it (D390/D392). `OPEN_PROPOSALS.md` is a static, machine-parsed record.
 5. **No LLM in the production loop.** Enumerator / pre-filters / ranker / submitter / feedback
    are deterministic Python.
 6. **Enumeration is deterministic.** Same `(grammar_version, registry_hash, seed)` → same

@@ -108,6 +108,7 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     )
     """,
     """
+    -- no writer since Batch 5 G3 (D420); kept for old DBs
     CREATE TABLE IF NOT EXISTS grammar_proposals (
         proposal_id         UUID PRIMARY KEY,
         proposed_at         TIMESTAMP NOT NULL,
@@ -175,6 +176,7 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     # Idempotent ALTER; NULL on legacy rows and on any producer that omits it.
     "ALTER TABLE verdicts ADD COLUMN IF NOT EXISTS refit_selection VARCHAR",
     """
+    -- no writer since Batch 5 G3 (D420); kept for old DBs
     CREATE TABLE IF NOT EXISTS promoted_patterns (
         pattern_id          UUID PRIMARY KEY,
         discovered_at       TIMESTAMP NOT NULL,

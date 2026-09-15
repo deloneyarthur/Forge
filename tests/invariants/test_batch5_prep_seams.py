@@ -43,11 +43,10 @@ def test_campaign_path_imports_nothing_from_the_daemon_era(path: Path) -> None:
     assert not offending, f"{path.name} imports doomed module(s): {sorted(offending)}"
 
 
-def test_old_names_are_still_bound_to_the_moved_objects() -> None:
-    """The daemon-era `cli/main` aliases left in G1 and the ranking re-exports in G2; the
-    remaining rebinds belong to `feedback/rejection_weights`, which Batch 5 G3 deletes next,
-    and stay bound until then."""
-    from forge.feedback import eras, rejection_weights
+def test_eras_owns_the_era_helpers() -> None:
+    """After G3 the era cuts and the two label-honesty helpers have exactly one home."""
+    from forge.feedback import eras
 
-    assert rejection_weights.CLEAN_ERA_LABEL_CUT is eras.CLEAN_ERA_LABEL_CUT
-    assert rejection_weights.VE_GHOST_LABEL_CUT is eras.VE_GHOST_LABEL_CUT
+    assert eras.CLEAN_ERA_LABEL_CUT < eras.VE_GHOST_LABEL_CUT
+    assert callable(eras.is_ve_ghost_label)
+    assert callable(eras.honest_regime_coverage_row)
