@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 5 G6 DONE (D423): REL-4 fixed (SIGTERM sets a stop flag honoured between candidates — the in-flight write+commit always completes; second SIGTERM = hard stop), REL-5 fixed (universe fallback → loud `UniverseUnavailable`; goldens prove no draw moved), campaign batches now carry the funnel `rejection_breakdown`. Suite 1,558 green in 64 s, ZERO xfails. Live dry-run identical.** (D423)
+
+- Next: G7 — the last Batch 5 group (7 spent scripts, 3 uncited proposals, docs describe one machine).
+
 ## 2026-09-15 (later) — **Batch 5 G5 DONE (D422): ONE config surface — `forge.yaml` = `db_path` + `crucible.inbox_path` + `campaign:`; the consumer reads Crucible exports only (direct-`runs.duckdb` fallback GONE, hard rule #2); `prefilter.yaml` loses `auto_tune:`; the only env knob `src` reads is `FORGE_REFUTATION_GUARD` (documented). Suite 1,550 green in 65 s; 1 xfail (REL-4); live dry-run identical.** (D422)
 
 - Next: G6 (REL-4 SIGTERM stop-flag, REL-5 universe fail-loud, funnel rejection counts on campaign batches), then G7 (scripts + docs + records).

@@ -2538,3 +2538,44 @@ paths".
 candidates, never mid-candidate; un-xfail), REL-5 (the sampler's hard-coded universe fallback fails loud —
 the boot check already requires the export), wire `record_prefilter_rejections` into the campaign so its
 batches carry the funnel `rejection_breakdown` (G4's note).
+
+## D423 — 2026-09-15 — Batch 5 G6 DONE: REL-4 (SIGTERM cannot tear a submission), REL-5 (the universe fallback fails loud), campaign batches carry the funnel's rejection counts; the suite has ZERO xfails for the first time since Batch 2
+
+**Commits** `5a635cd` (REL-4), `3c77dd0` (REL-5), `9ae2b0c` (funnel counts + comment truth). Suite
+**1,558 passed / 1 skipped / 0 xfailed in 64 s**. `forge check` OK. Live dry-run `2026-W38-20260915T022326Z`
+identical to `…020433Z`.
+
+**REL-4 — SIGTERM.** systemd stops a oneshot with SIGTERM; `submitter._submit_one` writes the inbox file
+inside the DB transaction, so a signal between the write and the commit used to leave an inbox file with no
+row (the July reliability audit's finding, never actioned). Design, in `campaign/stop.py`: the handler sets a
+module flag and does NOT raise; a second SIGTERM with the flag set raises `KeyboardInterrupt` (the deliberate
+hard stop, mirroring SIGINT). `run_campaign` is now `with sigterm_guard(): _run_campaign(...)` — the run, not
+the CLI, owns the process contract, so a hand run, the unit and a test behave the same; the guard installs on
+the main thread only and restores the prior disposition. `submit_batch(..., should_stop=)` checks the flag at
+the top of each candidate, so the in-flight candidate's write + commit always complete and the next never
+starts (`BatchSubmissionResult.stopped_early` / `remaining_count`). The run then records `status: error` with
+`submitted` and `batch_id`, notes "stopped by SIGTERM after N submission(s); M not submitted", and raises
+`CampaignStopped` (exit 1, the unit FAILED = the page). Six tests incl. a live-run stop inside the first
+`submit_candidate`: exactly one inbox file == the one committed row. **The last xfail is gone.**
+
+**REL-5 — universe fallback.** `sampler._load_underlyings()` fell back to a hard-coded 24-name tier-1/2 list
+(D033) when Crucible's universe export was absent — under a frozen grammar a silent stale universe that also
+moves `enumeration_inputs_hash`. Now raises `UniverseUnavailable` naming the dir and glob; the list and three
+fallback docstrings are gone. Not a draw path: with the export present `universe_fingerprint()` is unchanged
+by construction; `tests/unit/test_enumeration` (511), `test_phase2_invariants`, `test_batch_reproducibility`
+green. The five D105/D106 draw tests that had relied on the fallback pool now publish the same 24 names as a
+real export fixture, so their byte-identity references still mean what they meant.
+
+**Funnel counts on campaign batches (G4's note).** `_submit` passes the battery reports:
+`enumerated_count = len(reports)` — the kept-in-cells sample the battery saw, NOT the 20,000 population sample
+(that stays in the run record's `enumerated`) — `survived_count` = passed, `enumerated_by_hypothesis` over the
+reports, then `record_prefilter_rejections` on the same connection. `forge_funnel.json`'s
+`rejection_breakdown` now satisfies Crucible's invariant `sum == enumerated − survived_prefilters` for campaign
+batches (tested red → green; `test_funnel_invariants` unchanged).
+
+**Comment truth.** 13 docstrings/comments in survivors that described the deleted loop as live were reworded;
+historical D-citations left as history.
+
+**Next:** G7 — the last group: retire the seven spent research scripts (+ one test), archive the three
+proposals whose last citing module is gone, and make the docs describe one machine (architecture → the final
+map; MANPAGE/HOW-TO final; DESIGN banners with §3.5 untouched; GRAMMAR accretion stripped; CLAUDE.md routing).
