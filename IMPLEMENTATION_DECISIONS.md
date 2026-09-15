@@ -2579,3 +2579,58 @@ historical D-citations left as history.
 **Next:** G7 — the last group: retire the seven spent research scripts (+ one test), archive the three
 proposals whose last citing module is gone, and make the docs describe one machine (architecture → the final
 map; MANPAGE/HOW-TO final; DESIGN banners with §3.5 untouched; GRAMMAR accretion stripped; CLAUDE.md routing).
+
+## D424 — 2026-09-15 — Batch 5 G7 DONE and **BATCH 5 COMPLETE**: the daemon era is out of the tree. Seven spent research scripts, four proposals and eight stale open questions retired; the docs describe one machine (DESIGN §3.5 byte-identical by diff). Totals: src 28,563 → 18612 LOC (88 files), tests 46,729 → 31681, suite 2,158 tests / 232 s → 1,555 / 72 s with 0 xfails, scripts 18 → 7, timers 5 → 2, CLI 32 → 8
+
+**G7 commits** `d3454c7` (scripts), `e48be4b` (proposals + open-questions sweep + `docs/proposals/README.md`),
+`57c3f2f` (the docs pass; `feedback-change.md` deleted). Suite **1,555 passed / 1 skipped / 0 xfailed in
+72 s**. Live dry-run `2026-W38-20260915T025949Z` identical to the G6 baseline (registry `c703b3b8…`, seed
+1290051760, 20,000 enumerated, no trigger), run after Crucible's fleet was verified back (their slim rewrite,
+19:47–19:58 PT, 205.9 → 51.8 GB).
+
+**Scripts.** `ceiling_record_test`, `joint_frontier` (D368), `second_gate_contrast` (+ test; D395),
+`threshold_resolution_value` (D353), `tail_verified_alignment` (D155), `production_by_group`
+(D341/D350), `promoted_leg_recall` (07-26) deleted (−1,442 LOC); MANPAGE retirement-ledger row added.
+**`scripts/` = `backup_forge_db.sh`, `campaign_run.sh`, `live_db_snapshot.sh`, `deploy_preflight.sh` + the three
+grammar hooks.**
+
+**Proposals.** Archived with banners: `yield-auditor` (D419), `orthogonal-family-supply-for-pbo`
+(D418/D420), `learned-target-and-label-integrity` (D419), `tail-aware-ranker` (the tail LANE is gone; the
+robustness model's design-of-record is `quality-lane-rewire`, bannered post-cutover). Kept: `learned-ranker`,
+`quality-lane-rewire`, `grammar-freeze-declaration` (hook-read), `path-c-scope-expansion` (the live §5
+reopener), the five `v3x/v41` records cited by their retirement-guard tests, and this plan until Batch 7.
+`docs/proposals/README.md` states the keep/archive discriminator.
+
+**Open questions.** Q21, Q22, Q27, Q45, Q47, Q48, Q52, Q60 swept (subjects deleted or moot — dark supply is
+now T3/T5's job; the daemon cohorts are history). Open: Q9 (test needle), Q14, Q19, Q24, Q29, Q41 (freeze-moot,
+bannered).
+
+**Docs.** architecture.md rewritten to the final map (the campaign pipeline, the packages that exist, two
+timers, the §13 bookmarks re-pointed at living tests, Terms curated with Cell / Protected / Dead / Dark /
+Trigger / Challenger gate / Run record). MANPAGE final (six commands, three yaml files, the tables written
+today). HOW-TO = the weekly run, Monday check, `status`, failure classes, reopener ritual, cold start, the
+timestamp-era table merged in; investigate-live trimmed to the snapshot idiom + living queries. GRAMMAR.md:
+history blockquotes → one-line D-links (−13% bytes; the 21 headings and the S5 terms intact; doc-sync hook
+passed). DESIGN.md: §0 names the weekly run as the as-built state; banners at §1.4, §2.2, §6, §7.3, §8,
+§13.3, §13.7; §2.1/§10 → pointers; §12 → a seven-row table; the §14 "25 rules" cell marked *sic* (the D300
+banner declares that table verbatim); **§3.5 byte-identical**, proven:
+`diff <(git show e48be4b:docs/DESIGN.md | sed -n '268,386p') <(awk '/^### 3\.5 The v1 ruleset/{f=1} /^### 3\.6/{f=0} f' docs/DESIGN.md)`
+→ empty. CLAUDE.md routing: `feedback-change` row gone, deploy/HOW-TO rows renamed.
+
+**Batch 5 in one table (D417 → D424).**
+| | before (09-13) | after |
+|---|---|---|
+| `src/` | 28,563 LOC / 107 files | 18612 / 88 |
+| `tests/` | 46,729 lines / 191 files, 2,158 tests, 232 s, 3 xfails | 31681 / 130, 1,555 tests, 72 s, 0 xfails |
+| `scripts/` | 18 | 7 |
+| CLI (top + sub) | 32 | 8 (version, check, enumerate, prefilter, campaign, campaign status, prereg ×3) |
+| timers | 5 (daemon + 4) | 2 (campaign Sun 03:00Z, backup Sun 04:30Z) |
+| env knobs read by `src` | 12 | 1 (`FORGE_REFUTATION_GUARD`) |
+| config files | 4 yaml | 3 yaml (`forge.yaml` = 3 keys) |
+| `docs/` | 7,352 lines | 4500 |
+
+**Deferred to Batch 6 (consolidate):** `campaign/run.py::_run_battery` duplicates `main._run_battery_for_seed`;
+`load_cell_stats` pulls every `submissions.config_json` into Python (16 GB peak) and `build_dataset`
+materialises 1.27 M verdicts wide (25 GB) — both move into DuckDB-side aggregation; the newest-file/JSONL
+helpers; `campaign_run.sh`'s dead `forge.service` guard; test consolidation (17 version-guard files,
+`test_sampler` 3,088 lines, `test_custom_predicates` 1,702). **Batch 7:** regrowth rules + a size invariant.

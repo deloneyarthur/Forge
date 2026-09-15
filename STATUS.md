@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **BATCH 5 COMPLETE (D424): the daemon era is out of the tree. src 28,563 → 18,611 LOC; tests 46,729 → 31,681 lines, suite 2,158/232 s → 1,555/72 s, 0 xfails; scripts 18 → 7; CLI 32 → 8; timers 5 → 2; env knobs 12 → 1; docs describe one machine (DESIGN §3.5 byte-identical). Live dry-run identical after Crucible's slim rewrite (205.9 → 51.8 GB, fleet healthy 19:59 PT).** (D424)
+
+- Remaining: Batch 6 (consolidate: `_run_battery` dup, the 16 GB cell-stats + 25 GB dataset queries, helpers, test consolidation) and Batch 7 (regrowth rules + size invariant). Next Sunday run 2026-09-20 03:00 UTC is the first on the slimmed tree.
+
 ## 2026-09-15 (later) — **Batch 5 G6 DONE (D423): REL-4 fixed (SIGTERM sets a stop flag honoured between candidates — the in-flight write+commit always completes; second SIGTERM = hard stop), REL-5 fixed (universe fallback → loud `UniverseUnavailable`; goldens prove no draw moved), campaign batches now carry the funnel `rejection_breakdown`. Suite 1,558 green in 64 s, ZERO xfails. Live dry-run identical.** (D423)
 
 - Next: G7 — the last Batch 5 group (7 spent scripts, 3 uncited proposals, docs describe one machine).
