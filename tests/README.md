@@ -7,7 +7,7 @@ Scope: where a test goes and the local patterns. Run commands: `docs/tasks/quali
 | `unit/` | Pure-logic single-module tests, mirroring `src/forge/` (`test_campaign/`, `test_grammar/`, `test_enumeration/`, …) | Default home for new tests |
 | `integration/` | Multi-module workflows, contracts integration, resilience (`test_resilience_*`), reproducibility, hook scripts, the CLI↔docs sync guard | Anything crossing module boundaries or touching real file layouts |
 | `invariants/` | Structural enforcement of the CLAUDE.md hard rules + §13: `test_phase{0..6}_invariants.py` (by build phase; `test_phase6_properties.py` is Hypothesis-driven), `test_campaign_invariants.py` (a run's kept configs are a subsequence of the cold-start sequence), `test_batch5_prep_seams.py` (the campaign imports nothing daemon-era), and the one-invariant files | Every hard rule gets its failure-mode test HERE, written before the production code |
-| `fixtures/` | Shared synthetic data: `synthetic_crucible_db.py`, `strategy_configs.py`, `grammar_property_helpers.py` | Extend rather than duplicate |
+| `fixtures/` | Shared synthetic data and builders: `synthetic_crucible_db.py`, `strategy_configs.py`, `grammar_property_helpers.py`, `forge_db_rows.py` (GatedRun / submission rows), `contexts.py` (filter and batch contexts, ranked candidates), `registries.py` (registries that SERVE the ids an emission property is about), `sampling.py` (`sample_configs`, the seed-k population convention) | Extend rather than duplicate |
 
 Markers (pyproject): `unit`, `integration`, `invariants`, `slow`.
 
@@ -15,6 +15,10 @@ Markers (pyproject): `unit`, `integration`, `invariants`, `slow`.
 
 - **Golden sampler-sequence tests** pin cold-start byte-identical enumeration (hard rule #6).
   A deliberate population change re-pins them — note it in the D-entry; never adjust casually.
+- **Emission-policy tripwires** live in one module, `unit/test_enumeration/test_v55_emission_policy.py`,
+  grouped by hypothesis; each test names its D-entry. The freeze hook guards `grammar.yaml` text,
+  these guard the sampler, so a retired id re-entering a pool fails here first. Add a property
+  under its hypothesis section; never a new per-version file.
 - **Exports, not DBs.** Tests that feed the consumer write real export files (the
   `write_gated_runs_export` helpers) — the direct-DuckDB fallback is gone (Batch 5 G5, hard rule #2).
 - **Eight test files import `forge.cli.main`; six only import `app`** and drive it through

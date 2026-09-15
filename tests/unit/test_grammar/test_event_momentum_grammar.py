@@ -13,7 +13,7 @@ volatility_event, which rides the pre-print IV crush). Its grammar shape:
 
 These tests pin the §3.5 predicate behaviour (C1/C2/S5) and the per-hypothesis
 pools for event_momentum. End-to-end sampling lives in
-``tests/unit/test_enumeration/test_event_momentum.py``.
+``tests/unit/test_enumeration/test_v55_emission_policy.py`` (event-momentum section).
 """
 
 from __future__ import annotations
