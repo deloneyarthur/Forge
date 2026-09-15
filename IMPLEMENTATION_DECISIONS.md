@@ -2698,3 +2698,36 @@ the numpy materialisation inside `train_verdict_model` — not this batch's busi
 
 **Next:** part C — test consolidation (17 version-guard files → one emission-policy module; six duplicated
 row/ctx builders → `tests/fixtures/`; table-driven `test_custom_predicates`; goldens untouched).
+
+## D427 — 2026-09-15 — Batch 6 part C DONE and **BATCH 6 COMPLETE**: test consolidation — 145 → 117 files, 32,250 → 29,823 lines, every assertion kept, all 15 goldens verbatim; suite 1,587 green in 61 s, fast lane 33 s
+
+**Commits** `aeda7da` (C1 shared builders), `8ff1747` (C2 emission-policy module), `ab7ec11` (C3
+parametrization), `dbe523a` (C4 slow lane + README). Suite **1,587 passed / 1 skipped / 0 xfailed in 61 s**;
+`-m "not slow"` = 1,585 in 33 s (the two >5 s perf invariants were already marked).
+
+**C1.** `tests/fixtures/forge_db_rows.py` + `contexts.py` replace 7 `_gated_run`, 6 `_insert_submission`,
+14 `_ctx`, 5 `_candidate` copies across 25 files (−398 lines). One behaviour change, for the better: the
+prefilter test contexts' RNG factory moved from a process-salted `random.Random(hash(name))` to
+`SeedHierarchy(seed).rng`, so it is pinnable.
+
+**C2.** The 17 version-guard files (2,461 lines, 115 collected, 13 s) → `test_v55_emission_policy.py`
+(1,164 lines, 123 collected via parametrization, 9 s), grouped trend / MR / ve / event_momentum /
+cross-cutting retirements; every assertion kept; populations are module fixtures
+(`tests/fixtures/sampling.py::sample_configs`), registries in `tests/fixtures/registries.py`. These are the
+silent-re-admission tripwires for Python-side emission policy that the freeze hook cannot see; they lost
+their per-version narratives (the D-entries own those), not their teeth.
+
+**C3.** `test_custom_predicates.py` 1,702 → 679 lines (table-driven per rule id; the S5 needle intact);
+`test_sampler.py` 3,088 → 2,879 (six parametrized tests replace thirteen; the registry chain moved to
+fixtures). **Goldens: all 15 kept verbatim, zero golden constants changed (grep of the diff); none deleted —
+the capitulation lever's code still exists (`iterator.py:76`, D270 paths), so its golden still pins a live
+draw.** `test_consumer.py` left as is (its helpers write a synthetic Crucible DB; ~20 lines of gain for some
+risk).
+
+**Batch 6 in one table (D425 → D427).** `campaign/run.py` 993 → 388 lines over six phase modules; one
+battery builder; one home per path/JSONL/validation helper; the arm-B draw branch gone (goldens green); the
+live run's peak memory 25–27 → 16.3 GB (cell stats 14.5 → 3.6 GB, training frame 24.4 → 8.4 GB, both
+byte-identical); unit caps 20/32 GB; tests 145 → 117 files. `src/` 97 files / 18,856 LOC.
+
+**Next:** Batch 7 — the regrowth rules become an invariant test, the records discipline is written where
+commits happen, and the plan archives itself (sweep-on-land).

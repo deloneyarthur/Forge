@@ -740,7 +740,7 @@ reads `~/forge_data/campaigns/*.json`; `OPEN_PROPOSALS.md` stays parseable and s
   **Verify:** goldens green (the v55 population is untouched — `test_enumeration_byte_identical…`,
   `test_batch_reproducibility.py`); a `--dry-run` before and after produces the identical plan for
   the same watermarks; full suite; ruff; mypy; `forge check`.
-- **Batch 6 — consolidate.** Single config surface (`forge.yaml` only); shared helpers (§3 #9);
+- **Batch 6 — DONE 2026-09-15 (D425–D427: A source consolidation, B memory hot spots, C test consolidation).** Originally: consolidate. Single config surface (`forge.yaml` only); shared helpers (§3 #9);
   test consolidation (§5); `architecture.md` rewritten to §12.4; DESIGN "final state" banner;
   MANPAGE to the 9 commands; HOW-TO = weekly run, `status`, cold start, reopener ritual.
 - **Batch 7** — regrowth rules (§10), plus one invariant: `forge campaign --dry-run` must succeed

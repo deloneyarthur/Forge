@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **BATCH 6 COMPLETE (D427): tests 145 → 117 files / 32,250 → 29,823 lines, every assertion kept, 15 goldens verbatim; suite 1,587 green in 61 s (fast lane 33 s). With 6A/6B: run.py split into six phase modules, live run 16.3 GB peak, one home per helper.** (D427)
+
+- Next: Batch 7 (regrowth invariant + records discipline; archive the plan). Then the plan is done.
+
 ## 2026-09-15 (later) — **Batch 6 part B DONE (D426): cell stats 14.5 → 3.6 GB (SQL, 6× faster), training frame 24.4 → 8.4 GB (featurise per config, stream); whole live run 25–27 → 16.3 GB; caps 20/32 GB (daemon-reloaded). Outputs byte-identical (1,146 cells; 1,268,538 × 127 frame). Suite 1,580 green in 63 s.** (D426)
 
 - Next: part C — test consolidation (version-guard files, duplicated builders, table-driven predicate tests; goldens untouched). Then Batch 7.
