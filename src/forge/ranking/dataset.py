@@ -21,7 +21,7 @@ import polars as pl
 from crucible_contracts import StrategyConfig, parse_forward_compatible
 from crucible_contracts.models import GateResult
 
-from forge.feedback.rejection_weights import (
+from forge.feedback.eras import (
     CLEAN_ERA_LABEL_CUT,
     honest_regime_coverage_row,
     is_ve_ghost_label,

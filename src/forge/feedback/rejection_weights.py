@@ -36,7 +36,6 @@ if TYPE_CHECKING:
 
     import duckdb
     from crucible_contracts import GatedRun
-    from crucible_contracts.models import GateResult
 
 
 # Beta prior over per-hypothesis promotion rate. Mild prior favoring
@@ -249,8 +248,8 @@ _COST_FLOOR_VALUE_CUT: datetime = datetime(2026, 6, 9, 22, 52, 57, tzinfo=UTC)
 # this marker (D124) — their binary event was unverified-admission noise;
 # honest re-evaluations flow in via the fullhist-refit children (same
 # config_hash), replacing the evidence organically.
-_COVERAGE_GATE: str = "regime_coverage"
-_COVERAGE_UNVERIFIED_MARK: str = "coverage_unverified"
+_COVERAGE_GATE: str = _eras._COVERAGE_GATE  # home: feedback/eras.py (Batch 5 prep)
+_COVERAGE_UNVERIFIED_MARK: str = _eras._COVERAGE_UNVERIFIED_MARK
 
 # Label-era key for the learned verdict model (D132 / F1). Stricter than the
 # value-cut above on purpose: training LABELS must come from the engine that
@@ -274,20 +273,8 @@ CLEAN_ERA_LABEL_CUT: datetime = _eras.CLEAN_ERA_LABEL_CUT  # home: feedback/eras
 # Non-ve rows and post-cut ve rows are untouched.
 VE_GHOST_LABEL_CUT: datetime = _eras.VE_GHOST_LABEL_CUT  # home: feedback/eras.py (Batch 5 prep)
 
-_VE_GHOST_HYPOTHESIS = "volatility_event"
-
-
-def is_ve_ghost_label(hypothesis: str | None, decided_at: datetime) -> bool:
-    """True iff this (hypothesis, decided_at) label falls under the ve ghost cut.
-
-    Naive timestamps are UTC by repo convention (the verdicts/export era is
-    uniform post-D117)."""
-    if hypothesis != _VE_GHOST_HYPOTHESIS:
-        return False
-    decided = decided_at
-    if decided.tzinfo is None:
-        decided = decided.replace(tzinfo=UTC)
-    return decided < VE_GHOST_LABEL_CUT
+_VE_GHOST_HYPOTHESIS = _eras._VE_GHOST_HYPOTHESIS
+is_ve_ghost_label = _eras.is_ve_ghost_label  # home: feedback/eras.py
 
 
 def _values_readable(gated_run: GatedRun) -> bool:
@@ -301,19 +288,8 @@ def _values_readable(gated_run: GatedRun) -> bool:
     return decided >= _COST_FLOOR_VALUE_CUT
 
 
-def honest_regime_coverage_row(gate_results: Mapping[str, GateResult]) -> bool:
-    """D124 key 2 on a bare gate-results mapping — the single source of truth.
-
-    Shared by the reward path (via `_honest_regime_coverage`) and the learned
-    verdict model's label builder (D132), so the two reads cannot drift.
-    """
-    row = gate_results.get(_COVERAGE_GATE)
-    return row is not None and row.passed and _COVERAGE_UNVERIFIED_MARK not in (row.detail or "")
-
-
-def _honest_regime_coverage(gated_run: GatedRun) -> bool:
-    """D124 key 2: True only when the coverage gate REALLY evaluated and passed."""
-    return honest_regime_coverage_row(gated_run.decision.gate_results)
+honest_regime_coverage_row = _eras.honest_regime_coverage_row  # home: feedback/eras.py
+_honest_regime_coverage = _eras._honest_regime_coverage
 
 
 def component_prior_mean(*, alpha: float = COMPONENT_ALPHA, beta: float = COMPONENT_BETA) -> float:

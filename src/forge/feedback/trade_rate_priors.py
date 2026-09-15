@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from forge.feedback.rejection_weights import is_ve_ghost_label
+from forge.feedback.eras import is_ve_ghost_label
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

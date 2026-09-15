@@ -29,8 +29,57 @@ untouched.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from crucible_contracts import GatedRun
+    from crucible_contracts.models import GateResult
 
 CLEAN_ERA_LABEL_CUT: datetime = datetime(2026, 6, 10, 17, 17, 13, tzinfo=UTC)
 VE_GHOST_LABEL_CUT: datetime = datetime(2026, 7, 18, 0, 0, 0, tzinfo=UTC)
 
-__all__ = ["CLEAN_ERA_LABEL_CUT", "VE_GHOST_LABEL_CUT"]
+_VE_GHOST_HYPOTHESIS = "volatility_event"
+
+# D124 key 2: the coverage gate's name and the marker Crucible writes into its `detail` when the
+# gate was NOT actually evaluated (a pass with this mark is a passthrough, not verified coverage).
+_COVERAGE_GATE: str = "regime_coverage"
+_COVERAGE_UNVERIFIED_MARK: str = "coverage_unverified"
+
+
+def is_ve_ghost_label(hypothesis: str | None, decided_at: datetime) -> bool:
+    """True iff this (hypothesis, decided_at) label falls under the ve ghost cut.
+
+    Naive timestamps are UTC by repo convention (the verdicts/export era is
+    uniform post-D117)."""
+    if hypothesis != _VE_GHOST_HYPOTHESIS:
+        return False
+    decided = decided_at
+    if decided.tzinfo is None:
+        decided = decided.replace(tzinfo=UTC)
+    return decided < VE_GHOST_LABEL_CUT
+
+
+def honest_regime_coverage_row(gate_results: Mapping[str, GateResult]) -> bool:
+    """D124 key 2 on a bare gate-results mapping — the single source of truth.
+
+    Shared by the learned verdict model's label builder (D132) and the trainer
+    invariants, so the two reads cannot drift: True only when the coverage gate
+    REALLY evaluated and passed.
+    """
+    row = gate_results.get(_COVERAGE_GATE)
+    return row is not None and row.passed and _COVERAGE_UNVERIFIED_MARK not in (row.detail or "")
+
+
+def _honest_regime_coverage(gated_run: GatedRun) -> bool:
+    """D124 key 2 on a whole `GatedRun`."""
+    return honest_regime_coverage_row(gated_run.decision.gate_results)
+
+
+__all__ = [
+    "CLEAN_ERA_LABEL_CUT",
+    "VE_GHOST_LABEL_CUT",
+    "honest_regime_coverage_row",
+    "is_ve_ghost_label",
+]

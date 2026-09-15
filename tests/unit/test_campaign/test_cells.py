@@ -32,7 +32,7 @@ from forge.campaign.cells import (
     load_cell_stats,
 )
 from forge.campaign.types import CampaignConfig, CellStats
-from forge.feedback.rejection_weights import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
+from forge.feedback.eras import CLEAN_ERA_LABEL_CUT, VE_GHOST_LABEL_CUT
 from forge.persistence.db import open_db
 from tests.fixtures.strategy_configs import grammar_valid_baseline, minimal_strategy_config
 

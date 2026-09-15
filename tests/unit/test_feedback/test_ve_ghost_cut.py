@@ -22,7 +22,7 @@ from datetime import datetime
 import duckdb
 import pytest
 
-from forge.feedback.rejection_weights import (
+from forge.feedback.eras import (
     VE_GHOST_LABEL_CUT,
     is_ve_ghost_label,
 )

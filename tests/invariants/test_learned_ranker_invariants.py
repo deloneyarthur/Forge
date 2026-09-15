@@ -23,7 +23,7 @@ import duckdb
 from crucible_contracts import GatedRun, StrategyConfig
 from crucible_contracts.models import GateResult, PromotionDecision, RunResult
 
-from forge.feedback.rejection_weights import (
+from forge.feedback.eras import (
     CLEAN_ERA_LABEL_CUT,
     _honest_regime_coverage,
     honest_regime_coverage_row,
