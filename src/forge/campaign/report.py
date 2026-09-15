@@ -166,17 +166,42 @@ def load_records(records_dir: Path) -> list[RunRecord]:
     """Every record, oldest first (run ids sort chronologically by construction)."""
     if not records_dir.exists():
         return []
-    out = [
-        record_from_json(p.read_text(encoding="utf-8"))
-        for p in sorted(records_dir.glob(_RECORD_GLOB))
-    ]
+    out: list[RunRecord] = []
+    for path in sorted(records_dir.glob(_RECORD_GLOB)):
+        text = path.read_text(encoding="utf-8")
+        if not _is_run_record(text):
+            # The directory also holds markers in other schemas (`CUTOVER.json`,
+            # `cutover/v1`); a foreign file must never break the next run's baseline read.
+            continue
+        out.append(record_from_json(text))
     out.sort(key=lambda r: r.started_at)
     return out
+
+
+def _is_run_record(text: str) -> bool:
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(raw, dict) and str(raw.get("schema_version", "")).startswith("campaign_run/")
 
 
 def load_latest_record(records_dir: Path) -> RunRecord | None:
     records = load_records(records_dir)
     return records[-1] if records else None
+
+
+_COMPLETED: frozenset[str] = frozenset({"ok", "no_trigger"})
+
+
+def load_latest_baseline_record(records_dir: Path) -> RunRecord | None:
+    """The newest record that COMPLETED — the only kind whose ``baselines`` mean anything.
+
+    A ``boot_failed`` or ``error`` record carries empty baselines; letting it stand in for the
+    previous run would make T1-T3 read "first run, no baseline" the week after any failure
+    (caught on the 2026-09-15 dry-run that followed a failed one)."""
+    completed = [r for r in load_records(records_dir) if r.status in _COMPLETED]
+    return completed[-1] if completed else None
 
 
 def _verdict_counts(conn: duckdb.DuckDBPyConnection, hashes: Sequence[str]) -> tuple[int, int]:
@@ -227,6 +252,7 @@ __all__ = [
     "baseline_ids",
     "baseline_str",
     "format_status",
+    "load_latest_baseline_record",
     "load_latest_record",
     "load_records",
     "record_from_json",

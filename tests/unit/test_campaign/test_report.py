@@ -131,3 +131,38 @@ def test_status_joins_verdicts_when_a_db_is_given() -> None:
     assert "verdicts=2 converting=1" in text
     assert "submitted=2" in text
     assert format_status([], None) == "no campaign runs recorded yet"
+
+
+def test_foreign_json_in_the_records_dir_is_skipped(tmp_path: Path) -> None:
+    """The cutover wrote `CUTOVER.json` (schema `cutover/v1`) into the records dir; the first
+    weekly run after it must still read its baseline instead of dying on a marker file
+    (caught on the 2026-09-15 dry-run: `ValueError: run record missing started_at`)."""
+    from forge.campaign.report import load_latest_record, load_records, write_record
+
+    started = datetime(2026, 9, 14, 23, 52, 6, tzinfo=UTC)
+    write_record(tmp_path, _record("2026-W38-20260914T235206Z", started))
+    (tmp_path / "CUTOVER.json").write_text(
+        '{"schema_version": "cutover/v1", "instant": "2026-09-14T23:53:01Z"}', encoding="utf-8"
+    )
+    (tmp_path / "garbage.json").write_text("not json", encoding="utf-8")
+    assert [r.run_id for r in load_records(tmp_path)] == ["2026-W38-20260914T235206Z"]
+    latest = load_latest_record(tmp_path)
+    assert latest is not None
+    assert latest.run_id == "2026-W38-20260914T235206Z"
+
+
+def test_baseline_record_skips_failed_runs(tmp_path: Path) -> None:
+    """A failed Sunday must not blind the next run's triggers: the baseline is the newest
+    COMPLETED record, not the newest file."""
+    from forge.campaign.report import load_latest_baseline_record, write_record
+
+    good = _record("2026-W37-20260906T030000Z", datetime(2026, 9, 6, 3, tzinfo=UTC))
+    failed = _record(
+        "2026-W38-20260913T030000Z", datetime(2026, 9, 13, 3, tzinfo=UTC), status="error"
+    )
+    write_record(tmp_path, good)
+    write_record(tmp_path, failed)
+    latest = load_latest_baseline_record(tmp_path)
+    assert latest is not None
+    assert latest.run_id == good.run_id
+    assert load_latest_baseline_record(tmp_path / "empty") is None

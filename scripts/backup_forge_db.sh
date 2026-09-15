@@ -9,7 +9,8 @@
 #
 # METHOD: the live DB holds an intermittent RW lock, so a read-only open can fail
 # (docs/tasks/investigate-live.md). The house convention is to `cp` the single DuckDB
-# file between the daemon's write bursts (scripts/daily_ranker_eval.sh does the same).
+# file between write bursts (the retired daily_ranker_eval.sh did the same; since Batch 5 G0 the
+# DB changes only on the Sunday campaign run, and this timer follows it at 04:30 UTC).
 # We cp, then VALIDATE the copy by opening it read-only and querying a core table; a
 # torn mid-write copy fails validation and we retry. Only a validated copy is published
 # (atomic rename on the same filesystem), and retention prunes ONLY after a new good
@@ -21,7 +22,7 @@
 # FORGE_BACKUP_DEST at a mounted external/remote target; nothing else changes.
 #
 # Deterministic-loop rules (#6/#8) do not apply: this is ops glue, not src/ -- it reads
-# the DB and the wall clock exactly as daily_ranker_eval.sh already does, touches no
+# the DB and the wall clock exactly as the retired daily_ranker_eval.sh did, touches no
 # grammar/weights/config/service, and cannot change what Forge submits. Reverting =
 # disable the timer; the backups dir is inert data.
 #

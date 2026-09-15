@@ -117,10 +117,8 @@ The full unit set after bring-up:
 | Unit | Cadence | Purpose | Provenance |
 |---|---|---|---|
 | `forge.service` | 24/7 daemon | the producer loop (`forge run --loop …`) | — |
-| `forge-ranker-eval.timer` | 05:00 daily | train + eval the learned verdict / wf_p25 model; publish to `~/forge_data/models/` | F3 / D193 |
-| `forge-backup.timer` | 04:00 daily | DR backup of `forge.db` + `models/` | D195 |
+| `forge-backup.timer` | Sunday 04:30 UTC | DR backup of `forge.db` + `models/`, after the campaign run | D195 / G0 |
 | `forge-healthcheck.timer` | hourly | `forge healthcheck` — detect an alive-but-unproductive daemon (CRITICAL surfaces in `--state=failed`) | D197 |
-| `forge-prereg-watch.timer` | 06:30 daily | `scripts/freeze_read_watcher.py` — a registered read must not come due silently (DUE / UNWATCHABLE fail the unit) | D392 |
 | `forge-campaign.timer` | Sunday 03:00 UTC | `scripts/campaign_run.sh` — the weekly zero-input challenger run; `FORGE_CAMPAIGN_MODE` in the unit = `dry-run` (snapshot, nothing submitted) until the Route C cutover flips it to `live` | D410/D411 |
 
 (`forge-eod-check.timer`, a 21:00 headless-Claude EOD report created 06-10, was RETIRED D253 —
@@ -132,15 +130,15 @@ alerting superseded by the hourly healthcheck; its prompt had fossilized on a v1
 `~/optbt_data/{inbox,exports}`. The timer scripts create the rest of `~/forge_data/` on their
 first run — no manual step needed:
 
-- `scripts/daily_ranker_eval.sh` creates `~/forge_data/{models,ranker_eval}` (`mkdir -p`).
+- `forge campaign` (in-run training, Batch 5 G0) creates `~/forge_data/{models,campaigns}`.
 - `scripts/backup_forge_db.sh` creates its destination `~/forge_data/backups`
   (override via `FORGE_BACKUP_DEST` for a true off-box target — see DR note below).
 
 All scripts the timers invoke ride the tree and are committed executable; verify before enabling:
 
 ```bash
-ls -l ~/proj/Forge/scripts/{daily_ranker_eval.sh,backup_forge_db.sh,deploy_preflight.sh,live_db_snapshot.sh,campaign_run.sh}
-# all five should be -rwxr-xr-x; chmod +x any that lost the bit in transit
+ls -l ~/proj/Forge/scripts/{backup_forge_db.sh,deploy_preflight.sh,live_db_snapshot.sh,campaign_run.sh}
+# all four should be -rwxr-xr-x; chmod +x any that lost the bit in transit
 ```
 
 (`deploy_preflight.sh` (D199) is the read-only pre-deploy GO/NO-GO gate used by the deploy
@@ -198,9 +196,9 @@ set one on the new box if the host has only one disk.
       (`FORGE_EXPECTED_CONTRACT_VERSION` in `src/forge/core/contracts_check.py`)
 - [ ] `du -h ~/forge_data/forge.db` ≈ matches the old box (state came across)
 - [ ] `systemctl --user is-enabled forge.service` → enabled; linger on
-- [ ] `systemctl --user list-timers 'forge-*'` → `forge-ranker-eval`, `forge-backup`,
-      `forge-healthcheck`, `forge-prereg-watch`, `forge-campaign` all five scheduled (king arm absent — D190; eod-check retired — D253)
-- [ ] `ls ~/proj/Forge/scripts/*.sh` → backup/ranker-eval/preflight scripts present + executable
+- [ ] `systemctl --user list-timers 'forge-*'` → `forge-campaign` (Sun 03:00 UTC) and `forge-backup`
+      (Sun 04:30 UTC), both scheduled (ranker-eval / prereg-watch / healthcheck retired with the daemon, Batch 5)
+- [ ] `ls ~/proj/Forge/scripts/*.sh` → backup / campaign_run / preflight / snapshot scripts present + executable
 - [ ] Crucible up + `~/optbt_data/exports/` populated → start Forge
 - [ ] First batch in `journalctl` loads the registry + grammar (`grammar_version` matching `config/grammar.yaml`) without
       `SchemaVersionMismatch`

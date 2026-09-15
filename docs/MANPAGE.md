@@ -160,7 +160,7 @@ IS the gate-tail value (the §6.2 hygiene blend is BYPASSED), so the gate is HAR
 to 0.0 and can never outrank an eligible config (matching the `rewire_streak_wfp25` shadow the flip decision
 reads, which gates on the SAME `FORGE_REWIRE_P_FLOOR`). Consumed by `forge.cli.main._quality_rank_mode` →
 `rank_batch(gate_tail_ordering=…)`. Flipping to `gate-tail` is an operator-gated deploy (prereg + the §8.6
-rewire streak); keep the floor env identical on `forge.service` and `forge-ranker-eval` so shadow==production.
+rewire streak); keep the floor env identical on `forge.service` and `forge-ranker-eval` so shadow==production (both units retired, Batch 5).
 
 **Env-only knob — `FORGE_EXPLORATION_HOLDOUT_FRAC`** (P3.3/B7, D232): the fraction of each batch that
 BYPASSES the learned ranking as a seeded random draw from the prefiltered survivors — unbiased labels for
@@ -304,9 +304,9 @@ tails (on stage-one cells spearman(cell mean, cell std) = −0.148 while spearma
 P(≥1.0), cell std) = +0.500). Refuses when the base-metric column is absent, when under 50
 rows carry it, or when `--n-pos` ≥ the trainable rows (the label would be every row). Saves
 an append-only `tail_model_<base_target>_n<N>_*.json` artifact — base metric and label size
-are both in the FILENAME, so two lanes at different sizes never shadow each other. Published
-daily by `scripts/daily_ranker_eval.sh` (staging + atomic mv); the artifact must exist
-BEFORE `FORGE_TAIL_LANE_SLOTS` is set or the lane logs `inert` and changes nothing.
+are both in the FILENAME, so two lanes at different sizes never shadow each other. The daily
+trainer that published these retired with the daemon (Batch 5 G0); the weekly run does not train
+tail models because nothing in it loads them — this command remains for hand use until G1.
 
 `--n-pos` is a **count, never a quantile**: five independently-tuned parameters have failed
 to transfer forward on this data, and `wf_p10` carries a mass point at zero where a quantile
@@ -403,8 +403,9 @@ criterion margin is set once the shadow distribution is visible.
 | `--since` | str | clean-era boundary | ISO window start (naive = UTC). |
 | `--gate` | str | `cpcv_sharpe_p25` | Realized worst-quartile gate to correlate against (timer uses `wf_sharpe_p25`). |
 
-**Automated daily** by the `forge-ranker-eval` systemd timer (05:00; `scripts/daily_ranker_eval.sh`)
-— it snapshots the DB, trains BOTH shadow models (`train` for P(component) + `train-robustness
+**RETIRED 2026-09-14 (Batch 5 G0)** — the `forge-ranker-eval` timer and `scripts/daily_ranker_eval.sh` are
+gone; the weekly `forge campaign` trains in-run and writes no streak clocks. What follows is how the
+daily automation worked, kept until G1 deletes these commands: it snapshotted the DB, trains BOTH shadow models (`train` for P(component) + `train-robustness
 --target target_wf_p25` for the quality lane's tail-aware model, D191/D192; each atomic-published to
 `~/forge_data/models/`), evaluates (`eval` for the streak + `eval-robustness --gate wf_sharpe_p25`
 for the observational tail readout), and appends **TWO consecutive-PASS clocks**: the F3
@@ -579,6 +580,17 @@ and the run skips the D052 aged-out flush; after the cutover every file must rea
 — a truncated file then means something else is flooding `source='forge'` and is worth a relay
 (D412). An absent stream falls back to the all-source export and says so in the record.
 
+**In-run training (Batch 5 G0).** After reconcile the run trains the two model families its
+ranking loads — the verdict model and the robustness model for `ranking.model.QUALITY_LANE_TARGET`
+— from `forge.db` directly, publishes each atomically (staging + rename) into `--models-dir`, then
+prunes every artifact family to the newest `campaign.models_keep` (default 4; REL-12). A fit that
+refuses (thin rows) or fails is a `notes` entry and the run ranks on the previous artifact — never a
+crash. The trained ids land in the record's `models` field. `--skip-train` ranks on the newest
+existing artifacts (hermetic/diagnostic runs). The boot check `preregistrations` is the DUE judge
+that was `forge-prereg-watch`: an open registration whose clock has come due, or one with no
+`watch: {n, basis_fp}` clock at all, FAILS the boot (exit 2, unit FAILED) — a registered read must
+not come due silently (D389/D392).
+
 Units: `forge-campaign.timer` (Sunday 03:00 UTC) → `forge-campaign.service` →
 `scripts/campaign_run.sh`, **installed and enabled 2026-09-14 (D411)** in **dry-run mode**: the unit's
 `Environment=FORGE_CAMPAIGN_MODE=dry-run` makes the wrapper snapshot the DB (`live_db_snapshot.sh`)
@@ -722,42 +734,10 @@ forge grammar revert --to-version v3 --initials AJ --forge-db ~/forge_data/forge
 
 Run via `.venv/bin/python scripts/NAME.py` from the Forge repo root.
 
-### daily_ranker_eval.sh
-
-**Bash, not Python** — the `ExecStart` of the `forge-ranker-eval` timer (05:00 daily), runnable by
-hand too. Snapshots the live DB to `/tmp`, trains the verdict model AND the tail-aware
-`wf_p25` robustness model (D191/D192, the quality lane's) into a staging dir and **atomically**
-publishes each to `~/forge_data/models/` (the daemon's `load_latest_model` never reads a half-written
-file), evaluates the live shadow models, and appends one JSON row to EACH of two clocks — the F3
-verdict streak `~/forge_data/ranker_eval/streak.jsonl` (hygiene-incumbent-judged once populated,
-D284) and the gate-then-tail re-wire streak `~/forge_data/ranker_eval/rewire_streak_wfp25.jsonl`
-(the §8.6 tail streak was retired 2026-07-16, D285) — both judged
-on a fresh per-checkpoint window. D302 adds a final non-fatal block: the campaign
-region-carriage audit (`forge.ranking.campaign_audit`) appends one row to
-`~/forge_data/ranker_eval/campaign_audit.jsonl`; the healthcheck's `campaign carriage` check
-WARNs on a starved campaign or a stale file. D316 adds the writer-activation probe:
-`forge check-activations` daily → `~/forge_data/ranker_eval/activation_probe.jsonl` (the
-`activation probe` healthcheck WARNs on INERT ids). D328 adds the grammar-freeze census:
-`scripts/search_multiplicity_census.py --db $SNAP --jsonl-out …` reuses the same snapshot →
-`~/forge_data/ranker_eval/search_multiplicity_census.jsonl` (one metric-B row/day; the
-`freeze census` healthcheck WARNs on a rise past the bar or a stale file). D339 adds the
-vix-conditioner ranked share → `~/forge_data/ranker_eval/vix_conditioner_share.jsonl`: the
-cell's share of its eligible pool per selection arm, over 7d. **Deliberately no healthcheck
-check** — the cell is worth ~0.01% of strong production, so it is a row to read when asked,
-not an alert. It exists to keep the D339 commitment to Crucible auditable: their
-`vix-trend-conditioner` entry is left UNBOUND because our ranker already de-selects the cell
-~24x, and we bind it if `ranked_share_max` climbs toward `unbiased_share_mean`. Deterministic
-(no LLM, hard rule #5); telemetry-only — never touches grammar/weights/config/ranking.
-Trap-cleans the snapshot + staging on every exit. No args.
-
-```
-scripts/daily_ranker_eval.sh        # or: systemctl --user start forge-ranker-eval.service
-```
-
 ### backup_forge_db.sh
 
-**Bash, not Python** — the `ExecStart` of the `forge-backup` timer (04:00 daily), runnable by
-hand too. Nightly disaster-recovery backup of the non-git state. `cp`s the live `forge.db`
+**Bash, not Python** — the `ExecStart` of the `forge-backup` timer (Sunday 04:30 UTC, after the
+campaign run; nightly until Batch 5 G0), runnable by hand too. Disaster-recovery backup of the non-git state. `cp`s the live `forge.db`
 between write bursts, **validates** the copy (opens it read-only and queries `submissions`; a torn
 mid-write copy fails and retries ≤3×), then publishes it via atomic same-fs rename as
 `forge_db_<UTC>.duckdb`; `~/forge_data/models/` is tar.gz'd alongside. Retention keeps the newest
@@ -800,15 +780,16 @@ history. `scripts/` holds only wired, ritual, and in-flight instruments.
 
 | Class | Scripts |
 |---|---|
-| WIRED — machinery executes them | `daily_ranker_eval.sh` (05:00 timer), `backup_forge_db.sh` (04:00 timer), `search_multiplicity_census.py` (invoked by the daily eval), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` + `check_freeze_governance.py` (pre-commit), `freeze_read_watcher.py` (06:30 `forge-prereg-watch` timer), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom), `campaign_run.sh` (the `forge-campaign` timer's ExecStart: mode-guarded dry-run/live wrapper, D411) |
+| WIRED — machinery executes them | `backup_forge_db.sh` (Sun 04:30 UTC timer), `check_grammar_version_bump.py` + `check_grammar_doc_sync.py` + `check_freeze_governance.py` (pre-commit), `freeze_read_watcher.py` (06:30 `forge-prereg-watch` timer), `deploy_preflight.sh` (deploy step 0), `live_db_snapshot.sh` (the blessed DB-snapshot idiom), `campaign_run.sh` (the `forge-campaign` timer's ExecStart: mode-guarded dry-run/live wrapper, D411) |
 | RITUAL / standing monitor | `tail_verified_alignment.py` (D155 verified-coverage alignment monitor; run against a `live_db_snapshot.sh` snapshot), `production_by_group.py` (per-arm/per-category production reads) |
-| IN-FLIGHT freeze/ceiling instruments | `freeze_tail_reading.py` (+ its importer `freeze_registered_read.py` — spent once its prereg-pinned tests retire with the declaration), `ceiling_record_test.py`, `joint_frontier.py` (D368), `second_gate_contrast.py` (carries the D360 measurement_basis pooling defect — repair queued in the freeze declaration), `threshold_resolution_value.py` (D353), `promoted_leg_recall.py` |
+| IN-FLIGHT freeze/ceiling instruments | `ceiling_record_test.py`, `joint_frontier.py` (D368), `second_gate_contrast.py` (carries the D360 measurement_basis pooling defect — repair queued in the freeze declaration), `threshold_resolution_value.py` (D353), `promoted_leg_recall.py` |
 
 Retired 2026-07-05 (D241 follow-through; recoverable from git history): `signal_correlation_regime_pair_audit.py` (D227 evidence), `decorrelation_proxy_alignment.py` (D186), `wf_quality_probe.py` (D186→D189).
 Retired 2026-07-20 (D295 post-promotion sweep; recoverable from git history, tests removed with them): `backfill_verdicts.py` (D111 one-time catch-up, completed), `migrate_verdicts_decided_at.py` (D117 one-time era repair, completed), `requeue_high_value_configs.py` (one-off recovery, completed), `probe_option_momentum_min_months.py` (Q39 one-shot probe + its `probe_results/` output; Q39 resolved at v19/D138).
 Retired 2026-07-20 (D298 — D206 made permanent): `propose_threshold_tightenings.py` + `forge.feedback.threshold_proposer` (D073 threshold-range proposer; the axis measured flat on CPCV-p25, monoculture risk; `auto_tightened_thresholds.yaml` stays empty and the reader/fingerprint stay — determinism-load-bearing).
 Retired 2026-08-06 (repo-simplification Step C; conclusions all shipped and D-cited): the tail-target sweep chain `exceedance_target_sweep.py`, `exceedance_extreme_sweep.py`, `exceedance_merge_sweep.py`, `wf_blend_sweep.py`, `wf_p10_validation.py`, `sharpe_baseline_nested_test.py`, `tail_target_headtohead.py`, `tail_lane_tradeoff.py`, `trend_tail_target_sweep.py`, `target_sweep.py` (→ the live `FORGE_TAIL_LANE_SLOTS`/`FORGE_TREND_LANE_SLOTS` values + the cpcv retarget, D336/D345-era); the winner-prior trio `winner_prior_signal_probe.py`, `winner_prior_shadow.py`, `winner_prior_stage_one.py` (programme parked, prereg `916d79109b4d` refuted); `collider_fix_sweep.py` (Q59 → `FORGE_HONEST_LABEL_SCOPE=off`); `vix_conditioner_stage_decomposition.py`, `resid_vix_construct_split.py` (D339; superseded by the inline share computation in `daily_ranker_eval.sh`); the freeze-prep set `tail_lane_model_era_split.py`, `trend_lane_arm_read.py`, `exhaustion_power_assessment.py`, `honest_cell_scorecard.py`, `export_generation_by_version.py`, `tail_target_rank_ic.py` (preregs resolved / Tier-1 A/B closed D351).
 Retired 2026-08-06 (Step E2, D373 — the alpha-budget question is ANSWERED): `forge alpha-budget` (`feedback/alpha_budget.py` + `cli/alpha_budget_cmd.py` + tests) and `scripts/alpha_budget.py`. Its prereg `098ea730d5f2` resolved confirmed 2026-07-21; the exhaustion monitor it closed cannot reopen (dossier §0); the *standing* multiplicity accounting lives in `submission/search_multiplicity.py` (D310), which is unrelated code and stays. Spec/results record: `_archive/ALPHA_BUDGET_SCOPE.md`.
+Retired 2026-09-14 (Batch 5 G0 — the daemon era's timers folded into the weekly run; recoverable from git history, tests removed with them): `daily_ranker_eval.sh` (the 05:00 trainer — `forge campaign` now trains the two families it loads in-run, step 0.5, and prunes artifacts per `campaign.models_keep`; the streak clocks, campaign-carriage audit, activation probe, freeze census and vix-share rows had no consumer left), `search_multiplicity_census.py` (freeze metric B — the freeze is signed and hook-enforced, §8.4), `freeze_read_watcher.py` (its DUE/UNWATCHABLE judge is the boot check `preregistrations`, `feedback.preregistration.assess_watch_clocks`), `freeze_registered_read.py` + `freeze_tail_reading.py` (the registered-read instruments; a §5 reopener brings its own, §8.7), `cutover_campaign.sh` + `arm_cutover.sh` (the Route C cutover ran 2026-09-14T23:52:05Z, D416). Units retired with them: `forge-ranker-eval.{service,timer}`, `forge-prereg-watch.{service,timer}`, `forge-cutover.{service,timer}`.
 
 ---
 
@@ -864,7 +845,7 @@ The Crucible rows below are the **Forge-relevant subset**, not Crucible's full u
 | `crucible-refit-watcher` | `start_refit_watcher.py` | Polls `refit_inbox/` for QuantIQ re-validation requests. |
 | `forge` | `forge run --loop --consume-feedback --require-real-cache --cohort-yield --regime-gate-yield --quality-rank` | The Forge daemon: generate → submit → learn. Yield-driven draws (D182/D183) + the wf_p25 quality lane (D193) are on. |
 
-Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-campaign` (Sunday 03:00 UTC, `scripts/campaign_run.sh` in dry-run mode until the cutover, D411); `forge-ranker-eval` (05:00, daily train of both shadow models — verdict + tail-aware wf_p25 robustness, D191/D192 — + eval & eval-robustness → two clocks: `streak.jsonl` (F3 verdict, hygiene-judged once populated D284) + `rewire_streak_wfp25.jsonl` (gate-tail lane; the §8.6 tail clock retired D285), both under `~/forge_data/ranker_eval/`; `scripts/daily_ranker_eval.sh`), `forge-backup` (04:00, nightly DR backup of `forge.db` + `models/` → `~/forge_data/backups`; retention = `FORGE_BACKUP_KEEP` set on the unit, `deploy/systemd/forge-backup.service` — script default 14; `scripts/backup_forge_db.sh`), `forge-healthcheck` (hourly, daemon health → exit 0/1/2; CRITICAL marks the unit failed; `cli/healthcheck_cmd.py`, D197), `forge-prereg-watch` (06:30, `scripts/freeze_read_watcher.py` — DUE / waiting / UNWATCHABLE on open preregistrations; any non-OK marks the unit failed; D392). Forge timer units live in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`.
+Timers (independent): `crucible-ingest-daily` (19:00, market data), `crucible-morning-digest` (06:00). **Forge timers:** `forge-campaign` (Sunday 03:00 UTC, `scripts/campaign_run.sh`, mode `live` since the 2026-09-14 cutover, D416) and `forge-backup` (Sunday 04:30 UTC, `scripts/backup_forge_db.sh` → `~/forge_data/backups`; retention `FORGE_BACKUP_KEEP` on the unit). `forge-ranker-eval`, `forge-prereg-watch`, `forge-healthcheck` and the daemon itself are retired (Batch 5).
 
 ```
 # Inspect any service:

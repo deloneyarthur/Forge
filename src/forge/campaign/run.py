@@ -33,7 +33,7 @@ from forge.campaign.report import (
     baseline_families,
     baseline_ids,
     baseline_str,
-    load_latest_record,
+    load_latest_baseline_record,
     write_record,
 )
 from forge.campaign.triggers import (
@@ -679,7 +679,7 @@ def run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, ec
         sample = [(config, cell_key(config)) for config in population]
         dark = dark_cells((cell for _, cell in sample), stats)
         # 6. previous record -> trigger inputs
-        prev = load_latest_record(records_dir)
+        prev = load_latest_baseline_record(records_dir)
         book_cells_now = frozenset(
             leg.cell for leg in book.legs if leg.portfolio_id == book.designated_id
         )

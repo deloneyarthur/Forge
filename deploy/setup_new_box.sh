@@ -144,7 +144,7 @@ done
 loginctl enable-linger "$USER" 2>/dev/null || warn "enable-linger failed (need: loginctl enable-linger $USER)"
 if systemctl --user daemon-reload 2>/dev/null; then
   # Timers run independently of Crucible — enable + start them now.
-  for t in forge-ranker-eval forge-backup forge-healthcheck forge-prereg-watch forge-campaign; do
+  for t in forge-campaign forge-backup; do
     systemctl --user enable --now "$t.timer" 2>/dev/null || warn "could not enable $t.timer"
   done
   systemctl --user enable forge.service 2>/dev/null || warn "could not enable forge.service"
@@ -157,7 +157,7 @@ if systemctl --user daemon-reload 2>/dev/null; then
 else
   warn "systemctl --user unavailable in this shell (no user D-Bus session)."
   warn "After a real login: systemctl --user daemon-reload && systemctl --user enable --now \\"
-  warn "  forge.service forge-ranker-eval.timer forge-backup.timer forge-healthcheck.timer forge-prereg-watch.timer forge-campaign.timer"
+  warn "  forge.service forge-campaign.timer forge-backup.timer"
 fi
 
 # --- 9. smoke test -------------------------------------------------------------

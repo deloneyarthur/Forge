@@ -50,7 +50,8 @@ from forge.ranking.features import FEATURE_SCHEMA_VERSION
 # consequence (target_sweep.py Run C — script retired 2026-08-06, git history: train on
 # non-honest rows, rank the unseen honest arm): ordering by wf_p25 lifts realized cpcv
 # +0.009 (i.e. baseline), by cpcv +0.178.
-# Endorsed by Crucible. The trainer publishes BOTH targets (daily_ranker_eval.sh), so
+# Endorsed by Crucible. The retired daily trainer published BOTH targets
+# (daily_ranker_eval.sh; since Batch 5 G0 the weekly run trains only this target), so
 # reverting is this one constant with no gap in either artifact.
 # SINGLE SOURCE OF TRUTH: the journal labels derive from this too. The first v50 batch logged
 # "quality_rank: wf_p25 ... (model=d8d85324)" — the cpcv model under a hardcoded wf label —

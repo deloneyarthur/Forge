@@ -108,23 +108,18 @@ Determinism identity: `(grammar_version, registry_hash, seed)` → same enumerat
   the unit's `ExecStart`. A reboot auto-starts it onto whatever the tree contains (D104) — hence the
   worktree + deploy ritual in `docs/tasks/deploy.md`.
 - Crucible services/timers and start/stop order: `docs/MANPAGE.md` (PIPELINE SERVICES) and `docs/HOW-TO.md`.
-- Forge timers (units in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`):
-  `forge-ranker-eval` (05:00, `scripts/daily_ranker_eval.sh` — daily learned-model train+eval; the
-  F3 streak → `~/forge_data/ranker_eval/streak.jsonl` and the wf_p25 robustness streak; deterministic,
-  telemetry-only); `forge-backup` (04:00, `scripts/backup_forge_db.sh` — nightly DR copy of `forge.db`
-  + `models/`, D195); `forge-healthcheck` (hourly, `forge healthcheck` — alerts on the alive-but-stuck
-  daemon states systemd can't see, D197); `forge-prereg-watch` (06:30, `scripts/freeze_read_watcher.py`
-  — a registered read must not come due silently, D392); `forge-campaign` (Sunday 03:00 UTC,
-  `scripts/campaign_run.sh` — the weekly zero-input challenger run, plan 2026-09 §12; in dry-run
-  mode until the Route C cutover flips the unit's `FORGE_CAMPAIGN_MODE` to `live`, D411).
-  (`forge-eod-check`, a 21:00 headless EOD
-  read, was retired D253 — superseded by the hourly healthcheck.)
+- Forge timers (units in `deploy/systemd/`, symlinked into `~/.config/systemd/user/`): `forge-campaign`
+  (Sunday 03:00 UTC, `scripts/campaign_run.sh` — the weekly zero-input challenger run, plan 2026-09 §12;
+  mode `live` since the 2026-09-14 cutover, D416; it trains its own models in-run and judges open prereg
+  clocks at boot, Batch 5 G0) and `forge-backup` (Sunday 04:30 UTC, `scripts/backup_forge_db.sh` — DR copy
+  of `forge.db` + `models/`, D195). `forge-ranker-eval`, `forge-prereg-watch`, `forge-healthcheck` and
+  `forge-eod-check` are retired (Batch 5 / D253).
 - Forge state: `~/forge_data/forge.db` (DuckDB; live RW lock — snapshot before reading, see
   `docs/tasks/investigate-live.md`). Inter-system paths: table in `docs/HOW-TO.md`.
 - `scripts/` is operational glue around the daemon, not part of the import graph: pre-commit
   enforcers (`check_grammar_version_bump.py`, `check_grammar_doc_sync.py` — see §13.2 below;
   `check_freeze_governance.py` — the signed-freeze guard, D392), the timer entrypoints
-  (`daily_ranker_eval.sh`, `backup_forge_db.sh`, `freeze_read_watcher.py`), the read-only pre-deploy
+  (`campaign_run.sh`, `backup_forge_db.sh`) and their snapshot idiom (`live_db_snapshot.sh`), the read-only pre-deploy
   GO/NO-GO gate (`deploy_preflight.sh` — codifies the D104 ritual's pre-checks: dirty tree, stale
   contracts pin, inert feature wiring; D199), plus one-off analysis/probe + migration scripts.
 

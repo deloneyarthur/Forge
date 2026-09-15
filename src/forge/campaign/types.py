@@ -5,7 +5,7 @@ record (plan §12.3 step 5), so every input and outcome is an immutable value
 that serialises to JSON without loss. Nothing here reads a clock, a file, or a
 DB (hard rule #8 keeps this module inert); ``run.py`` supplies the facts.
 
-The cell key is the census key (`scripts/search_multiplicity_census.py`):
+The cell key is the census key (of the retired `search_multiplicity_census.py`, git history):
 ``(hypothesis, dte_bucket, axis, directional, regime)`` with ``axis`` in
 {"named", "xsect"}. It is finer than the campaign registry's
 ``(directional, regime)`` pair because protection and evidence both live at

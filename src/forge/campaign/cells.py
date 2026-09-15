@@ -50,7 +50,7 @@ _PROMOTED_SINCE: datetime = datetime(2020, 1, 1, tzinfo=UTC)
 def cell_key_from_json(config: Mapping[str, Any]) -> CellKey:
     """The census cell of a ``submissions.config_json`` payload.
 
-    Mirrors ``scripts/search_multiplicity_census.py`` exactly so protection,
+    Mirrors the retired ``search_multiplicity_census.py`` (git history) exactly so protection,
     evidence, and the freeze census all speak the same key: the canonical
     (directional, regime) pair from the campaign registry, with the gate-free
     fallback for xsect/rank configs that carry no regime filter.

@@ -34,7 +34,10 @@ _CFG = CampaignConfig(
 
 
 def _write_registry(exports_dir: Path, *, age_days: int = 0) -> None:
-    taken = utc_now() - timedelta(days=age_days)
+    # Pinned to midnight UTC: the run's seed derives from the registry hash, which covers
+    # `snapshot_taken_at`, so a per-call `utc_now()` re-seeded every run and made the tiny
+    # 300-attempt sample flake (some seeds leave the synthetic battery zero survivors).
+    taken = utc_now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=age_days)
     snap = demo_registry().model_copy(update={"snapshot_taken_at": taken})
     target = exports_dir / "registry_snapshot_0001.json"
     target.write_text(snap.model_dump_json(), encoding="utf-8")

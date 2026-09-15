@@ -76,26 +76,19 @@ journalctl --user -u crucible-runner@1.service -n 10 --no-pager
 # Are exports fresh? (should be < 2 min old)
 ls -lt ~/optbt_data/exports/gated_runs_*.json | head -1
 
-# Is the stream improving? Curated learning clocks (no tail|json spelunking)
-(cd ~/proj/Forge && uv run forge status)
-journalctl --user -u forge-ranker-eval.service -n 20 --no-pager
-
-# Last nightly backup fresh? (forge-backup timer, 04:00)
+# Last weekly backup fresh? (forge-backup timer, Sunday 04:30 UTC, after the campaign run)
 ls -lt ~/forge_data/backups/forge_db_*.duckdb | head -1
 
-# Weekly campaign dry-run ran? (forge-campaign timer, Sunday 03:00 UTC; a failed unit = a
-# refused mode, a boot check, or a run error — read the block, plan 2026-09 §12)
-journalctl --user -u forge-campaign.service -n 15 --no-pager
-# Registered read due / unwatchable? (forge-prereg-watch timer, 06:30; a failed unit = a
-# registered read came due silently or cannot be watched — D389/D392)
-journalctl --user -u forge-prereg-watch.service -n 5 --no-pager
+# Weekly campaign ran? (forge-campaign timer, Sunday 03:00 UTC; a failed unit = a refused mode,
+# a boot check — incl. a prereg read that came DUE or is UNWATCHABLE, D389/D392 — or a run error;
+# read the block, plan 2026-09 §12; `forge campaign status` for the records)
+journalctl --user -u forge-campaign.service -n 30 --no-pager
 ```
 
-The `forge-ranker-eval` timer trains + evaluates the shadow verdict model each morning and records
-the consecutive-PASS streak; the streak files are telemetry-only — they track *whether the learning
-is improving*, not what the daemon submits (the live ranker/quality-lane models are loaded on their
-own paths). `forge status` pretty-prints both clocks; don't hand-run train/eval at checkpoints
-anymore. Deeper digging (forge.db queries, cohort analysis, known traps): `tasks/investigate-live.md`.
+The weekly run trains the verdict + robustness models it ranks with in-run (record field `models`,
+Batch 5 G0); the daily trainer and its streak clocks are retired, so `forge status` reads stale
+files until G1 removes it. Deeper digging (forge.db queries, cohort analysis, known traps):
+`tasks/investigate-live.md`.
 
 ## Common situations
 

@@ -1,6 +1,6 @@
 """Behaviour tests for `scripts/live_db_snapshot.sh` — the blessed read-only snapshot.
 
-WHY: the 06:30 `forge-prereg-watch` timer's `ExecStart` depends on this script,
+WHY: `forge-campaign.service` in dry-run mode (`scripts/campaign_run.sh`) depends on this script,
 and every investigation ritual does too, yet nothing exercised it. Its three
 promises — refuse RAM-backed dirs (the 62 GB tmpfs incident), reuse a fresh
 snapshot, clean up on request — are each a one-line regression waiting to happen.

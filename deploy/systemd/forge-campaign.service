@@ -17,10 +17,12 @@ WorkingDirectory=%h/proj/Forge
 Environment=FORGE_CAMPAIGN_MODE=live
 ExecStart=%h/proj/Forge/scripts/campaign_run.sh
 TimeoutStartSec=3h
-# 13.8 GB peak on the first timer run (cell stats over the 9 GB snapshot + a 20k enumeration).
-# Fail this unit rather than starve Crucible (its services OOM'd twice, D399/D401).
-MemoryHigh=16G
-MemoryMax=24G
+# 26.7 GB peak measured 2026-09-15 on a dry-run WITH in-run training (Batch 5 G0: the verdict fit
+# reads 1.27M verdict rows, the robustness fit 1.0M, on top of the cell stats + a 20k enumeration;
+# 13.8 GB before training moved in). Fail this unit rather than starve Crucible (its services
+# OOM'd twice, D399/D401). The dataset build is the Batch 6 memory target.
+MemoryHigh=32G
+MemoryMax=48G
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=forge-campaign
