@@ -40,6 +40,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
+from forge.core.paths import default_exports_dir, newest_file
+
 # Crucible's `runs_repository.py` queue-time table, declared in their 2026-08-01 relay. Each
 # length is the history that bucket needs to reach its §8.7 min-trade floor at its natural
 # cadence (~25/yr short, ~12/yr mid, ~5/yr long), NOT a per-hypothesis or operator-set choice.
@@ -97,16 +99,12 @@ class ChainInceptionExclusions:
 
 
 def _newest_export(exports_dir: Path) -> Path | None:
-    try:
-        files = sorted(exports_dir.glob(_EXPORT_GLOB), key=lambda p: p.stat().st_mtime)
-    except OSError:
-        return None
-    return files[-1] if files else None
+    return newest_file(exports_dir, _EXPORT_GLOB)
 
 
 def load_chain_inception_floors(exports_dir: Path | None = None) -> dict[str, date]:
     """`{symbol: first-chain-snapshot date}` from Crucible's newest export, or {}."""
-    root = exports_dir or (Path.home() / "optbt_data" / "exports")
+    root = exports_dir or default_exports_dir()
     path = _newest_export(root)
     if path is None:
         return {}

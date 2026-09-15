@@ -10,18 +10,13 @@ a value to persist.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from forge.core.validation import check_unit_interval
+
 if TYPE_CHECKING:
     from forge.prefilters.types import PreFilterReport
-
-
-def _check_unit_interval(name: str, value: float) -> None:
-    if math.isnan(value) or math.isinf(value) or not (0.0 <= value <= 1.0):
-        msg = f"{name} must be in [0, 1]; got {value!r}"
-        raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,8 +32,8 @@ class RankedCandidate:
     composite_score: float
 
     def __post_init__(self) -> None:
-        _check_unit_interval("RankedCandidate.composite_score", self.composite_score)
-        _check_unit_interval("RankedCandidate.prior_promotion_score", self.prior_promotion_score)
+        check_unit_interval("RankedCandidate.composite_score", self.composite_score)
+        check_unit_interval("RankedCandidate.prior_promotion_score", self.prior_promotion_score)
 
 
 __all__ = ["RankedCandidate"]

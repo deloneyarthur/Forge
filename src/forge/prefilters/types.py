@@ -15,13 +15,14 @@ and `IMPLEMENTATION_DECISIONS.md` D021 (closure D2 / D5).
 
 from __future__ import annotations
 
-import math
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+from forge.core.validation import check_unit_interval
 
 if TYPE_CHECKING:
     from crucible_contracts import RegistrySnapshot, StrategyConfig
@@ -63,9 +64,7 @@ class FilterResult:
     details: Mapping[str, Any] = field(default_factory=_empty_details)
 
     def __post_init__(self) -> None:
-        if math.isnan(self.score) or math.isinf(self.score) or not (0.0 <= self.score <= 1.0):
-            msg = f"FilterResult.score must be in [0, 1]; got {self.score!r}"
-            raise ValueError(msg)
+        check_unit_interval("FilterResult.score", self.score)
         if not isinstance(self.details, MappingProxyType):
             # Freeze user-supplied dicts so post-hoc mutation can't drift
             # the report from what the filter actually computed.

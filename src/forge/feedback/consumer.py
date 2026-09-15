@@ -53,6 +53,7 @@ from crucible_contracts import (
     parse_forward_compatible,
 )
 
+from forge.core.paths import default_exports_dir, newest_file
 from forge.feedback.types import BatchFeedback, CandidateOutcome
 from forge.persistence.verdicts import record_verdicts
 
@@ -268,7 +269,7 @@ def consume_batch_results(  # noqa: PLR0912 — D046 added a 4th param branch
 
     if crucible_runs is None:
         if exports_dir is None:
-            exports_dir = Path.home() / "optbt_data" / "exports"
+            exports_dir = default_exports_dir()
         crucible_runs = _fetch_gated_runs(exports_dir)
 
     matched: dict[str, GatedRun] = {}
@@ -508,7 +509,7 @@ def reconcile_all_pending(
     to the downstream join, so there's no BatchFeedback to emit.
     """
     if exports_dir is None:
-        exports_dir = Path.home() / "optbt_data" / "exports"
+        exports_dir = default_exports_dir()
     # D412: a caller may hand in the runs it already read (the weekly campaign reads the
     # forge-scoped 14-day stream, contracts 1.48.0) with their provenance; the all-source
     # fetch remains the fallback path. `flush_aged_out=False` is for a TRUNCATED window: when the
@@ -527,11 +528,7 @@ def reconcile_all_pending(
     # a concurrent publish mis-stamps at most one poll's rows — documented,
     # acceptable for provenance) + the installed contracts version.
     if not injected:
-        newest_export = max(
-            exports_dir.glob("gated_runs_*.json"),
-            key=lambda p: p.stat().st_mtime,
-            default=None,
-        )
+        newest_export = newest_file(exports_dir, "gated_runs_*.json")
         source_export = newest_export.name if newest_export is not None else None
     record_verdicts(forge_db, runs, source_export=source_export)
 

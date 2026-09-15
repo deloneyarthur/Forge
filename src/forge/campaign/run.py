@@ -56,6 +56,7 @@ from forge.campaign.types import (
     TriggerOutcome,
 )
 from forge.core.clock import utc_now
+from forge.core.paths import newest_file
 
 if TYPE_CHECKING:
     from crucible_contracts import RegistrySnapshot, StrategyConfig
@@ -93,11 +94,6 @@ class _Booted:
         return all(c.ok for c in self.checks)
 
 
-def _newest(exports_dir: Path, glob: str) -> Path | None:
-    files = sorted(exports_dir.glob(glob), key=lambda p: p.stat().st_mtime)
-    return files[-1] if files else None
-
-
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -106,7 +102,7 @@ def watermarks(exports_dir: Path) -> dict[str, str]:
     """``export -> "<file>@<sha256[:12]>"`` for every export the run reads (content, not mtime)."""
     out: dict[str, str] = {}
     for name, glob in _EXPORT_GLOBS.items():
-        newest = _newest(exports_dir, glob)
+        newest = newest_file(exports_dir, glob)
         if newest is not None:
             out[name] = f"{newest.name}@{_sha(newest)[:12]}"
     return out
@@ -213,7 +209,7 @@ def boot(
 
     def _export(glob: str) -> Callable[[], str]:
         def _present() -> str:
-            newest = _newest(exports_dir, glob)
+            newest = newest_file(exports_dir, glob)
             if newest is None:
                 msg = f"no {glob} under {exports_dir}"
                 raise FileNotFoundError(msg)
@@ -301,7 +297,7 @@ def dark_cells(
 
 
 def _refutation_hash(exports_dir: Path) -> str:
-    newest = _newest(exports_dir, _EXPORT_GLOBS["refutations"])
+    newest = newest_file(exports_dir, _EXPORT_GLOBS["refutations"])
     return _sha(newest) if newest is not None else ""
 
 
@@ -634,7 +630,7 @@ def _run_campaign(  # noqa: PLR0912, PLR0915 — one straight-line weekly run, e
                     conn, exports_dir=exports_dir, flush_aged_out=False
                 )
             else:
-                newest_forge = _newest(exports_dir, _EXPORT_GLOBS["forge_gated_runs"])
+                newest_forge = newest_file(exports_dir, _EXPORT_GLOBS["forge_gated_runs"])
                 n_rows = len(forge_stream.gated_runs)
                 span = (
                     f"{n_rows} rows, lookback {forge_stream.lookback_days} d, "

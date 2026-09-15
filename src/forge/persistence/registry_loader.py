@@ -27,10 +27,11 @@ from pathlib import Path
 from crucible_contracts import RegistrySnapshot, parse_skipping_unknown_literals
 
 from forge.core.clock import utc_now
+from forge.core.paths import default_exports_dir, newest_file
 
 _LOG = logging.getLogger(__name__)
 
-DEFAULT_EXPORTS_DIR = Path.home() / "optbt_data" / "exports"
+DEFAULT_EXPORTS_DIR = default_exports_dir()
 
 _SNAPSHOT_GLOB = "registry_snapshot_*.json"
 
@@ -48,13 +49,7 @@ def find_latest_snapshot(exports_dir: Path = DEFAULT_EXPORTS_DIR) -> Path | None
     most recently written wins. Returns ``None`` if the directory does not
     exist or contains no matching files.
     """
-    if not exports_dir.exists():
-        return None
-    candidates = sorted(
-        exports_dir.glob(_SNAPSHOT_GLOB),
-        key=lambda p: p.stat().st_mtime,
-    )
-    return candidates[-1] if candidates else None
+    return newest_file(exports_dir, _SNAPSHOT_GLOB)
 
 
 def _parse_registry_tolerating_unknown_family(text: str) -> RegistrySnapshot:

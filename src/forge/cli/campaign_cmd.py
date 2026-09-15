@@ -20,16 +20,18 @@ from pathlib import Path
 
 import typer
 
+from forge.core.paths import default_data_root, default_exports_dir
+
 campaign_app = typer.Typer(
     invoke_without_command=True,
     help="Weekly zero-input challenger run for the designated book (plan 2026-09 §12).",
 )
 
 _DEFAULT_CONFIG = Path("config/forge.yaml")
-_DEFAULT_EXPORTS = Path("~/optbt_data/exports")
+_DEFAULT_EXPORTS = default_exports_dir()
 _DEFAULT_RECORDS = Path("~/forge_data/campaigns")
 _DEFAULT_FORGE_DB = Path("~/forge_data/forge.db")
-_DEFAULT_INBOX = Path("~/optbt_data/inbox")
+_DEFAULT_INBOX = default_data_root() / "inbox"
 _EXIT_BOOT_FAILED = 2
 _EXIT_ERROR = 1
 

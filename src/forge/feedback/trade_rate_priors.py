@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from forge.core.paths import default_exports_dir
 from forge.feedback.eras import is_ve_ghost_label
 
 if TYPE_CHECKING:
@@ -308,7 +309,7 @@ def load_trade_rate_priors(
 
     if forge_db_path == Path(":memory:") or not forge_db_path.exists():
         return {}
-    exports_dir = Path.home() / "optbt_data" / "exports"
+    exports_dir = default_exports_dir()
     try:
         gated_runs = load_recent_gated_runs_from_export(exports_dir, limit=10_000)
     except (QueryError, OSError) as exc:

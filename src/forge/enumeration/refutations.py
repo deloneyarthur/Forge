@@ -44,6 +44,8 @@ from typing import Any, Literal
 
 from crucible_contracts import load_refutations_from_export
 
+from forge.core.paths import default_exports_dir
+
 # ---------------------------------------------------------------------------
 # Tunables (operator-facing)
 # ---------------------------------------------------------------------------
@@ -149,7 +151,7 @@ def _load_entries(exports_dir: Path | None) -> tuple[dict[str, Any], ...]:
     """Read the newest refutations export, fail OPEN (empty) on any error —
     missing / stale / corrupt registry must never crash or alter the draw."""
     if exports_dir is None:
-        exports_dir = Path.home() / "optbt_data" / "exports"
+        exports_dir = default_exports_dir()
     try:
         return load_refutations_from_export(exports_dir)
     except Exception:  # fail-open is the whole point (missing / stale / corrupt)
