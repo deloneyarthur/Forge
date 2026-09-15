@@ -242,6 +242,4 @@ prefilter:
     n_permutations: 10
     p_value_threshold: 1.0
     forward_horizon_days: 5
-  auto_tune:
-    adjustment_pct_per_step: 0.10
 """

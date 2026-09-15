@@ -1,10 +1,11 @@
-"""Pre-filter battery calibration: load thresholds, propose adjustments.
+"""Pre-filter battery calibration: load the operator-owned thresholds.
 
-`Calibration` mirrors `config/prefilter.yaml` as a nested frozen dataclass.
-`load_calibration(path)` round-trips it. Adjustments arrive as
-`AdjustmentProposal`s; the API enforces hard rule #4's spirit by exposing
-`apply_tightening` (pure) but NOT `apply_loosening` — and, since Batch 5 G4 (D421), no
-loosening proposal writer either: a loosening needs a preregistration and the operator.
+`Calibration` mirrors `config/prefilter.yaml` as a nested frozen dataclass and
+`load_calibration(path)` validates it. Nothing writes the file any more (the
+auto-tune trigger, its step-size key and the serializer left with the daemon,
+D206/D298/D325/D422): the file is operator-owned, read at every weekly run.
+`apply_tightening` survives as a pure helper; there is no `apply_loosening` and no
+loosening writer — a threshold change is an operator edit + commit (hard rule #4).
 
 See DESIGN.md §5.5, `IMPLEMENTATION_DECISIONS.md` D021 (closure D3).
 """
@@ -12,8 +13,7 @@ See DESIGN.md §5.5, `IMPLEMENTATION_DECISIONS.md` D021 (closure D3).
 from __future__ import annotations
 
 import math
-import os
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,7 +23,7 @@ Direction = Literal["tighten", "loosen"]
 
 
 # ---------------------------------------------------------------------------
-# Nested calibration dataclasses (one per filter + auto-tune)
+# Nested calibration dataclasses (one per filter)
 # ---------------------------------------------------------------------------
 
 
@@ -108,15 +108,6 @@ class PermutationTestCalibration:
 
 
 @dataclass(frozen=True, slots=True)
-class AutoTuneCalibration:
-    # Only `adjustment_pct_per_step` survives — the step size for the manual
-    # `grammar apply-proposal` prefilter-tighten path. The §5.5 auto-tune trigger's
-    # enabled/min/max fields were removed (D326) after the trigger itself was
-    # deleted (D325); nothing read them once the trigger was gone.
-    adjustment_pct_per_step: float
-
-
-@dataclass(frozen=True, slots=True)
 class Calibration:
     signal_density: SignalDensityCalibration
     expected_trade_count: ExpectedTradeCountCalibration
@@ -125,7 +116,6 @@ class Calibration:
     signal_correlation: SignalCorrelationCalibration
     regime_exposure: RegimeExposureCalibration
     permutation_test: PermutationTestCalibration
-    auto_tune: AutoTuneCalibration
 
 
 # ---------------------------------------------------------------------------
@@ -137,10 +127,9 @@ class Calibration:
 class AdjustmentProposal:
     """A proposed pre-filter calibration change.
 
-    Phase 3 mechanism; Phase 5 wires the feedback-driven trigger that
-    actually constructs these. `apply_tightening` consumes a tighten
-    proposal; loosening proposals never auto-apply — they are written to
-    `OPEN_PROPOSALS.md` for operator review.
+    `apply_tightening` consumes a tighten proposal (pure); nothing constructs these
+    in production since the auto-tune trigger left (D325) — the type stays as the
+    typed argument of that helper. A loosening is an operator edit, never a proposal.
     """
 
     direction: Direction
@@ -173,7 +162,6 @@ _REQUIRED_TOP_KEYS = (
     "signal_correlation",
     "regime_exposure",
     "permutation_test",
-    "auto_tune",
 )
 
 
@@ -252,7 +240,6 @@ def load_calibration(path: Path) -> Calibration:
     sc = pf["signal_correlation"]
     re_ = pf["regime_exposure"]
     pt = pf["permutation_test"]
-    at = pf["auto_tune"]
 
     return Calibration(
         signal_density=SignalDensityCalibration(
@@ -339,38 +326,12 @@ def load_calibration(path: Path) -> Calibration:
                 pt.get("forward_return_mode", "single_day")
             ),
         ),
-        auto_tune=AutoTuneCalibration(
-            adjustment_pct_per_step=_validate_unit_float(
-                _require(at, "auto_tune", "adjustment_pct_per_step"),
-                "auto_tune",
-                "adjustment_pct_per_step",
-            ),
-        ),
     )
 
 
 # ---------------------------------------------------------------------------
 # Adjustment proposal + application
 # ---------------------------------------------------------------------------
-
-
-def propose_adjustment(
-    calibration: Calibration,
-    *,
-    direction: Direction,
-    reason: str,
-) -> AdjustmentProposal:
-    """Build a proposal using the calibration's configured step size.
-
-    The magnitude lives in `auto_tune.adjustment_pct_per_step` so changing
-    the step in one place changes every proposal — there's no second
-    source of truth.
-    """
-    return AdjustmentProposal(
-        direction=direction,
-        magnitude_pct=calibration.auto_tune.adjustment_pct_per_step,
-        reason=reason,
-    )
 
 
 def apply_tightening(
@@ -438,40 +399,8 @@ def apply_tightening(
     )
 
 
-def write_calibration_yaml(calibration: Calibration, path: Path) -> None:
-    """Serialize `Calibration` back to the §10.2 YAML shape, atomically.
-
-    H-6 (audit 2026-05-29): the daemon re-reads this file via `load_calibration`
-    at the top of EVERY iteration, and that loader raises on a
-    missing-key/truncated file. A non-atomic `write_text` killed mid-flight
-    (OOM, SIGTERM, power loss) would leave `prefilter.yaml` partial and brick the
-    daemon into a 30s systemd crash-loop. Write to a sibling tmp then `os.replace`
-    (POSIX-atomic on the same filesystem) — mirrors `proposal_writer._atomic_write`.
-    The one live writer of this file is `grammar apply-proposal` (D325 note: the
-    §5.5 auto-tune self-apply that formerly wrote it was retired).
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = {
-        "prefilter": {
-            "signal_density": asdict(calibration.signal_density),
-            "expected_trade_count": asdict(calibration.expected_trade_count),
-            "predicted_activations": asdict(calibration.predicted_activations),
-            "novelty": asdict(calibration.novelty),
-            "signal_correlation": asdict(calibration.signal_correlation),
-            "regime_exposure": asdict(calibration.regime_exposure),
-            "permutation_test": asdict(calibration.permutation_test),
-            "auto_tune": asdict(calibration.auto_tune),
-        }
-    }
-    content = yaml.safe_dump(data, sort_keys=False)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
-
-
 __all__ = [
     "AdjustmentProposal",
-    "AutoTuneCalibration",
     "Calibration",
     "ExpectedTradeCountCalibration",
     "NoveltyCalibration",
@@ -482,6 +411,4 @@ __all__ = [
     "SignalDensityCalibration",
     "apply_tightening",
     "load_calibration",
-    "propose_adjustment",
-    "write_calibration_yaml",
 ]

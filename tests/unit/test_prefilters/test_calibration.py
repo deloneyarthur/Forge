@@ -4,7 +4,6 @@ Covers:
 - `Calibration` is frozen, nested-dataclass shape matches `config/prefilter.yaml`.
 - `load_calibration(path)` round-trips the v1 default YAML.
 - Loader rejects unknown top-level keys, missing keys, and invalid types.
-- `propose_adjustment` returns the right direction + magnitude.
 - `apply_tightening` is pure and shifts knobs in the stricter direction.
 - there is no loosening write path at all (`write_loosening_proposal`, 0 callers, left in
   Batch 5 G4 / D421; grammar changes need a preregistration, hard rule #4) and
@@ -25,7 +24,6 @@ from forge.prefilters.calibration import (
     AdjustmentProposal,
     apply_tightening,
     load_calibration,
-    propose_adjustment,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -44,8 +42,8 @@ def test_calibration_is_frozen() -> None:
 
 
 def test_calibration_nested_shape_matches_yaml() -> None:
-    """Each filter has its own nested calibration dataclass; auto-tune
-    has its own. Verbose-but-honest mapping from `config/prefilter.yaml`."""
+    """Each filter has its own nested calibration dataclass. Verbose-but-honest
+    mapping from `config/prefilter.yaml`."""
     c = load_calibration(_PREFILTER_YAML)
     assert c.signal_density.min_activations == 30
     assert c.expected_trade_count.min_trades == 50
@@ -55,7 +53,6 @@ def test_calibration_nested_shape_matches_yaml() -> None:
     assert c.permutation_test.p_value_threshold == 0.10
     # D075: forward-horizon parameter for the return comparison.
     assert c.permutation_test.forward_horizon_days == 5
-    assert c.auto_tune.adjustment_pct_per_step == 0.10  # D326: only surviving field
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +84,6 @@ prefilter:
   permutation_test:
     n_permutations: 100
     p_value_threshold: 0.10
-  auto_tune:
-    adjustment_pct_per_step: 0.10
   mystery_filter:
     threshold: 0.5
 """,
@@ -100,7 +95,7 @@ prefilter:
 
 def test_loader_rejects_missing_required_key(tmp_path: Path) -> None:
     bad = tmp_path / "missing.yaml"
-    # Omit auto_tune entirely
+    # Omit predicted_activations + signal_correlation entirely
     bad.write_text(
         """
 prefilter:
@@ -118,7 +113,7 @@ prefilter:
 """,
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="auto_tune"):
+    with pytest.raises(ValueError, match="predicted_activations"):
         load_calibration(bad)
 
 
@@ -142,8 +137,6 @@ prefilter:
   permutation_test:
     n_permutations: 100
     p_value_threshold: 0.10
-  auto_tune:
-    adjustment_pct_per_step: 0.10
 """,
         encoding="utf-8",
     )
@@ -171,8 +164,6 @@ prefilter:
   permutation_test:
     n_permutations: 100
     p_value_threshold: 0.10
-  auto_tune:
-    adjustment_pct_per_step: 0.10
 """,
         encoding="utf-8",
     )
@@ -201,21 +192,6 @@ def test_proposal_rejects_zero_or_negative_magnitude() -> None:
         AdjustmentProposal(direction="tighten", magnitude_pct=0.0, reason="x")
     with pytest.raises(ValueError, match="magnitude_pct"):
         AdjustmentProposal(direction="tighten", magnitude_pct=-0.1, reason="x")
-
-
-def test_propose_adjustment_uses_calibration_step_size() -> None:
-    """The step size lives in `auto_tune.adjustment_pct_per_step` so a
-    single config edit changes both the proposal magnitude and any
-    consumer that reads the calibration directly."""
-    c = load_calibration(_PREFILTER_YAML)
-    p = propose_adjustment(c, direction="tighten", reason="promotion rate climbed > 5%")
-    assert p.direction == "tighten"
-    assert p.magnitude_pct == c.auto_tune.adjustment_pct_per_step
-
-
-# ---------------------------------------------------------------------------
-# Tightening application
-# ---------------------------------------------------------------------------
 
 
 def test_apply_tightening_returns_new_calibration_with_stricter_thresholds() -> None:
@@ -294,7 +270,6 @@ def test_calibration_module_public_surface() -> None:
     """Lock the public API so future drift gets caught by this test."""
     expected = {
         "AdjustmentProposal",
-        "AutoTuneCalibration",
         "Calibration",
         "ExpectedTradeCountCalibration",
         "NoveltyCalibration",
@@ -305,36 +280,5 @@ def test_calibration_module_public_surface() -> None:
         "SignalDensityCalibration",
         "apply_tightening",
         "load_calibration",
-        "propose_adjustment",
-        "write_calibration_yaml",
     }
     assert set(calibration_module.__all__) == expected
-
-
-def test_write_calibration_yaml_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A crash mid-write must NOT truncate the live prefilter.yaml — the daemon
-    re-reads it via `load_calibration` every iteration and raises on a partial
-    file, which (with M-1) would brick it into a 30s systemd crash-loop. Atomic
-    tmp+rename means a failed write leaves the destination's prior content whole.
-    (D325: moved here from the retired auto_tune module — this serializer is now
-    written only by `grammar apply-proposal`.)"""
-    import os as _os
-
-    from forge.prefilters.calibration import write_calibration_yaml
-
-    repo_root = Path(__file__).resolve().parents[3]
-    calib = load_calibration(repo_root / "config" / "prefilter.yaml")
-    dest = tmp_path / "prefilter.yaml"
-    write_calibration_yaml(calib, dest)
-    original = dest.read_text(encoding="utf-8")
-    assert original.strip()  # a valid, complete file
-
-    def _boom(*_a: object, **_k: object) -> None:
-        raise OSError("simulated crash during rename")
-
-    monkeypatch.setattr(_os, "replace", _boom)
-    with pytest.raises(OSError, match="simulated crash"):
-        write_calibration_yaml(calib, dest)
-    # Atomicity: the destination still holds the complete original content
-    # (the partial write landed in a tmp file, never the live path).
-    assert dest.read_text(encoding="utf-8") == original

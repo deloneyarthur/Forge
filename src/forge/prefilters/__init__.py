@@ -8,7 +8,6 @@ from forge.prefilters.calibration import (
     Calibration,
     apply_tightening,
     load_calibration,
-    propose_adjustment,
 )
 from forge.prefilters.feature_cache import (
     REGIMES,
@@ -35,6 +34,5 @@ __all__ = [
     "apply_tightening",
     "default_filters",
     "load_calibration",
-    "propose_adjustment",
     "run_battery",
 ]

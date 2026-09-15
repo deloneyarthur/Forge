@@ -1,4 +1,5 @@
-# Pre-filter battery thresholds. See FORGE_DESIGN.md §10.2.
+# Pre-filter battery thresholds (DESIGN.md §10.2). Operator-owned; nothing writes this file
+# (the auto-tune trigger and its `auto_tune:` step-size key left with the daemon, D422).
 prefilter:
   signal_density:
     min_activations: 30
@@ -57,9 +58,3 @@ prefilter:
     # shift dropped ~40% of Mon/Tue samples to weekends). Shadow-count D226 validated:
     # trend/event_momentum/ve survival up. Resolve the prereg on the POST-FLIP cohort.
     forward_return_mode: cumulative_trading
-  auto_tune:
-    # The §5.5 auto-tune TRIGGER was disarmed (D218/D298) then deleted (D325); its
-    # enabled/min_promotion_rate/max_promotion_rate/max_cumulative_adjustment fields
-    # were removed from the schema (D326). The one surviving key is the step size for
-    # the manual `grammar apply-proposal` prefilter-tighten path.
-    adjustment_pct_per_step: 0.10

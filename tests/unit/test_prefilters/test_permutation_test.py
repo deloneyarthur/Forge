@@ -398,7 +398,6 @@ def test_d075_leading_indicator_passes_only_with_horizon() -> None:
     is the canonical case D075 is designed to fix. Same data, two
     calibrations: horizon=0 rejects, horizon=5 passes."""
     from forge.prefilters.calibration import (
-        AutoTuneCalibration,
         Calibration,
         ExpectedTradeCountCalibration,
         NoveltyCalibration,
@@ -422,7 +421,6 @@ def test_d075_leading_indicator_passes_only_with_horizon() -> None:
                 p_value_threshold=0.10,
                 forward_horizon_days=horizon,
             ),
-            auto_tune=AutoTuneCalibration(adjustment_pct_per_step=0.10),
         )
 
     f = PermutationTestFilter()
