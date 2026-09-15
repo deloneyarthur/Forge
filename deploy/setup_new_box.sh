@@ -15,14 +15,14 @@
 #   5. uv sync --extra dev  (rebuilds .venv; uv provisions Python 3.12 if needed)
 #   6. ensure ~/forge_data dirs; place forge.db if --copy-db given
 #   7. forge version + forge check  (contracts compat + DB schema-ensure)
-#   8. install + enable all systemd user units (daemon + timers) (+ linger);
+#   8. install + enable the systemd user timers (forge-campaign, forge-backup) (+ linger);
 #      start the daemon only if --start
 #   9. invariant smoke test (the must-be-green bar)
 #
 # Flags:
 #   --from-bundle DIR  rsync DIR/proj/ -> ~/proj and DIR/forge_data/forge.db -> ~/forge_data
 #   --copy-db SRC      copy a forge.db from SRC into ~/forge_data (e.g. the flash drive)
-#   --start            `systemctl --user start forge.service` now
+#   --start            run `forge campaign --dry-run` once now (plan only; proves the path)
 #                      (default: enable only — start AFTER Crucible is up)
 #   --skip-tests       skip the invariant smoke test
 #
@@ -132,9 +132,9 @@ say "forge version + forge check"
 # --- 8. systemd user units (daemon + timers) -----------------------------------
 say "Installing systemd user units (daemon + timers)"
 UNIT_DIR="$HOME/.config/systemd/user"
-[ -f "$FORGE/deploy/systemd/forge.service" ] || die "missing unit file $FORGE/deploy/systemd/forge.service"
+[ -f "$FORGE/deploy/systemd/forge-campaign.service" ] || die "missing unit file $FORGE/deploy/systemd/forge-campaign.service"
 mkdir -p "$UNIT_DIR"
-# Symlink every unit shipped in deploy/systemd/ (forge.service + all timers).
+# Symlink every unit shipped in deploy/systemd/ (the campaign + backup service/timer pairs).
 for u in "$FORGE"/deploy/systemd/*.service "$FORGE"/deploy/systemd/*.timer; do
   [ -e "$u" ] || continue
   ln -sfn "$u" "$UNIT_DIR/$(basename "$u")"
@@ -147,17 +147,15 @@ if systemctl --user daemon-reload 2>/dev/null; then
   for t in forge-campaign forge-backup; do
     systemctl --user enable --now "$t.timer" 2>/dev/null || warn "could not enable $t.timer"
   done
-  systemctl --user enable forge.service 2>/dev/null || warn "could not enable forge.service"
   if [ "$START" -eq 1 ]; then
-    systemctl --user start forge.service && say "forge.service started"
+    ( cd "$FORGE" && uv run forge campaign --dry-run ) && say "forge campaign --dry-run OK (plan only)"
   else
-    say "forge.service ENABLED (not started); timers active. Start the daemon AFTER Crucible is up:"
-    printf '       systemctl --user start forge.service\n'
+    say "timers active; the first weekly run is Sunday 03:00 UTC (or: uv run forge campaign --dry-run now)"
   fi
 else
   warn "systemctl --user unavailable in this shell (no user D-Bus session)."
   warn "After a real login: systemctl --user daemon-reload && systemctl --user enable --now \\"
-  warn "  forge.service forge-campaign.timer forge-backup.timer"
+  warn "  forge-campaign.timer forge-backup.timer"
 fi
 
 # --- 9. smoke test -------------------------------------------------------------
@@ -172,10 +170,10 @@ cat <<EOF
 Next steps
   1. Bring Crucible up FIRST (its agent owns ~/optbt_data + the db_writer socket
      + the registry / gated-runs / promoted / universe publishers). Forge needs
-     ~/optbt_data/exports populated and db_writer.sock live for non-skipped
-     iterations (the unit runs with --require-real-cache).
-  2. Start Forge:        systemctl --user start forge.service
-  3. Watch it:           journalctl --user -u forge.service -f
+     ~/optbt_data/exports populated and db_writer.sock live for a run that
+     reaches the battery (it builds its cache with require_real=True).
+  2. Prove the path:     cd $FORGE && uv run forge campaign --dry-run
+  3. Watch a live run:   journalctl --user -u forge-campaign.service -n 40
   4. Confirm health:     cd $FORGE && uv run forge check
   5. Verify the timers:  systemctl --user list-timers 'forge-*'
      (forge-healthcheck reports CRITICAL until the daemon is started — expected.)

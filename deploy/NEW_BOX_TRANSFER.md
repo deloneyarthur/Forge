@@ -11,7 +11,7 @@ Migrating Forge to a new machine. Profile chosen for this transfer:
 The two scripts live beside this file: `stage_transfer.sh` (old box) and `setup_new_box.sh` (new box).
 
 > **`setup_new_box.sh` is current (refreshed D203, eod-check retired D253):** it symlinks **all**
-> units in `deploy/systemd/` (`forge.service` + every timer), and its contracts gate derives the
+> units in `deploy/systemd/` (`forge-campaign` + `forge-backup`), and its contracts gate derives the
 > expected version from `FORGE_EXPECTED_CONTRACT_VERSION` in `contracts_check.py` (no hardcoded
 > literal to re-stale). No manual unit-install follow-up is needed — the "verify the units" step
 > below is just a check.
@@ -71,8 +71,8 @@ rebuilt or regenerated on the new box:
   must not stand up any king DB, oracle, or king timer. If a naive copy drags this file along,
   delete it.
 
-`--stop-service` leaves Forge **stopped** on the old box. To resume producing there
-(e.g. you're not cutting over yet): `systemctl --user start forge.service`.
+`--stop-service` disables the two Forge timers on the old box. To resume there (e.g. you're not
+cutting over yet): `systemctl --user enable --now forge-campaign.timer forge-backup.timer`.
 
 > Coordinate with the Crucible agent: this bundle is the **single source** of
 > `crucible_contracts`. The Crucible transfer should point at the same
@@ -83,7 +83,7 @@ rebuilt or regenerated on the new box:
 ## New box — bootstrap
 
 Mount the drive and run the script straight off it — it lays the repos and `forge.db` down,
-verifies the contracts gate, rebuilds the venv, and installs `forge.service`:
+verifies the contracts gate, rebuilds the venv, and installs the two Forge timers:
 
 ```bash
 /media/aj/FLASHDRIVE/proj/Forge/deploy/setup_new_box.sh --from-bundle /media/aj/FLASHDRIVE
@@ -95,8 +95,8 @@ verifies the contracts gate, rebuilds the venv, and installs `forge.service`:
 `--from-bundle` rsyncs `proj/*` → `~/proj` and `forge_data/forge.db` → `~/forge_data`, verifies
 the contracts version gate, installs uv if absent, rebuilds `.venv` (`uv sync --extra dev` — uv
 provisions Python 3.12 if the box lacks it), ensures the data dirs, runs `forge version` +
-`forge check`, installs and **enables** the `forge.service` user unit with linger, and runs the
-invariant smoke test.
+`forge check`, installs and **enables** the `forge-campaign` + `forge-backup` timers with linger, and
+runs the invariant smoke test. There is no daemon unit since the 2026-09-14 cutover (D416).
 
 It deliberately does **not** start the service (pass `--start` to override) — Crucible should come
 up first.
@@ -108,15 +108,13 @@ and enables the timers (the daemon itself starts only with `--start`, after Cruc
 Confirm the full set:
 
 ```bash
-systemctl --user list-timers 'forge-*'    # all five timers scheduled
-systemctl --user is-enabled forge.service
+systemctl --user list-timers 'forge-*'    # forge-campaign + forge-backup scheduled
 ```
 
 The full unit set after bring-up:
 
 | Unit | Cadence | Purpose | Provenance |
 |---|---|---|---|
-| `forge.service` | 24/7 daemon | the producer loop (`forge run --loop …`) | — |
 | `forge-backup.timer` | Sunday 04:30 UTC | DR backup of `forge.db` + `models/`, after the campaign run | D195 / G0 |
 | `forge-healthcheck.timer` | hourly | `forge healthcheck` — detect an alive-but-unproductive daemon (CRITICAL surfaces in `--state=failed`) | D197 |
 | `forge-campaign.timer` | Sunday 03:00 UTC | `scripts/campaign_run.sh` — the weekly zero-input challenger run; `FORGE_CAMPAIGN_MODE` in the unit = `dry-run` (snapshot, nothing submitted) until the Route C cutover flips it to `live` | D410/D411 |
@@ -153,15 +151,16 @@ Forge is a consumer of Crucible's runtime. Bring things up in this order:
 1. **Crucible** (its agent): `~/optbt_data` in place, `db_writer` socket live, and the
    registry / gated-runs / promoted-strategies / universe publishers running so
    `~/optbt_data/exports/` is populated.
-2. **Forge**: `systemctl --user start forge.service`.
+2. **Forge**: nothing to start — `forge-campaign.timer` fires Sunday 03:00 UTC; run
+   `forge campaign --dry-run` by hand to see this week's plan without submitting.
 
-The unit runs with `--require-real-cache`, so if Crucible's writer/feature cache is not yet up,
-Forge **skips iterations cleanly** rather than submitting a noise-filtered batch — it will not
-crash, it just waits.
+The run builds its feature cache with `require_real=True`, so if Crucible's writer is not up the
+run ends as an ERROR record (the unit goes FAILED = the page) and submits nothing — it never
+filters against the synthetic cache.
 
-Watch: `journalctl --user -u forge.service -f`. On a healthy start the journal prints the contracts
-line, the `grammar_version` matching `config/grammar.yaml`, and the enabled rank/yield axes the unit carries
-(`--cohort-yield` / `--regime-gate-yield` D182/D183; `--quality-rank` D193) before the per-iteration
+Watch: `journalctl --user -u forge-campaign.service -n 40`. A healthy run prints the boot checks, the
+contracts line, `grammar_version` matching `config/grammar.yaml`, the trained model ids, the five
+trigger lines and the closing `campaign <run_id>: …` line
 prefetch.
 
 ---
@@ -195,7 +194,7 @@ set one on the new box if the host has only one disk.
 - [ ] `uv run forge version` shows Forge + the contracts version matching the pin
       (`FORGE_EXPECTED_CONTRACT_VERSION` in `src/forge/core/contracts_check.py`)
 - [ ] `du -h ~/forge_data/forge.db` ≈ matches the old box (state came across)
-- [ ] `systemctl --user is-enabled forge.service` → enabled; linger on
+- [ ] `loginctl show-user $USER -p Linger` → yes (timers run headless)
 - [ ] `systemctl --user list-timers 'forge-*'` → `forge-campaign` (Sun 03:00 UTC) and `forge-backup`
       (Sun 04:30 UTC), both scheduled (ranker-eval / prereg-watch / healthcheck retired with the daemon, Batch 5)
 - [ ] `ls ~/proj/Forge/scripts/*.sh` → backup / campaign_run / preflight / snapshot scripts present + executable

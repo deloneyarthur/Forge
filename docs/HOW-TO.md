@@ -5,8 +5,10 @@ details see `MANPAGE.md`.
 
 ## The pipeline in one breath
 
-Forge generates candidate option strategies → writes them to Crucible's inbox →
-Crucible backtests + gates them → publishes results → Forge learns and refines.
+Once a week (`forge-campaign.timer`, Sunday 03:00 UTC) Forge reads the designated book and
+Crucible's verdicts, decides whether any cell is worth generating for, and writes at most a few
+hundred challengers to Crucible's inbox → Crucible backtests + gates them → publishes results.
+The 24/7 daemon is retired (D416, 2026-09-14).
 Promoted strategies flow to QuantIQ for live/paper trading.
 
 ```
@@ -18,57 +20,21 @@ Forge ──inbox/*.json──► Crucible ──exports/gated_runs──► For
 All inter-system communication is **files under `~/optbt_data/`** — no direct DB
 sharing. Everything runs as **systemd user services**.
 
-## Start everything
+## Start / stop
 
-Order matters: the DB writer holds the exclusive lock and must come up first.
-
-```bash
-# 1. Crucible foundation (writer first, then everything else)
-systemctl --user start crucible-db-writer.service
-systemctl --user start crucible-registry-publisher.service   # timer-driven oneshot (~6h republish, D166)
-systemctl --user start crucible-inbox-watcher.service
-systemctl --user start crucible-runner@1.service crucible-runner@2.service   # templated; plain crucible-runner.service is unused
-systemctl --user start crucible-gated-runs-publisher.service
-systemctl --user start crucible-failed-runs-publisher.service    # D240: Forge retires runner-FAILED runs from this export
-systemctl --user start crucible-promoted-strategies-publisher.service
-systemctl --user start crucible-universe-publisher.service      # timer-driven oneshot (universe_tickers)
-systemctl --user start crucible-component-contributions-publisher.service
-systemctl --user start crucible-refit-watcher.service
-
-# 2. Forge (safe to start last; retries if inbox not ready)
-systemctl --user start forge.service
-```
-
-Check it all came up:
-
-```bash
-systemctl --user list-units 'crucible*' 'forge*'
-```
-
-## Stop everything
-
-Reverse order — stop readers/publishers first so the writer drains cleanly.
-
-```bash
-systemctl --user stop forge.service
-systemctl --user stop crucible-runner@1.service crucible-runner@2.service crucible-inbox-watcher.service crucible-refit-watcher.service
-systemctl --user stop crucible-gated-runs-publisher.service crucible-failed-runs-publisher.service crucible-promoted-strategies-publisher.service crucible-component-contributions-publisher.service
-systemctl --user stop crucible-db-writer.service
-```
+Forge has no long-running service since the cutover (D416): `forge-campaign.timer` (Sunday
+03:00 UTC) and `forge-backup.timer` (Sunday 04:30 UTC) are the whole schedule, and a reboot
+re-arms them onto whatever this tree contains. Crucible's fleet is theirs to start and stop
+(writer first, then everything else; reverse to stop) — `MANPAGE.md` PIPELINE SERVICES lists the
+Forge-relevant subset. To run the weekly campaign by hand: `systemctl --user start
+forge-campaign.service` (live mode — it submits if a trigger fires) or
+`forge campaign --dry-run` for a plan that submits nothing.
 
 ## Daily health check
 
 ```bash
-# One-shot daemon health — alive AND productive (exit 0/1/2 = OK/WARN/CRITICAL). The
-# forge-healthcheck timer runs this hourly; only a CRITICAL fails the unit (WARN is
-# informational), so a WARN won't show in --state=failed — read the journal for it.
-(cd ~/proj/Forge && uv run forge healthcheck)
-
-# Are all services alive? (forge-healthcheck shows here on CRITICAL)
+# Anything failed? (a FAILED forge-campaign / forge-backup unit is the only Forge page)
 systemctl --user list-units 'crucible*' 'forge*' --state=failed
-
-# Is Forge submitting / rate-limited?
-journalctl --user -u forge.service -n 20 --no-pager
 
 # Is Crucible processing? (templated runner instances)
 journalctl --user -u crucible-runner@1.service -n 10 --no-pager
@@ -86,76 +52,19 @@ journalctl --user -u forge-campaign.service -n 30 --no-pager
 ```
 
 The weekly run trains the verdict + robustness models it ranks with in-run (record field `models`,
-Batch 5 G0); the daily trainer and its streak clocks are retired, so `forge status` reads stale
-files until G1 removes it. Deeper digging (forge.db queries, cohort analysis, known traps):
+Batch 5 G0). Deeper digging (forge.db queries, cohort analysis, known traps):
 `tasks/investigate-live.md`.
 
 ## Common situations
 
-### Forge says "blocked: ... 0% gated, waiting for >=80%"
+### The daemon-era "blocked: …" lines (retired with `forge run`, D416)
 
-Forge won't submit a new batch until 80% of the previous batch has been gated by
-Crucible. This is the rate limiter (correct behavior). If it's stuck for hours:
-
-1. **Check the publisher is alive** — Forge reads gated state from exports, not
-   the DB. A dead publisher = stale exports = permanent block.
-   ```bash
-   systemctl --user status crucible-gated-runs-publisher.service
-   systemctl --user restart crucible-gated-runs-publisher.service   # if failed
-   ```
-2. **Check the runner is making progress** — if Crucible has a deep backlog the
-   batch may simply not be reached yet.
-   ```bash
-   journalctl --user -u crucible-runner@1.service -n 5 --no-pager
-   ```
-3. **Skip a stale batch** if it predates a code change and you don't need its
-   results (stop Forge, mark its rows `skipped`, restart):
-   ```bash
-   systemctl --user stop forge.service
-   python -c "
-   import duckdb; from pathlib import Path
-   db = duckdb.connect(str(Path.home()/'forge_data/forge.db'))
-   db.execute(\"UPDATE submissions SET status='skipped' WHERE forge_batch_id='<UUID>' AND status='submitted'\")
-   db.close()"
-   systemctl --user start forge.service
-   ```
-
-### Forge says "blocked: crucible stalled — no decisions since …"
-
-A *different* block from the one above (D137 stall guard, `submission.stall_after_seconds`,
-default 3 h). It means Crucible has had Forge's work in its queue for ≥3 h and decided
-nothing — its decision clock (`max(decided_at)`) is stale while configs submitted after it
-sit pending. This is the guard working: it stops Forge from pouring thousands of configs
-into a gate that has gone quiet (the 2026-06-10 wedge). It **self-clears** the moment one
-fresh decision lands — no intervention needed once Crucible recovers.
-
-What to do: this points upstream, not at Forge. Diagnose the runner (is it wedged? a
-`futex_do_wait` at 0% CPU with byte-identical exports is the signature), restart it if
-needed, and relay a wedge prompt (`PROMPT_CRUCIBLE_RUNNER_WEDGE.md` is the template). Do
-**not** lower `stall_after_seconds` to "unblock" — that just resumes feeding the dead gate.
-
-### Forge says "blocked: in-flight depth N exceeds cap M"
-
-The §7.3 backpressure block (`submission.max_inflight`, deployed ON per D196/D200): the
-*aggregate* learnable queue — genuine in-flight `submitted` rows newer than the D110 flush
-watermark, summed across all batches — exceeds the cap. Unlike the per-batch "N% gated"
-line, it fires even when the oldest batch reads ≥80% (a permanent zombie batch can't mask
-it). It means Crucible is draining slower than Forge submits; Forge is correctly waiting so
-the queue stays shallow enough to learn from. It self-clears as Crucible drains below the cap.
-
-Since D240 the feedback consumer also auto-retires runner-FAILED runs each poll (from
-Crucible's `failed_runs_*.json` export), so failures no longer sit `submitted` and pin the
-depth metric for days. A *persistent* depth block therefore points at either the
-`crucible-failed-runs-publisher` being down (failed runs invisible again) or a genuine
-Crucible backlog. To diagnose which, join forge.db's `submitted` rows against Crucible's
-`run.status` / the failed_runs export on `config_hash` (the D205/D240 join —
-`docs/tasks/investigate-live.md`).
-
-What to do: usually nothing — it's the throttle working. If it blocks persistently, Crucible
-is the bottleneck (see the stall guidance above / diagnose the runner), not Forge. To retune,
-raise/lower `submission.max_inflight` in `config/forge.yaml` (0 = disable; the live value is set
-at ≈3× batch_size per D200). Don't disable it to "unblock" — that just re-deepens the un-learnable
-queue. Changing it is a config edit that deploys on restart — run the deploy ritual (below).
+The daemon's §7.3 rate limiter printed `blocked: prev batch N% gated`, `blocked: crucible
+stalled` and `blocked: in-flight depth N exceeds cap M`; all three were the limiter working as
+designed (D046/D137/D196), not faults. The weekly run has no in-flight backpressure — its boot
+check refuses only on an inbox backlog above `campaign.inbox_backlog_ceiling`. If Crucible's
+publishers die, the campaign's reconcile sees a stale export: `systemctl --user status
+crucible-gated-runs-publisher.service crucible-publisher@forge_gated_runs.service`.
 
 ### Exports are stale / Forge can't see results
 
@@ -179,18 +88,18 @@ the row to `status='submitted'` manually; if absent, re-run the batch — the
 
 ### Restore forge.db (or models/) from a backup
 
-Nightly backups land in `~/forge_data/backups/` (the `forge-backup` timer, 04:00): validated
+Weekly backups land in `~/forge_data/backups/` (the `forge-backup` timer, Sunday 04:30 UTC, after the campaign run): validated
 `forge_db_<UTC>.duckdb` snapshots + `models_<UTC>.tar.gz`; the newest `FORGE_BACKUP_KEEP` are
 kept (set on the unit, `deploy/systemd/forge-backup.service`; script default 14). To restore:
 
 ```bash
-systemctl --user stop forge.service          # release the writer's lock on forge.db
+systemctl --user is-active forge-campaign.service && echo 'a run is in progress: wait for it'   # nothing else writes forge.db
 LATEST=$(ls -1 ~/forge_data/backups/forge_db_*.duckdb | sort | tail -1)
 # verify it opens before swapping:
 ~/proj/Forge/.venv/bin/python -c "import duckdb,sys; print(duckdb.connect(sys.argv[1],read_only=True).execute('select count(*) from submissions').fetchone())" "$LATEST"
 cp -- "$LATEST" ~/forge_data/forge.db        # overwrite the corrupted/lost DB
 # models, if needed: tar -xzf "$(ls -1 ~/forge_data/backups/models_*.tar.gz | sort | tail -1)" -C ~/forge_data
-systemctl --user start forge.service
+# the next Sunday run picks the restored DB up; nothing to restart
 ```
 
 Caveat: same-disk backups don't survive a *physical disk* failure — for that, `FORGE_BACKUP_DEST`
@@ -207,15 +116,14 @@ Any change that deploys on restart (config edits, new ranges, code) should clear
 `scripts/deploy_preflight.sh` first — it's step 0 of the deploy ritual (`tasks/deploy.md`).
 Review any **loosening** proposals (these need operator sign-off) in `OPEN_PROPOSALS.md`.
 
-### Weekly campaign run (the final state; the timer runs it in dry-run mode until the cutover)
+### Weekly campaign run (the pipeline since the 2026-09-14 cutover)
 
 `forge-campaign.timer` (Sunday 03:00 UTC) runs `scripts/campaign_run.sh`, which in the unit's
-`dry-run` mode snapshots the DB and runs `forge campaign --dry-run`: a plan and a record every
-week, nothing submitted, no operator input. Check it Monday with
-`journalctl --user -u forge-campaign.service -n 30 --no-pager` (a FAILED unit is the page). The
-Route C cutover = flip `FORGE_CAMPAIGN_MODE` to `live` in the unit after the daemon is stopped and
-Crucible's forge-scoped 14-day gated stream is live (D409); the wrapper refuses `live` while
-`forge.service` runs. Read the
+`live` mode (since the 2026-09-14 cutover, D416) submits whatever the triggers select, at most a few
+hundred configs, no operator input. Check it Monday with
+`journalctl --user -u forge-campaign.service -n 30 --no-pager` (a FAILED unit is the page). For a plan
+that submits nothing, run `forge campaign --dry-run --skip-train --forge-db "$(scripts/live_db_snapshot.sh)"`
+by hand. Read the
 journal block top to bottom: one `boot <check> ok|FAIL` line per precondition (any FAIL → exit 2,
 nothing submitted, the unit goes FAILED — that is the only page); one `trigger <name> FIRED|quiet
 <reason>` line per trigger; one `campaign <trigger> cells=N budget=B` line per campaign; then
@@ -253,17 +161,18 @@ Full change procedure (worktree, tests, deploy ritual): `tasks/grammar-change.md
 | `~/optbt_data/refit_inbox/` | QuantIQ's quarterly re-validation requests |
 | `~/optbt_data/runs.duckdb` | Crucible's results DB (writer-locked; never read directly) |
 | `~/forge_data/forge.db` | Forge's own state (submissions, batches, proposals) |
-| `~/forge_data/backups/` | Nightly DR snapshots of `forge.db` + `models/` (`forge-backup` timer, 04:00; retention = `FORGE_BACKUP_KEEP` on the unit) |
+| `~/forge_data/backups/` | Weekly DR snapshots of `forge.db` + `models/` (`forge-backup` timer, Sunday 04:30 UTC; retention = `FORGE_BACKUP_KEEP` on the unit) |
 
-## Manual runs (without the daemon)
+## Manual runs
 
 ```bash
 cd ~/proj/Forge
 
-forge check                      # sanity: contracts + DB schema
-forge enumerate --max 20 --summary    # preview generated configs (no submission)
-forge run --dry-run --max 100         # full cycle, no inbox writes
-forge run --inbox ~/optbt_data/inbox --forge-db ~/forge_data/forge.db   # one real batch
+forge check                                    # sanity: contracts + DB schema
+forge enumerate --max 20 --summary             # preview generated configs (demo registry, no submission)
+forge prefilter --max 20 --summary             # the §5.2 battery on those configs (diagnosis)
+forge campaign --dry-run                       # this week's plan, nothing submitted
+forge campaign status --last 4                 # recent runs + what their submissions earned
 ```
 
 See `MANPAGE.md` for every command and flag.

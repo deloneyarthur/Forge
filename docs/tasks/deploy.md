@@ -1,66 +1,43 @@
-# Task: deploy to the live service (the D104 ritual)
+# Task: deploy to the live tree (the D104 ritual, weekly cadence)
 
-Scope: getting any code/grammar change into the running `forge.service`. Background: a reboot
-auto-starts the service onto whatever this tree contains — committed or not — which once silently
-deployed ungated code (D104). Hence:
+Scope: getting any code/grammar change into production. Since the 2026-09-14 cutover (D416)
+there is no daemon: `forge-campaign.timer` runs `forge campaign` from this working tree every
+Sunday 03:00 UTC via editable install, and a reboot re-arms the timer onto whatever the tree
+contains — committed or not. So the tree IS the deploy, and the ritual is about what you leave in it.
 
 ## Standing rules
 
 - **Grammar bumps build in a worktree** (`git worktree add ../Forge-build <branch>`); other work
-  stays in this tree with short dirty windows. The live tree stays `git status`-clean except mid-deploy.
-- Never edit `config/grammar.yaml` in the live tree while the service runs — the loop re-reads it
-  hot and stamps submissions with the new version before the code exists
-  (`grammar_versions.changed_at` = stamp-flip time, never deploy time).
-- Versionless changes follow the same ritual — the uncontended-suite gate is the point.
-- §7.3 backpressure knobs (`submission.stall_after_seconds`, `submission.max_inflight`) live in
-  `config/forge.yaml`, NOT `grammar.yaml`; they're hot-read, default-off, and operator-gated
-  (enabling a depth cap is a loosening-adjacent live-behavior change — D196/D200). Changing a
-  value here needs no version bump but still goes through this ritual.
+  stays in this tree with short dirty windows. Never leave the tree dirty at a stopping point.
+- The grammar is FROZEN at v55 (D390): a `grammar.yaml` content change needs an open
+  preregistration first (pre-commit `freeze-governance`), then the bump + archive + D-entry.
+- Versionless changes (weights, campaign knobs in `forge.yaml` `campaign:`) follow the same gate —
+  the full suite is the point.
+- The unit file `deploy/systemd/forge-campaign.service` is symlinked live: an edit needs
+  `systemctl --user daemon-reload` to take effect; its `FORGE_CAMPAIGN_MODE` line is the one
+  operator decision it carries (`live` since D416).
 
 ## Steps
 
 ```bash
-scripts/deploy_preflight.sh                  # GATE (D199): deploy-surface clean + FULL suite (covers contracts pin D176 + anti-inertness D185). NO-GO => fix first
-systemctl --user stop forge.service          # journal exit 143 = normal --loop SIGTERM
-# commit / merge to main in the LIVE tree (service runs from here via editable install)
-systemctl --user reset-failed forge.service
-systemctl --user daemon-reload               # REQUIRED if deploy/systemd/forge.service changed (env/flag activation); else start runs the OLD unit and the change silently no-ops
-systemctl --user start forge.service
+scripts/deploy_preflight.sh                  # GATE: deploy surface clean + FULL suite (covers the contracts pin, D176)
+# commit on main in the LIVE tree
+uv run forge campaign --dry-run --skip-train --forge-db "$(scripts/live_db_snapshot.sh --max-age-min 720)"   # verify: same plan class, boot 8/8 ok
 ```
 
-If you changed the unit file (a flag/env activation like `--quality-rank` or
-`FORGE_YOUNG_CELL_FLOOR`), `daemon-reload` is mandatory before `start` — systemd
-warns "unit file changed on disk" and otherwise starts the stale unit (the flag looks set
-in the file but is absent from the process env). Confirm it took in Verify below.
+The next Sunday run is the deploy. To deploy sooner, `systemctl --user start forge-campaign.service`
+(live mode — it submits if a trigger fires).
 
-The preflight is read-only (it never stops/starts the service or touches the tree) and runs the
-full suite (tests use isolated temp DBs, so it's effectively uncontended even with the daemon up).
-Its dirty-tree NO-GO is scoped to the **deploy surface** (`src config pyproject.toml uv.lock deploy`)
-— a reboot deploys those; other uncommitted tracked files (docs/tests/scripts) and untracked scratch
-docs are reported but never block, so the operator's in-flight `PROMPT_*` docs don't fail the gate
-(D199 scope fix). Re-run `uv run pytest` after stopping if you want a fully-quiesced gate. A contracts
-bump leaves the suite red until the pin is adopted — the preflight will NO-GO until you do, which is
-the point.
+## Verify (the dry-run block)
 
-## Verify (within the first minutes)
-
-```bash
-journalctl --user -u forge.service -n 50 --no-pager
-systemctl --user show forge.service -p NRestarts    # expect 0
-systemctl --user show forge.service -p Environment  # unit/flag change: confirm the env is actually set (not just in the file)
-```
-
-Expect: contracts version startup line, `grammar_version=v{N}`, `registry_loaded_from_export`
-(+ registry_hash), a reconcile line; **no** traceback / `SchemaVersionMismatch` /
-`GrammarVersionError`.
-
-`blocked: prev batch ... gated` is the §7.3 limiter — normal. Change-specific journal lines
-(e.g. `hypothesis_weights:`, `rank_combiner_share`) appear only on the first UNBLOCKED iteration,
-which can be hours out under Crucible backpressure.
+Expect: every `boot <check> ok` line, `grammar_version=v55`, the contracts version, the trained
+model ids, five `trigger` lines, and a closing `campaign <run_id>: …` line; **no** traceback /
+`SchemaVersionMismatch` / `GrammarVersionError`. A contracts bump leaves the suite red until the
+pin in `core/contracts_check.py` is adopted — the preflight NO-GOs until you do, which is the point.
 
 ## After
 
-- Update `STATUS.md` with the deploy timestamp (UTC) + verification evidence.
-- Grammar-versioned change → relay version string + deploy timestamp to Crucible
-  (`crucible-handoff.md`).
-- Push when the operator expects it; service runs from the working tree, not origin.
+- Update `STATUS.md` (≤ ~800 chars) with the commit + verification evidence.
+- Grammar-versioned change → relay the version string + the first live run's timestamp to Crucible
+  (`crucible-handoff.md`) so they can run `crucible funnel --compare`.
+- Push when the operator expects it; the timer runs from the working tree, not origin.

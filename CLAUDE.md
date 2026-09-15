@@ -11,13 +11,15 @@ something isn't in it, ask before inventing. Quote § numbers when justifying de
 
 ## This working tree IS production
 
-`forge.service` (systemd user unit) runs the daemon from THIS directory via editable install.
+`forge-campaign.timer` (systemd user unit, Sundays 03:00 UTC) runs `forge campaign` from THIS
+directory via editable install — the weekly run is the pipeline since the 2026-09-14 cutover
+(D416); there is no daemon.
 
 - Grammar bumps build in a worktree (`git worktree add ../Forge-build`); other work in this
-  tree, short dirty windows. Keep this tree `git status`-clean: a reboot auto-starts
-  the service onto whatever the tree contains, committed or not (D104).
-- Deploys follow `docs/tasks/deploy.md`: stop service → full uncontended suite → commit →
-  restart → verify journal. Never restart the service casually.
+  tree, short dirty windows. Keep this tree `git status`-clean: the next Sunday run (and a
+  reboot's re-armed timer) executes whatever the tree contains, committed or not (D104).
+- Deploys follow `docs/tasks/deploy.md`: preflight (clean deploy surface + full suite) → commit
+  → the next run deploys; verify with a hand `forge campaign --dry-run`. Nothing to restart.
 
 ## Stack & commands
 
@@ -88,8 +90,8 @@ command; type hints on every public signature; docstrings say WHY, not what; no 
 - Timestamps before 2026-06-07 are PDT (old box); after, UTC. Convert before joining.
 - Crucible's gated export is a rolling top-10k window with pre-v5 re-gate pollution; split
   cohorts by `grammar_version` and time-cut v9 at 2026-06-06T06:48:49Z (D104).
-- Two dozen test files import `forge.cli.main` (22 only import `app`) — its structure is
-  deliberate (D065/D105/D106); don't refactor it casually.
+- Eight test files import `forge.cli.main` (six only import `app`); the daemon loop and its
+  monkeypatch seams left in Batch 5 G1 — `main.py` is now a thin Typer entry point.
 - "blocked: prev batch N% gated" = the §7.3 limiter working; `crucible-ingest-daily` "failed"
   is benign (rfr-only). Don't "fix" either.
 
