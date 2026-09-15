@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 5 G3 DONE (D420): daemon-era feedback GONE — `rejection_weights` (1,171 LOC) + the §8.5 proposal machinery, 8 modules / 12 test files (−3,003 src, −4,772 tests); `feedback/` = consumer · eras · preregistration · trade_rate_priors · types. Hard rule #4 re-cut ("no code writes grammar.yaml at runtime", AST invariant); `OPEN_PROPOSALS.md` static. Suite 1,618 green in 94 s; live dry-run identical.** (D420)
+
+- Next: G4 (rate limiter, write-only prefilter logger + Q44 close, three unused predicate types).
+
 ## 2026-09-15 (later) — **Batch 5 G2 DONE (D419): daemon-era ranking GONE — 14 modules + `yield_audit` + `ranker.yaml` (32 files / 7,866 LOC); `ranking/` = dataset · features · model · shadow · signal_key · types. Hard rules #6/#9 keep named tests (`test_batch_reproducibility` re-targeted to two campaign runs in disjoint workspaces). Suite 1,803 green in 99 s; live dry-run identical.** (D419)
 
 - Next: G3 (feedback, daemon era — `rejection_weights` 1,171 LOC + the proposal machinery; hard rule #4 reworded).

@@ -2423,3 +2423,44 @@ the sampler goldens, the campaign subsequence invariant. #9 idempotency:
 then delete `rejection_weights` (1,171 LOC), `analyzer`, `proposer`, `proposal_writer`,
 `trade_concentration`, `stuck_state`, `promoted_patterns`, `book_usable_weights`; trim `feedback/types.py`
 to what `consumer` uses; hard rule #4 reworded; `OPEN_PROPOSALS.md` stays a static machine-parsed file.
+
+## D420 — 2026-09-15 — Batch 5 G3 DONE: the daemon-era feedback is gone — `rejection_weights` (1,171 LOC) and the §8.5 proposal machinery (8 modules, −3,003 src / −4,772 test LOC); hard rule #4 re-cut as "no code writes `grammar.yaml` at runtime" with an AST invariant
+
+**Commits** `5c44190` (era helpers → `feedback/eras.py`), `1671bf1` (deletions + trims + CLAUDE.md rule 4),
+`556d86f` (docs). Suite **1,618 passed / 1 skipped / 2 xfailed in 94 s** (from 1,803). `forge check` OK.
+Live dry-run `2026-W38-20260915T013259Z` identical to `…011907Z` (registry `c703b3b8…`, seed 1290051760,
+20,000 enumerated, no trigger).
+
+**Moved first (pure).** `is_ve_ghost_label`, `honest_regime_coverage_row`, `_honest_regime_coverage`
+(+ their three constants) → `feedback/eras.py`; `ranking/dataset.py`, `feedback/trade_rate_priors.py`
+and three test files import from there. `feedback/eras.py` is now the single home of every label-era
+rule the training frame applies.
+
+**Deleted.** `feedback/{rejection_weights, proposer, proposal_writer, analyzer, trade_concentration,
+book_usable_weights, stuck_state, promoted_patterns}.py`. The learned draw weights had only the deleted
+loop as consumer. The proposal trio was the §8.5 grammar-proposal machinery: under the signed freeze no
+proposal can be applied without a preregistration, its only writer was the daemon, and its last four
+outputs were noise (plan §4d, §8.2). `promoted_patterns`: 8 rows ever, no reader (Q44 half-closed).
+`stuck_state`: journal-only, permanently noisy under book-level promotion. `feedback/types.py` trimmed to
+`CandidateOutcome` + `BatchFeedback`. Twelve test files deleted; `test_types` trimmed. **`feedback/`
+now = `consumer`, `eras`, `preregistration`, `trade_rate_priors`, `types`** (1,418 LOC). The
+`grammar_proposals` / `promoted_patterns` DDL stays for old DBs, commented "no writer since D420".
+`OPEN_PROPOSALS.md` stays a static machine-parsed record (QuantIQ parses `forge-proposals/v1`).
+
+**Hard rule #4, re-cut.** CLAUDE.md rule 4 now: "Grammar changes require a preregistration and the
+operator's signature. No code writes `config/grammar.yaml` at runtime; the pre-commit `freeze-governance`
+and `grammar-version-bump` hooks enforce it (D390/D392). `OPEN_PROPOSALS.md` is a static, machine-parsed
+record." Rules 1–3, 5–10 byte-identical. `test_phase5_invariants.py`: the eight proposer-structure tests
+went with their subject; new `test_no_src_module_writes_grammar_yaml_at_runtime` (AST: any `src/forge`
+module naming `grammar.yaml` contains no write call) — passes today; the hook wiring is asserted once, in
+phase6 (D418). Consumer idempotency, aged-out sentinel, D051 audit-row and naive-clock tests stay.
+`test_batch5_prep_seams`: `test_eras_owns_the_era_helpers` replaces the rebind checks; the
+campaign-imports-nothing tripwire unchanged.
+
+**Docs.** architecture.md: diagram label "feedback: consume (reconcile)", the `feedback/` row +
+breakdown → survivors, four Terms marked "(daemon era, retired D420)"; MANPAGE state-DB notes;
+`docs/tasks/feedback-change.md` → a six-line RETIRED note (CLAUDE.md route goes in G7).
+
+**Remaining xfails: 2** — REL-2 (`rate_limiter`, deleted in G4) and REL-4 (SIGTERM on the campaign
+oneshot, fixed in G6). **Next:** G4 — `submission/rate_limiter`, `submission/pre_filter_logger` + the
+submitter call (Q44 closed), the three unused predicate types.
