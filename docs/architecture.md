@@ -67,7 +67,7 @@ so the same week on the same inputs replays the same plan.
 - **Two systemd user timers, no daemon** (units in `deploy/systemd/`, symlinked into
   `~/.config/systemd/user/`): `forge-campaign.timer` (Sunday 03:00 UTC → `scripts/campaign_run.sh` →
   `forge campaign`; the unit's `Environment=FORGE_CAMPAIGN_MODE=live` is the one operator decision it
-  carries — `dry-run` snapshots the DB and plans only; `MemoryHigh=32G` / `MemoryMax=48G` fail the
+  carries — `dry-run` snapshots the DB and plans only; `MemoryHigh=20G` / `MemoryMax=32G` fail the
   unit rather than starve Crucible; no `SuccessExitStatus` — a FAILED unit is the only page) and
   `forge-backup.timer` (Sunday 04:30 UTC, `scripts/backup_forge_db.sh`).
 - The run executes **this working tree** via editable install: a commit is the deploy, a reboot

@@ -17,12 +17,14 @@ WorkingDirectory=%h/proj/Forge
 Environment=FORGE_CAMPAIGN_MODE=live
 ExecStart=%h/proj/Forge/scripts/campaign_run.sh
 TimeoutStartSec=3h
-# 26.7 GB peak measured 2026-09-15 on a dry-run WITH in-run training (Batch 5 G0: the verdict fit
-# reads 1.27M verdict rows, the robustness fit 1.0M, on top of the cell stats + a 20k enumeration;
-# 13.8 GB before training moved in). Fail this unit rather than starve Crucible (its services
-# OOM'd twice, D399/D401). The dataset build is the Batch 6 memory target.
-MemoryHigh=32G
-MemoryMax=48G
+# 15.6 GiB peak (16,314,216 kB max RSS, /usr/bin/time -v) measured 2026-09-15T04:17Z on a dry-run
+# WITH in-run training after Batch 6B (D426): the cell census aggregates inside DuckDB and the
+# training frame is built from two streamed passes, so the peak now sits in the verdict fit
+# itself (1.27M rows x 127 columns into numpy), not in reading the ledger. Before 6B the same run
+# peaked at 25.2-26.7 GB (D417; 13.8 GB before training moved in). Fail this unit rather than
+# starve Crucible (its services OOM'd twice, D399/D401); the peak has ~4 GiB under MemoryHigh.
+MemoryHigh=20G
+MemoryMax=32G
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=forge-campaign

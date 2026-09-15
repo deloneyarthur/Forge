@@ -149,8 +149,9 @@ Units: `forge-campaign.timer` (Sunday 03:00 UTC) → `forge-campaign.service` �
 `scripts/campaign_run.sh`. The unit's `Environment=FORGE_CAMPAIGN_MODE` is the one operator decision it
 carries: `live` since the 2026-09-14 cutover (D416) — the run submits what the triggers select;
 `dry-run` made the wrapper snapshot the DB and plan only (the pre-cutover weeks, D411). The wrapper
-refuses any other value. `MemoryHigh=32G` / `MemoryMax=48G` (the run trains its models in-process,
-25-27 GB peak measured, D417) fail the unit rather than starve Crucible. No `SuccessExitStatus`: a
+refuses any other value. `MemoryHigh=20G` / `MemoryMax=32G` (the run trains its models in-process;
+15.6 GiB peak measured after the Batch 6B memory work, D426, down from 25-27 GB at D417) fail the
+unit rather than starve Crucible. No `SuccessExitStatus`: a
 failed unit is the only page.
 
 The one env knob the run itself reads is `FORGE_REFUTATION_GUARD` (default on): `off` disables the
