@@ -287,29 +287,6 @@ _VIX_CONDITIONER_SHARE: float = 0.0
 # dead (see the block above); the pilot conditions the working hurst base only.
 _VIX_CONDITIONER_PRIMARY_GATES: frozenset[str] = frozenset({"hurst"})
 
-# v45 (D319) — residual_momentum pilot DIAL (Crucible
-# FORGE_q46_readdesign_and_scope_refine_2026-07-21 §5): lift the residual_momentum
-# directional draw ~2x so the hurst x vix double-gate cell lands ~600-800 decided
-# over the +2-week read window (~2x the natural ~375), enough honest components
-# (~20-30) for their in-book marginal-contribution lane (P2 incumbent_add_variants,
-# D213 — the load-bearing read). A MULTIPLIER on residual_momentum's weighted-draw
-# option weight (`_option_weight`), so it only touches the learned weighted path
-# (production); the cold-start path (rng.choice, no weights) is UNTOUCHED —
-# byte-identical (hard rule #6), the test_sampler goldens included. Deliberately
-# MODEST: ~2x share (donchian/rolling_sharpe still dominate) so the trend supply
-# does not become a monoculture (Crucible's P5 diversity KPIs — the very thing
-# this pilot exists to grow). RETIRE this dial when the +2-week in-book read
-# concludes (a future version drops it; the D287-pin-retire convention).
-# v48 (D328): RETIRED to 1.0 (neutral) — the dial's own retirement condition, met.
-# It was sized to accrue ~600-800 decided resid configs for Crucible's +2wk in-book
-# read; v47 alone produced 891 resid trend-xsect runs, and resid reached 40.8% of
-# trend-xsect emission (v44 9.55% -> v46 19.82% -> v47 40.80%) while momentum_252
-# — Crucible's best trend component (lift 4.11 vs resid's 0.15) — fell to 0.64%.
-# The dial x the v47 filter meeting resid's xsect pin above was the crowding
-# mechanism. Retiring the DIAL is not calling the PILOT: the sample is banked and
-# their 2026-08-04 P2 in-book read is unaffected; resid keeps its D276 xsect pin.
-_RESID_MOMENTUM_PILOT_WEIGHT: float = 1.0
-
 # D270 (v31) — the capitulation-bounce family (Crucible
 # FORGE_capitulation_bounce_generation_request_2026-07-12): `momentum` as a
 # mean_reversion directional (§3.5 C2 per-id carve-out, OPEN_PROPOSALS
@@ -1767,11 +1744,6 @@ def _select_bucket_directional_regime(
             if weight is None:
                 weight = pairs.get((hypothesis, bucket_name), _BUCKET_WEIGHT_PRIOR_MEAN)
             weight = max(weight, _BUCKET_EXPLORATION_FLOOR)
-            # v45 (D319): the residual_momentum pilot dial — lift its draw ~2x to
-            # feed the hurst x vix double-gate cell for the +2-week in-book read.
-            # Weighted path only; cold-start (rng.choice) stays byte-identical.
-            if directional == _RESID_MOMENTUM_DIRECTIONAL_ID:
-                weight *= _RESID_MOMENTUM_PILOT_WEIGHT
             return weight
 
         options = tuple(
