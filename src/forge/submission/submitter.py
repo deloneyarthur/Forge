@@ -30,7 +30,6 @@ import duckdb
 from crucible_contracts import submit_candidate
 
 from forge.enumeration.search_space import OVERLAY_ONLY_HYPOTHESES
-from forge.submission.pre_filter_logger import record_pre_filter_logs
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -277,13 +276,9 @@ def _submit_one(
             "UPDATE submissions SET status = ? WHERE forge_candidate_id = ?",
             ["submitted", str(candidate_id)],
         )
-        record_pre_filter_logs(
-            db,
-            candidate_id=candidate_id,
-            report=candidate.report,
-            evaluated_at=batch.submitted_at,
-            batch_id=batch.batch_id,
-        )
+        # The per-candidate x per-filter `pre_filter_logs` write left in Batch 5 G4 (D421):
+        # 45.7 M rows with no reader anywhere (Q44). The per-batch rejection COUNTS
+        # (`record_prefilter_rejections` -> batch_summaries) stay: Crucible's funnel reads them.
         db.execute("COMMIT")
     except BaseException:
         # Any unexpected failure (incl. KeyboardInterrupt mid-write) must not

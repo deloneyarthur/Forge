@@ -165,19 +165,6 @@ def test_selection_mode_defaults_ranked_when_no_holdout(tmp_path: Path) -> None:
     assert modes == ["ranked", "ranked"]
 
 
-def test_writes_pre_filter_logs(tmp_path: Path) -> None:
-    forge_db = tmp_path / "forge.db"
-    inbox = tmp_path / "inbox"
-    cands = (_candidate("a", "dir_a"),)
-    with db_connection(forge_db) as conn:
-        submit_batch(conn, batch=_ctx(), candidates=cands, inbox_root=inbox)
-        result = conn.execute("SELECT COUNT(*) FROM pre_filter_logs").fetchone()
-        assert result is not None
-        count = int(result[0])
-    # 7 filter results in the candidate's report.
-    assert count == 7
-
-
 def test_writes_batch_summaries_row(tmp_path: Path) -> None:
     forge_db = tmp_path / "forge.db"
     inbox = tmp_path / "inbox"

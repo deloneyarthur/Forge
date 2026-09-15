@@ -147,7 +147,7 @@ def cmd_prefilter(
 
     Phase 3 ships ahead of Phase 4's submission wiring, so this command
     uses the synthetic feature cache and reports per-filter pass/fail
-    counts rather than writing reports to ``pre_filter_logs``.
+    counts rather than persisting per-filter reports (the `pre_filter_logs` sink is retired, D421).
     """
     from collections import Counter
     from pathlib import Path

@@ -7,7 +7,7 @@ Operator reviews at every phase boundary.
 
 ---
 
-> **Rotation (2026-08-06, Step A3):** resolved/closed entries (37, Q7→Q62 era; +Q23/Q34/Q40/Q49/Q62 swept 2026-09-13 Batch 1, +Q51 Batch 2) live
+> **Rotation (2026-08-06, Step A3):** resolved/closed entries (38, Q7→Q62 era; +Q23/Q34/Q40/Q49/Q62 swept 2026-09-13 Batch 1, +Q51 Batch 2, +Q44 Batch 5 G4) live
 > verbatim in `_archive/OPEN_QUESTIONS_RESOLVED.md`. This file holds OPEN questions
 > only; move an entry to the archive in the same commit that resolves it.
 
@@ -153,20 +153,6 @@ Operator reviews at every phase boundary.
 **Reconciliation folded in (2026-06-15 — operator-relayed Crucible answer + code-verified):** the "combine momentum × vol_event" question reduces to this same sampling-coverage issue. **C2 restricts only the DIRECTIONAL signal's family to the hypothesis** (`grammar/custom_predicates.py:154`, `:551-586` filter to `role=='directional'`); confluence/regime signals are NOT C2-restricted — so a momentum-directional × vol-event-as-confluence config is **expressible today** (Crucible confirmed; an earlier "needs a grammar change" read was too strong — that applies only to the hypothesis-keyed *regime-gate* R-rule pools). The open question is whether the **sampler emits** such cross-family-confluence configs. **Economic caveat:** a long-premium momentum bet timed *into* a vol-event buys *elevated* IV = pays the seller's premium (D152) → wrong side for long premium; the right form is the inverse — momentum gated to *cheap* vol (the realized-vol cheapness gate above). **Portfolio-level** hypothesis mixing already works but only on the WF gate (Crucible: WF-median 1.385→1.746, mean corr 0.079); it lifts the center, **not** the binding CPCV-p25 worst-quartile (D146) — necessary-not-sufficient.
 
 **Tag:** `enum-grammar-lane`, `generation-coverage`, `low-EV`, `breadth-not-magnitude`, `operator-gated`, `relates-to-D152/D154/D156`
-
----
-
-## 2026-07-06 — Q44 — Two forge.db tables are write-only in code (`pre_filter_logs`, `promoted_patterns`): keep as forensic sinks or stop writing? — **LOW, persistence lane, operator ruling wanted**
-
-**Question:** The D247 tech-debt inventory found two tables that every code path writes and NO code path reads:
-- `pre_filter_logs` (written `submission/pre_filter_logger.py:91` via `record_pre_filter_logs`, called from `submitter.py`) — the D076 schema comment describes an intended per-filter pass-rate use that no query ever implemented.
-- `promoted_patterns` (written `feedback/promoted_patterns.py:43`, called from the daemon feedback chain + `feedback_cmd.py`) — §9.1 pattern rows, zero SELECTs anywhere.
-
-Absence of a code reader does not prove absence of a consumer: ad-hoc DB forensics on `/tmp` snapshots is a documented workflow (`docs/tasks/investigate-live.md`). Do these tables earn their write cost + DB growth as audit trails, or should the writes be retired (schema kept for history)?
-
-**What I did instead:** kept both untouched (removal is the irreversible direction for accumulated rows); logged here per the confirm-with-maintainer rule. If the operator confirms neither is used in investigations, retiring the writes is a small, restart-requiring change (both writers are on the daemon path).
-
-**Severity:** low (storage/complexity only; no correctness impact either way). **Tag:** `persistence`, `write-only-tables`, `D247-followup`
 
 ---
 

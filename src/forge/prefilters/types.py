@@ -39,7 +39,8 @@ class FeatureDataUnavailable(RuntimeError):
     writer state, empty window response) from a *signal-quality* FAIL. The battery
     catches this and produces a `PreFilterReport(data_unavailable=True)` so the
     config isn't mislabeled as a genuine rejection — which would pollute
-    `pre_filter_logs` and the D076 empirical-prior buckets (same silent-degradation
+    the D076 empirical-prior buckets (and, historically, `pre_filter_logs`, retired D421;
+    same silent-degradation
     class as the D080 incident, at per-underlying granularity).
     """
 
@@ -54,8 +55,7 @@ class FilterResult:
 
     `score` is in `[0, 1]`: higher means "more confident this is a healthy
     candidate against this filter's criterion." `details` carries
-    filter-specific diagnostics for `pre_filter_logs` (Phase 4 wires the
-    write).
+    filter-specific diagnostics (once persisted to `pre_filter_logs`, retired D421).
     """
 
     passed: bool
@@ -90,8 +90,8 @@ class PreFilterReport:
     # feature-cache window was unavailable for this config's underlying — a
     # data-availability verdict distinct from a signal-quality FAIL. These
     # reports are bucketed separately in the rejection histogram and excluded
-    # from `pre_filter_logs` so thin-data false-rejections don't pollute the
-    # D076 priors.
+    # from the D076 priors (and, before D421, from `pre_filter_logs`) so thin-data
+    # false-rejections don't pollute them.
     data_unavailable: bool = False
 
 

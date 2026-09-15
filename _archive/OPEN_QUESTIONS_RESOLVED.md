@@ -1143,3 +1143,25 @@ can vary across runs (parallel scans, load-dependent), so the split — and occa
 stable key in the eval query (or sort rows before the split) — deterministic split, unchanged
 semantics; then re-check the test's margin. Production impact: none on submissions (diagnostic
 telemetry); the same scan-order wobble technically touches the LIVE `model_ece_platt` journal number.
+
+---
+
+> **Swept 2026-09-15 (Batch 5 G4 / D421):** Q44 — CLOSED. `pre_filter_logs` (45.7 M rows, zero readers in
+> Forge / Crucible / QuantIQ SQL) is no longer written: `submission/pre_filter_logger.py` deleted and the
+> submitter's per-candidate call removed; `promoted_patterns` lost its writer in G3 (D420). Both DDLs stay
+> for old DBs. The per-batch rejection COUNTS (`batch_summaries.prefilter_rejections`) are unaffected —
+> Crucible's funnel reads them. Verbatim below.
+
+## 2026-07-06 — Q44 — Two forge.db tables are write-only in code (`pre_filter_logs`, `promoted_patterns`): keep as forensic sinks or stop writing? — **LOW, persistence lane, operator ruling wanted**
+
+**Question:** The D247 tech-debt inventory found two tables that every code path writes and NO code path reads:
+- `pre_filter_logs` (written `submission/pre_filter_logger.py:91` via `record_pre_filter_logs`, called from `submitter.py`) — the D076 schema comment describes an intended per-filter pass-rate use that no query ever implemented.
+- `promoted_patterns` (written `feedback/promoted_patterns.py:43`, called from the daemon feedback chain + `feedback_cmd.py`) — §9.1 pattern rows, zero SELECTs anywhere.
+
+Absence of a code reader does not prove absence of a consumer: ad-hoc DB forensics on `/tmp` snapshots is a documented workflow (`docs/tasks/investigate-live.md`). Do these tables earn their write cost + DB growth as audit trails, or should the writes be retired (schema kept for history)?
+
+**What I did instead:** kept both untouched (removal is the irreversible direction for accumulated rows); logged here per the confirm-with-maintainer rule. If the operator confirms neither is used in investigations, retiring the writes is a small, restart-requiring change (both writers are on the daemon path).
+
+**Severity:** low (storage/complexity only; no correctness impact either way). **Tag:** `persistence`, `write-only-tables`, `D247-followup`
+
+---

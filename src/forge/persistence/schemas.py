@@ -76,6 +76,7 @@ DDL_STATEMENTS: Final[tuple[str, ...]] = (
     "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS survived_count BIGINT",
     "ALTER TABLE batch_summaries ADD COLUMN IF NOT EXISTS enumerated_by_hypothesis JSON",
     """
+    -- no writer since Batch 5 G4 (D421; Q44 closed) — kept for old DBs, never read
     CREATE TABLE IF NOT EXISTS pre_filter_logs (
         forge_candidate_id  UUID,
         filter_name         VARCHAR(64),
