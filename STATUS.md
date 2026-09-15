@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 5 G2 DONE (D419): daemon-era ranking GONE — 14 modules + `yield_audit` + `ranker.yaml` (32 files / 7,866 LOC); `ranking/` = dataset · features · model · shadow · signal_key · types. Hard rules #6/#9 keep named tests (`test_batch_reproducibility` re-targeted to two campaign runs in disjoint workspaces). Suite 1,803 green in 99 s; live dry-run identical.** (D419)
+
+- Next: G3 (feedback, daemon era — `rejection_weights` 1,171 LOC + the proposal machinery; hard rule #4 reworded).
+
 ## 2026-09-15 (later) — **Batch 5 G1 DONE (D418): the daemon loop + its command family are GONE — `cli/main.py` 2,952 → 254 lines, 29 files / 7,489 LOC deleted; `forge --help` = version · check · enumerate · prefilter · campaign · prereg. Suite 2,052 green in 116 s (was 220 s). Live dry-run reproduces the plan.** (D418)
 
 - REL-4 SIGTERM test re-targeted to the campaign oneshot (xfail until G6); the D352 battery-inputs invariant now reads `campaign/run.py`. Next: G2 (ranking, daemon era).

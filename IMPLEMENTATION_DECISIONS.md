@@ -2389,3 +2389,37 @@ daemon unit.
 **Next:** G2 — ranking, daemon era (`queue`, `diversifier`, `arm_floor`, `cell_floor`, `scorer`, `config`,
 `prior_promotion`, `calibration`, `drift`, `sequential_test`, `evaluation`, `campaign_audit`, `campaigns`,
 `regime_supply`, `ranker.yaml`; `ranking/types.py` trimmed to `RankedCandidate`).
+
+## D419 — 2026-09-15 — Batch 5 G2 DONE: the daemon-era ranking is gone — 14 modules, `yield_audit`, `ranker.yaml` (32 files / 7,866 LOC); `ranking/` is six survivors; hard rules #6 and #9 keep named tests
+
+**Commits** `3feab56` (src + tests + config) and `61b1a67` (docs). Suite **1,803 passed / 1 skipped /
+2 xfailed in 99 s** (from 2,052). `forge check` OK. Live dry-run `2026-W38-20260915T011907Z` identical
+to `…010542Z` (registry `c703b3b835fea532`, seed 1290051760, 20,000 enumerated, no trigger).
+
+**Deleted.** `ranking/{queue, diversifier, arm_floor, cell_floor, scorer, config, prior_promotion,
+calibration, drift, sequential_test, evaluation, campaign_audit, campaigns, regime_supply}.py`,
+`config/ranker.yaml` (the §6.2 composite that gate-tail had bypassed; `method: greedy|dpp` phantom),
+`feedback/yield_audit.py` (moved from G3's row: its CLI died in G1, it imported the campaign registry,
+and a frozen grammar cannot act on its riders). Sixteen test files. `ranking/types.py` trimmed to
+`RankedCandidate`; `ranking/__init__.py` exports only that. **`ranking/` now = `dataset`, `features`,
+`model`, `shadow`, `signal_key`, `types`.**
+
+**Hard-rule coverage, by name.** #6 determinism: `tests/integration/test_batch_reproducibility.py`
+RE-TARGETED (two `run_campaign(dry_run=False)` runs in disjoint workspaces → identical `submitted_hashes`
+order, `batch_id`, seed, registry_hash, byte-identical inbox files — the only test of cross-workspace
+payload identity, so kept), `test_phase2_invariants::test_enumeration_byte_identical_for_same_triple`,
+the sampler goldens, the campaign subsequence invariant. #9 idempotency:
+`test_phase4_invariants::test_resubmitting_same_batch_is_a_no_op` /
+`test_unique_index_on_config_hash_is_enforced`, `test_phase6_properties::test_property_submission_idempotency`
+(the only Hypothesis property left; the ranker/diversifier properties went with their subjects),
+`test_submitter::test_duplicate_hash_skipped_not_fatal`. `test_ve_ghost_cut` keeps the era-cut and
+`build_dataset` cases. `test_batch5_prep_seams` keeps the campaign-imports-nothing tripwire.
+
+**Docs.** architecture.md `ranking/` row + breakdown → the six survivors; the `feedback/` breakdown loses
+`yield_audit` and the registry sentence; MANPAGE CONFIG FILES and `config/README.md` drop `ranker.yaml`.
+
+**Next:** G3 — feedback, daemon era: move `is_ve_ghost_label`, `honest_regime_coverage_row`,
+`_honest_regime_coverage` into `feedback/eras.py` (dataset + the learned-ranker invariants need them),
+then delete `rejection_weights` (1,171 LOC), `analyzer`, `proposer`, `proposal_writer`,
+`trade_concentration`, `stuck_state`, `promoted_patterns`, `book_usable_weights`; trim `feedback/types.py`
+to what `consumer` uses; hard rule #4 reworded; `OPEN_PROPOSALS.md` stays a static machine-parsed file.
