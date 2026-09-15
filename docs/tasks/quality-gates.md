@@ -47,3 +47,18 @@ record any manual-verification fallback in the commit/STATUS rather than skippin
 
 `git status` clean (live tree must stay clean — `deploy.md`), suite green, ruff + mypy zero on
 changed scope.
+
+## Records discipline (invariant-enforced)
+
+`tests/invariants/test_regrowth_invariants.py` checks these at every suite run, so the conventions
+are enforced where commits happen instead of remembered (D428; the August 2026 regrowth — a 559 KB
+STATUS, a 702 KB ledger, 21 root relays — is why):
+
+- **Sweep-on-land.** The commit that resolves a Q, lands a proposal or retires a script also moves the
+  record: `OPEN_QUESTIONS.md` → `_archive/OPEN_QUESTIONS_RESOLVED.md`, `docs/proposals/*` →
+  `_archive/PROPOSAL_*.md`, a deleted script → its MANPAGE retirement-ledger row.
+- **STATUS block ≤ ~1,200 chars, citing its `(D###)`.** The narrative lives in the D-entry.
+- **Rotate the ledger at 400 KB** (the test trips at 450) and STATUS at 150 KB, to `_archive/` slices.
+- **Relays live in `~/proj/freeze/relays/`**, never at the repo root (the one parked exception is named
+  in the test).
+- **Every file in `scripts/` is in MANPAGE's inventory.**

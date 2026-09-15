@@ -790,3 +790,5 @@ scripts 6 (`backup_forge_db.sh`, `live_db_snapshot.sh`, `campaign_run.sh`, `depl
 CLI = `campaign` (+`status`), `check`, `version`, `enumerate`, `prefilter`, `prereg` (3); timers 2;
 env flags 0 (the mode line is the unit's, not an env knob of the code); config files `forge.yaml`,
 `grammar.yaml` + archive, `preregistrations.jsonl`, `auto_tightened_thresholds.yaml`.
+
+> **DONE 2026-09-15 (D428).** Batches 0–7 landed (D406–D428). Archived on landing, per its own §10 Batch 7 rule.

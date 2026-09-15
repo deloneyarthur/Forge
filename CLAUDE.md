@@ -120,6 +120,8 @@ Docs are part of the change: if a commit alters a CLI command/flag, a ritual, a 
 meaning, or module layout, update the doc that owns it (routing table below) in the same commit.
 Volatile facts (versions, weights, counts, dates that will pass) belong in `STATUS.md`/D-entries,
 never in docs — a doc may state where a value lives, never the value.
+Records discipline (sweep-on-land, block size, rotation, relay location) is enforced by
+`tests/invariants/test_regrowth_invariants.py`; the rules are in `docs/tasks/quality-gates.md`.
 
 ## Where to look
 

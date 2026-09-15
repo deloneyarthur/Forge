@@ -2731,3 +2731,46 @@ byte-identical); unit caps 20/32 GB; tests 145 → 117 files. `src/` 97 files / 
 
 **Next:** Batch 7 — the regrowth rules become an invariant test, the records discipline is written where
 commits happen, and the plan archives itself (sweep-on-land).
+
+## D428 — 2026-09-15 — Batch 7 DONE and **THE 2026-09 SIMPLIFICATION PLAN IS COMPLETE (D406 → D428)**: the regrowth rules are an invariant test, the records discipline is written where commits happen, and the plan archived itself on landing
+
+**Batch 7.** `tests/invariants/test_regrowth_invariants.py` (6 tests, all green on today's tree): STATUS ≤
+150 KB and its five newest blocks ≤ 1,200 chars each citing a `(D###)`; the ledger ≤ 450 KB (rotate at
+400); `OPEN_QUESTIONS.md` holds no outright-RESOLVED heading ("PARTIALLY RESOLVED" is a bannered open
+question — Q29); no relay at the repo root but the operator-parked Path-C dossier; every file in
+`scripts/` is named in MANPAGE's inventory. `docs/tasks/quality-gates.md` gains "Records discipline
+(invariant-enforced)"; CLAUDE.md's session-discipline section points at both. The plan
+`repo-simplification-2026-09.md` → `_archive/PROPOSAL_repo-simplification-2026-09.md` with a DONE
+banner — sweep-on-land applied to the plan itself. Suite **1,593 passed / 1 skipped / 0 xfailed in 62 s**.
+
+**The programme, 2026-09-13 → 09-15, in one table.**
+
+| | 09-13 (audit) | 09-15 (now) |
+|---|---|---|
+| What runs | a 24/7 daemon (~11k submissions/day, 5 lanes, 12 batch-shaping mechanisms, 9 learned-weight loaders) + 4 timers | one weekly zero-input `forge campaign` (Sun 03:00 UTC, ≤ 400/run, 5 triggers, structural challenger gate) + a weekly backup |
+| `src/` | 28,563 LOC / 107 files | 18984 / 97 |
+| `tests/` | 46,729 lines / 191 files; 2,158 tests / 232 s / 3 xfails | 29907 / 118; 1,593 tests / 62 s / 0 xfails (fast lane 33 s) |
+| CLI | 32 commands | 8 |
+| `scripts/` | 18 | 7 |
+| timers / units | 5 | 2 |
+| env knobs read by `src` | 12 | 1 |
+| config | 4 yaml (+ phantom keys) | 3 yaml; `forge.yaml` = 3 keys |
+| peak memory of the recurring job | 20–34 GB (daily trainer) | 16.3 GB (weekly run incl. training), caps 20/32 GB |
+| `docs/` | 7,352 lines, 12 files with wrong facts | 3724 lines, describing one machine; DESIGN §3.5 byte-identical |
+| session read-path (STATUS + ledger + OQ) | 633 KB | ~310 KB, ceilings enforced |
+| open questions | 20 | 6 (Q9, Q14, Q19, Q24, Q29, Q41) |
+| known bugs carried (REL-*) | 6 unactioned since July | 0 (REL-1/2/8 moot with their subjects; REL-4/5/12 fixed) |
+
+**What did not change, on purpose.** The v55 grammar and its archive (frozen, hook-enforced); the
+population the sampler emits (every enumeration/ edit gated by the goldens; the one shim that would have
+moved the live sequence — the vix conditioner — stays); `auto_tightened_thresholds.yaml` and the
+`enumeration_inputs_hash` identity; the prefilter battery; the submitter's crash-safe per-candidate
+transaction; the contracts boundary (now stricter: no direct `runs.duckdb` read anywhere);
+`OPEN_PROPOSALS.md` as a static machine-parsed record; hard rules 1–10 (rule 4 re-cut to the
+runtime-write prohibition the hooks enforce).
+
+**Standing after the plan.** Next Sunday run 2026-09-20 03:00 UTC is the first unattended one on the
+slimmed tree; the forge stream reads `truncated: true` until ~09-28 (expected); the Monday check is
+`journalctl --user -u forge-campaign.service -n 30`. Nothing is owed to Crucible. Deferred with reasons:
+the vix-conditioner shim (grammar-version event), `test_consumer.py`'s synthetic-DB helpers (~20 lines
+of gain for risk), the numpy materialisation inside `train_verdict_model` (the new memory peak).

@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **THE 2026-09 SIMPLIFICATION PLAN IS COMPLETE (D406 → D428). Batch 7: regrowth rules are now `tests/invariants/test_regrowth_invariants.py` (6 tests), records discipline written in `quality-gates.md`, the plan archived on landing. Forge = one weekly zero-input run + a weekly backup; src 28,563 → 18,856 LOC; suite 2,158/232 s/3 xfails → 1,593/62 s/0; CLI 32 → 8; timers 5 → 2; docs describe one machine.** (D428)
+
+- Next Sunday run 2026-09-20 03:00 UTC is the first unattended one on the slimmed tree. Monday check: `journalctl --user -u forge-campaign.service -n 30`. Nothing owed to Crucible.
+
 ## 2026-09-15 (later) — **BATCH 6 COMPLETE (D427): tests 145 → 117 files / 32,250 → 29,823 lines, every assertion kept, 15 goldens verbatim; suite 1,587 green in 61 s (fast lane 33 s). With 6A/6B: run.py split into six phase modules, live run 16.3 GB peak, one home per helper.** (D427)
 
 - Next: Batch 7 (regrowth invariant + records discipline; archive the plan). Then the plan is done.
