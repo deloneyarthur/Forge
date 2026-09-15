@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 — **Batch 5 G0 DONE (D417): the weekly run trains its own two models (verdict + cpcv robustness, retention 4/family) and judges preregistrations at boot (DUE/UNWATCHABLE = FAIL); ranker-eval + prereg-watch timers, 7 scripts, 6 unit files GONE (−3,279 LOC). Two Sunday-breaking defects found by live dry-runs and fixed (CUTOVER.json crashed the record loader; failed records wiped the baselines). Timers = campaign (Sun 03:00Z) + backup (Sun 04:30Z). Peak RSS with training 25–27 GB → caps 32/48 GB.** (D417)
+
+- Suite 2,219 green. Next: G1 (the daemon loop + its CLI leave `cli/main.py`).
+
 ## 2026-09-14 (later) — **CUTOVER RAN 2026-09-14T23:52:05Z (operator ran the unit; Crucible waived the 24 h notice). `forge.service` DISABLED — the daemon era is over. `forge campaign` LIVE: first live run reconciled 624 verdicts from the forge stream, 20,000 enumerated, no trigger, 0 submitted. Timers now: campaign (Sun 03:00 UTC), backup, ranker-eval, prereg-watch. Batches 0–4 DONE; Batch 5 (remove the daemon era, plan §13) starts.** (D416)
 
 - Expect `truncated: true` on the forge stream until ~09-28T21:20Z; a truncated file after that is ours to relay. 16 GB peak on the live run (cap 24 GB) — Batch 6 target.

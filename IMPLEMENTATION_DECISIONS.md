@@ -2301,3 +2301,48 @@ their guard and amend §20 to 23:52:05Z. Their correction adopted: the forge str
 **State of the plan.** Batches 0–4 DONE. Forge is now what §12 described: no daemon, one weekly
 zero-input run (Sundays 03:00 UTC, next 2026-09-20), ≤ 400/week, page = a failed unit. The daemon-era
 code is still in the tree and is dead: Batch 5 (§13, G0–G7) removes it, starting now.
+
+## D417 — 2026-09-15 — Batch 5 G0 DONE: the weekly run trains its own models and judges preregistrations; the last two daemon-era timers, seven scripts and six unit files are gone (−3,279 LOC); two Sunday-breaking defects found by the live dry-runs and fixed
+
+**Commits** `ddcbfc8` (in-run training + prereg judge) and `1e87329` (retirements, units, docs). Suite
+2,219 passed / 1 skipped / 3 xfailed in 220 s (the deleted script tests account for the drop from
+2,252). Timers now: `forge-campaign` (Sun 03:00 UTC) + `forge-backup` (re-timed Sun 04:30 UTC, weekly —
+`forge.db` changes only on the Sunday run and its reconcile). `forge-ranker-eval.timer` and
+`forge-prereg-watch.timer` disabled and their links removed; the dangling cutover links removed.
+
+**Training moved INTO the run** (`campaign/train.py::train_models` + `prune_models`, step 0.5): the two
+families the campaign ranks with — verdict (`train_verdict_model`) and robustness for
+`QUALITY_LANE_TARGET` (`train_robustness_model`) — from `forge.db` directly (no daemon lock, no snapshot),
+same refusal floors as the old CLI, atomic publish, then the run loads the newest. A fit failure is a note
+and the previous artifact serves (D080 stance). **Retention (REL-12):** `CampaignConfig.models_keep = 4`
+per family. `RunRecord.models` (family → model_id) added, codec lossless. `--skip-train` for hermetic
+runs. **Deviation, accepted:** the tail models (`sharpe_baseline n800`, `wf_p10 n200`) are not trained —
+nothing in the campaign loads them (they served the daemon's tail/trend lanes); training them would be
+unread artifacts, the class this plan removes. The wf_p25 robustness fit is likewise gone.
+
+**Prereg judge moved into boot** (`feedback/preregistration.py::assess_watch_clocks` +
+`count_basis_rows`; `run.py::_prereg_gate`): DUE or UNWATCHABLE → boot FAIL (exit 2, unit FAILED = the
+page — a registered read must not come due silently, D389/D392); waiting → ok with the count; none → ok.
+
+**Deleted (18 files):** `scripts/{daily_ranker_eval.sh, search_multiplicity_census.py (§8.4),
+freeze_read_watcher.py, freeze_registered_read.py, freeze_tail_reading.py (§8.7 — a reopener brings its
+own instrument; git holds these), cutover_campaign.sh, arm_cutover.sh}`; their five test files; the six
+unit files for ranker-eval / prereg-watch / cutover. `check_freeze_governance.py` untouched (verified it
+imports none of them). `setup_new_box.sh` / `NEW_BOX_TRANSFER.md` → two timers.
+
+**Two defects the live dry-runs caught — Sunday's run would have failed:** (1) `load_records` parsed
+every `*.json` in `~/forge_data/campaigns/`, so the `CUTOVER.json` marker (`cutover/v1`) raised
+`ValueError: run record missing started_at` — now non-`campaign_run/` files are skipped (a record
+`…002444Z` with `status: error` documents the crash); (2) the T1–T3 baseline came from the NEWEST record
+even when it was `error`/`boot_failed` (empty baselines → "first run" every week after any failure) — now
+the newest COMPLETED record. Also the D415 watch-item flake: the test fixture stamped the registry with
+`utc_now()` to the microsecond, so `registry_hash` (hence the seed) changed per run and some seeds left a
+tiny synthetic sample with zero survivors — pinned to midnight UTC.
+
+**Memory:** dry-run with training on the snapshot DB peaked **25.2–26.7 GB** (three runs; 13.8 GB before
+training moved in) → `forge-campaign.service` `MemoryHigh=32G` / `MemoryMax=48G` (box: 123 GB; Crucible
+must not starve). Batch 6 target: `build_dataset` materialises 1.27 M verdict rows wide. Final dry-run
+plan identical to the live run `…235206Z` (same registry_hash, seed, 20,000 enumerated, no trigger);
+trained `verdict_model_v1_20260915T002215Z_92117964`, `robustness_model_v1_20260915T002215Z_e4dcb547`.
+
+**Next:** G1 — the daemon loop and its CLI leave `cli/main.py`.
