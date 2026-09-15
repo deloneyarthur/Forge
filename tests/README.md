@@ -9,7 +9,11 @@ Scope: where a test goes and the local patterns. Run commands: `docs/tasks/quali
 | `invariants/` | Structural enforcement of the CLAUDE.md hard rules + §13: `test_phase{0..6}_invariants.py` (by build phase; `test_phase6_properties.py` is Hypothesis-driven), `test_campaign_invariants.py` (a run's kept configs are a subsequence of the cold-start sequence), `test_batch5_prep_seams.py` (the campaign imports nothing daemon-era), and the one-invariant files | Every hard rule gets its failure-mode test HERE, written before the production code |
 | `fixtures/` | Shared synthetic data and builders: `synthetic_crucible_db.py`, `strategy_configs.py`, `grammar_property_helpers.py`, `forge_db_rows.py` (GatedRun / submission rows), `contexts.py` (filter and batch contexts, ranked candidates), `registries.py` (registries that SERVE the ids an emission property is about), `sampling.py` (`sample_configs`, the seed-k population convention) | Extend rather than duplicate |
 
-Markers (pyproject): `unit`, `integration`, `invariants`, `slow`.
+Markers (pyproject): `unit`, `integration`, `invariants`, `slow`. `slow` is for a test whose own
+phase exceeds 5 s (`grep -rn mark.slow tests` lists them); `uv run pytest -m "not slow"` is the
+fast lane for the inner loop, the full suite runs before every commit (`docs/tasks/quality-gates.md`).
+Check `--durations=15` when adding a heavyweight test; a module-scoped population fixture (see
+`test_v55_emission_policy.py`) is usually the fix, not the marker.
 
 ## Local patterns
 
