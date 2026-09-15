@@ -2500,3 +2500,41 @@ REL-4 (SIGTERM on the campaign oneshot, G6). **Next:** G5 — the config surface
 gone; the consumer's direct-DuckDB fallback (hard rule #2 deviation, Q23 class) removed with the
 `crucible_db` parameter; `prefilter.yaml` `auto_tune:` + `AutoTuneCalibration` + `write_calibration_yaml`
 gone; `FORGE_REFUTATION_GUARD` documented.
+
+## D422 — 2026-09-15 — Batch 5 G5 DONE: one config surface — `forge.yaml` = `db_path` + `crucible.inbox_path` + `campaign:`; the consumer reads Crucible exports only (the direct-`runs.duckdb` fallback, a hard-rule-#2 deviation, is gone); `prefilter.yaml` loses `auto_tune:`; one env knob left in `src`
+
+**Commits** `d91d1ff` (forge.yaml + consumer), `d5ebbf2` (calibration), `cd9e514` (docs). Suite **1,550 passed
+/ 1 skipped / 1 xfailed in 65 s**; the xfail is REL-4 (G6). `forge check` OK; `forge campaign --help` has no
+`--crucible-db`. Live dry-run `2026-W38-20260915T020433Z` identical to `…014551Z`.
+
+**`config/forge.yaml`** is now three keys: `db_path`, `crucible.inbox_path`, and an optional `campaign:`
+section resolved onto `CampaignConfig` (dataclass defaults are the single home; unknown keys fail loud,
+`extra="forbid"` kept). `EnumerationConfig`, `SubmissionConfig` (the §7.3 knobs) and `crucible.db_path`
+deleted — nothing read them after G4; the `.enumeration` hits in `main.py` were module imports.
+`test_repo_forge_yaml_loads` guards the committed file (the tree is the deploy).
+
+**The consumer is export-only.** `feedback/consumer._fetch_crucible_runs`'s fallback —
+`get_recent_gated_runs(crucible_db, …)` when the export was empty, a direct read of `runs.duckdb` kept
+for test fixtures — is gone with the `crucible_db` parameter of `reconcile_all_pending` /
+`consume_batch_results` and of `run_campaign`. An absent or empty export yields zero runs; a corrupt one
+raises `QueryError`. The 37 test call sites were converted to the production read path via a new fixture
+`synthetic_crucible_db.write_gated_runs_export` (the synthetic DuckDB stays as the `GatedRun` factory);
+`test_resilience_crucible_offline` re-cut to the export contract.
+
+**`prefilter.yaml` / `calibration.py`.** `AutoTuneCalibration`, the required `auto_tune:` key,
+`propose_adjustment` (its only job was reading that key) and `write_calibration_yaml` (no caller since
+`grammar apply-proposal` left, D418) removed; the yaml block removed in the same commit (`load_calibration`
+runs at campaign start, nothing hot-reads it). `apply_tightening` + `AdjustmentProposal` stay (pure,
+surface pinned by `test_phase3_invariants`).
+
+**Env-flag census.** Read in `src`: `FORGE_REFUTATION_GUARD` only (live, determinism-load-bearing; now
+documented in MANPAGE as the one knob the run reads — `off` changes `enumeration_inputs_hash`) plus the
+`FORGE_EXPECTED_CONTRACT_VERSION` constant. Scripts: the hook's `FORGE_FREEZE_REOPENER`, the wrapper's
+`FORGE_CAMPAIGN_*`/`FORGE_PROJ`/`FORGE_UV`, the snapshot's and backup's knobs. No daemon-era flag read
+survived G1. Plan §3 #7 ("single config surface") is delivered; `--no-config` stays as "defaults + explicit
+paths".
+
+**Next:** G6 — reliability: REL-4 (a SIGTERM handler on the campaign that sets a stop flag honoured between
+candidates, never mid-candidate; un-xfail), REL-5 (the sampler's hard-coded universe fallback fails loud —
+the boot check already requires the export), wire `record_prefilter_rejections` into the campaign so its
+batches carry the funnel `rejection_breakdown` (G4's note).

@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 5 G5 DONE (D422): ONE config surface — `forge.yaml` = `db_path` + `crucible.inbox_path` + `campaign:`; the consumer reads Crucible exports only (direct-`runs.duckdb` fallback GONE, hard rule #2); `prefilter.yaml` loses `auto_tune:`; the only env knob `src` reads is `FORGE_REFUTATION_GUARD` (documented). Suite 1,550 green in 65 s; 1 xfail (REL-4); live dry-run identical.** (D422)
+
+- Next: G6 (REL-4 SIGTERM stop-flag, REL-5 universe fail-loud, funnel rejection counts on campaign batches), then G7 (scripts + docs + records).
+
 ## 2026-09-15 (later) — **Batch 5 G4 DONE (D421): §7.3 rate limiter, the write-only `pre_filter_logs` writer (Q44 CLOSED), three never-used predicate types, the orphan loosening writer — GONE (−765 src / −2,041 tests). `record_prefilter_rejections` correctly KEPT (feeds Crucible's funnel `rejection_breakdown`). Suite 1,552 green in 63 s; 1 xfail left (REL-4); live dry-run identical.** (D421)
 
 - Next: G5 (config surface — forge.yaml to paths + `campaign:`; consumer's direct-DuckDB fallback removed; `auto_tune` key gone).
