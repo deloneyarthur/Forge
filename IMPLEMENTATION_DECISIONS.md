@@ -2634,3 +2634,37 @@ banner declares that table verbatim); **§3.5 byte-identical**, proven:
 materialises 1.27 M verdicts wide (25 GB) — both move into DuckDB-side aggregation; the newest-file/JSONL
 helpers; `campaign_run.sh`'s dead `forge.service` guard; test consolidation (17 version-guard files,
 `test_sampler` 3,088 lines, `test_custom_predicates` 1,702). **Batch 7:** regrowth rules + a size invariant.
+
+## D425 — 2026-09-15 — Batch 6 part A DONE: source consolidation — one battery builder, one home per helper, `campaign/run.py` split 993 → 388 lines into six phase modules, the arm-B draw branch removed with the goldens as proof; the vix-conditioner shim stays (a grammar-version event)
+
+**Commits** `98fafc2` (A1 `prefilters/runner.py`: `build_filter_context` + `run_battery_over`, used by
+the campaign and `forge prefilter`), `e201efb` (A2 `core/paths.py` newest-file/exports-dir/data-root
+replacing four mtime copies and six hand-built paths; `core/validation.check_unit_interval` replacing two
+copies), `3ef5e26` (A3 `campaign_run.sh` drops the dead daemon guard + its test seam), `f41c587` (A4
+`campaign/{exports,boot,reconcile,decide,generate,submit}.py`; `run.py` is the orchestrator; the D352
+battery-inputs invariant now reads `generate.py`), `8c920d5` / `11f5576` / `8835c09` (A5: v51/v41/D169
+tombstone comments; the v48 resid pilot dial fixed at 1.0 since v48; the arm-B `_draw_arm` coin + params +
+stamp in `iterator.py` — share 0.0 drew no rng, so the goldens are the proof; `test_generation_arm_ab.py`
+deleted). Suite **1,571 passed / 1 skipped / 0 xfailed in 63 s**. Live dry-run `2026-W38-20260915T034505Z`
+matches the previous record on every identity field (registry `c703b3b8…`, seed 1290051760, 20,000
+enumerated, the three-part `enumeration_inputs_hash`, designated `7f2a697e…`, five quiet triggers).
+
+**Golden gate, applied literally.** Each `enumeration/` edit was its own commit followed by the goldens +
+`test_phase2_invariants` + `test_batch_reproducibility`; all green, nothing re-pinned. **A5d — the v55
+vix-conditioner shim (`_VIX_CONDITIONER_SHARE = 0.0` + `_vix_conditioner_eligible`) is LEFT IN PLACE:** its
+draw site consumes rng when a config is eligible on the production registry, so deleting it moves the live
+sequence — a grammar-version event under hard rule #6 that the goldens cannot vouch for (their fixture
+registry lacks `vix_term_slope`). `test_v55_vix_conditioner_retired.py` stays as the re-admission guard.
+If a §5 reopener ever bumps the grammar, that deletion rides along.
+
+**Size, honestly.** `src/` is 97 files / 18,856 LOC, UP from 88 / 18,612: six cohesive modules and two
+helper homes cost 244 net lines of headers, imports and signatures against the deletions. The win is
+cohesion (`run.py` 388 lines; every campaign phase has a file and a test), not LOC — and the LOC
+counter is not the objective (plan §0: a repo one person can hold in their head).
+
+**Next:** part B — the two memory hot spots. `load_cell_stats` (`campaign/cells.py`) does two
+`fetchall()`s — every `submissions.config_json` (1.19 M rows × ~1.4 KB) and every clean-era verdict joined
+with its config_json (1.30 M × ~3.2 KB `gate_results`) — then parses each in Python: the 16 GB peak.
+`ranking/dataset.build_dataset` fetches the same join and featurises per verdict row: the 25 GB peak
+(1.05 M distinct hashes ≈ features per config, not per verdict). Targets: stats < 4 GB, training frame
+< 10 GB, whole live run < 16 GB, byte-identical stats/frames pinned against the current implementation.

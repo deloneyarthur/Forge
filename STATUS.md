@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 6 part A DONE (D425): one battery builder (`prefilters/runner.py`), one home per helper (`core/paths.py`, `core/validation.py`), `campaign/run.py` 993 → 388 lines split into six phase modules, the arm-B draw branch removed (goldens green), tombstones cleared. The vix-conditioner shim STAYS (its removal moves the live sequence — grammar-version event). Suite 1,571 green in 63 s; dry-run identical. src 97 files / 18,856 LOC (+244 net: module headers).** (D425)
+
+- Next: part B — the two memory hot spots (`load_cell_stats` 16 GB, `build_dataset` 25 GB → DuckDB-side aggregation, per-config featurisation; whole run < 16 GB).
+
 ## 2026-09-15 (later) — **BATCH 5 COMPLETE (D424): the daemon era is out of the tree. src 28,563 → 18,611 LOC; tests 46,729 → 31,681 lines, suite 2,158/232 s → 1,555/72 s, 0 xfails; scripts 18 → 7; CLI 32 → 8; timers 5 → 2; env knobs 12 → 1; docs describe one machine (DESIGN §3.5 byte-identical). Live dry-run identical after Crucible's slim rewrite (205.9 → 51.8 GB, fleet healthy 19:59 PT).** (D424)
 
 - Remaining: Batch 6 (consolidate: `_run_battery` dup, the 16 GB cell-stats + 25 GB dataset queries, helpers, test consolidation) and Batch 7 (regrowth rules + size invariant). Next Sunday run 2026-09-20 03:00 UTC is the first on the slimmed tree.
