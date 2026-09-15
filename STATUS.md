@@ -1,5 +1,9 @@
 # Forge — Status
 
+## 2026-09-15 (later) — **Batch 5 G4 DONE (D421): §7.3 rate limiter, the write-only `pre_filter_logs` writer (Q44 CLOSED), three never-used predicate types, the orphan loosening writer — GONE (−765 src / −2,041 tests). `record_prefilter_rejections` correctly KEPT (feeds Crucible's funnel `rejection_breakdown`). Suite 1,552 green in 63 s; 1 xfail left (REL-4); live dry-run identical.** (D421)
+
+- Next: G5 (config surface — forge.yaml to paths + `campaign:`; consumer's direct-DuckDB fallback removed; `auto_tune` key gone).
+
 ## 2026-09-15 (later) — **Batch 5 G3 DONE (D420): daemon-era feedback GONE — `rejection_weights` (1,171 LOC) + the §8.5 proposal machinery, 8 modules / 12 test files (−3,003 src, −4,772 tests); `feedback/` = consumer · eras · preregistration · trade_rate_priors · types. Hard rule #4 re-cut ("no code writes grammar.yaml at runtime", AST invariant); `OPEN_PROPOSALS.md` static. Suite 1,618 green in 94 s; live dry-run identical.** (D420)
 
 - Next: G4 (rate limiter, write-only prefilter logger + Q44 close, three unused predicate types).

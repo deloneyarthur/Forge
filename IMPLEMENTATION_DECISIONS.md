@@ -2464,3 +2464,39 @@ breakdown → survivors, four Terms marked "(daemon era, retired D420)"; MANPAGE
 **Remaining xfails: 2** — REL-2 (`rate_limiter`, deleted in G4) and REL-4 (SIGTERM on the campaign
 oneshot, fixed in G6). **Next:** G4 — `submission/rate_limiter`, `submission/pre_filter_logger` + the
 submitter call (Q44 closed), the three unused predicate types.
+
+## D421 — 2026-09-15 — Batch 5 G4 DONE: the §7.3 rate limiter, the write-only `pre_filter_logs` writer (Q44 CLOSED), the three never-used predicate types and the orphan loosening writer are gone (−765 src / −2,041 test LOC); one xfail remains (REL-4)
+
+**Commits** `5b20d8a` (rate limiter + the HOW-TO/needle re-cut), `4ec5ce7` (prefilter logger + Q44 sweep),
+`9dcea1a` (predicate types + `write_loosening_proposal`). Suite **1,552 passed / 1 skipped / 1 xfailed in
+63 s** (from 1,618). `forge check` OK. Live dry-run `2026-W38-20260915T014551Z` identical to `…013259Z`.
+
+**Rate limiter.** `submission/rate_limiter.py` (358 LOC) paced a 24/7 daemon against Crucible's queue;
+the weekly run is capped by `CampaignConfig.weekly_cap` and checks the inbox backlog at boot. Its five
+test files (unit + `test_inflight_depth_invariants` + `test_stall_guard_invariants`) went with it; the
+REL-2 xfail's subject is gone. HOW-TO's `rate limiter` needle (`test_phase6_invariants`) re-cut to
+`weekly cap` + `inbox backlog`; the three "blocked …" situations → one retired-signals note
+(`investigate-live.md` likewise); CLAUDE.md pitfall trimmed.
+
+**`pre_filter_logs` — Q44 CLOSED.** `submission/pre_filter_logger.py` and the submitter's per-candidate
+write are gone: 45.7 M rows, zero readers in Forge, Crucible or QuantIQ SQL. DDL kept for old DBs ("no
+writer since D421"). Q44 swept to `_archive/OPEN_QUESTIONS_RESOLVED.md`. **Scope correction, correctly
+made by the worker:** `submitter.record_prefilter_rejections` STAYS — it writes the per-batch rejection
+COUNTS (`batch_summaries.prefilter_rejections`) that `funnel/aggregate.py` turns into
+`forge_funnel.json`'s `rejection_breakdown`, Crucible's funnel contract (`test_funnel_invariants` pins it).
+Noticed: `campaign/run.py` never calls it, so campaign batches carry no breakdown — Crucible's loader
+tolerates it; wired in G6.
+
+**Predicate types.** `RequiresPredicate`, `ForbidsPredicate`, `CompatibilityPredicate` + clauses,
+evaluators and four helpers removed from `grammar/models.py` / `predicates.py`; verified first: `type:
+requires|forbids|compatibility` = 0 hits in `config/grammar.yaml` and all 55 archives. The loader parses
+v55 and the archive check passes. `GRAMMAR.md` lists no predicate types (no edit). Hard rule #1 is about
+the rule TEXT, which is untouched; the schema now admits exactly the three types the frozen grammar uses —
+under a freeze, a loader that refuses unknown types is a feature.
+
+**Also.** `prefilters/calibration.write_loosening_proposal` (0 callers) gone. Remaining xfail: exactly
+REL-4 (SIGTERM on the campaign oneshot, G6). **Next:** G5 — the config surface: `forge.yaml` →
+`{db_path, crucible.inbox_path, campaign:}`; `SubmissionConfig`/`EnumerationConfig`/`crucible.db_path`
+gone; the consumer's direct-DuckDB fallback (hard rule #2 deviation, Q23 class) removed with the
+`crucible_db` parameter; `prefilter.yaml` `auto_tune:` + `AutoTuneCalibration` + `write_calibration_yaml`
+gone; `FORGE_REFUTATION_GUARD` documented.
